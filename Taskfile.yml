@@ -1,0 +1,171 @@
+# https://taskfile.dev
+
+version: "3"
+
+# The house rule, made explicit instead of inherited: this project is CGO-free end to end — there is
+# no WebView and no native window, so nothing overrides it.
+#
+# Without this a machine that HAS a C compiler would silently default to CGO_ENABLED=1, and `task
+# build` would produce a dynamically linked binary while the spec promises a static one — and the
+# same Go code would compile a different net resolver on every machine.
+env:
+  CGO_ENABLED: "0"
+
+tasks:
+  build:
+    desc: Build the CGO-free (static) binary, PWA included
+    deps: [web:build]
+    cmd: go build -o dist/thought-keeper ./cmd/thought-keeper
+
+  web:install:
+    desc: Install the next PWA toolchain (npm)
+    dir: web-next
+    cmd: npm ci
+    sources: [web-next/package.json, web-next/package-lock.json]
+
+  web:build:
+    desc: Build the next PWA into internal/web/dist (embedded by go:embed)
+    dir: web-next
+    cmds:
+      - npm ci --no-audit --no-fund
+      - npm run build
+    sources:
+      - web-next/src/**/*
+      - web-next/index.html
+      - web-next/vite.config.ts
+      - web-next/svelte.config.js
+      - web-next/tsconfig.json
+      - web-next/public/**/*
+      - web-next/package.json
+      - web-next/package-lock.json
+    generates: [internal/web/dist/index.html]
+
+  icons:
+    desc: Render the app icons (squircle) from web/icons/pictogram.svg
+    dir: web
+    cmds:
+      - node scripts/render-icons.mjs
+      - cp public/icon.svg public/icon-192.png public/icon-512.png public/icon-maskable-512.png public/apple-touch-icon.png ../web-next/public/
+    sources: [web/icons/pictogram.svg, web/scripts/render-icons.mjs]
+    generates:
+      - web/public/icon.svg
+      - web/public/icon-192.png
+      - web/public/icon-512.png
+      - web/public/icon-maskable-512.png
+      - web/public/apple-touch-icon.png
+      - web-next/public/icon.svg
+      - web-next/public/icon-192.png
+      - web-next/public/icon-512.png
+      - web-next/public/icon-maskable-512.png
+      - web-next/public/apple-touch-icon.png
+      - internal/app/icon.png
+
+  web:dev:
+    desc: Run the next PWA's Vite dev server (proxies /api to the running app)
+    dir: web-next
+    cmd: npm run dev
+
+  web:check:
+    desc: Type-check and lint the next PWA
+    dir: web-next
+    cmd: npm run check
+
+  web:test:
+    desc: Run the next PWA's unit tests
+    dir: web-next
+    cmd: npm run test
+
+  run:
+    desc: Run the desktop app (tray + service; no browser is opened — see run:open)
+    deps: [web:build]
+    cmd: go run ./cmd/thought-keeper app --no-open --config config.yaml 2>&1 | tee logs/main-$(date +%s).log
+
+  run:open:
+    desc: Run the desktop app and hand the address to the OS (the installed PWA or the browser)
+    deps: [web:build]
+    cmd: go run ./cmd/thought-keeper app --config config.yaml
+
+  run:headless:
+    desc: Run without the tray (CI, WSL, headless hosts)
+    deps: [web:build]
+    cmd: go run ./cmd/thought-keeper app --headless
+
+  cross:
+    desc: Static binaries (CGO off) for linux/amd64, linux/arm64, windows/amd64
+    deps: [web:build]
+    cmds:
+      - cmd: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dist/thought-keeper-linux-amd64 ./cmd/thought-keeper
+      - cmd: CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dist/thought-keeper-linux-arm64 ./cmd/thought-keeper
+      - cmd: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o dist/thought-keeper-windows-amd64.exe ./cmd/thought-keeper
+
+  format:go:
+    desc: Format Go code
+    cmd: gofumpt -w .
+
+  lint:go:
+    desc: Lint Go code
+    cmd: golangci-lint run
+
+  lint-fix:go:
+    desc: Auto-fix Go lint issues
+    cmds:
+      - go mod tidy
+      - go get -u ./...
+      - golangci-lint run --fix
+
+  modernize:
+    desc: Update Go code to use newer APIs
+    cmd: go fix ./...
+
+  unit-tests:
+    desc: Run unit tests
+    cmd: go test -short ./...
+
+  integration-tests:
+    desc: Run integration tests
+    cmd: go test ./internal/...
+
+  check:
+    desc: Run all checks
+    cmds:
+      - task: modernize
+      - task: format:go
+      - task: lint-fix:go
+      - task: unit-tests
+      - task: integration-tests
+      - task: sqlc:verify
+      - task: web:check
+
+  sqlc:generate:
+    desc: Generate sqlc code
+    cmd: sqlc generate
+
+  sqlc:verify:
+    desc: Verify generated sqlc code has not drifted
+    cmds:
+      - sqlc vet
+      - sqlc diff
+
+  migrate:up:
+    desc: 'Migrate the index DB up (DB=path/to/index.db)'
+    cmd: goose -dir internal/infrastructure/persistence/migrations sqlite "{{.DB | default "index.db"}}" up
+
+  migrate:down:
+    desc: 'Migrate the index DB down (DB=path/to/index.db)'
+    cmd: goose -dir internal/infrastructure/persistence/migrations sqlite "{{.DB | default "index.db"}}" down
+
+  migrate:status:
+    desc: 'Show index migration status (DB=path/to/index.db)'
+    cmd: goose -dir internal/infrastructure/persistence/migrations sqlite "{{.DB | default "index.db"}}" status
+
+  audit:
+    desc: Supply-chain scan (SBOM + vulnerabilities + licenses)
+    cmds:
+      - syft dir:. --exclude './.git/**' --exclude './dist/**' -o cyclonedx-json=sbom.json
+      - defer: rm -f sbom.json
+      - grype sbom.json
+      - grant check sbom.json
+
+  hooks:
+    desc: Install Git hooks via lefthook
+    cmd: lefthook install

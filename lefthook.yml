@@ -1,0 +1,24 @@
+# https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: true
+  commands:
+    audit:
+      glob: "go.{mod,sum}"
+      run: task audit
+      stage_fixed: true
+    format:go:
+      glob: "*.go"
+      run: task format:go
+      stage_fixed: true
+    lint:go:
+      glob: "*.go"
+      run: task lint:go
+    check:web:
+      glob: "web/**/*.{ts,svelte,js,json}"
+      run: task web:check
+
+pre-push:
+  commands:
+    check:
+      run: task check

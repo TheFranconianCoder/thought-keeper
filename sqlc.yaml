@@ -1,0 +1,53 @@
+version: "2"
+sql:
+    - engine: "sqlite"
+      schema: "internal/infrastructure/persistence/migrations"
+      queries: "internal/infrastructure/persistence/sqlc/queries"
+      gen:
+          go:
+              package: "dal"
+              out: "internal/infrastructure/persistence/sqlc/dal"
+              emit_json_tags: true
+              emit_prepared_queries: false
+              emit_interface: false
+              overrides:
+                  - column: "sources.id"
+                    go_type:
+                        import: "github.com/oklog/ulid/v2"
+                        package: "ulid"
+                        type: "ULID"
+                  - column: "atoms.id"
+                    go_type:
+                        import: "github.com/oklog/ulid/v2"
+                        package: "ulid"
+                        type: "ULID"
+                  - column: "atom_sources.source_id"
+                    go_type:
+                        import: "github.com/oklog/ulid/v2"
+                        package: "ulid"
+                        type: "ULID"
+                  - column: "runs.id"
+                    go_type:
+                        import: "github.com/oklog/ulid/v2"
+                        package: "ulid"
+                        type: "ULID"
+                  - column: "clusters.id"
+                    go_type:
+                        import: "github.com/oklog/ulid/v2"
+                        package: "ulid"
+                        type: "ULID"
+                  - column: "cluster_atoms.cluster_id"
+                    go_type:
+                        import: "github.com/oklog/ulid/v2"
+                        package: "ulid"
+                        type: "ULID"
+                  - column: "cluster_atoms.atom_id"
+                    go_type:
+                        import: "github.com/oklog/ulid/v2"
+                        package: "ulid"
+                        type: "ULID"
+                  - column: "atom_sources.atom_id"
+                    go_type:
+                        import: "github.com/oklog/ulid/v2"
+                        package: "ulid"
+                        type: "ULID"

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Thought Keeper pictogram">
+  <rect width="512" height="512" fill="#0b0f14" />
+  <g fill="none" stroke="#d1d5db" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 106L126 181" />
+    <path d="M126 181V331" />
+    <path d="M256 406L386 331" />
+    <path d="M386 331V181" />
+    <path d="M256 256L126 181" />
+    <path d="M256 256V406" />
+    <path d="M256 256L386 181" />
+  </g>
+  <path d="M386 181L256 106" fill="none" stroke="#f97316" stroke-width="14" stroke-linecap="round" />
+  <path d="M126 331L256 406" fill="none" stroke="#f97316" stroke-width="14" stroke-linecap="round" />
+  <g fill="#d1d5db">
+    <circle cx="256" cy="106" r="18" />
+    <circle cx="126" cy="181" r="18" />
+    <circle cx="126" cy="331" r="18" />
+    <circle cx="256" cy="406" r="18" />
+    <circle cx="386" cy="331" r="18" />
+    <circle cx="386" cy="181" r="18" />
+    <circle cx="256" cy="256" r="24" />
+  </g>
+</svg>

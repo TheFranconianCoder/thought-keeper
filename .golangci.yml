@@ -1,0 +1,49 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - durationcheck
+    - errname
+    - errorlint
+    - makezero
+    - nilerr
+    - noctx
+    - prealloc
+    - predeclared
+    - unconvert
+    - unparam
+    - whitespace
+  settings:
+    errcheck:
+      check-blank: true
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    staticcheck:
+      checks:
+        - all
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+  exclusions:
+    rules:
+      # Test code: unchecked setup errors and unused params are acceptable.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - unparam
+      # sqlc output: generated, not written by hand.
+      - path: internal/infrastructure/persistence/sqlc/dal
+        linters:
+          - errcheck
+          - unparam
+          - prealloc

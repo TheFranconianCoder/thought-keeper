@@ -1,0 +1,645 @@
+<script lang="ts">
+  import { clearable } from '../../lib/clearable';
+  import { onDestroy, untrack } from 'svelte';
+  import { api } from '../../lib/api';
+  import { humanError } from '../../lib/api/errors';
+  import type { Atom, SearchHit } from '../../lib/api/types';
+  import { plural } from '../../lib/format';
+  import { claimPath, claimTopicPath, navigate, router, sourcePath } from '../../lib/router.svelte';
+  import { rememberScroll } from '../../lib/scroll-memory';
+  import { scrollFade } from '../../lib/scroll-fade';
+  import { CLAIM_PAGE_SIZE, claims } from '../../lib/stores/claims.svelte';
+  import { connection } from '../../lib/stores/connection.svelte';
+  import { system } from '../../lib/stores/system.svelte';
+  import EmptyState from '../ui/EmptyState.svelte';
+  import Icon from '../ui/Icon.svelte';
+  import Markdown from '../ui/Markdown.svelte';
+  import CopyId from '../ui/CopyId.svelte';
+  import VirtualList from '../ui/VirtualList.svelte';
+
+  const detailOpen = $derived(router.current.view === 'claims' && !!router.current.id);
+  const topic = $derived(router.current.view === 'claims' ? (router.current.params.get('topic') ?? '') : '');
+
+  let query = $state('');
+  let results = $state<SearchHit[]>([]);
+  let searching = $state(false);
+  let searchError = $state('');
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  let searchSeq = 0;
+  let lastDeepLinkQuery = '';
+
+  const searchMode = $derived(query.trim().length >= 2);
+  const topicNames = $derived(claims.topics.map((item) => item.topic));
+
+  // The list endpoint returns only the slice, so `claims.total` is the slice length, not the vault
+  // total. The status report has the real count; a topic's count comes from the full topic catalogue.
+  const total = $derived.by(() => {
+    if (topic) return claims.topicCounts[topic] ?? claims.total;
+    return system.status?.index.atoms ?? claims.total;
+  });
+
+  const caption = $derived.by(() => {
+    if (searchMode) {
+      return searching
+        ? 'Searching…'
+        : `${results.length} result${results.length === 1 ? '' : 's'} for “${query.trim()}”`;
+    }
+    const all = total <= CLAIM_PAGE_SIZE;
+    if (topic) {
+      return all
+        ? `All ${plural(total, 'claim')} in this topic`
+        : `Newest ${CLAIM_PAGE_SIZE} of ${plural(total, 'claim')} in this topic`;
+    }
+    return all ? plural(total, 'claim') : `Newest ${CLAIM_PAGE_SIZE} of ${plural(total, 'claim')}`;
+  });
+
+  $effect(() => {
+    const route = router.current;
+    if (route.view !== 'claims') return;
+
+    const nextTopic = route.params.get('topic') ?? '';
+    // Store methods read their own reactive fields. They must stay untracked: an effect that
+    // depended on them would rerun after every load and reload the same container forever.
+    untrack(() => {
+      if (nextTopic !== claims.topic || !claims.loaded) void claims.load(nextTopic);
+      if (claims.topics.length === 0) void claims.loadTopics();
+
+      if (route.id) void claims.open(route.id);
+      else claims.clearSelection();
+    });
+
+    const q = route.params.get('q') ?? '';
+    if (q !== lastDeepLinkQuery) {
+      lastDeepLinkQuery = q;
+      query = q;
+      if (q.trim().length >= 2) void runSearch(q.trim());
+      else {
+        results = [];
+        searching = false;
+      }
+    }
+  });
+
+  // The reader's place in the list belongs to the list; opening a claim must not move it. The detail
+  // pane's position is restored by the same history-entry memory as the list.
+  onDestroy(() => clearTimeout(searchTimer));
+
+  async function runSearch(term: string): Promise<void> {
+    const seq = ++searchSeq;
+    searching = true;
+    searchError = '';
+    try {
+      const result = await api.search(term, 'atoms', 50);
+      if (seq !== searchSeq) return;
+      results = result.hits ?? [];
+    } catch (error) {
+      if (seq !== searchSeq) return;
+      results = [];
+      searchError = humanError(error);
+    } finally {
+      if (seq === searchSeq) searching = false;
+    }
+  }
+
+  function onSearchInput(value: string): void {
+    query = value;
+    clearTimeout(searchTimer);
+    const term = value.trim();
+    if (term.length < 2) {
+      results = [];
+      searching = false;
+      searchError = '';
+      return;
+    }
+    searchTimer = setTimeout(() => void runSearch(term), 170);
+  }
+
+  function openClaim(id: string): void {
+    // The list's topic filter travels with the claim: the detail view keeps the filtered list on the
+    // left, and "back" returns to it.
+    navigate(claimPath(id, topic));
+  }
+
+  function openSource(hash: string, node?: string): void {
+    navigate(sourcePath(hash, node ? { tab: 'snapshot', part: node } : {}));
+  }
+</script>
+
+<div class="page claims-page" class:split={detailOpen}>
+  <section class="claims-list-pane" aria-label="Claims">
+    <div class="list-head">
+      <div class="list-title">
+        <h1>Claims</h1>
+        <span class="count">{total}</span>
+      </div>
+      <div class="search-wrap">
+        <Icon name="search" size={14} />
+        <input
+          use:clearable
+          class="input input--search"
+          placeholder="Find a claim…"
+          value={query}
+          oninput={(event) => onSearchInput(event.currentTarget.value)}
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Find a claim"
+        />
+      </div>
+      {#if !searchMode && claims.topics.length > 0}
+        <div class="topic-cloud" use:scrollFade use:rememberScroll={'claims-topics'} aria-label="Claim topics">
+          {#each claims.topics as item (item.topic)}
+            <a
+              class="chip"
+              class:chip--accent={topic === item.topic}
+              href={topic === item.topic ? '#/claims' : claimTopicPath(item.topic)}
+            >
+              {item.topic}<span class="chip-count">{item.count}</span>
+            </a>
+          {/each}
+        </div>
+      {/if}
+      {#if topic && !searchMode}
+        <div class="filter-line">
+          <span class="muted">Filtered by</span>
+          <a class="chip chip--accent" href="#/claims">{topic}<Icon name="close" size={10} /></a>
+        </div>
+      {/if}
+      <div class="list-caption">{caption}</div>
+    </div>
+
+    <div class="claim-rows" use:scrollFade use:rememberScroll={'claims-list'}>
+      {#if searchMode}
+        {#if searchError}
+          <p class="notice notice--error">{searchError}</p>
+        {:else if !searching && results.length === 0}
+          <EmptyState icon="search" title="No claim matches" text={`Nothing in the claims index matches “${query.trim()}”.`} />
+        {:else}
+          {#each results as hit (hit.id)}
+            <button class="claim-item" onclick={() => openClaim(hit.id)}>
+              <span class="claim-text">{hit.title}</span>
+              <span class="claim-sub">{hit.snippet}</span>
+            </button>
+          {/each}
+        {/if}
+      {:else if claims.error}
+        <p class="notice notice--error">{claims.error}</p>
+      {:else if !claims.loaded}
+        {#if connection.state !== 'live'}
+          <EmptyState icon="claims" title="Nothing loaded" text="Thought Keeper is not reachable, so this is not the vault's answer." />
+        {:else}
+          <div class="stack">
+            {#each Array(4) as _, index (index)}<span class="skeleton" style="height:42px"></span>{/each}
+          </div>
+        {/if}
+      {:else if claims.items.length === 0}
+        <EmptyState
+          icon="claims"
+          title={topic ? 'No claims in this topic' : 'No claims yet'}
+          text={topic
+            ? 'This topic has no claims right now. Clear the filter to see the newest claims.'
+            : 'Claims appear here after a source has been distilled.'}
+        />
+      {:else}
+        <VirtualList items={claims.items} rowHeight={58} key={(claim) => claim.id}>
+          {#snippet row(claim: Atom)}
+            <button
+              class="claim-item"
+              class:active={claims.selected?.id === claim.id}
+              onclick={() => openClaim(claim.id)}
+            >
+              <span class="claim-text">{claim.claim}</span>
+              <span class="claim-sub">
+                {claim.topic}{claim.type ? ` · ${claim.type}` : ''}{claim.cluster_count
+                  ? ` · ${claim.cluster_count} cluster${claim.cluster_count === 1 ? '' : 's'}`
+                  : ''}
+              </span>
+            </button>
+          {/snippet}
+        </VirtualList>
+      {/if}
+    </div>
+  </section>
+
+  {#if detailOpen}
+    <article class="claim-detail detail-frame" aria-label="Claim detail">
+      <a class="back-link" href={topic ? claimTopicPath(topic) : '#/claims'}>← Back to claims</a>
+
+      {#if claims.detailError}
+        <p class="notice notice--error">{claims.detailError}</p>
+      {:else if claims.detailLoading && !claims.selected}
+        <div class="stack">
+          <span class="skeleton" style="height:18px;width:60px"></span>
+          <span class="skeleton" style="height:54px"></span>
+          <span class="skeleton" style="height:120px"></span>
+        </div>
+      {:else if claims.selected}
+        {@const claim = claims.selected}
+        <div class="kicker">Claim</div>
+        <h2 class="statement">{claim.claim}</h2>
+
+        <div class="claim-meta">
+          {#if claim.topic}
+            <a class="chip chip--accent" href={claimTopicPath(claim.topic)}>{claim.topic}</a>
+          {/if}
+          {#if claim.type}<span class="chip">{claim.type}</span>{/if}
+          {#if claim.status}<span class="chip">{claim.status}</span>{/if}
+          {#if claim.cluster_count}
+            <span class="chip">{claim.cluster_count} cluster{claim.cluster_count === 1 ? '' : 's'}</span>
+          {/if}
+          <span class="spacer"></span>
+          <CopyId text={claim.id} label="Claim ID" display={claim.id.slice(0, 10)} />
+        </div>
+
+        {#if claim.body}
+          <div class="claim-body">
+            <Markdown text={claim.body} topics={topicNames} claimTopic={topic} />
+          </div>
+        {/if}
+
+        {#if claim.sources?.length}
+          <section class="detail-section">
+            <div class="section-head">
+              <h3>Provenance</h3>
+              <span class="count">{claim.sources.length}</span>
+            </div>
+            <div class="provenance">
+              {#each claim.sources as source (source.hash + ':' + (source.node ?? ''))}
+                <button class="provenance-row" onclick={() => openSource(source.hash, source.node)}>
+                  <Icon name="sources" size={14} />
+                  <span class="provenance-main">
+                    <span class="provenance-title">{source.title || source.hash.slice(0, 16)}</span>
+                    <span class="provenance-sub">
+                      node {source.node || '—'}{source.ocr ? ' · OCR' : ''}
+                    </span>
+                  </span>
+                  <Icon name="arrowUpRight" size={13} />
+                </button>
+              {/each}
+            </div>
+          </section>
+        {/if}
+
+        <section class="detail-section">
+          <div class="section-head">
+            <h3>Cluster peers</h3>
+            <span class="count">{claims.relatedPeers.length}</span>
+          </div>
+          {#if claims.relatedPeers.length > 0}
+            <div class="related">
+              {#each claims.relatedPeers as related (related.id)}
+                <button class="related-row" onclick={() => openClaim(related.id)}>
+                  <Icon name="claims" size={14} />
+                  <span class="related-main">
+                    <span class="related-text">{related.claim}</span>
+                    <span class="related-sub">{related.topic}</span>
+                  </span>
+                </button>
+              {/each}
+            </div>
+          {:else}
+            <p class="section-note">
+              The association step has not grouped this claim with another one yet.
+            </p>
+          {/if}
+        </section>
+
+        <section class="detail-section">
+          <div class="section-head">
+            <h3>Same topic</h3>
+            <span class="count">{claims.relatedSameTopic.length}</span>
+          </div>
+          {#if claims.relatedSameTopic.length > 0}
+            <div class="related">
+              {#each claims.relatedSameTopic as related (related.id)}
+                <button class="related-row" onclick={() => openClaim(related.id)}>
+                  <Icon name="claims" size={14} />
+                  <span class="related-main">
+                    <span class="related-text">{related.claim}</span>
+                    <span class="related-sub">{related.topic}</span>
+                  </span>
+                </button>
+              {/each}
+            </div>
+          {:else}
+            <p class="section-note">
+              No other claim is filed under{claim.topic ? ` “${claim.topic}”` : ' this topic'} yet.
+            </p>
+          {/if}
+        </section>
+      {/if}
+    </article>
+  {/if}
+</div>
+
+<style>
+  .claims-page {
+    padding-top: 24px;
+  }
+
+  .claims-page.split {
+    display: grid;
+    grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+    gap: 38px;
+    align-items: start;
+    height: auto;
+    min-height: calc(100dvh - var(--topbar-h));
+    max-width: 1280px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .claims-list-pane {
+    min-width: 0;
+  }
+
+  .split .claims-list-pane {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - var(--topbar-h));
+    min-height: 0;
+    max-height: calc(100dvh - var(--topbar-h));
+    padding: 24px 0;
+  }
+
+  .list-head {
+    flex: none;
+  }
+
+  .list-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .list-title h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 650;
+    letter-spacing: -0.025em;
+  }
+
+  .list-title .count {
+    color: var(--faint);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .search-wrap {
+    margin-bottom: 10px;
+  }
+
+  .filter-line {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: -2px 0 9px;
+    font-size: 12px;
+  }
+
+  .topic-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-height: 92px;
+    margin-bottom: 10px;
+    overflow: auto;
+    padding-bottom: 2px;
+  }
+
+  .list-caption {
+    margin-bottom: 8px;
+    color: var(--faint);
+    font-size: 11.5px;
+  }
+
+  .claim-rows {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    border-top: 1px solid var(--line);
+  }
+
+  .claim-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 100%;
+    padding: 10px 9px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    transition: background 0.12s var(--ease);
+  }
+
+  .claim-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .claim-item.active {
+    background: var(--accent-soft);
+  }
+
+  .claim-text {
+    display: block;
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 13.5px;
+    font-weight: 500;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .claim-item.active .claim-text {
+    color: var(--ink);
+    font-weight: 520;
+  }
+
+  .claim-sub {
+    overflow: hidden;
+    color: var(--faint);
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .claim-detail {
+    min-width: 0;
+    margin: 24px 0 40px;
+  }
+
+  .back-link {
+    display: none;
+    margin-bottom: 12px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .kicker {
+    margin-bottom: 5px;
+    color: var(--faint);
+    font-size: 10.5px;
+    font-weight: 650;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .statement {
+    margin: 0 0 14px;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 27px;
+    font-weight: 600;
+    line-height: 1.32;
+    letter-spacing: -0.015em;
+  }
+
+  .claim-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 22px;
+  }
+
+  .claim-meta .spacer {
+    flex: 1;
+  }
+
+  .claim-body {
+    padding: 2px 0 10px;
+  }
+
+  .detail-section {
+    margin-top: 30px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+
+  .detail-section .section-head {
+    margin-bottom: 8px;
+  }
+
+  .detail-section h3 {
+    margin: 0;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .section-note {
+    margin: 0 0 8px;
+    color: var(--faint);
+    font-size: 12px;
+  }
+
+  .provenance,
+  .related {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .provenance-row,
+  .related-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 8px 11px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-elevated);
+    color: inherit;
+    text-align: left;
+  }
+
+  .provenance-row:last-child,
+  .related-row:last-child {
+    border-bottom: 0;
+  }
+
+  .provenance-row:hover,
+  .related-row:hover {
+    background: var(--bg-hover);
+  }
+
+  .provenance-row :global(.ico),
+  .related-row :global(.ico) {
+    color: var(--muted);
+  }
+
+  .provenance-main,
+  .related-main {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .provenance-title,
+  .related-text {
+    overflow: hidden;
+    color: var(--ink-2);
+    font-size: 12.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .provenance-sub,
+  .related-sub {
+    color: var(--faint);
+    font-size: 11px;
+  }
+
+  @media (max-width: 1000px) {
+    .claims-page.split {
+      grid-template-columns: 300px minmax(0, 1fr);
+      gap: 26px;
+    }
+  }
+
+  @media (max-width: 860px) {
+    .claims-page.split {
+      display: block;
+      height: auto;
+      min-height: 0;
+      max-width: var(--content-max);
+      padding: 22px 20px 56px;
+    }
+
+    .claims-page.split .claims-list-pane {
+      display: none;
+    }
+
+    .back-link {
+      display: inline-block;
+    }
+
+    .claims-list-pane {
+      position: static;
+      max-height: none;
+    }
+
+    .claim-rows {
+      overflow: visible;
+    }
+
+    .claim-detail {
+      height: auto;
+      margin: 0;
+      overflow: visible;
+      padding-right: 0;
+    }
+  }
+</style>

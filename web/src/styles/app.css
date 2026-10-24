@@ -1,0 +1,2664 @@
+/* Thought Keeper — Notion-flavored UI on the studio design system (v3) palette:
+   graphite + signal orange, Inter/mono, flat and calm. Two schemes: light (derived
+   paper) and dark (studio graphite). The wiki document is the centre of everything. */
+
+:root {
+  /* Studio palette anchors */
+  --graphite: #0b0f14;
+  --surface: #111827;
+  --steel: #1f2937;
+  --industrial: #334155;
+  --signal-orange: #f97316;
+
+  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius: 4px;
+  --radius-lg: 8px;
+  --sidebar-w: 248px;
+  --doc-max: 720px;
+  --ease: cubic-bezier(0.2, 0, 0.1, 1);
+
+  /* Light: a calm paper sheet derived from the studio neutrals. */
+  --bg: #ffffff;
+  --bg-alt: #f7f8fa;
+  --bg-hover: #f0f1f4;
+  --bg-active: #e9ebef;
+  --text: #111827;
+  --text-2: #374151;
+  --muted: #6b7280;
+  --faint: #9ca3af;
+  --border: #eceef1;
+  --border-strong: #dfe3e8;
+  --accent: var(--signal-orange);
+  --accent-soft: rgb(249 115 22 / 12%);
+  --accent-ink: #ffffff;
+  --code-bg: #f6f7f9;
+  --shadow-pop: 0 0 0 1px rgb(15 23 42 / 6%), 0 12px 32px rgb(15 23 42 / 14%);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: var(--graphite);
+  --bg-alt: #0e131a;
+  --bg-hover: #161d27;
+  --bg-active: #1d2632;
+  --text: #f3f4f6;
+  --text-2: #d1d5db;
+  --muted: #94a3b8;
+  --faint: #64748b;
+  --border: #1d2733;
+  --border-strong: #2a3644;
+  --accent-soft: rgb(249 115 22 / 16%);
+  --code-bg: #111827;
+  --shadow-pop: 0 0 0 1px rgb(0 0 0 / 40%), 0 16px 40px rgb(0 0 0 / 55%);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] {
+    --bg: var(--graphite);
+    --bg-alt: #0e131a;
+    --bg-hover: #161d27;
+    --bg-active: #1d2632;
+    --text: #f3f4f6;
+    --text-2: #d1d5db;
+    --muted: #94a3b8;
+    --faint: #64748b;
+    --border: #1d2733;
+    --border-strong: #2a3644;
+    --accent-soft: rgb(249 115 22 / 16%);
+    --code-bg: #111827;
+    --shadow-pop: 0 0 0 1px rgb(0 0 0 / 40%), 0 16px 40px rgb(0 0 0 / 55%);
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Scrollbars — same treatment as studio-page: a slim, pill-shaped thumb on an
+   invisible track, with a Firefox fallback. */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--industrial);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--industrial) transparent;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* ── App shell ──────────────────────────────────────────── */
+/* The shell's own layout: the sidebar beside the content, with the bar as the content column's
+ * first row. The bar is the app's chrome in every shell — there is no platform-drawn title bar to
+ * build around (see the Window Controls Overlay note in AGENTS.md). */
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  height: 100vh;
+}
+
+/* ── The platform's window controls (window-controls-overlay) ──────────────
+   The manifest asks for `window-controls-overlay`, so an INSTALLED app has its window controls drawn
+   inside the window, over the app's own bar. The region the app may use is published as
+   env(titlebar-area-*), and the bar steps aside exactly where the controls are — on the RIGHT on
+   Windows and Linux, on the LEFT on macOS. The rest of the layout keeps its full width: no reserved
+   strip and no full-width bar, only the two ends of the top row give way.
+   `html[data-wco='1']` is set by the app while the overlay is really visible
+   (lib/windowControls.ts), so a browser tab — where the variables exist too — never reserves a region
+   nobody draws.
+   env() goes straight into the property that uses it: a custom property holding env() is invalid at
+   computed-value time, and the height it produced was 0. */
+html[data-wco="1"] .topbar {
+  /* The controls sit against the window's right edge, and 100vw is the window's width — so what the
+       title bar area does not cover is exactly their width. */
+  padding-right: calc(
+    16px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)
+  );
+  /* And the row must be tall enough to hold them: a taller system title bar must not push the
+       controls down into the content. */
+  min-height: env(titlebar-area-height, 52px);
+}
+
+html[data-wco="1"] .brand {
+  padding-left: calc(8px + env(titlebar-area-x, 0px));
+  min-height: env(titlebar-area-height, 38px);
+}
+
+/* With the overlay the app's own bar IS the window's title bar: dragging it moves the window and
+   double-clicking it maximises, which is what a title bar does. Controls inside it opt out, or the
+   drag region swallows their clicks. */
+html[data-wco="1"] .topbar,
+html[data-wco="1"] .brand {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+html[data-wco="1"] .topbar button,
+html[data-wco="1"] .topbar a,
+html[data-wco="1"] .topbar input,
+html[data-wco="1"] .brand button,
+html[data-wco="1"] .brand a {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* ── Sidebar ────────────────────────────────────────────── */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-alt);
+  border-right: 1px solid var(--border);
+  padding: 10px 8px;
+  gap: 2px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px 10px;
+}
+
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  flex: none;
+}
+
+.brand-name {
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.side-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 9px;
+  margin: 2px 2px 8px;
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.side-search:hover,
+.side-search:focus-within {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+
+.side-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: text;
+}
+
+.side-search input:focus {
+  outline: none;
+}
+
+.side-search input::placeholder {
+  color: var(--muted);
+}
+
+.side-search .kbd {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 0 5px;
+}
+
+.nav-group {
+  padding: 10px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  color: var(--text-2);
+  text-decoration: none;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+}
+
+.nav-item:hover {
+  background: var(--bg-hover);
+}
+
+.nav-item.active {
+  background: var(--bg-active);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.nav-item .count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.nav-item .ico {
+  flex: none;
+  color: var(--faint);
+}
+
+.nav-item.active .ico {
+  color: var(--accent);
+}
+
+/* Page tree inside the sidebar */
+.tree {
+  flex: 1;
+  min-height: 0;
+  /* A scroller on ONE axis makes the other `auto` too (the spec turns `visible` into `auto` as soon
+       as one axis scrolls), so a row that grew a little too wide made the whole topic list scroll
+       sideways. The list scrolls VERTICALLY; sideways it must never move. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 8px;
+  margin-top: 2px;
+}
+
+/* The topic list: one row per domain, and the row IS the link to that domain's topic page. The
+   pages themselves belong in the content column — the sidebar says what there is, not what is in
+   it. */
+.tree-topic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  color: var(--text-2);
+  text-decoration: none;
+  font-size: 13.5px;
+}
+
+.tree-topic:hover {
+  background: var(--bg-hover);
+}
+
+.tree-topic.active {
+  background: var(--bg-active);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.tree-topic .count {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  margin-left: auto;
+  color: var(--faint);
+}
+
+/* The counts never wrap and never shrink: the NAME gives way (ellipsised) when a domain carries a
+   page count, a dirty count, an inconsistent count and a query count at once. */
+.tree-topic .count,
+.tree-topic .count.q,
+.tree-topic .count.dirty,
+.tree-topic .count.bad {
+  flex: none;
+  white-space: nowrap;
+}
+
+.tree-topic .tname {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-topic .count + .count {
+  margin-left: 6px;
+}
+
+.side-foot {
+  /* The footer is pinned to the bottom no matter how short the navigation above it is. */
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.side-foot .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+
+.dot-off {
+  background: var(--faint);
+}
+
+.dot-warn {
+  background: var(--accent);
+  opacity: 0.55;
+}
+
+.run-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--muted);
+  background: var(--bg-hover);
+}
+
+/* The spinner is used by the topbar chip, the list row and the detail overlay — one rule. */
+.spin {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Main + topbar ──────────────────────────────────────── */
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 16px;
+  flex: none;
+}
+
+/* The bar is an ordinary toolbar — it keeps its place beside the sidebar and reserves no strip — but
+ * in an INSTALLED app it is also the window's title bar, so its two ends step aside for the platform's
+ * window controls (see the window-controls-overlay block above). */
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.crumb .sep {
+  color: var(--faint);
+}
+
+.crumb .cur {
+  color: var(--text-2);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* The note above a capped preview: a source is raw material, so a long document is shown in part. */
+.viewer-cap {
+  margin: 0;
+  padding: 10px 22px 0;
+  font-size: 12.5px;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  /* Always reserve the vertical scrollbar: a view that gains one when its content grows would
+       shift the whole column sideways. */
+  overflow-y: scroll;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+/* ── Buttons ────────────────────────────────────────────── */
+/* A button that cannot be pressed has to LOOK like it. The `disabled` attribute alone changes nothing
+   on screen, so a reader keeps clicking — and "the button did nothing" is the report that follows. Every
+   button that a running job locks (the Status actions, the source actions) is covered by this. */
+.btn:disabled,
+.icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+}
+
+.btn-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn-danger {
+  border-color: var(--danger, #b4241f);
+  color: var(--danger, #b4241f);
+}
+
+.btn-danger:hover {
+  background: var(--danger, #b4241f);
+  color: #fff;
+}
+
+.btn-accent:hover {
+  filter: brightness(1.06);
+  background: var(--accent);
+}
+
+.btn-ghost {
+  border-color: transparent;
+  background: none;
+}
+
+.btn-ghost:hover {
+  background: var(--bg-hover);
+}
+
+/* ── Inputs ─────────────────────────────────────────────── */
+.input,
+.textarea {
+  width: 100%;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+/* A horizontal form row: input + button, vertically centred. */
+.row-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.row-inline .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+/* Thin top progress line. Its 2px are reserved permanently (see App.svelte): an
+   appearing bar must never shift the content. */
+.progress {
+  height: 2px;
+  flex: none;
+  overflow: hidden;
+  background: transparent;
+}
+
+.progress > i {
+  display: block;
+  height: 100%;
+  width: 40%;
+  background: var(--accent);
+  opacity: 0;
+}
+
+.progress.on > i {
+  opacity: 1;
+  animation: prog 1.15s ease-in-out infinite;
+}
+
+@keyframes prog {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+.textarea {
+  height: auto;
+  min-height: 96px;
+  padding: 9px 11px;
+  resize: vertical;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--faint);
+}
+
+.input:focus-visible,
+.textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ── Document ───────────────────────────────────────────── */
+.doc-wrap {
+  padding: 28px 0 96px;
+}
+
+.doc {
+  max-width: var(--doc-max);
+  margin: 0 auto;
+  padding: 0 48px;
+}
+
+.doc-title {
+  margin: 22px 0 8px;
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.doc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-bottom: 22px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chip-accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* The number beside a topic chip: how many claims of this source carry it. Muted, small, and always
+   the same width, so a list of five reads as a ranking. */
+.chip-n {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+/* ── Markdown ───────────────────────────────────────────── */
+.markdown {
+  color: var(--text-2);
+  font-size: 15.5px;
+  line-height: 1.7;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  color: var(--text);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin: 1.7em 0 0.5em;
+}
+
+.markdown h1 {
+  font-size: 1.7em;
+}
+.markdown h2 {
+  font-size: 1.4em;
+}
+.markdown h3 {
+  font-size: 1.18em;
+}
+.markdown h4 {
+  font-size: 1.02em;
+}
+
+.markdown p {
+  margin: 0 0 0.9em;
+}
+
+.markdown a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-soft);
+}
+
+.markdown a:hover {
+  border-bottom-color: var(--accent);
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.5em;
+}
+
+.markdown li {
+  margin: 0.25em 0;
+}
+
+.markdown li::marker {
+  color: var(--faint);
+}
+
+.markdown blockquote {
+  margin: 0 0 1em;
+  padding: 2px 0 2px 16px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--muted);
+}
+
+.markdown hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2em 0;
+}
+
+.markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--code-bg);
+  border-radius: 4px;
+  padding: 1.5px 5px;
+}
+
+.markdown pre.code {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  overflow: auto;
+  margin: 0 0 1em;
+}
+
+.markdown pre.code code {
+  background: none;
+  padding: 0;
+}
+
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1em;
+  font-size: 0.94em;
+}
+
+.markdown th,
+.markdown td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* ── Provenance footer of a page (calm, secondary) ──────── */
+.page-foot {
+  max-width: var(--doc-max);
+  margin: 40px auto 0;
+  padding: 22px 48px 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.foot-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.foot-summary strong {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+/* A claim behind the page: the sentence, with where it lives — one line, ellipsised. */
+.foot-claim {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.foot-claim .c {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.foot-claim .s {
+  flex: none;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.foot-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
+
+/* The count beside a footer label: its own element with its own margin, so it can never stick to
+   the word (a text node inside a flex row is easy to get wrong, and "Claims2" is what that looks
+   like). */
+.foot-count {
+  margin-left: 7px;
+  color: var(--faint);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* The same count inside a topic heading. */
+.foot-label .muted,
+.topic-block h2 .muted {
+  color: var(--faint);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* A reason group inside a footer block (e.g. "same source · 3"). */
+.foot-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.foot-sub:first-of-type {
+  margin-top: 0;
+}
+
+.foot-sub .muted {
+  font-family: var(--font-mono);
+  font-weight: 400;
+}
+
+.foot-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--text-2);
+  font-size: 14px;
+  width: calc(100% + 16px);
+  border: 0;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.foot-row:hover {
+  background: var(--bg-hover);
+}
+
+.foot-row .t {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.foot-row .s {
+  font-size: 12px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+}
+
+/* ── Home (wiki index) ──────────────────────────────────── */
+.home {
+  max-width: var(--doc-max);
+  margin: 0 auto;
+  padding: 40px 48px 96px;
+}
+
+.home-hero h1 {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+}
+
+.home-hero p {
+  color: var(--muted);
+  margin: 0 0 26px;
+}
+
+.topic-block {
+  margin-bottom: 26px;
+}
+
+.topic-block h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: 0 0 8px;
+}
+
+.page-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  margin: 0 -10px;
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--text);
+}
+
+.page-link:hover {
+  background: var(--bg-hover);
+}
+
+.page-link .ico {
+  color: var(--faint);
+  flex: none;
+}
+
+.page-link .t {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page-link .k {
+  font-size: 12px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+}
+
+.empty {
+  text-align: center;
+  padding: 60px 24px;
+  color: var(--muted);
+}
+
+.empty .big {
+  font-size: 17px;
+  color: var(--text-2);
+  font-weight: 550;
+  margin-bottom: 6px;
+}
+
+/* ── Sources (secondary) ────────────────────────────────── */
+/* The centred reading column the secondary views share: one measure, centred in the content area. */
+.sources,
+.status,
+.ask {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 34px 48px 96px;
+}
+
+/* The waiting state of a question: a big spinner, the question as its subject, in the accent colour —
+   a quiet "Thinking…" line is exactly what a reader misses. */
+.ask-thinking {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: none;
+  margin: 4px 0 0;
+  padding: 18px 20px;
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.ask-thinking .t {
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ask-thinking .q {
+  margin-top: 3px;
+  color: var(--text-2);
+  font-size: 13.5px;
+}
+
+.spinner {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
+/* The question above its answer: marked with an accent rule, as the strongest line of the block. */
+.ask-q {
+  max-width: var(--doc-max);
+  margin: 0 0 14px;
+  padding-left: 14px;
+  border-left: 2px solid var(--accent);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.page-head h1 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.row-src {
+  display: flex;
+  /* The two text columns are the SAME two lines (title/sub on the left, state/counts on the right),
+       so they start at the top together and each line lands on its counterpart. Centring them would
+       align nothing but their middles. */
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 10px;
+  margin: 0 -10px;
+  border-radius: var(--radius);
+  border-bottom: 1px solid var(--border);
+  text-decoration: none;
+  color: var(--text);
+  /* The bookmarks list renders this row as a <button>, whose UA style centres text: a list row is
+       left-aligned like the Sources list it mirrors. */
+  text-align: left;
+  cursor: pointer;
+}
+
+/* The icon and the status are not lines of the two-line text column: they stay centred on the row. */
+.row-src .ico,
+.row-src .favicon,
+.row-src .meta {
+  align-self: center;
+}
+
+.row-src:hover {
+  background: var(--bg-hover);
+}
+
+/* A page a change made stale: a small amber dot, and a chip in the document. Shown, never hidden. */
+/* A LEGACY saved-query page: knowledge you asked for, not a page the wiki wrote. It carries a
+   leading mark — small, in the text flow, before the title. */
+.q-emoji {
+  margin-right: 6px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+/* The chip form of the same mark, for the lists that have room for a word. */
+.q-mark {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  flex: none;
+}
+
+/* The count inside a tab label ("Pages 3"). */
+.seg .tab-count {
+  margin-left: 5px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+/* A count of pages that still owe a re-derivation: the same amber as the dirty dot. */
+.tree-topic .count.dirty,
+.home .k.dirty {
+  color: #b45309;
+}
+
+/* A count of pages that compile NO claim: they cannot be attributed to a source at all, which lint
+   reports as an ERROR — hence the danger colour, the same one the claimless dot uses. */
+.tree-topic .count.bad,
+.home .k.bad {
+  color: var(--danger, #b4241f);
+}
+
+/* The query count beside a domain's page count. */
+.tree-topic .count.q {
+  margin-left: 6px;
+  color: var(--accent);
+}
+
+/* A page that compiles no claim: it cannot be attributed to a source at all, which lint reports as an
+   ERROR — hence a different mark from the amber "stale" dot. Both belong in a list, because a reader
+   who cannot see that a page is broken reads it as one that works. */
+.claimless-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--danger, #b4241f);
+  flex: none;
+}
+
+.dirty-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #b45309;
+  flex: none;
+}
+
+.chip-dirty {
+  border-color: #b45309;
+  color: #b45309;
+}
+
+/* A source whose document steps are running is shown by the two things that mean it: the progress
+   bars (parts and claims) and the coloured step light (blue, pulsing). The ROW is not highlighted —
+   a tinted row and an accent edge made the whole list look busy and said "here" about a row that is
+   merely busy. The bars live in the SourceSteps component, which the row and the overlay share. */
+
+/* The "what is this source doing" chip in the detail overlay's header. */
+.doing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted-fg);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.doing.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* The step the run is in right now, from the live progress events. */
+.doing-now {
+  color: var(--muted-fg);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 34ch;
+}
+
+/* A value a running derivation is still writing (only live numbers carry it). */
+.live {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kv .v.working {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.row-src:last-child {
+  border-bottom: none;
+}
+
+.favicon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 3px;
+  object-fit: contain;
+}
+
+.row-src .ico {
+  color: var(--faint);
+  flex: none;
+}
+
+.row-src .main-col {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The right end of a source row: the state block — the two progress bars, the four lights and the
+   counts under them — flush right. On hover (or keyboard focus) the block is REPLACED by the row's
+   actions in the same column: the buttons never lie on top of the lights or the counts. */
+.row-src .end-col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  align-self: stretch;
+  flex: none;
+  margin-left: auto;
+}
+
+/* The right column is the SAME two lines as the left — the state line against the title, the counts
+   line against the file name / URL — so the two sides line up and the lights sit against the title.
+   The line boxes are literally the same ones: the state line takes the title's (`1.6em` at the row's
+   font size), the counts line the sub line's (12px at 1.6), and neither adds a margin. Without this
+   the right block was shorter than the left, centring floated it between the two lines, and the row
+   read as two columns that do not belong together. */
+.row-src .end-col .state {
+  /* One line box of the title: `1lh` says exactly that, `1.6em` is the same number for a browser
+       that does not know the unit yet. */
+  min-height: 1.6em;
+  min-height: 1lh;
+}
+
+.row-src .end-col .totals {
+  margin-top: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.row-src .acts {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  padding: 0;
+}
+
+/* The buttons themselves are buttons: a circular background, not a bare glyph that only looks
+   clickable while the pointer happens to be over it. The group spans both text lines. */
+.row-src .acts .icon-btn {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  color: var(--text-2);
+}
+
+.row-src .acts .icon-btn:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+/* The actions appear on hover, and for a KEYBOARD focus — never because a mouse click left the
+   button focused. `:focus-within` alone kept them on screen after a click (the click focuses the
+   button and the focus stays), so the row stayed "open" long after the pointer had left it. Only
+   `:focus-visible` distinguishes a tabbed-to element from a clicked one, and it keeps the keyboard
+   path intact: tab to the row, tab on to its actions, they stay visible.
+   The row is matched by its own `:focus-visible` (a child is not a descendant of itself, so `:has()`
+   alone would miss it), and `:is()` keeps the rule VALID where `:has()` is unknown: a comma list
+   containing one unsupported selector is dropped entirely, which would hide the actions for good. */
+.row-src:is(:hover, :focus-visible, :has(:focus-visible)) .acts {
+  display: flex;
+}
+
+/* The actions take the place of the state, not a layer over it: the lights and the counts are
+   actively hidden while the row is hovered or keyboard-focused. */
+.row-src:is(:hover, :focus-visible, :has(:focus-visible)) .end-col .state,
+.row-src:is(:hover, :focus-visible, :has(:focus-visible)) .end-col .totals {
+  display: none;
+}
+
+.row-src .t {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-src .sub .orig {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.row-src .sub {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.row-src .sub .meta-line {
+  flex: none;
+}
+
+.row-src .sub .orig {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-src .sub a {
+  color: var(--muted);
+}
+
+.row-src .meta {
+  font-size: 12px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  text-align: right;
+  flex: none;
+}
+
+/* Maintenance actions with their sentence: a button nobody dares to press is a button nobody uses. */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.action {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.action .btn {
+  flex: none;
+}
+
+.action .muted {
+  font-size: 12.5px;
+}
+
+/* The rail's first view: the state block (bars, lights, counts) and the actions that trigger the
+   steps. The block carries its own spacing; the actions get a little room below it. */
+.rail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.rail-actions .icon-btn {
+  border: 1px solid var(--border);
+}
+
+/* The files a source consists of (the object and its sidecars), with sizes. */
+.sidecar-table {
+  padding: 18px 0;
+}
+
+/* A list of page links inside the source page: the rows carry their own padding (and a negative
+   margin to reach the container's edge), so the list hands them the panel's 22px back and cancels
+   that margin — otherwise every row sticks 10px out of the panel and scrolls it sideways. */
+.page-list {
+  padding: 0 22px;
+}
+
+.page-list .page-link {
+  margin: 0;
+}
+
+.sidecar-table table {
+  width: calc(100% - 44px);
+  margin: 12px 22px 0;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.sidecar-table th {
+  text-align: left;
+  color: var(--faint);
+  font-weight: 500;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidecar-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.sidecar-table td:last-child,
+.sidecar-table th:last-child {
+  text-align: right;
+}
+
+.sidecar-table tr.missing td {
+  color: var(--danger, #b4241f);
+}
+
+/* The outline of a document that is too big to render at once: its own table of contents, one row per
+   part, indented by depth. Reading a book starts here — not with 2 MB of prose. */
+.outline {
+  padding: 12px 0 22px;
+}
+
+.outline-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 22px;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.outline-row:hover {
+  background: var(--surface-2, rgb(127 127 127 / 8%));
+}
+
+.outline-row .o-id {
+  flex: none;
+  min-width: 34px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+/* A node without text: a grouping heading, shown for the structure's sake but not offered to read. */
+.outline-group {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 22px 2px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.outline-row .o-t {
+  color: var(--text);
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A file of a source, opened: monospace, because that is what a file is — and the YAML header in its
+   own block, so it reads as what the document declares about itself and not as prose. */
+.file-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.file-link code {
+  border-bottom: 1px dotted var(--border-strong);
+}
+
+.file-link:hover code {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.file-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.file-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+/* The chevron points left for "back": one glyph, turned. */
+.file-head .icon-btn svg,
+.file-head .icon-btn {
+  transform: rotate(90deg);
+}
+
+.file-front {
+  margin: 0;
+  padding: 12px 22px;
+  background: var(--surface-2, rgb(127 127 127 / 8%));
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.file-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 14px 22px 22px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Status / health (low-key) ──────────────────────────── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 18px 24px;
+  margin: 6px 0 26px;
+}
+
+.stat .num {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.stat .lbl {
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.kv {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+  padding: 3px 0;
+}
+
+.kv .k {
+  width: 96px;
+  flex: none;
+  color: var(--faint);
+}
+
+.kv .v {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-2);
+  word-break: break-all;
+}
+
+.block-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: 26px 0 10px;
+}
+
+/* A block title can carry its own action (the vocabulary curation is ONE unit, so it is one
+   button, in the heading — not one per row). The button keeps its own case. */
+.block-title .spacer {
+  flex: 1;
+}
+
+.block-title .btn {
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.finding {
+  display: flex;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+
+.finding:last-child {
+  border-bottom: none;
+}
+
+.finding .sev {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  padding-top: 2px;
+  width: 58px;
+}
+
+.finding .fbody {
+  min-width: 0;
+  flex: 1;
+}
+
+.finding .fmsg {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.finding .forigin {
+  display: inline-flex;
+  gap: 6px;
+}
+
+/* The claim a finding is about, shown in place: a finding must point at its origin, and for a claim
+   that origin is the claim itself — atoms are not a place in the app, they are what pages and
+   sources are made of. Both directions are links, so a finding leads on. */
+.finding .fatom {
+  margin: 8px 0 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-alt);
+}
+
+.finding .fatom .claim {
+  color: var(--text);
+}
+
+.finding .fmeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+/* Not connected: a strip in the content area, above everything the reader could mistake for data. The
+   sidebar's footer dot is the quiet indicator; this is the one that explains an empty or stale view. */
+.offline-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 9px 16px;
+  border-bottom: 1px solid #b45309;
+  background: color-mix(in srgb, #b45309 12%, var(--bg));
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.offline-strip b {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+/* The work in flight on the Status page: one row per job, with the step, its state, WHAT it is about
+   and what the run itself reports. A list of jobs, not a wall of text — the counts say how busy the app
+   is, this says what it is busy with. */
+.jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.job {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-alt);
+  font-size: 13px;
+}
+
+.job .jstep {
+  font-weight: 500;
+  min-width: 92px;
+}
+
+.job .jstate {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  flex: none;
+}
+
+.job .jstate.running {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.job .jstate.waiting {
+  border-color: var(--border-strong);
+  color: var(--text-2);
+}
+
+.job .jstate.pending {
+  border-color: #b45309;
+  color: #b45309;
+}
+
+.job .jlive {
+  color: var(--text-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job .spacer {
+  flex: 1;
+}
+
+/* An inline link to where a finding points: a page, a source, a claim. Quiet and icon-led — an
+   offer to look, not a button that does something. */
+.src-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-2);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.src-link:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* ── Overlay: search & dialog ───────────────────────────── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(11 15 20 / 40%);
+  backdrop-filter: blur(2px);
+  display: flex;
+  justify-content: center;
+  /* Vertically centred: the dialog is the thing on screen, not a banner pinned to the top. */
+  align-items: center;
+  padding: 4vh 0;
+  z-index: 50;
+}
+
+.overlay-bg {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.palette,
+.dialog {
+  position: relative;
+}
+
+.palette {
+  width: min(640px, 92vw);
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+
+.palette input {
+  width: 100%;
+  height: 52px;
+  padding: 0 18px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.palette input:focus {
+  outline: none;
+}
+
+.palette .results {
+  max-height: 52vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px;
+}
+
+.hit {
+  display: flex;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--text);
+  cursor: pointer;
+  width: 100%;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  min-width: 0;
+}
+
+.hit.active,
+.hit:hover {
+  background: var(--bg-hover);
+}
+
+.hit .t {
+  font-weight: 500;
+}
+
+.hit .s {
+  display: block;
+  font-size: 12px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.hit > span {
+  min-width: 0;
+}
+
+.hit .kind {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+}
+
+.palette .hint {
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+}
+
+.dialog {
+  width: min(560px, 92vw);
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  padding: 20px;
+  align-self: flex-start;
+}
+
+.dialog h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.dialog p.sub {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.dropzone {
+  margin-top: 12px;
+  padding: 22px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13.5px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: var(--ease) 140ms;
+}
+
+.dropzone:hover {
+  color: var(--text-2);
+  border-color: var(--faint);
+}
+
+.dropzone.drop-active {
+  border-color: var(--accent);
+  border-style: solid;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.dialog .foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.dialog .msg {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: var(--bg);
+  padding: 9px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  box-shadow: var(--shadow-pop);
+  z-index: 60;
+  max-width: 80vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Source page ────────────────────────────────────────── */
+/* A source is a PAGE now, not an overlay: it fills the content column and keeps its own main/rail
+   scrollers, so the surrounding shell does not scroll the whole document behind it. */
+.source-page {
+  height: 100%;
+  min-height: 0;
+}
+
+.source-page .viewer {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* ── Inline source viewer ───────────────────────────────── */
+.viewer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1080px, 95vw);
+  height: 88vh;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+
+.viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.viewer-head .t {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.seg button {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.seg button.on {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.viewer-cols {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 288px;
+}
+
+.viewer-main {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+.viewer-rail {
+  border-left: 1px solid var(--border);
+  background: var(--bg-alt);
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  padding: 14px 16px 28px;
+  min-width: 0;
+}
+
+.rail-block {
+  margin-bottom: 18px;
+}
+
+.rail-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
+
+.rail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.claim {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+}
+
+.claim:last-child {
+  border-bottom: none;
+}
+
+.claim-t {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.claim-m {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.viewer-main .pdf {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: var(--inset, #525659);
+}
+
+.viewer-md {
+  max-width: var(--doc-max);
+  margin: 0 auto;
+  padding: 24px 40px 48px;
+}
+
+/* The per-source log: smaller than the body text, so a whole run fits on one screen — but
+   still comfortably readable. */
+.viewer-main .srclog,
+/* The log scrolls with its tab, not inside it: `.viewer-main` is the ONE scroller of every tab
+   (markdown, raw, files, log). An `overflow: auto` here made the pre a second one — and with a note
+   above it, `max-height: 100%` guaranteed the outer bar as well. Two scrollbars for one text is a
+   layout that cannot be right. */
+.srclog {
+  margin: 0;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  /* A log line ends in a URL or a path as often as in a word: break ANYWHERE, or the one long token
+       of a line decides the width of the whole view. */
+  overflow-wrap: anywhere;
+}
+
+.raw {
+  margin: 0;
+  padding: 20px 24px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Small screens ──────────────────────────────────────── */
+@media (max-width: 760px) {
+  .app {
+    grid-template-columns: 0 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .doc,
+    .page-foot,
+    .home,
+    .sources,
+    .status,
+    /* The question above its answer: a question mark in the margin, and the question itself as the
+   strongest line of the block. */
+.ask-q {
+    max-width: var(--doc-max);
+    margin: 0 0 14px;
+    padding-left: 14px;
+    border-left: 2px solid var(--accent);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 500;
+  }
+
+  .ask {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+/* The vocabulary report: one row per namespace, the numbers left, the findings right. */
+.vocab {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.vocab-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.vocab-ns {
+  min-width: 74px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.vocab-nums {
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.vocab-find {
+  color: #b45309;
+  font-family: var(--font-mono);
+}
+
+/* The vocabulary rows sit under a heading that carries the ONE action (the curation is a closed
+   unit): the numbers, then the findings. */
+.vocab-row {
+  gap: 12px;
+}
+
+
+/* Informational findings are a vocabulary observation, not a repair: collapsed by default. */
+.info-findings {
+  margin-top: 10px;
+}
+
+.info-findings summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 6px 0;
+}
+
+/* ── Wiki ───────────────────────────────────────────────── */
+.copy-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-2);
+  cursor: pointer;
+  font: inherit;
+}
+
+.copy-id:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.copy-id code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.wiki {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 34px 48px 96px;
+}
+
+.wiki-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: 0;
+  align-items: start;
+}
+
+.wiki-main {
+  min-width: 0;
+  padding: 0 26px 80px 0;
+}
+
+.wiki-aside {
+  position: sticky;
+  top: 0;
+  min-width: 0;
+  padding: 0 0 40px 20px;
+  border-left: 1px solid var(--border);
+}
+
+.wiki-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 900px;
+}
+
+.wiki-editor-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.field > span > .muted {
+  font-weight: 400;
+}
+
+.wiki-body {
+  height: auto;
+  min-height: 420px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.wiki-editor-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wiki-preview {
+  max-width: 900px;
+  min-height: 420px;
+}
+
+.wiki-preview h2 {
+  margin: 0 0 10px;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.wiki-page {
+  max-width: 900px;
+}
+
+.wiki-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.wiki-page-head h2 {
+  margin: 0 0 6px;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.wiki-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wiki-page-actions .btn {
+  text-decoration: none;
+}
+
+.wiki-id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+}
+
+.wiki-page-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.wiki-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.wiki-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wiki-row:hover {
+  background: var(--bg-hover);
+}
+
+.wiki-row-title {
+  font-weight: 600;
+  color: var(--text);
+  min-width: 0;
+}
+
+.wiki-row-tags {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* The small inline tag on a row: a wiki page's tag, a source's "link"/"wiki" marker. Not clickable —
+   the clickable ones are .tag-chip. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.wiki-empty {
+  padding: 48px 0;
+  color: var(--muted);
+}
+
+.wiki-empty p {
+  margin: 0 0 12px;
+}
+
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tag-chip span {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.tag-chip:hover,
+.tag-chip.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* A DERIVED tag (the app tagged the page) is the same chip, dashed: it is as usable as a written one —
+   a filter never asks who wrote it — but the reader can tell the two apart at a glance. */
+.tag-chip.auto,
+.tag.auto {
+  border-style: dashed;
+  color: var(--faint);
+}
+
+.chip.auto {
+  border: 1px dashed var(--border);
+  background: transparent;
+}
+
+.wiki-row-tags .tag.auto {
+  border-style: dashed;
+}
+
+.wiki-hint {
+  margin-top: 22px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.wiki-hint code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.wiki-markdown {
+  padding-bottom: 40px;
+}
+
+@media (max-width: 820px) {
+  .wiki {
+    padding: 24px 20px 80px;
+  }
+
+  .wiki-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wiki-aside {
+    position: static;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding: 18px 0 40px;
+  }
+
+  .wiki-main {
+    padding-right: 0;
+  }
+}

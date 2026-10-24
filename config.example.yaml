@@ -1,0 +1,137 @@
+# Thought Keeper — application configuration.
+# Copy to config.yaml and adjust. Values may reference environment variables
+# using ${VAR} syntax (useful for secrets).
+
+app:
+    # The app never launches a browser: it logs the address and the tray can show it.
+    # Open that address yourself — best as the installed PWA (a real app window).
+    tray: true                             # show a UI (a tray; the UI itself is the PWA); false = headless
+    autostart: false                       # login item; off by default
+    smart_open: true                       # tray/start-up open: prefer the INSTALLED PWA's own launcher (the browser writes it on install) over the OS URL handler, so the app's own window opens; best-effort, falls back to the OS handler
+    # A SOFT ceiling on the Go heap, in MiB; 0 = none. The association pass spikes the heap to read
+    # every claim and frees it again; without a ceiling the runtime gives that memory back to the OS
+    # only lazily. Set it generously (e.g. half the RAM you want the app to use) — below a pass's
+    # real working set it only buys GC thrashing.
+    memory_limit_mb: 0
+
+server:
+    addr: '127.0.0.1:9210'                 # loopback only; '127.0.0.1:0' = ephemeral port
+
+vault:
+    root: '~/thought-keeper'
+    sources: 'sources'                     # content-addressed raw store (immutable)
+    inbox: 'inbox'                         # drop zone; the watcher intakes files from here
+    atoms: 'atoms'                         # claims (source of truth)
+    wiki: 'wiki'                           # user-authored Markdown pages (source of truth)
+    clusters: 'clusters'                   # titleless associations of claims (derived cache)
+    asks: 'asks'                           # saved Ask conversations (records)
+    vocabulary: 'vocabulary'               # the canonical NAME vocabularies: claim topics, wiki tags
+                                           # and source tags — decisions about what a thing is called,
+                                           # as opposed to what it says. Records, not caches: a
+                                           # reindex reads them, and they belong in a versioned vault.
+    trash: '.trash'
+    git:
+        ignore_derived: true               # a vault under version control: keep the DERIVED files
+                                           # (.outline, .meta, .log, index.db, .dirty, trash,
+                                           # inbox) out of the history. The app only appends the
+                                           # missing rules to .gitignore; your own lines stay.
+        # NOT implemented — the app never runs git. The shape of a later feature:
+        enabled: false                     # commit on write when the vault is a repo
+        commit_on_write: true
+        author: 'thought-keeper <agent@localhost>'
+
+index:
+    # The index belongs to exactly ONE vault, so it lives in the vault root: a vault can be moved,
+    # backed up or switched as a whole, and the index can be rebuilt from the vault's files
+    # (`reindex` + `rebuild-trees`). An absolute path is honoured, so an existing setup keeps its
+    # location.
+    #
+    # Everything that belongs to ONE source lives next to that source instead — inside sources/:
+    #   <hash>.pdf|md|txt   the object (the bytes that were dropped in)
+    #   <hash>.capture.md   the readable rendering (step 1, only for a PDF — a .md source IS that)
+    #   <hash>.meta         the step record (capture/outline/distill)
+    #   <hash>.outline      the node tree (step 2)
+    #   <hash>.log          everything that was done to this source
+    # So deleting a source deletes its whole story, and one source is one folder entry.
+    path: 'index.db'          # $VAULT/index.db
+    favicons: 'favicons'      # $VAULT/.thought-keeper/favicons (shared: two sources of one host)
+
+openai:
+    base_url: '${OPENAI_BASE_URL}'         # OpenAI-compatible endpoint (default: OpenAI)
+    api_key: '${OPENAI_API_KEY}'
+    model_compile: 'gpt-4o-mini'           # trees + claims (cheap; env OPENAI_MODEL overrides)
+    model_reason: 'gpt-4o'                 # queries + lint (strong)
+    # reasoning_effort_compile: 'minimal'   # grouping and filing is mechanical
+    # reasoning_effort_distill: 'low'      # deciding what one claim is, is a judgement
+    max_iterations: 16
+    retries: 3                             # per-call retries for a TRANSIENT failure (timeout, 429, 5xx)
+    retry_backoff: '2s'                    # first wait; doubles per attempt
+    timeout: '300s'                        # per-call ceiling; a timeout is retried, not fatal
+    # Extra HTTP headers for the endpoint. A per-run x-opencode-session header is
+    # always sent (required by the opencode Zen proxy, ignored elsewhere); values
+    # here override it or add more headers.
+    headers: {}
+
+pipeline:                                  # the four steps: capture → outline → distill → cluster
+    # The DOCUMENT steps (capture, outline, distill) run per source; the CLUSTER step runs over the
+    # whole vault and only while no document step runs. The knobs are grouped that way.
+    auto: true                             # watcher derives dropped sources
+    auto_distill: true                     # run the document steps automatically once a source has an outline
+    debounce: '3s'
+    run_timeout: '10m'                     # hard ceiling for one DOCUMENT run
+    cluster_timeout: '30m'                 # hard ceiling for one CLUSTER pass (the claim graph can be large)
+    parts_per_run: 12                      # parts (one text-bearing node each) one distill run covers
+    parallel_parts: 4                      # parts distilled at the same time (they are independent)
+    parallel_runs: 4                       # document runs at the same time — one per source
+    auto_continue: true                    # queue the next run while a derivation is unfinished
+    reconcile_interval: '1m'               # consistency job: verify that what the step records claim is
+                                           # on disk (a deleted outline invalidates its derivation and
+                                           # re-queues the source), and ask step 4 for a pass when there
+                                           # is something to do. Empty/0 = off.
+    reconcile_batch: 500                   # sources one consistency pass looks at (sliced over ticks)
+cluster:                                   # the claim graph behind the associations. These are QUALITY gates,
+                                           # not target sizes: a broad group is split, a tight group stays.
+                                           # No model is involved: the grouping is deterministic.
+    neighbor_k: 16                         # genuinely similar claims linked per claim (the graph is sparse)
+    min_claim_score: 0.05                  # smallest IDF-weighted overlap for a claim edge
+    merge_min_internal: 0.22               # a growing cluster must keep this coherence
+    merge_min_gap: 0.04                    # ... and be more coherent than its nearest neighbour
+    split_min_core_size: 3                 # smallest core a split may produce
+    topic_span_limit: 12                   # above this many topics a merge needs stronger coherence
+    max_cluster_claims: 80                 # HARD cap: a bigger group is split by similarity
+    attach_min_score: 0.18                 # cosine to an existing cluster centroid for a free claim to join it
+    overlap_max: 2                         # clusters one claim may belong to
+    cross_topic_min_edges: 3               # real claim edges needed to merge two topic blocks
+
+capture:                                   # URL sources
+    dedupe_by_url: true
+    refresh_interval: '168h'               # how often ONE URL may be revisited (weekly); a due check
+                                           # runs hourly; empty = manual only
+    min_text_chars: 400                    # below this a page becomes a bookmark
+                                           # (video/app), never distilled; a login,
+                                           # paywall or consent wall is BLOCKED instead
+
+fetch:
+    timeout: '20s'
+    max_bytes: 5242880                     # 5 MiB
+    user_agent: 'thought-keeper/0.1 (+local)'
+    allow_private: false                   # SSRF guard stays on by default
+
+pdf:
+    text_tool: 'pdftotext'                 # poppler, ad-hoc stdin→stdout
+    max_bytes: 52428800                    # 50 MiB
+    max_pages: 2000
+
+ocr:
+    enabled: true
+    rasterizer: 'pdftocairo'                 # poppler, ad-hoc stdin→stdout
+    tesseract: 'tesseract'
+    languages: ['eng', 'deu']
+    dpi: 300
+    min_text_chars_per_page: 32            # below this, the page is OCR'd
+    max_pages: 500
+    timeout: '5m'
+
+lint:
+    programmatic_on_compile: true          # cheap checks after each cluster pass
+

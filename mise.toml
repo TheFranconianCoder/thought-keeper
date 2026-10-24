@@ -1,0 +1,18 @@
+[tools]
+go = "1.27"
+node = "26"                # PWA toolchain (Vite + Svelte); Node >=22.12 required
+"golangci-lint" = "2.12"
+gofumpt = "0.11"
+sqlc = "1.31"
+goose = "3.27"
+lefthook = "1.13"
+task = "3.53"
+syft = "1.54.0"
+grype = "0.119.0"
+grant = "0.6.8"
+
+# External tools for PDF text extraction and OCR. Invoked ad-hoc via stdin/stdout
+# (no daemon, no CGO). They are optional at runtime: the service capability-checks
+# them at startup; in production they must be installed for PDF/OCR to work.
+poppler = "latest"            # conda-forge: provides pdftotext, pdftoppm
+"conda:tesseract" = "latest"  # conda-forge: provides tesseract

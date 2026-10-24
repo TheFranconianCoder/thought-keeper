@@ -1,0 +1,24 @@
+# Build output
+/dist/
+
+# Local configuration and data
+/config.yaml
+.env
+*.db
+*.db-wal
+*.db-shm
+
+# A local vault created while testing
+/thought-keeper/
+
+# Web toolchain
+/web/node_modules/
+# Generated PWA assets: built by `task web:build`, embedded by go:embed.
+# Only the placeholder is tracked so `go build` works without Node.
+/internal/web/dist/*
+!/internal/web/dist/.gitkeep
+
+# Editor / OS
+.DS_Store
+/.task/
+/logs/
