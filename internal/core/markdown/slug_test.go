@@ -56,24 +56,11 @@ func TestTagsWithUmlauts(t *testing.T) {
 	}
 }
 
-func TestStripTrailingTags(t *testing.T) {
-	body := "The real prose stays.\n\n#caching #correctness\n"
-	if got := markdown.StripTrailingTags(body); got != "The real prose stays." {
-		t.Fatalf("StripTrailingTags = %q", got)
+func TestSlug(t *testing.T) {
+	if got := markdown.Slug("Caching is only safe!"); got != "caching-is-only-safe" {
+		t.Errorf("slug = %q", got)
 	}
-	// A lone '#' heading line is not a tag line.
-	body2 := "Text.\n\n# Heading"
-	if got := markdown.StripTrailingTags(body2); got != "Text.\n\n# Heading" {
-		t.Fatalf("StripTrailingTags kept heading wrong: %q", got)
-	}
-}
-
-func TestUnlinkDropsUnknownTargets(t *testing.T) {
-	known := map[string]bool{"Caching": true}
-	body := "See [[Caching]] and [[Ghost Page|the ghost]] and `[[Code]]`."
-	got, n := markdown.Unlink(body, func(target string) bool { return known[target] })
-	want := "See [[Caching]] and the ghost and `[[Code]]`."
-	if got != want || n != 1 {
-		t.Fatalf("Unlink = %q (%d changes), want %q (1)", got, n, want)
+	if got := markdown.Slug("###"); got != "untitled" {
+		t.Errorf("slug = %q, want untitled", got)
 	}
 }

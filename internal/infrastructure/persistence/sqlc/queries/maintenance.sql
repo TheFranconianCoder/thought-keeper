@@ -12,8 +12,5 @@ WHERE cluster_id NOT IN (SELECT id FROM clusters) OR atom_id NOT IN (SELECT id F
 -- name: DeleteOrphanClusters :execrows
 DELETE FROM clusters WHERE id NOT IN (SELECT cluster_id FROM cluster_atoms);
 
--- name: DeleteOrphanAtomLinks :execrows
-DELETE FROM atom_links WHERE from_id NOT IN (SELECT id FROM atoms);
-
 -- name: DeleteOrphanSourceNodes :execrows
 DELETE FROM source_nodes WHERE source_id NOT IN (SELECT id FROM sources);

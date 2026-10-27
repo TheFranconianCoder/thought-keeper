@@ -18,9 +18,10 @@ import (
 // (unsaved). It is shared by the lint run and by cleanup, so the findings list always reflects the
 // current state after a repair.
 //
-// There are no page findings any more: no ghost page links, no orphans, no untagged pages, no pages
-// without provenance. The association layer is a cache derived from the claims, so a stale cluster is
-// repaired by the cluster pass, not reported as a defect.
+// There are no page findings any more: no orphans, no untagged pages, no pages without provenance.
+// A claim body carries no links, so there is no red link to report either. The association layer is a
+// cache derived from the claims, so a stale cluster is repaired by the cluster pass, not reported as
+// a defect.
 func ProgrammaticFindings(
 	ctx context.Context,
 	lint interfaces.LintRepository,
@@ -36,12 +37,6 @@ func ProgrammaticFindings(
 		})
 	}
 
-	if links, err := lint.UnresolvedAtomLinks(ctx, 2000); err == nil {
-		for _, l := range links {
-			add("ghost_link", entities.SeverityWarning, entities.SubjectAtom, l.FromID.String(),
-				fmt.Sprintf("claim links to missing [[%s]] (%s)", l.RawTarget, l.FromTitle))
-		}
-	}
 	if list, err := lint.AtomsWithoutSource(ctx, 1000); err == nil {
 		for _, a := range list {
 			add("provenance_gap", entities.SeverityWarning, entities.SubjectAtom, a.ID.String(),

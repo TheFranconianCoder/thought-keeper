@@ -61,8 +61,8 @@
     // Store methods read their own reactive fields. They must stay untracked: an effect that
     // depended on them would rerun after every load and reload the same container forever.
     untrack(() => {
-      if (nextTopic !== claims.topic || !claims.loaded) void claims.load(nextTopic);
-      if (claims.topics.length === 0) void claims.loadTopics();
+      if (nextTopic !== claims.topic || !claims.loaded || claims.stale) void claims.load(nextTopic);
+      if (claims.topics.length === 0 || claims.topicsStale) void claims.loadTopics();
 
       if (route.id) void claims.open(route.id);
       else claims.clearSelection();
@@ -252,7 +252,7 @@
 
         {#if claim.body}
           <div class="claim-body">
-            <Markdown text={claim.body} topics={topicNames} claimTopic={topic} />
+            <Markdown text={claim.body} topics={topicNames} claimTopic={topic} wikilinks={false} />
           </div>
         {/if}
 

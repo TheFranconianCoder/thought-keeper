@@ -80,12 +80,44 @@ export function stepsOf(source: Source): Record<StepName, StepStatus> {
 }
 
 /** canAttachSnapshot reports whether a human-supplied page can fill this source: a URL the app could
- *  not read — a wall (capture failed) or a bookmark (no readable text: a JavaScript page, a video, an
- *  app). A sitemap or a feed is a LIST, not a page: attaching to it would replace the list. */
+ *  not read — a wall (capture failed), a bookmark (no readable text: a JavaScript page, a video, an
+ *  app), or a source whose snapshot was already attached (the human may replace it). A sitemap or a
+ *  feed is a LIST, not a page: attaching to it would replace the list. */
 export function canAttachSnapshot(source: Source): boolean {
   if (source.kind !== 'url' || source.sitemap === true || source.rss === true) return false;
-  if (source.bookmark === true) return true;
+  if (source.bookmark === true || source.attached === true) return true;
   return source.steps?.capture?.state === 'failed';
+}
+
+/** SourceFilter is the source lens's client-side filter: the search term, the kind selector, one
+ *  tag and the "attached snapshots only" switch. The list is loaded whole, so the same predicate
+ *  serves every page. */
+export interface SourceFilter {
+  query?: string;
+  kind?: string;
+  tag?: string;
+  attachedOnly?: boolean;
+}
+
+/** matchesSourceFilter applies the lens filters. An attachment is a source fact (a human supplied
+ *  the snapshot), not a derivation state: the filter shows those sources regardless of their step
+ *  lights. */
+export function matchesSourceFilter(source: Source, filter: SourceFilter): boolean {
+  if (filter.kind && filter.kind !== 'all' && source.kind !== filter.kind) return false;
+  if (filter.attachedOnly && source.attached !== true) return false;
+  if (filter.tag) {
+    const tags = new Set([...(source.tags ?? []), ...(source.auto_tags ?? [])]);
+    if (!tags.has(filter.tag)) return false;
+  }
+  const term = (filter.query ?? '').trim().toLowerCase();
+  if (!term) return true;
+  return (
+    source.title.toLowerCase().includes(term) ||
+    source.original_name.toLowerCase().includes(term) ||
+    (source.url ?? '').toLowerCase().includes(term) ||
+    (source.tags ?? []).some((tag) => tag.includes(term)) ||
+    (source.auto_tags ?? []).some((tag) => tag.includes(term))
+  );
 }
 
 export function stepTitle(step: StepName, status: StepStatus): string {

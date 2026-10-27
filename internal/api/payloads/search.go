@@ -46,6 +46,5 @@ type FindingList struct {
 type CleanupResult struct {
 	ClustersPruned  int `json:"clusters_pruned"`
 	ClustersRemoved int `json:"clusters_removed"`
-	LinksRepaired   int `json:"links_repaired"`
 	Findings        int `json:"findings"`
 }

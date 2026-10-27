@@ -16,7 +16,7 @@ func TestAtomCodecRoundTrip(t *testing.T) {
 		ID:        ulid.Make(),
 		Topic:     "caching",
 		Claim:     "Caching is only safe when the key covers every input.",
-		Body:      "If two inputs share a key, one value is wrong. See [[Other Atom]].",
+		Body:      "If two inputs share a key, one value is wrong. See `[[Other Atom]]`.",
 		Type:      entities.AtomClaim,
 		Status:    entities.AtomActive,
 		Sources:   []entities.AtomSource{{Hash: strings.Repeat("a", 64), NodeID: "0.1", OCR: true}},
@@ -45,10 +45,8 @@ func TestAtomCodecRoundTrip(t *testing.T) {
 	if len(got.Sources) != 1 || got.Sources[0].NodeID != "0.1" || !got.Sources[0].OCR {
 		t.Errorf("sources = %+v", got.Sources)
 	}
-	if len(got.Links) != 1 || got.Links[0].RawTarget != "Other Atom" {
-		t.Errorf("links = %+v", got.Links)
-	}
-	if !strings.Contains(got.Body, "one value is wrong") {
+	// A bracket pair is prose. It is no longer decoded as a link, and the body keeps it verbatim.
+	if !strings.Contains(got.Body, "`[[Other Atom]]`") {
 		t.Errorf("body = %q", got.Body)
 	}
 }

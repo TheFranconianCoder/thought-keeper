@@ -19,8 +19,13 @@ type Source struct {
 	RSS bool `json:"rss,omitempty"`
 	// FromFeed marks a snapshot taken from a feed's own copy of the post (the page itself may be a
 	// JavaScript shell); FeedHash is the feed it came from.
-	FromFeed     bool   `json:"from_feed,omitempty"`
-	FeedHash     string `json:"feed_hash,omitempty"`
+	FromFeed bool   `json:"from_feed,omitempty"`
+	FeedHash string `json:"feed_hash,omitempty"`
+	// Attached marks a snapshot the human supplied (a login, a paywall, a JavaScript page). The
+	// source page offers "replace snapshot" and "try the URL again" for it; the automatic refresh
+	// still leaves it alone.
+	Attached     bool   `json:"attached,omitempty"`
+	AttachedFrom string `json:"attached_from,omitempty"`
 	OriginalName string `json:"original_name,omitempty"`
 	// Tags are the human's labels for this source; AutoTags are the agent's derived ones. Both are
 	// observed by the source-tags vocabulary; auto_tags_at marks a tagged source whose answer was
@@ -72,6 +77,16 @@ type StepStatus struct {
 	At     string `json:"at,omitempty"`
 	Detail string `json:"detail,omitempty"`
 	Error  string `json:"error,omitempty"`
+}
+
+// RefetchResult is the response of POST /api/v1/sources/{hash}/refetch: a forced fetch of an attached
+// URL. A readable page replaces the snapshot and clears the marker; a wall or a failure keeps the
+// attached snapshot exactly as it was.
+type RefetchResult struct {
+	Replaced bool   `json:"replaced"`
+	Blocked  bool   `json:"blocked"`
+	Failed   bool   `json:"failed"`
+	Detail   string `json:"detail,omitempty"`
 }
 
 // SourceList is the response of GET /api/v1/sources.
@@ -159,7 +174,8 @@ type RefreshResult struct {
 	// Blocked counts pages that answered with a wall (a login, a paywall, a consent gate): the source
 	// is fine, the site is not answering with itself.
 	Blocked int `json:"blocked,omitempty"`
-	// Attached counts sources with a human-supplied snapshot. They are not fetched at all.
+	// Attached counts sources with a human-supplied snapshot. The pass leaves them alone; a forced
+	// per-source refetch is the explicit way to try one.
 	Attached int `json:"attached,omitempty"`
 	// Discovered counts the NEW pages a sitemap or a feed declared in this pass (already claimed);
 	// Removed counts the pages a sitemap no longer lists. A feed never removes.

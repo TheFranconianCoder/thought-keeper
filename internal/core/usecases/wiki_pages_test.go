@@ -3,6 +3,7 @@ package usecases_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -52,10 +53,9 @@ func TestSaveWikiPageOwnsOneStableSource(t *testing.T) {
 	parts := sqlc.NewPartRepository(db)
 	steps := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), index, nil)
 	clean := usecases.CleanSource{Parts: parts, Atoms: atomRepo, AtomStore: atomStore, Index: index, Clock: wikiClock{}}
-	deleter := usecases.DeleteSource{Store: store, Index: index, Atoms: atomStore, AtomRepo: atomRepo, Steps: steps, Clock: wikiClock{}}
 	pages := wiki.New(wikiDir)
 	save := usecases.SaveWikiPage{
-		Pages: pages, Store: store, Index: index, Steps: steps, Delete: deleter, Clock: wikiClock{},
+		Pages: pages, Store: store, Index: index, Steps: steps, Clock: wikiClock{},
 	}
 
 	first, err := save.Execute(ctx, usecases.WikiPageInput{
@@ -180,9 +180,9 @@ func TestSaveWikiPageQueuesLinksWithoutFetchingThem(t *testing.T) {
 	steps := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), index, nil)
 	deleter := usecases.DeleteSource{Store: store, Index: index, Atoms: atomStore, AtomRepo: atomRepo, Steps: steps, Clock: wikiClock{}}
 	save := usecases.SaveWikiPage{
-		Pages: wiki.New(wikiDir), Store: store, Index: index, Steps: steps,
-		Delete: deleter, Clock: wikiClock{},
+		Pages: wiki.New(wikiDir), Store: store, Index: index, Steps: steps, Clock: wikiClock{},
 	}
+	prune := usecases.PruneWikiLinks{Pages: wiki.New(wikiDir), Index: index, Delete: deleter}
 	queue := usecases.QueueURLs{Index: index, Steps: steps, Clock: wikiClock{}}
 
 	const link = "https://example.com/a"
@@ -242,18 +242,133 @@ func TestSaveWikiPageQueuesLinksWithoutFetchingThem(t *testing.T) {
 		t.Fatalf("a known link was queued again: %v", second.URLsAdded)
 	}
 
-	// Removing the URL removes the page-owned source.
-	third, err := save.Execute(ctx, usecases.WikiPageInput{
+	// Removing the URL is not a delete: a save must not wait for one, so the source is still there
+	// when the save returns.
+	if _, err := save.Execute(ctx, usecases.WikiPageInput{
 		ID: first.Page.ID, Title: "Links", Body: "No links any more.",
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatalf("third save: %v", err)
 	}
-	if len(third.URLHashesRemoved) != 1 || third.URLHashesRemoved[0] != urlHash {
-		t.Fatalf("URLHashesRemoved = %v, want the link's source", third.URLHashesRemoved)
+	if _, err := index.GetSourceByHash(ctx, urlHash); err != nil {
+		t.Fatal("the save deleted the link's source inside the request")
+	}
+
+	// The background pass is what removes it — and it re-reads the page, so it only removes what the
+	// page no longer declares.
+	res, err := prune.Execute(ctx, first.Page.ID, "")
+	if err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if res.LinksRemoved != 1 {
+		t.Fatalf("pruned %d link sources, want 1", res.LinksRemoved)
 	}
 	if _, err := index.GetSourceByHash(ctx, urlHash); err == nil {
 		t.Fatal("URL source survived its removal from the page")
+	}
+
+	// A link re-added before the job ran is declared again, so its source stays: the pass is
+	// idempotent and race-safe.
+	const kept = "https://example.com/kept"
+	if _, err := queue.Execute(ctx, first.Page.ID.String(), []string{kept}); err != nil {
+		t.Fatalf("queue kept: %v", err)
+	}
+	if _, err := save.Execute(ctx, usecases.WikiPageInput{
+		ID: first.Page.ID, Title: "Links", Body: "Back: [kept](" + kept + ").",
+	}); err != nil {
+		t.Fatalf("save kept: %v", err)
+	}
+	if _, err := prune.Execute(ctx, first.Page.ID, ""); err != nil {
+		t.Fatalf("prune kept: %v", err)
+	}
+	if _, err := index.GetSourceByHash(ctx, entities.URLHash(kept)); err != nil {
+		t.Fatal("a link the page still declares was pruned")
+	}
+}
+
+// TestPruneWikiLinksLeavesALinkAnotherPageDeclaresAlone: a URL one page drops is not that page's to
+// delete while another page still declares it.
+func TestPruneWikiLinksLeavesALinkAnotherPageDeclaresAlone(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	sourcesDir := filepath.Join(root, "sources")
+	db, err := persistence.Open(filepath.Join(root, "index.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := persistence.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	store := objects.New(sourcesDir)
+	index := sqlc.NewSourceRepository(db)
+	atomStore := atoms.New(filepath.Join(root, "atoms"))
+	steps := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), index, nil)
+	pages := wiki.New(filepath.Join(root, "wiki"))
+	deleter := usecases.DeleteSource{Store: store, Index: index, Atoms: atomStore, AtomRepo: sqlc.NewAtomRepository(db), Steps: steps, Clock: wikiClock{}}
+	save := usecases.SaveWikiPage{Pages: pages, Store: store, Index: index, Steps: steps, Clock: wikiClock{}}
+	prune := usecases.PruneWikiLinks{Pages: pages, Index: index, Delete: deleter}
+	queue := usecases.QueueURLs{Index: index, Steps: steps, Clock: wikiClock{}}
+
+	const link = "https://example.com/shared"
+	first, err := save.Execute(ctx, usecases.WikiPageInput{Title: "One", Body: "See " + link + "."})
+	if err != nil {
+		t.Fatalf("save one: %v", err)
+	}
+	second, err := save.Execute(ctx, usecases.WikiPageInput{Title: "Two", Body: "Also " + link + "."})
+	if err != nil {
+		t.Fatalf("save two: %v", err)
+	}
+	if _, err := queue.Execute(ctx, first.Page.ID.String(), []string{link}); err != nil {
+		t.Fatalf("queue: %v", err)
+	}
+	if _, err := save.Execute(ctx, usecases.WikiPageInput{ID: first.Page.ID, Title: "One", Body: "No link."}); err != nil {
+		t.Fatalf("save one without the link: %v", err)
+	}
+	if _, err := prune.Execute(ctx, first.Page.ID, ""); err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if _, err := index.GetSourceByHash(ctx, entities.URLHash(link)); err != nil {
+		t.Fatalf("the link second still declares %q was pruned", second.Page.ID)
+	}
+}
+
+// listCountingIndex counts the URL-catalog reads a save makes.
+type listCountingIndex struct {
+	*fakeIndex
+	calls int
+}
+
+func (i *listCountingIndex) ListURLSources(ctx context.Context) ([]entities.Source, error) {
+	i.calls++
+	return i.fakeIndex.ListURLSources(ctx)
+}
+
+// TestSaveWikiPageReadsTheURLCatalogOnce: the save asks "which links are known?" with ONE list read.
+// FindURLSource lists every URL source on each call, and a page with 63 links paid that whole list 63
+// times inside the request — 1.6 seconds for a local write.
+func TestSaveWikiPageReadsTheURLCatalogOnce(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	index := &listCountingIndex{fakeIndex: newFakeIndex()}
+	save := usecases.SaveWikiPage{
+		Pages: wiki.New(filepath.Join(root, "wiki")),
+		Store: objects.New(filepath.Join(root, "sources")),
+		Index: index, Clock: wikiClock{},
+	}
+
+	var body strings.Builder
+	for i := range 40 {
+		fmt.Fprintf(&body, "- [link %d](https://example.com/%d)\n", i, i)
+	}
+	first, err := save.Execute(ctx, usecases.WikiPageInput{Title: "Many links", Body: body.String()})
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if len(first.URLsAdded) != 40 {
+		t.Fatalf("URLsAdded = %d, want 40", len(first.URLsAdded))
+	}
+	if index.calls != 1 {
+		t.Fatalf("ListURLSources called %d times, want 1", index.calls)
 	}
 }
 

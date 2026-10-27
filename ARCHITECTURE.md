@@ -4,7 +4,7 @@ A local knowledge base that follows the **LLM-Wiki pattern**, extended with an *
 immutable **raw sources** (Markdown, PDF, TXT, URL) are distilled by an agent into **atoms**
 (one claim per note, the Zettelkasten), the human authors **wiki pages**, and the claims are grouped
 into **titleless clusters** (the association layer). Retrieval is **vectorless** — hierarchical
-trees, the link graph and reasoning, not embeddings.
+trees, the association layer and reasoning, not embeddings.
 
 > Architectural frame. The model is `../scriber` (single Go service, Clean Architecture, sqlc +
 > goose + SQLite, one binary) and `../syncraft` (Chi router, layer/naming rules, quality gates).
@@ -35,12 +35,12 @@ trees, the link graph and reasoning, not embeddings.
 - **Distill once; associate incrementally.** Sources are read once; claims already exist and stay
   current. Ask reasons over claims, not over raw chunks re-derived every time.
 - **Vectorless by design.** No embeddings, no vector database, no ANN index. Navigation is the
-  generated **indexes**, the **per-source trees**, the **claim link graph** and lexical
+  generated **indexes**, the **per-source trees**, the **association layer** and lexical
   **full-text search** — with traceable citations.
 - **Built to scale to thousands of sources.** Sources shard by hash prefix; claims carry a FLAT
   **topic** field; clusters are records (`clusters/<ab>/<cd>/<id>.meta`) with no title and no prose.
-  The agent navigates by reasoning over topics, trees, links and lexical search, never by scanning one
-  flat file.
+  The agent navigates by reasoning over topics, trees, clusters and lexical search, never by scanning
+  one flat file.
 - **The agent owns atoms; the human owns sources and wiki pages.** Drop a source or write a page;
   the agent distills it and the deterministic cluster step groups the claims. The cluster step has
   **no model**.
@@ -53,8 +53,8 @@ trees, the link graph and reasoning, not embeddings.
 - **Everything derived is rebuildable.** Trees, outlines, cluster records and the SQLite index are
   rebuildable from `sources/` + `wiki/` + `atoms/` + `clusters/`. The only exception is the
   append-only audit.
-- **Never invent, never discard.** A red link is kept; a failed step is recorded; a scanned page
-  with no text layer is flagged (OCR) rather than silently empty.
+- **Never invent, never discard.** A claim is never invented from a missing part; a failed step is
+  recorded; a scanned page with no text layer is flagged (OCR) rather than silently empty.
 - **Standard library first.** Core imports the standard library and its own core packages only —
   no YAML, no SQL, no HTTP, no OpenAI, no PDF, no OCR (see § 2.2 rule 5).
 - **External tools are ad-hoc, never daemons.** PDF text and OCR are one-shot subprocesses that
@@ -79,8 +79,8 @@ trees, the link graph and reasoning, not embeddings.
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  Entities (Core)                                              │
-│  - Source, SourceNode, Atom, Cluster, Link, LintFinding, Run  │
-│  - Markdown semantics: wikilink/title extraction              │
+│  - Source, SourceNode, Atom, Cluster, LintFinding, Run         │
+│  - Markdown semantics: slugs, tags, code quoting               │
 │  - tree shape, claim topics, cluster membership                │
 │  - no external dependencies, no SQL/HTTP/YAML/PDF/OCR/OpenAI  │
 ├──────────────────────────────────────────────────────────────┤
@@ -109,13 +109,13 @@ trees, the link graph and reasoning, not embeddings.
    imports the standard library and its own core packages only — no `database/sql`, no
    `net/http`, no `modernc.org/sqlite`, no `gopkg.in/yaml.v3`, no `go-openai`, no PDF library, no
    `os/exec`. YAML frontmatter, PDF/OCR extraction and the OpenAI/HTTP clients all live in
-   adapters. The *pure* wikilink/title extraction and the tree *shape* live in core.
+   adapters. The *pure* Markdown semantics and the tree *shape* live in core.
 6. **Wiring happens in exactly two places:** `cmd/thought-keeper` (lifecycle) and
    `internal/registry` (constructing adapters and handing them over as interfaces). Use cases
    never know concrete types.
 7. **Handlers and repositories stay dumb:** handlers parse, call one use case, map the result.
    Stores translate hashes/ids ↔ bytes; repositories translate arguments into SQL. No hashing
-   policy, no link resolution, no agent policy outside use cases.
+   policy, no agent policy outside use cases.
 8. **Time is a port.** Use cases read the clock through an interface (`Clock`), never `time.Now()`.
 9. **Errors are types, not strings.** Sentinel errors in `internal/types/errors.go`, translated
    to HTTP once in `internal/api`.
@@ -179,8 +179,8 @@ thought-keeper/
     │   │   ├── sidecar.go              # suffix constants, URLHash, WikiHash, record shape
     │   │   ├── source.go · source_node.go · wiki.go
     │   │   ├── atom.go · cluster.go · vocabulary.go
-    │   │   └── link.go · lint_finding.go · run.go
-    │   ├── markdown/               # pure stdlib: links, title, slug, topic/tag normalization
+    │   │   └── lint_finding.go · run.go
+    │   ├── markdown/               # pure stdlib: slugs, tags, code quoting, URLs, citations
     │   ├── tree/                   # pure: tree shape, node addressing, breadcrumbs,
     │   │                           #        front/back-matter filter, Markdown rendering
     │   └── usecases/
@@ -357,7 +357,7 @@ structural consequences:
   `unitsOf` ignores such nodes defensively.
 - **Use cases:** `usecases.DocumentRun` (outline → distill, one source), `usecases.CaptureSource`,
   `usecases.BuildTree`, `usecases.DistillSource`, `usecases.ClusterPass` (the whole association
-  step), `usecases.Cleanup` (prune dead members, resolve claim links).
+  step), `usecases.Cleanup` (prune dead members, refresh the findings).
 
 ### 4.6 Asks (`asks/`, saved questions and answers, records)
 
@@ -384,8 +384,8 @@ structural consequences:
   `queries/atom_projections.sql`; the association pass and the health checks fold their work from
   that stream). Reading bodies to answer "which claims exist" is how a pass over 135 new claims
   cost the whole vault.
-- **Hydration hydrates the page, not the table.** A list read carries provenance and links for the
-  rows it RETURNS (`AtomSourcesForAtoms`, `AtomLinksForAtoms`, `AtomSourceCountsForAtoms`) — never
+- **Hydration hydrates the page, not the table.** A list read carries provenance for the rows it
+  RETURNS (`AtomSourcesForAtoms`, `AtomSourceCountsForAtoms`) — never
   by loading every row of `atom_sources` to decorate fifty. And a hydration failure is an ERROR, not
   a missing field: a caller that re-saves a silently-under-hydrated atom DELETES its provenance.
   A bounded queue walk (`ListOldestAtoms`) therefore reads text only, and re-reads each atom WHOLE
@@ -406,8 +406,8 @@ structural consequences:
   not run an applied migration again — and the failure names a column instead of the reason. A mismatch
   is REPORTED (start-up log, `GET /api/v1/status`, `thought-keeper status`) and never repaired by the
   app: the index lives in the vault, and deleting it is the user's decision.
-- **Everything derived is rebuildable.** `reindex` re-derives atoms, links, cluster rows, sources
-  and node rows (from the outlines) from the vault; `rebuild-trees` re-derives the outlines. The
+- **Everything derived is rebuildable.** `reindex` re-derives atoms, cluster rows, sources and node
+  rows (from the outlines) from the vault; `rebuild-trees` re-derives the outlines. The
   **append-only audit tables** (`runs`, `run_steps`, `lint_findings`) are the only rows `reindex`
   leaves alone.
 - **The sidecar rule.** Every derived file lies next to what it is about, named after it plus a
@@ -535,9 +535,8 @@ flagged rather than silently empty.
 
 ### Test Tiers
 
-1. **Unit** (`internal/core/...`): fakes for every port. Covers Markdown extraction, link
-   resolution, the tree shaper, hashing/sharding, the atom codec and the agent loops with a
-   scripted gateway.
+1. **Unit** (`internal/core/...`): fakes for every port. Covers Markdown extraction, code quoting,
+   the tree shaper, hashing/sharding, the atom codec and the agent loops with a scripted gateway.
 2. **Integration** (`httptest` + `:memory:` SQLite + a temp-dir vault): router, handlers, the
    index repositories, migrations, extraction of a small real `.pdf`, `reindex`, `rebuild-trees`.
 3. **Acceptance** (`internal/registry`): the full path from an HTTP request or CLI verb to files

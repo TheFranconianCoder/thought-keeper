@@ -14,7 +14,7 @@
   import { rememberSourcesTop } from '../../lib/sources-scroll';
   import { sourcePath } from '../../lib/router.svelte';
   import { navigate } from '../../lib/router.svelte';
-  import { statusLabel } from '../../lib/source-state';
+  import { matchesSourceFilter, statusLabel } from '../../lib/source-state';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
@@ -39,24 +39,20 @@
       .map(([tag, count]) => ({ tag, count }));
   });
 
-  const filtered = $derived.by(() => {
-    const term = sources.query.trim().toLowerCase();
-    return sources.items.filter((source) => {
-      if (sources.kind !== 'all' && source.kind !== sources.kind) return false;
-      if (sources.filter) {
-        const tags = new Set([...(source.tags ?? []), ...(source.auto_tags ?? [])]);
-        if (!tags.has(sources.filter)) return false;
-      }
-      if (!term) return true;
-      return (
-        source.title.toLowerCase().includes(term) ||
-        source.original_name.toLowerCase().includes(term) ||
-        (source.url ?? '').toLowerCase().includes(term) ||
-        (source.tags ?? []).some((tag) => tag.includes(term)) ||
-        (source.auto_tags ?? []).some((tag) => tag.includes(term))
-      );
-    });
-  });
+  const filtered = $derived(
+    sources.items.filter((source) =>
+      matchesSourceFilter(source, {
+        query: sources.query,
+        kind: sources.kind,
+        tag: sources.filter,
+        attachedOnly: sources.attachedOnly,
+      }),
+    ),
+  );
+
+  // The filter is only useful when there is something to find; an ACTIVE filter stays visible so it
+  // can always be cleared, even after the last attached source was regularized.
+  const attachedCount = $derived(sources.items.filter((source) => source.attached === true).length);
 
   $effect(() => {
     if (router.current.view === 'sources') void sources.loadList();
@@ -143,6 +139,17 @@
       <button class:on={sources.kind === 'txt'} onclick={() => setKind('txt')}>Text</button>
       <button class:on={sources.kind === 'url'} onclick={() => setKind('url')}>URLs</button>
     </div>
+    {#if attachedCount > 0 || sources.attachedOnly}
+      <button
+        class="chip attached-filter"
+        class:chip--warn={sources.attachedOnly}
+        aria-pressed={sources.attachedOnly}
+        title="Show only sources whose snapshot was attached by hand"
+        onclick={() => (sources.attachedOnly = !sources.attachedOnly)}
+      >
+        <Icon name="paperclip" size={12} /> Attached<span class="chip-count">{attachedCount}</span>
+      </button>
+    {/if}
   </div>
 
   {#if tagCloud.length > 0}
@@ -192,7 +199,7 @@
       </EmptyState>
     {/if}
   {:else if filtered.length === 0}
-    <EmptyState icon="filter" title="No source matches" text="Clear the search, the tag or the kind filter." />
+    <EmptyState icon="filter" title="No source matches" text="Clear the search or one of the filters." />
   {:else}
     <div class="source-list">
       <VirtualList items={filtered} rowHeight={78} key={(source) => source.hash}>
@@ -209,6 +216,14 @@
 
               <div class="source-main">
                 <div class="source-title">
+                  {#if source.attached}
+                    <span
+                      class="tag tag--attached"
+                      title={`Snapshot attached by hand${source.attached_from ? ` from ${source.attached_from}` : ''}`}
+                    >
+                      <Icon name="paperclip" size={10} /> attached
+                    </span>
+                  {/if}
                   {source.title || source.hash.slice(0, 12)}
                   {#if source.bookmark}<span class="tag">link</span>{/if}
                   {#if source.sitemap}<span class="tag">sitemap</span>{/if}
@@ -405,6 +420,14 @@
   .tag--auto {
     opacity: 0.62;
   }
+
+  .tag--attached {
+    flex: none;
+    gap: 3px;
+    background: var(--warning-soft);
+    color: var(--warning);
+  }
+
 
   .tag-cloud {
     display: flex;

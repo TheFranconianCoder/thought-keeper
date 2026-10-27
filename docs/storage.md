@@ -12,7 +12,7 @@ greppable, worth versioning and backing up. The app never treats a directory as 
 
 ```
 <vault>/
-├── index.db                    # SQLite: FTS5, link graph, derived counts (rebuildable)
+├── index.db                    # SQLite: FTS5, derived counts (rebuildable)
 ├── inbox/                      # drop zone; the watcher intakes files into sources/
 ├── sources/                    # immutable, content-addressed
 │   └── 7f/3a/
@@ -150,9 +150,15 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
   a page. The snapshot's frontmatter carries `attached: true`,
   `attached_from`, `attached_sha256` and `attached_at` instead of `fetched_at`/`http_status`; the
   source's record carries `attached` (identity, so a reindex keeps it), and its metadata carries
-  `attached`/`attached_from`/`attached_hash`. **A refresh never fetches an attached source** — a
-  login page is not a correction of the article. The original file is not stored: like a fetched
-  page, the vault keeps the readable snapshot, and the receipt names the file it came from.
+  `attached`/`attached_from`/`attached_hash`. **The automatic refresh never fetches an attached
+  source** — a login page is not a correction of the article. The original file is not stored: like a
+  fetched page, the vault keeps the readable snapshot, and the receipt names the file it came from.
+- **An attachment is replaced or retried explicitly.** `POST /sources/{hash}/attach` with a new file
+  replaces the snapshot (and resets the old derivation). `POST /sources/{hash}/refetch` fetches the
+  URL once: a readable 2xx with text replaces the snapshot and clears the attachment marker in the
+  record/index/identity (a changed text also resets the derivation); a wall, a dead host or an empty
+  page keeps the attached bytes and marker exactly as they are. `Reset` remains derivation-only and
+  never replaces an attachment.
 - **Favicons.** A URL source stores the site's icon content-addressed under
   `.thought-keeper/favicons/`, served at `GET /api/v1/sources/{hash}/favicon`.
 - **Name = SHA-256 of the bytes**, sharded `sources/<ab>/<cd>/<full-hash>.<ext>`. Identical bytes
@@ -190,7 +196,8 @@ created: 2026-10-16T09:00:00Z
 updated: 2026-10-16T09:12:00Z
 ---
 
-The body expands the claim and may link to sibling atoms: cf. [[Cache Invalidation]].
+The body expands the claim in one to three sentences. Syntax quoted from the source stays in inline
+code: `cache_key[0]`.
 ```
 
 | Key | Owner | Meaning |
@@ -222,11 +229,13 @@ The body expands the claim and may link to sibling atoms: cf. [[Cache Invalidati
 - **Atoms cite source nodes, not whole sources.** A node not in the source's outline rejects the
   write; a claim that names none inherits the part it was distilled from.
 - **`ocr: true` when the text came from OCR.**
-- **Atoms cross-link** to other atoms (`[[Claim Text]]`). The app resolves the link to the atom
-  whose claim is that sentence; an unresolved target stays red (lint reports it).
-- **Code is not a wikilink.** Fenced and inline code are skipped, and known code syntax (C++
-  attributes such as `[[nodiscard]]`, SQL bracket grammar, shell `[[ … ]]`) is not parsed as a claim
-  reference.
+- **A claim has NO links.** The body is Markdown prose; a `[[…]]` pair in it is syntax quoted from
+  the source (a C attribute, a shell test, a grammar fragment), never a reference. A claim's
+  associations are its cluster, and nothing parses a body into edges.
+- **Code is quoted as code.** A declaration, expression, literal, identifier or grammar fragment from
+  the source goes in the body as inline code; `[[unsequenced]]` is one. In the claim sentence the
+  code is named in prose, not quoted raw. The save wraps a bracket pair in a code span, and a body
+  written before that rule is repaired once with `POST /api/v1/atoms/quote-code`.
 - There is no generated atom index: the catalog is SQLite's job (`list_topics`, `list_atoms`,
   `search`).
 - **The cluster membership is not stored beside the atom.** It is in `clusters/` and `cluster_atoms`.
@@ -275,11 +284,14 @@ Channels connect goroutines.
 - **References use the ID and a prefix:** `[[wiki:<id>]]` opens a page; `[[source:<hash>]]` opens a
   source. Both accept the ordinary `|alias` form. The detail views show the full ID with a copy
   button.
-- **URLs in a page are sources — and a save never fetches them.** `core/markdown.URLs` extracts
-  http(s) links from authored prose (code fences and inline code are ignored). Saving a page writes
-  the page and its source representation and **returns**: the new links are handed to the app's URL
-  queue, which fetches them in the background. Fetching inside the request made one page with 154
-  links take three and a half minutes, with nothing on disk until the last link answered.
+- **URLs in a page are sources — and a save never fetches or deletes them.** `core/markdown.URLs`
+  extracts http(s) links from authored prose (code fences and inline code are ignored). Saving a page
+  writes the page and its source representation and **returns**: the new links are handed to the
+  app's URL queue, which fetches them in the background, and a background `PruneWikiLinks` pass
+  reconciles the link sources the page owns with what it declares. Fetching inside the request made
+  one page with 154 links take three and a half minutes, with nothing on disk until the last link
+  answered; deleting inside the request made a page that dropped three links take 73 seconds, because
+  every delete walked the whole atom vault.
 - **A link is a source before it has bytes.** A new link is *claimed* immediately (`QueueURLs`): a
   row and a `<hash>.meta` at the URL's stable address, `origin: wiki`, a pending capture light, and
   outline and distill recorded `skipped` ("not fetched yet") so nothing downstream waits for text
@@ -288,15 +300,18 @@ Channels connect goroutines.
   light and the reason** in the step record, the source's `meta` and its log: a dead link is part of
   what the page claims, so it stays listed (and a source that already exists — failed included — is
   only associated, never fetched again; the retry is `POST /api/v1/refresh-urls`).
-- **Removal is tracked, not guessed.** On save the URL set is diffed. A URL that left is deleted
-  only when it was created by a wiki page (`origin: wiki` in the source record) and no other page
-  still lists it. A URL collected independently is left alone. The wiki page source itself is
-  re-derived; existing URL sources are not re-interpreted. The snapshot-stable keys (`language`,
-  `origin`, `wiki_page`, `parent_hash`, `sitemap`, favicon references, `content_hash`, `attached`)
-  survive every meta write — a snapshot rebuild must never un-own a link or turn a human's attached
-  article back into a page the next refresh may overwrite. They are carried forward by the writer
-  (the snapshot JSON is merged into the row's meta, never rebuilt from scratch), and the consistency
-  job restores them from the record when a row written before that rule lost them.
+- **Removal is tracked, not guessed.** After every save a BACKGROUND pass (`PruneWikiLinks`, behind
+  the exclusive gate) compares the link sources the page owns with what the page declares, and deletes
+  one only when it was created by a wiki page (`origin: wiki` in the source record) and no other page
+  still lists it. The pass re-reads the page instead of trusting a diff: a link re-added before it
+  runs is declared again and its source stays, and a save whose cleanup was lost is healed by the next
+  one. A URL collected independently is left alone. The wiki page source itself is re-derived;
+  existing URL sources are not re-interpreted. The snapshot-stable keys (`language`, `origin`,
+  `wiki_page`, `parent_hash`, `sitemap`, favicon references, `content_hash`, `attached`) survive
+  every meta write — a snapshot rebuild must never un-own a link or turn a human's attached article
+  back into a page the next refresh may overwrite. They are carried forward by the writer (the
+  snapshot JSON is merged into the row's meta, never rebuilt from scratch), and the consistency job
+  restores them from the record when a row written before that rule lost them.
 - **A sitemap is a source that owns the pages it declares.** When a fetched URL parses as a
   `<urlset>` (or a `<sitemapindex>`), its snapshot is a readable page list and the source is marked
   `sitemap: true`. New URLs become ordinary source rows claimed with `origin: sitemap` and

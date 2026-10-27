@@ -238,6 +238,7 @@ type App struct {
 	captureMu        sync.Mutex
 	maintenance      interfaces.Maintenance
 	resetSource      usecases.ResetSource
+	pruneWikiLinks   usecases.PruneWikiLinks
 
 	quitOnce sync.Once
 	quit     chan struct{}
@@ -377,7 +378,7 @@ func New(opts Options) (*App, error) {
 	a.pdfOK = a.runner.Available(cfg.PDF.TextTool)
 	a.ocrOK = a.runner.Available(cfg.OCR.Rasterizer) && a.runner.Available(cfg.OCR.Tesseract)
 
-	reg := registry.Build(cfg, db, a, a.onAdded, a.onRemoved, a.ScheduleWikiTag, a.ScheduleWikiReprocess, a.ScheduleDiscoveredChildren, a, a, a, a, a, a.hub, a.log)
+	reg := registry.Build(cfg, db, a, a.onAdded, a.onRemoved, a.ScheduleWikiTag, a.ScheduleWikiReprocess, a.ScheduleWikiCleanup, a.ScheduleDiscoveredChildren, a, a, a, a, a, a.hub, a.log)
 	a.handler = reg.Handler
 	a.intake = reg.Intake
 	a.capture = reg.Capture
@@ -407,6 +408,7 @@ func New(opts Options) (*App, error) {
 	a.agentAvailable = reg.AgentAvailable
 	a.maintenance = reg.Maintenance
 	a.resetSource = reg.ResetSource
+	a.pruneWikiLinks = reg.PruneWikiLinks
 	a.clusterPass = reg.ClusterPass
 	a.clusterPass.Progress = a.setClusterProgress
 	a.cleanup = reg.Cleanup
@@ -3079,6 +3081,45 @@ func (a *App) ScheduleWikiReprocess(hash string) {
 		}
 		a.publish("source", map[string]any{"hash": hash})
 		a.pumpPipeline("wiki page reprocessed")
+	}()
+}
+
+// ScheduleWikiCleanup prunes what a saved wiki page stopped owning: the link sources it no longer
+// declares, and an older representation it pointed at before the stable WikiHash. The save request
+// has already written the new page; it must not wait for a delete, and a delete of a link used to
+// walk the whole atom vault (a save with three removed links took 73 seconds).
+//
+// The pass re-reads the page, so two saves in a row, a link re-added before the job runs, or a page
+// deleted in between all resolve to the same answer.
+func (a *App) ScheduleWikiCleanup(pageID, staleHash string) {
+	if pageID == "" {
+		return
+	}
+	id, err := ulid.ParseStrict(pageID)
+	if err != nil {
+		return
+	}
+	go func() {
+		var res usecases.PruneWikiLinksResult
+		err := a.ExclusiveWrite(context.Background(), "wiki cleanup", func(ctx context.Context) error {
+			var pErr error
+			res, pErr = a.pruneWikiLinks.Execute(ctx, id, staleHash)
+			return pErr
+		})
+		if err != nil {
+			a.log.Warn("wiki: cleanup failed", "page", pageID, "err", err)
+			return
+		}
+		if res.LinksRemoved == 0 && !res.StaleRemoved {
+			return
+		}
+		a.log.Info("wiki cleanup done", "page", pageID, "links_removed", res.LinksRemoved,
+			"stale_removed", res.StaleRemoved)
+		// The same pair a single delete publishes: the source list changed and claims may have gone
+		// with the link sources.
+		a.publish("source", map[string]any{"page": pageID})
+		a.publish("clusters", map[string]any{"page": pageID})
+		a.pumpPipeline("wiki links pruned")
 	}()
 }
 

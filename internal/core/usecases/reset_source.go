@@ -60,6 +60,12 @@ type ResetResult struct {
 	Bookmark bool
 }
 
+// SourceResetter is the narrow shape of a derivation reset. A replacement snapshot (an attach or a
+// forced URL fetch) needs exactly this: the old claims and tree go, the source bytes stay.
+type SourceResetter interface {
+	Execute(ctx context.Context, hash string) (ResetResult, error)
+}
+
 // Execute resets one source's derivation.
 func (uc ResetSource) Execute(ctx context.Context, hash string) (ResetResult, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)

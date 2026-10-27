@@ -37,7 +37,6 @@ func (r *MaintenanceRepository) PruneOrphans(ctx context.Context) (int64, error)
 	for _, del := range []func(context.Context) (int64, error){
 		q.DeleteOrphanAtomSources,
 		q.DeleteOrphanClusterAtoms,
-		q.DeleteOrphanAtomLinks,
 		q.DeleteOrphanSourceNodes,
 	} {
 		n, err := del(ctx)

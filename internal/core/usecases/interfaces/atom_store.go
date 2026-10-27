@@ -15,8 +15,14 @@ type AtomStore interface {
 	// Write stores the atom file at its canonical path and returns the persisted atom (with the final
 	// topic and path).
 	Write(ctx context.Context, a entities.Atom) (entities.Atom, error)
+	// WritePath stores the atom at the path it already records, so a repair of a vault written in the
+	// legacy folder layout rewrites the file in place instead of leaving a second copy behind.
+	WritePath(ctx context.Context, a entities.Atom) (entities.Atom, error)
 	// Read loads an atom by its id.
 	Read(ctx context.Context, id ulid.ULID) (entities.Atom, error)
+	// ReadPath loads an atom from the path the INDEX recorded for it. A vault written before the ID
+	// layout still keeps a claim in its old folder, and the record is what says where.
+	ReadPath(ctx context.Context, path string) (entities.Atom, error)
 	// Remove deletes an atom's Markdown file (when the atom is deleted).
 	Remove(ctx context.Context, a entities.Atom) error
 	// Trash moves an atom's file into the vault's .trash/atoms/. Trash, not delete: a claim that

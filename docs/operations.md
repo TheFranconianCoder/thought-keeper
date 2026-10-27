@@ -64,6 +64,7 @@ a **client of the running instance**. The instance is found through the runtime 
 | `new-id` | one ULID |
 | `add --path FILE \| --url URL [--bookmark]` | source hash |
 | `attach --url URL \| --source HASH --file FILE` | the source's hash, title and size |
+| `refetch (--source HASH \| --url URL)` | whether the attached snapshot was replaced, or why it was kept |
 | `sources` (alias `list-sources`) `[--kind K] [--limit N]` | one source per line |
 | `tree --source HASH` | the tree outline |
 | `claim-topics` (alias `branches`) | claim topics with claim counts |
@@ -77,6 +78,7 @@ a **client of the running instance**. The instance is found through the runtime 
 | `lint [--wait] [--kind K]` | run id, or the findings summary with `--wait` |
 | `reindex` | counts of indexed/added/removed |
 | `rebuild-trees` | count of trees (re)built |
+| `quote-claim-code` | counts of scanned/repaired claims and wrapped bracket spans |
 | `models [--config PATH]` | models the endpoint serves |
 | `version` | version string |
 | `help` | usage |
@@ -115,8 +117,12 @@ task hooks             # lefthook install
 ## 5. Debugging
 
 - **Debugging lives in the terminal.** `app --log-level debug` logs every API request, every LLM
-  turn, every agent tool call and each run's start/finish. Static requests are logged at debug; the
-  client's status/run polling is kept out of the way.
+  turn, every agent tool call and each run's start/finish. At info, only **writes and failed
+  requests** are logged: a successful read is not an event, and an event-driven UI re-reads its
+  containers often enough that logging reads at info buried the pipeline in HTTP lines. There are
+  two deliberate exceptions: `GET /api/v1/events` stays at info — a stream that opens and closes is
+  a disconnect worth seeing — and a missing favicon stays at debug, because a source without one is
+  expected. Static assets are debug.
 - **Memory is a number, not a feeling.** `GET /api/v1/status` carries `memory` (`heap_mb` live,
   `heap_peak_mb` the high watermark since start sampled every 2 s, named by `peak_work` and
   `peak_at`, `sys_mb`, `num_gc`), the CLI `status` prints the same line, and every cluster pass logs
@@ -229,23 +235,29 @@ task hooks             # lefthook install
   is stored per source (`url_checked_at`), so restarting the app neither postpones nor doubles a
   refresh. A manual pass — `POST /api/v1/refresh-urls` — ignores it and checks everything now; the
   **Refresh** button (or `POST /api/v1/sources/{hash}/refresh`) checks ONE source now. A
-  source with a **human-supplied snapshot** is not fetched at all; a **blocked** page (a login, a
-  paywall, a consent gate) is attempted again on the same cadence, because it may become readable.
+  source with a **human-supplied snapshot** is not fetched by the cadence; the source page can
+  **Try the URL again** (`POST /api/v1/sources/{hash}/refetch`), which replaces it only when the page
+  is readable. A **blocked** page (a login, a paywall, a consent gate) is attempted again on the same
+  cadence, because it may become readable.
 - **A refresh keeps parents honest.** A sitemap is reconciled 1:1 (new pages claimed, pages it no
   longer lists removed with their claims); an RSS/Atom feed only ever extends (new items claimed,
   items that left kept). A page the human added by hand is never removed by either — it was released
   from its owner. A page whose snapshot came from the feed's copy keeps that copy while the page itself
   yields no readable text.
 - **A confirmed delete finishes.** The delete detaches from the request context, so a browser that
-  navigates away cannot leave a half-deleted feed or sitemap behind, and the atom lookup scans the
-  vault once for the whole cascade instead of once per child. The request still WAITS for the gate —
-  a delete rewrites sources and claims and must not race a running document step or the cluster pass
-  — but the UI returns to the list immediately and drops the row optimistically; a failure reloads
-  the list and brings it back.
+  navigates away cannot leave a half-deleted feed or sitemap behind. The atom lookup is the INDEX's
+  answer (`ListAtomsBySource`), never a walk of `atoms/`: that walk is O(vault) — 8–30 seconds per
+  deleted source on a 172k-claim vault — and it ran once per child of a sitemap. Finding atom files
+  the index never saw is `reindex`'s job: it trashes a claim whose every source is gone. The request
+  still WAITS for the gate — a delete rewrites sources and claims and must not race a running
+  document step or the cluster pass — but the UI returns to the list immediately and drops the row
+  optimistically; a failure reloads the list and brings it back.
 - **A wall is reported, never read.** A login form or a paywall teaser is not the page: the capture
   light turns red with the reason, and outline/distill are skipped. The human's way in is
   `thought-keeper attach --url URL --file page.html|page.pdf` (or **Attach snapshot…** in the source
-  page): the app does not authenticate and never reads your cookies.
+  page): the app does not authenticate and never reads your cookies. An attached snapshot is
+  replaced in the same rail (**Replace snapshot…**) or retried with **Try the URL again**
+  (`thought-keeper refetch`): a readable page replaces it and clears the marker, a wall keeps it.
 - **A refresh never loses a source's icon.** A new snapshot carries the previous icon when the site
   cannot be fetched.
 
@@ -278,15 +290,16 @@ Status → Vault offers every repair as a **button that says what it will do** b
 | Action | What it does |
 | --- | --- |
 | `POST /lint` | programmatic health check → findings |
-| `POST /cleanup` | prune dead cluster members, resolve claim links |
+| `POST /cleanup` | prune dead cluster members, refresh the findings |
 | `POST /reconcile` | check step records against disk, invalidate what is missing, restore a row's lost owner from its record |
 | `POST /reindex` | rebuild the index from the vault |
 | `POST /rebuild-trees` | rebuild every outline from captured sources |
 | `POST /atoms/reorganize` | move claims into `atoms/<ab>/<cd>/<id>.md` |
 | `POST /atoms/collapse` | keep one copy of each duplicate |
+| `POST /atoms/quote-code` | quote the bracket syntax in claim bodies as inline code (one-time, idempotent) |
 | `POST /fix-urls` | repair URL identity from the snapshot's own frontmatter |
 | `POST /urls/migrate` | move old URL sources onto their URL address |
-| `POST /refresh-urls` | check every known URL now (attached snapshots are left alone) |
+| `POST /refresh-urls` | check every known URL now (attached snapshots are left alone; `POST /sources/{hash}/refetch` is the explicit per-source retry) |
 | `POST /vocabulary/curate` · `/retopic` | merge names · re-derive claim topics |
 
 **Backup.** The real backup is the vault: `sources/` + `atoms/` + `wiki/` + `clusters/` (or git

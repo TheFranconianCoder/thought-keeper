@@ -1,7 +1,7 @@
 # Thought Keeper — retrieval (vectorless)
 
-No embeddings and no vector database. Retrieval is reasoning over **hierarchies, indexes, the link
-graph and lexical search**. `similarity ≠ relevance`.
+No embeddings and no vector database. Retrieval is reasoning over **hierarchies, indexes, the
+association layer and lexical search**. `similarity ≠ relevance`.
 
 ## 1. Substrates
 
@@ -12,7 +12,6 @@ The agent picks the substrate that fits the question:
 | Claim topics | every FLAT claim topic with its claim count | `list_topics` |
 | Lexical search | FTS5 over claims and source outlines, answerable in any vault language | `search`, `GET /search` |
 | Claim proximity | the same cluster, and separately the same topic | `GET /atoms/{id}/related` |
-| Link graph | resolved wikilink edges | claim detail, lint, cleanup |
 | Tree index (PageIndex) | per-source hierarchical tree | `read_source_node` (distill), `GET /sources/{hash}/tree` |
 
 **The tree is built once per source.** Retrieval mimics a human using a table of contents: read the

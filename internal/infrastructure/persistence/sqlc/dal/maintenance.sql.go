@@ -9,18 +9,6 @@ import (
 	"context"
 )
 
-const deleteOrphanAtomLinks = `-- name: DeleteOrphanAtomLinks :execrows
-DELETE FROM atom_links WHERE from_id NOT IN (SELECT id FROM atoms)
-`
-
-func (q *Queries) DeleteOrphanAtomLinks(ctx context.Context) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteOrphanAtomLinks)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const deleteOrphanAtomSources = `-- name: DeleteOrphanAtomSources :execrows
 
 DELETE FROM atom_sources

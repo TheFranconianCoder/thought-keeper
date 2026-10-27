@@ -19,8 +19,8 @@ distills them into **atomic claims** — one self-contained statement per file. 
 into **titleless associations**, and the connections are as valuable as the claims themselves.
 
 It is not a chat window over your PDFs and it is not a RAG pipeline. There are **no embeddings, no
-vector database and no cloud**: retrieval is reasoning over hierarchical outlines, lexical indexes,
-the claim graph and the link graph. Sources are read once, the knowledge stays on your disk, and the
+vector database and no cloud**: retrieval is reasoning over hierarchical outlines, lexical indexes
+and the associations between claims. Sources are read once, the knowledge stays on your disk, and the
 whole vault is plain Markdown, SQLite and JSON you can read, grep, version and back up.
 
 > **The one-liner:** an automatic Zettelkasten over the claims of your sources.
@@ -54,7 +54,7 @@ makes cross-source connections appear without asking a model for them.
 | | |
 | --- | --- |
 | ![The Claims lens](docs/screenshots/01-claims.png) | **Claims.** Newest claims and the busiest topics, a local FTS5 finder, and a detail view with provenance, cluster peers and same-topic claims. |
-| ![The Sources lens](docs/screenshots/02-sources.png) | **Sources.** Markdown, PDF, text and URL snapshots in one list, with a persistent search and type filter. |
+| ![The Sources lens](docs/screenshots/02-sources.png) | **Sources.** Markdown, PDF, text and URL snapshots in one list, with a persistent search, type and attachment filter; a hand-attached snapshot carries a paperclip badge. |
 | ![A source detail](docs/screenshots/03-source-detail.png) | **One source's whole story.** Content, PDF, live page, log, files, the generated summary and the ownership graph. |
 | ![The Wiki lens](docs/screenshots/05-wiki.png) | **Wiki pages.** User-authored Markdown with tags; saving one runs it through the same pipeline as any source. |
 | ![An Ask answer](docs/screenshots/06-ask.png) | **Ask.** Questions answered from claims, with inline citations, saved as notes with automatic tags. |
@@ -125,7 +125,6 @@ of features.
 - A detail view that shows where the claim came from, and two **disjoint** relation lists: its
   **cluster peers** (what it travels with) and the claims under the **same topic**.
 - A local FTS5 finder in the lens and a **command palette** (⌘K / Ctrl-K) across claims and sources.
-- Claim-to-claim links via `[[wikilinks]]`, resolved by the app into a link graph.
 - No human authoring of claims: the human curates sources, writes wiki pages and asks questions. The
   API can write for tooling, but the claim workflow belongs to the agent.
 
@@ -155,7 +154,8 @@ of features.
   login form, and offers **Attach snapshot…** — save the page in your browser as HTML or PDF (for a
   JavaScript page, print it to PDF) and the URL keeps its address while the file becomes its snapshot.
   The same button is offered for a **bookmark** (a page that only renders with JavaScript). URLs are
-  re-checked weekly; an attached snapshot is never fetched again.
+  re-checked weekly; an attached snapshot is never fetched automatically, but its source page can
+  **replace** it or **try the URL again** — a readable page then regularizes it, a wall keeps it.
 - **Tags — human and derived**: the same coarse labels a wiki page carries. Edit the human ones in
   the detail rail; the agent writes **auto tags** from the source's claims after a complete distill,
   and the consistency job backfills sources that predate the feature. Both are observed by the
@@ -206,8 +206,8 @@ of features.
 
 - **Vectorless and multilingual.** SQLite **FTS5** over claims and source nodes, with a language hint
   per source that tunes morphology; the hint never filters results.
-- Hierarchical trees for reading a document part by part, the link graph for following references,
-  and cluster memberships for "what travels with this claim".
+- Hierarchical trees for reading a document part by part, and cluster memberships for "what travels
+  with this claim".
 - `similarity ≠ relevance`: no cosine similarity over chunks, no nearest-neighbour store, no vector
   database anywhere.
 
@@ -303,7 +303,6 @@ No embeddings. A question is answered by **reasoning over structures that alread
 | Find a claim | FTS5 lexical index over claim, body and topic; language-aware |
 | Read a document | the outline tree: one part = one text-bearing node, with references into the text |
 | Related claims | cluster memberships (peers) and the flat claim topic |
-| Follow a reference | the claim→claim link graph resolved from wikilinks |
 | Answer a question | the agent's bounded tools: `list_topics`, `search`, `read_atom`, `list_atoms` |
 
 The Claims detail exposes the association exactly where it belongs — `GET /api/v1/atoms/{id}/related`
@@ -408,7 +407,7 @@ web/                      previous PWA, kept as a reference
 internal/core/entities    domain types (no dependencies)
 internal/core/usecases    use cases; interfaces/ next to them; agents/
 internal/core/tree        pure tree shape, addressing, rendering
-internal/core/markdown     pure wikilinks, titles, topic/tag normalization
+internal/core/markdown     pure titles, slugs, code quoting, topic/tag normalization
 internal/infrastructure   config, stores, SQLite/sqlc, gateways, extract/OCR, vocabulary, …
 docs/                     the design documents (see below)
 ```
@@ -476,6 +475,7 @@ The same binary is the CLI; content verbs are **clients of the running instance*
 | `status` (alias `doctor`) `[--json]` | the doctor report |
 | `add --path FILE \| --url URL [--bookmark]` | intake a source (a URL may be a sitemap or a feed) |
 | `attach --url URL \| --source HASH --file FILE` | attach a saved page (HTML/PDF/MD/TXT) to a URL the app could not read |
+| `refetch --source HASH \| --url URL` | try the URL again for an attached snapshot; a wall keeps it |
 | `sources [--kind K] [--limit N]` | list sources |
 | `distill --source HASH [--reset]` | run a source's document steps |
 | `search --query Q [--layer atoms\|sources]` | lexical search |
@@ -517,7 +517,9 @@ A small JSON API on loopback, serving the PWA and the CLI. Highlights:
 - `GET /api/v1/sources…` — list/read, tree, nodes, claims, raw files, log, summary, children.
 - `POST /api/v1/add` — intake a path, a URL or an upload. A sitemap or feed URL expands into its
   parent source; a manual URL is released from any owner it had.
-- `POST /api/v1/sources/{hash}/attach` — give a blocked URL source the page you saved (multipart).
+- `POST /api/v1/sources/{hash}/attach` — give a blocked URL source the page you saved (multipart);
+  replacing an attached snapshot resets the derivation the old bytes produced.
+- `POST /api/v1/sources/{hash}/refetch` — try the URL again for an attached snapshot; a wall keeps it.
 - `POST /api/v1/refresh-urls` — check every URL now (weekly otherwise); sitemaps reconcile 1:1,
   feeds only extend.
 - `GET /api/v1/atoms…` — claims, topics, related (`peers` + `same_topic`); duplicates and collapse
@@ -534,8 +536,8 @@ table, error format and event shapes are in [`docs/api.md`](docs/api.md).
 
 Thought Keeper is opinionated about what it will **not** do:
 
-- **No embeddings and no vector database.** Retrieval is trees, indexes, the link graph and lexical
-  search. Similarity is not relevance.
+- **No embeddings and no vector database.** Retrieval is trees, indexes, the association layer and
+  lexical search. Similarity is not relevance.
 - **Only Markdown, PDF, text and URLs.** No `.docx`, no images, no archives, no audio/video.
 - **No silent OCR.** If a scanned PDF has no text and OCR is unavailable, the source is flagged, never
   silently empty.

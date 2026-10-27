@@ -775,6 +775,17 @@ func toEntity(row dal.Source) entities.Source {
 		s.URLChecked = time.UnixMilli(row.UrlCheckedAt.Int64).UTC()
 	}
 	s.Bookmark = row.Bookmark != 0
+	// The attachment is identity, and it lives in the meta JSON as a BOOL (metaField reads strings
+	// only). It is a wire projection for the source page; the refresh still decides from the meta.
+	if s.Kind == entities.SourceKindURL {
+		var attachment struct {
+			Attached     bool   `json:"attached"`
+			AttachedFrom string `json:"attached_from"`
+		}
+		if json.Unmarshal([]byte(row.Meta), &attachment) == nil {
+			s.Attached, s.AttachedFrom = attachment.Attached, attachment.AttachedFrom
+		}
+	}
 	return s
 }
 

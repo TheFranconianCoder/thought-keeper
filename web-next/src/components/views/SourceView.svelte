@@ -7,6 +7,7 @@
     deleteSource,
     distillSource,
     rebuildSourceTree,
+    refetchSource,
     refreshSource,
     resetSource,
   } from '../../lib/actions';
@@ -86,10 +87,14 @@
   let pdfReady = $state(false);
 
   // A URL the app could not read (a login, a paywall, a JavaScript page that became a bookmark): the
-  // way out is the human's browser plus a file they attach here.
+  // way out is the human's browser plus a file they attach here. An attached snapshot can be
+  // REPLACED, and the URL can be tried again — which only replaces it when the page is readable.
   const attachable = $derived(!!selected && canAttachSnapshot(selected));
+  const attached = $derived(!!selected?.attached);
+  const attachedFrom = $derived(selected?.attached_from ?? '');
   let attachInput: HTMLInputElement | undefined = $state();
   let attaching = $state(false);
+  let refetching = $state(false);
 
   async function onAttachFile(files: FileList | null): Promise<void> {
     if (!selected || !files || files.length === 0 || attaching) return;
@@ -99,6 +104,16 @@
     } finally {
       attaching = false;
       if (attachInput) attachInput.value = '';
+    }
+  }
+
+  async function onRefetch(): Promise<void> {
+    if (!selected || refetching) return;
+    refetching = true;
+    try {
+      await refetchSource(selected.hash);
+    } finally {
+      refetching = false;
     }
   }
 
@@ -388,7 +403,7 @@
                   A standalone overview of this source, written from its claims. It is not a claim
                   itself: the claims below stay the source of truth.
                 </p>
-                <Markdown text={sources.summary} />
+                <Markdown text={sources.summary} wikilinks={false} />
               {:else if sources.summaryLoading}
                 <p class="file-notice muted">Loading the summary…</p>
               {:else}
@@ -535,7 +550,7 @@
                 {/if}
                 {#if partDoc.front}<Frontmatter text={partDoc.front} />{/if}
                 {#if markdownView}
-                  <Markdown text={partDoc.body} />
+                  <Markdown text={partDoc.body} wikilinks={false} />
                 {:else}
                   <pre class="raw-file">{partDoc.body}</pre>
                 {/if}
@@ -583,7 +598,7 @@
               {/if}
               {#if doc.front}<Frontmatter text={doc.front} />{/if}
               {#if markdownView}
-                <Markdown text={doc.body} />
+                <Markdown text={doc.body} wikilinks={false} />
               {:else}
                 <pre class="raw-file">{preview}</pre>
               {/if}
@@ -603,7 +618,11 @@
             <section class="rail-block attach-block">
               <div class="rail-label">Snapshot</div>
               <p class="attach-text">
-                {#if selected.bookmark}
+                {#if attached}
+                  This snapshot was attached by hand{attachedFrom ? ` from ${attachedFrom}` : ''}. The
+                  weekly refresh leaves it alone. Replace it with another file, or ask the site again —
+                  the page replaces it only when it is readable; a wall keeps it.
+                {:else if selected.bookmark}
                   This page gave no readable text (a JavaScript page, a video or an app). Open it in your
                   browser, <b>print it to PDF</b> (or copy the text), and attach it here. The URL stays the
                   address of this source.
@@ -614,13 +633,28 @@
                   it here. The URL stays the address of this source.
                 {/if}
               </p>
-              <button
-                class="btn btn--secondary btn--sm"
-                disabled={attaching}
-                onclick={() => attachInput?.click()}
-              >
-                <Icon name="upload" size={13} /> {attaching ? 'Attaching…' : 'Attach snapshot…'}
-              </button>
+              <div class="attach-actions">
+                <button
+                  class="btn btn--secondary btn--sm"
+                  disabled={attaching}
+                  onclick={() => attachInput?.click()}
+                >
+                  <Icon name="upload" size={13} /> {attaching
+                    ? 'Attaching…'
+                    : attached
+                      ? 'Replace snapshot…'
+                      : 'Attach snapshot…'}
+                </button>
+                {#if attached}
+                  <button
+                    class="btn btn--secondary btn--sm"
+                    disabled={refetching}
+                    onclick={() => void onRefetch()}
+                  >
+                    <Icon name="refresh" size={13} /> {refetching ? 'Fetching…' : 'Try the URL again'}
+                  </button>
+                {/if}
+              </div>
               <input
                 type="file"
                 hidden
@@ -922,6 +956,12 @@
     color: var(--muted);
     font-size: 11.5px;
     line-height: 1.45;
+  }
+
+  .attach-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .rail-chips {

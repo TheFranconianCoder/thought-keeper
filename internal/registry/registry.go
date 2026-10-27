@@ -77,7 +77,9 @@ type Deps struct {
 	SourcesWithoutTree     usecases.SourcesWithoutTree
 	Maintenance            interfaces.Maintenance
 	ResetSource            usecases.ResetSource
-	AgentAvailable         bool
+	// PruneWikiLinks removes what a saved page stopped owning, in the background.
+	PruneWikiLinks usecases.PruneWikiLinks
+	AgentAvailable bool
 }
 
 // Build wires the adapters, the use cases and the HTTP handler.
@@ -89,6 +91,7 @@ func Build(
 	onRemoved func(hash string),
 	onTag func(pageID string),
 	onReprocess func(hash string),
+	onCleanup func(pageID, staleHash string),
 	onDiscovered func([]usecases.DiscoveredChildren),
 	scheduler handlers.Runner,
 	pipeline handlers.PipelineProvider,
@@ -187,7 +190,7 @@ func Build(
 		Store: store, Index: index, Atoms: atomRepo, AtomStore: atomStore,
 		Maintenance: maintenanceRepo, SourceLog: sourceLog,
 		Trees: trees, Clock: clock, Log: log, Steps: steps, Parts: partRepo,
-		LinkResolver: atomRepo, ClusterStore: clusterStore, ClusterRepo: clusterRepo,
+		ClusterStore: clusterStore, ClusterRepo: clusterRepo,
 	}
 	capture := usecases.CaptureSource{
 		Store: store, Index: index, Extractor: extractor, Steps: steps, Languages: languages,
@@ -275,7 +278,7 @@ func Build(
 
 	distill := usecases.DistillSource{
 		Index: index, Trees: trees, Store: store, Atoms: atomStore, AtomRepo: atomRepo,
-		PartRepo: partRepo, SourceLog: sourceLog, Steps: steps, Vocab: vocabStore, LinkResolver: atomRepo,
+		PartRepo: partRepo, SourceLog: sourceLog, Steps: steps, Vocab: vocabStore,
 		PartsPerRun: cfg.Pipeline.PartsPerRun, Parallel: cfg.Pipeline.ParallelParts,
 		Model: cfg.OpenAI.ModelCompile, MaxIterations: cfg.OpenAI.MaxIterations,
 		ReasoningEffort: cfg.OpenAI.ReasoningEffortDistill, Clock: clock, Log: log,
@@ -292,12 +295,17 @@ func Build(
 	rebuildTrees = usecases.RebuildTrees{Index: index, BuildTree: buildTree}
 	resetSource.Clean = cleanSource
 	resetSource.SourceLog = sourceLog
+	// A replacement snapshot (an attach or a forced fetch) is a new source text: the derivation that
+	// belonged to the old one is reset.
+	attachURL.Reset = resetSource
+	refreshURLs.Reset = resetSource
 
 	saveWiki := usecases.SaveWikiPage{
 		Pages: wikiStore, Store: store, Index: index, Steps: steps,
-		Delete: deleteSource, SourceLog: sourceLog, Clock: clock, Log: log,
+		SourceLog: sourceLog, Clock: clock, Log: log,
 	}
 	deleteWiki := usecases.DeleteWikiPage{Pages: wikiStore, Index: index, Delete: deleteSource, Log: log}
+	pruneWikiLinks := usecases.PruneWikiLinks{Pages: wikiStore, Index: index, Delete: deleteSource, Log: log}
 
 	// Step 4: the titleless association of claims. It is deterministic — no model, no naming.
 	clusterPass := usecases.ClusterPass{
@@ -333,6 +341,7 @@ func Build(
 		ReasoningEffort: cfg.OpenAI.ReasoningEffortReason, Clock: clock, Log: log,
 	}
 	reorganizeAtoms := usecases.ReorganizeAtoms{Atoms: atomStore, AtomRepo: atomRepo, Log: log}
+	quoteClaimCode := usecases.QuoteClaimCode{Atoms: atomStore, AtomRepo: atomRepo, Clock: clock, Log: log}
 	collapseAtoms := usecases.CollapseDuplicateAtoms{
 		Atoms: atomStore, AtomRepo: atomRepo, Clusters: clusterRepo, Clock: clock, Log: log,
 	}
@@ -344,7 +353,7 @@ func Build(
 	}
 	cleanup := usecases.Cleanup{
 		Clusters: clusterRepo, Store: clusterStore, Atoms: atomRepo, Lint: lintRepo,
-		LinkResolver: atomRepo, Clock: clock, Log: log,
+		Clock: clock, Log: log,
 	}
 	if agentOK {
 		distill.Gateway = gw
@@ -388,12 +397,13 @@ func Build(
 			Atoms: listAtoms, ClaimTopics: listBranches, GetAtom: getAtom, SourceAtoms: sourceAtoms, Runs: getRun,
 			AtomRelated: usecases.RelatedAtoms{Atoms: atomRepo, Clusters: clusterRepo},
 			AtomLayout:  reorganizeAtoms, AtomReorganize: reorganizeAtoms,
-			AtomDuplicates: duplicates, AtomCollapse: duplicates, Mark: scheduler,
+			AtomDuplicates: duplicates, AtomCollapse: duplicates, QuoteCode: quoteClaimCode, Mark: scheduler,
 		},
 		Wiki: handlers.WikiHandler{
 			List: listWiki, Get: getWiki, Save: saveWiki, Delete: deleteWiki,
 			OnChanged:   func(_, hash string) { onAdded(hash) },
 			OnReprocess: onReprocess,
+			OnCleanup:   onCleanup,
 			OnTag:       onTag, OnDeleted: onRemoved, URLs: scheduler, OnURLRemoved: onRemoved,
 		},
 		Search: handlers.SearchHandler{Search: searchUC},
@@ -442,6 +452,7 @@ func Build(
 		SourcesWithoutTree:     withoutTree,
 		Maintenance:            maintenanceRepo,
 		ResetSource:            resetSource,
+		PruneWikiLinks:         pruneWikiLinks,
 		AgentAvailable:         agentOK,
 	}
 }

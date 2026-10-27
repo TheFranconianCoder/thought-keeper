@@ -93,23 +93,6 @@ func (r *LintRepository) ListFindings(ctx context.Context, kind string, limit, o
 	return out, nil
 }
 
-// UnresolvedAtomLinks lists atom→atom wikilinks pointing at no existing claim.
-func (r *LintRepository) UnresolvedAtomLinks(ctx context.Context, limit int) ([]entities.UnresolvedLink, error) {
-	rows, err := r.q.ListUnresolvedAtomLinks(ctx, int64(limit))
-	if err != nil {
-		return nil, fmt.Errorf("unresolved atom links: %w", err)
-	}
-	out := make([]entities.UnresolvedLink, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, entities.UnresolvedLink{
-			FromID:    idFromBytes(row.FromID),
-			FromTitle: row.FromTitle,
-			RawTarget: row.RawTarget,
-		})
-	}
-	return out, nil
-}
-
 // AtomsWithoutSource lists atoms with no provenance.
 func (r *LintRepository) AtomsWithoutSource(ctx context.Context, limit int) ([]entities.Atom, error) {
 	rows, err := r.q.ListAtomsWithoutSource(ctx, int64(limit))

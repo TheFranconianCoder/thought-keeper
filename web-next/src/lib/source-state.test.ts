@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { Pipeline, Source } from './api/types';
-import { canAttachSnapshot, countsOf, pipelineLabel, progressOf, statusLabel, totalsLabel } from './source-state';
+import {
+  canAttachSnapshot,
+  countsOf,
+  matchesSourceFilter,
+  pipelineLabel,
+  progressOf,
+  statusLabel,
+  totalsLabel,
+} from './source-state';
 
 function source(patch: Partial<Source> = {}): Source {
   return {
@@ -130,9 +138,10 @@ describe('source state', () => {
     expect(totalsLabel(sitemap)).toBe('');
   });
 
-  it('offers a snapshot for a blocked URL and for a bookmark', () => {
+  it('offers a snapshot for a blocked URL, a bookmark and an attached snapshot', () => {
     expect(canAttachSnapshot(source({ kind: 'url', steps: { capture: { state: 'failed' } } }))).toBe(true);
     expect(canAttachSnapshot(source({ kind: 'url', bookmark: true }))).toBe(true);
+    expect(canAttachSnapshot(source({ kind: 'url', attached: true }))).toBe(true);
   });
 
   it('does not offer a snapshot for a readable page, a file, a sitemap or a feed', () => {
@@ -141,6 +150,31 @@ describe('source state', () => {
     expect(canAttachSnapshot(source({ kind: 'pdf' }))).toBe(false);
     expect(canAttachSnapshot(source({ kind: 'url', sitemap: true }))).toBe(false);
     expect(canAttachSnapshot(source({ kind: 'url', rss: true }))).toBe(false);
+  });
+
+  it('filters sources by the attachment marker alone and together with the other filters', () => {
+    const attached = source({
+      kind: 'url',
+      attached: true,
+      title: 'Member article',
+      tags: ['member'],
+      steps: { capture: { state: 'ok' }, outline: { state: 'ok' }, distill: { state: 'ok' } },
+    });
+    const plain = source({ kind: 'url', title: 'Open article' });
+    const markdown = source({ kind: 'md', title: 'Notes' });
+
+    expect(matchesSourceFilter(attached, { attachedOnly: true })).toBe(true);
+    expect(matchesSourceFilter(plain, { attachedOnly: true })).toBe(false);
+    expect(matchesSourceFilter(attached, { attachedOnly: false })).toBe(true);
+    expect(matchesSourceFilter(markdown, { attachedOnly: true })).toBe(false);
+
+    // The attachment switch composes with kind, tag and search, like every other lens filter.
+    expect(matchesSourceFilter(attached, { attachedOnly: true, kind: 'url' })).toBe(true);
+    expect(matchesSourceFilter(attached, { attachedOnly: true, kind: 'md' })).toBe(false);
+    expect(matchesSourceFilter(attached, { attachedOnly: true, tag: 'member' })).toBe(true);
+    expect(matchesSourceFilter(attached, { attachedOnly: true, tag: 'other' })).toBe(false);
+    expect(matchesSourceFilter(attached, { attachedOnly: true, query: 'member' })).toBe(true);
+    expect(matchesSourceFilter(attached, { attachedOnly: true, query: 'open' })).toBe(false);
   });
 });
 

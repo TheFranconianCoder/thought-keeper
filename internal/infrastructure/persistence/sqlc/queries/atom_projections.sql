@@ -18,6 +18,11 @@ SELECT id, path FROM atoms ORDER BY id;
 -- cluster membership against this and never reads a body.
 SELECT id FROM atoms ORDER BY id;
 
+-- name: AtomsWithBracketSyntax :many
+-- The claims whose body still carries a [[...]] span: the candidates of the one-time code repair. On
+-- a claim a bracket pair is quoted syntax, never a link, so the span belongs in an inline code mark.
+SELECT id, path FROM atoms WHERE instr(body, '[[') > 0 ORDER BY id;
+
 -- name: ListAtomTextsPage :many
 -- One keyset page of claim texts, id order. The association pass walks the corpus by pages: one
 -- page is tokenized, folded into the running statistics and dropped - the vault is never held in

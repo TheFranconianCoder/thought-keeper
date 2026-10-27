@@ -11,7 +11,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	coremarkdown "github.com/TheFranconianCoder/thought-keeper/internal/core/markdown"
 )
 
 type atomFrontmatter struct {
@@ -94,9 +93,6 @@ func DecodeAtom(data []byte) (entities.Atom, error) {
 		a.UpdatedAt = t
 	}
 	a.Body = strings.TrimRight(body, "\n")
-	for _, l := range coremarkdown.Wikilinks(a.Body) {
-		a.Links = append(a.Links, entities.Link{RawTarget: l.RawTarget, Alias: l.Alias, Heading: l.Heading, Position: l.Position})
-	}
 	return a, nil
 }
 

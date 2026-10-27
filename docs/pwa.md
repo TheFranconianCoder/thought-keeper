@@ -10,9 +10,9 @@ The sidebar is a small, finite set of lenses:
 
 | Lens | What it shows |
 | --- | --- |
-| **Claims** | newest claims and the busiest claim topics; a local FTS5 finder and the search palette; one claim opens its detail with provenance, cluster peers and backlinks. The topic cloud stays while a topic is selected: the active chip is highlighted, clicking it again (or the “Filtered by” chip) clears the filter. Opening a claim keeps the filter in the URL (`#/claims/<id>?topic=…`), so the list beside the detail stays filtered — and a claim link inside the detail does too |
+| **Claims** | newest claims and the busiest claim topics; a local FTS5 finder and the search palette; one claim opens its detail with provenance and cluster peers. The topic cloud stays while a topic is selected: the active chip is highlighted, clicking it again (or the “Filtered by” chip) clears the filter. Opening a claim keeps the filter in the URL (`#/claims/<id>?topic=…`), so the list beside the detail stays filtered |
 | **Wiki** | user-authored pages, their tag cloud and tag filter; create, edit, delete |
-| **Sources** | list with a persistent search/type/tag filter — tags appear as chips in every row and as a tag cloud above the list (human and derived, counted once per source) — add (path/upload/URL/RSS feed), one source page with content/PDF/live/log/files, summary, sub-sources and a **Tags** editor in the rail; a URL whose capture is blocked (a login, a paywall) **or that became a bookmark** (a page that only renders with JavaScript) offers **Attach snapshot…** there — save it in the browser, print it to PDF for a JS page, and attach it; a page whose snapshot came from a feed's copy shows a **feed copy** tag and the copy's origin in the rail; a sitemap or feed and its pages show their relation — a child links back to its parent in the rail — and an owned page has no Delete action. A **feed or a sitemap is a list**: its page shows capture green and the other three lights grey ("does not apply"), offers **Refresh** instead of Capture/Outline/Distill/Reset, and names itself `feed · the items are sources` / `sitemap · the pages are sources`. **Deleting returns to the list at once**: the row leaves optimistically while the server finishes (a delete waits for running document/cluster work), and a failure reloads the list |
+| **Sources** | list with a persistent search/type/tag filter — tags appear as chips in every row and as a tag cloud above the list (human and derived, counted once per source) — add (path/upload/URL/RSS feed), one source page with content/PDF/live/log/files, summary, sub-sources and a **Tags** editor in the rail; a URL whose capture is blocked (a login, a paywall) **or that became a bookmark** (a page that only renders with JavaScript) offers **Attach snapshot…** there — save it in the browser, print it to PDF for a JS page, and attach it; an attached snapshot offers **Replace snapshot…** and **Try the URL again** (a readable page replaces it, a wall keeps it) and carries a paperclip **attached** tag in the list, where the **Attached** chip filters exactly those sources; a page whose snapshot came from a feed's copy shows a **feed copy** tag and the copy's origin in the rail; a sitemap or feed and its pages show their relation — a child links back to its parent in the rail — and an owned page has no Delete action. A **feed or a sitemap is a list**: its page shows capture green and the other three lights grey ("does not apply"), offers **Refresh** instead of Capture/Outline/Distill/Reset, and names itself `feed · the items are sources` / `sitemap · the pages are sources`. **Deleting returns to the list at once**: the row leaves optimistically while the server finishes (a delete waits for running document/cluster work), and a failure reloads the list |
 | **Attention** | failed source steps and non-info lint findings — a lens over existing state, not a second health model |
 | **Bookmarks** | collected links: URL sources that exist as metadata only |
 | **Ask** | saved queries with their automatic tags; an answer appears only on its own detail, whose scroll position survives a visit to a cited claim |
@@ -62,8 +62,15 @@ One SSE connection (`GET /api/v1/events`) replaces polling. Event types:
 `run` · `source` · `wiki` · `clusters` · `findings` · `urls` · `pipeline` · `progress` · `log` ·
 `vocabulary`
 
-- **The UI patches only its containers.** State events coalesce per type and are never dropped;
-  `progress` coalesces per source; `log` is a bounded live tail.
+- **The UI patches only its containers.** State events coalesce over a short window (150 ms) into a
+  set of scopes, and each scope is one container read — so the `source`, `clusters` and `run` frames
+  of a single run become one batch, and no list is loaded twice in it. `progress` coalesces per
+  source; `log` is a bounded live tail.
+- **A scope refreshes only what the open view can show.** A run that finishes while the reader is on
+  Status does not re-read the claim list or a hidden source list; a cluster pass re-reads the open
+  claim's peers and the vault report, not the claim text or the topics. Hidden containers with a
+  lazy view entry point (the claim list and the topic cloud) are marked **stale** and reload when
+  their view opens; the source list, findings and the vault report load on entry anyway.
 - **A frame is never handled concurrently with another.** Frames are queued, folded, and each
   affected container is reloaded once; every loader carries a **generation**, so a slow response
   cannot overwrite a newer one.

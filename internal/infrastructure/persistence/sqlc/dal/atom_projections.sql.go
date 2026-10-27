@@ -136,6 +136,40 @@ func (q *Queries) AtomTextsForIDs(ctx context.Context, ids []ulid.ULID) ([]AtomT
 	return items, nil
 }
 
+const atomsWithBracketSyntax = `-- name: AtomsWithBracketSyntax :many
+SELECT id, path FROM atoms WHERE instr(body, '[[') > 0 ORDER BY id
+`
+
+type AtomsWithBracketSyntaxRow struct {
+	ID   ulid.ULID `json:"id"`
+	Path string    `json:"path"`
+}
+
+// The claims whose body still carries a [[...]] span: the candidates of the one-time code repair. On
+// a claim a bracket pair is quoted syntax, never a link, so the span belongs in an inline code mark.
+func (q *Queries) AtomsWithBracketSyntax(ctx context.Context) ([]AtomsWithBracketSyntaxRow, error) {
+	rows, err := q.db.QueryContext(ctx, atomsWithBracketSyntax)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AtomsWithBracketSyntaxRow
+	for rows.Next() {
+		var i AtomsWithBracketSyntaxRow
+		if err := rows.Scan(&i.ID, &i.Path); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countAtoms = `-- name: CountAtoms :one
 SELECT count(*) FROM atoms
 `

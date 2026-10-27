@@ -109,9 +109,13 @@ func New(deps Deps, web http.Handler) http.Handler {
 		r.Post("/sources/{hash}/capture", deps.Sources.Capture)
 		// Refresh ONE URL source now: a feed or a sitemap re-expands its list, a page is re-fetched.
 		r.With(deps.Gate.Shared).Post("/sources/{hash}/refresh", deps.URL.PostOne)
+		// Try the URL again even when its snapshot was attached by hand. It may replace the snapshot
+		// and reset the derivation (claims and tree), so it takes the exclusive side.
+		r.With(deps.Gate.Exclusive).Post("/sources/{hash}/refetch", deps.URL.Refetch)
 		// A human-supplied snapshot for a URL the app could not read (a login wall, a paywall). The
-		// URL stays the address; the file becomes the snapshot and the steps are re-armed.
-		r.With(deps.Gate.Shared).Post("/sources/{hash}/attach", deps.Sources.Attach)
+		// URL stays the address; the file becomes the snapshot. Replacing one resets the old
+		// derivation, so the write is exclusive.
+		r.With(deps.Gate.Exclusive).Post("/sources/{hash}/attach", deps.Sources.Attach)
 		// The single-source outline writes the tree rows and can correct a derivation: exclusive.
 		r.With(deps.Gate.Exclusive).Post("/sources/{hash}/rebuild-tree", deps.Tree.RebuildOne)
 		// A reset deletes claims, tree rows and part records: exclusive, so it cannot race a run.
@@ -152,6 +156,9 @@ func New(deps Deps, web http.Handler) http.Handler {
 		// The same claim written more than once: what is there (GET) and the collapse (POST).
 		r.Get("/atoms/duplicates", deps.Atoms.GetAtomDuplicates)
 		r.With(deps.Gate.Exclusive).Post("/atoms/collapse", deps.Atoms.PostAtomCollapse)
+		// One-time repair: a body written while a claim body was still parsed for links carries its
+		// quoted bracket syntax bare. It becomes inline code; it never becomes an edge.
+		r.With(deps.Gate.Exclusive).Post("/atoms/quote-code", deps.Atoms.PostQuoteCode)
 		r.Get("/atoms/{id}", deps.Atoms.Get)
 		r.Get("/atoms/{id}/related", deps.Atoms.GetRelated)
 		// The claim's cluster PEERS. There is no cluster view: a cluster is an association, not a
@@ -186,7 +193,12 @@ func New(deps Deps, web http.Handler) http.Handler {
 	return r
 }
 
-// requestLogger logs API requests at info and static requests at debug.
+// requestLogger logs writes and failed requests at info, everything else at debug.
+//
+// A successful read is not an event. The PWA is event-driven and re-reads a container whenever the
+// server says it changed, so logging reads at info turned a pipeline run into a wall of HTTP lines
+// that hid the run itself. The SSE connection is the exception: a stream that opens and closes is a
+// disconnect worth seeing.
 func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -195,11 +207,15 @@ func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(ww, r)
 			level := slog.LevelInfo
 			p := r.URL.Path
+			read := r.Method == http.MethodGet || r.Method == http.MethodHead
+			// A favicon that does not exist is expected for a source without one; the browser asks
+			// for it once per row and falls back to a glyph.
+			missingFavicon := read && strings.HasSuffix(p, "/favicon") && ww.Status() == http.StatusNotFound
 			switch {
 			case !strings.HasPrefix(p, "/api/"):
 				level = slog.LevelDebug // static assets
-			case p == "/api/v1/status", strings.HasPrefix(p, "/api/v1/runs/"):
-				level = slog.LevelDebug // client polling: keep the terminal readable
+			case read && p != "/api/v1/events" && (ww.Status() < http.StatusBadRequest || missingFavicon):
+				level = slog.LevelDebug // a successful read, not a change
 			}
 			log.Log(r.Context(), level, "http",
 				"method", r.Method,

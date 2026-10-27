@@ -6,8 +6,8 @@ import (
 )
 
 // SchemaVersion is the shape of the index this build writes. It is stored in the database itself
-// (`PRAGMA user_version`, set by the initial migration) so a build can tell whether the index in hand
-// is one it knows how to read and write.
+// (`PRAGMA user_version`, set by the migration that last changed the shape) so a build can tell
+// whether the index in hand is one it knows how to read and write.
 //
 // goose cannot answer that question, and that is why this marker exists: the index is DERIVED and
 // disposable, so a change of vocabulary happens in the initial migration file with the database thrown
@@ -15,7 +15,7 @@ import (
 // build therefore keeps its old shape while the queries move on: every write dies on a constraint
 // ("NOT NULL constraint failed: atoms.slug") that names the column but not the reason, and every read
 // fails on a column list that no longer matches. The marker turns that into one sentence.
-const SchemaVersion = 20261022
+const SchemaVersion = 20261027
 
 // SchemaStatus is what the index says about its own shape.
 type SchemaStatus struct {

@@ -4,8 +4,6 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/oklog/ulid/v2"
-
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
@@ -15,6 +13,12 @@ import (
 // nodes and provenance cascade), the content-addressed object (moved to the trash), every sidecar next
 // to it (rendering, step record, outline, log) and any atom that cited this source and no other.
 // Cluster records that cited those atoms are a cache: the next cluster pass prunes the dead members.
+//
+// The atom lookup is the INDEX's answer (ListAtomsBySource), never a walk of atoms/. That walk is
+// O(vault): it reads and decodes every claim file, and on a 172k-claim vault it cost 8–30 seconds per
+// deleted source — once per link a wiki page stopped declaring, once per page a sitemap reconciled.
+// Atom files the index never saw are `reindex`'s to find; it trashes a claim whose every source is
+// gone, which is exactly what such a file is.
 type DeleteSource struct {
 	Store     interfaces.SourceStore
 	Index     interfaces.IndexRepository
@@ -33,60 +37,10 @@ type DeleteResult struct {
 	DependentsRemoved int
 }
 
-// deletion is the state of ONE delete call, shared by the whole cascade. Its important part is the
-// single vault scan: finding atoms the index missed is a full walk of atoms/, and doing that once per
-// child made deleting a 30-item feed take minutes (and a client that gave up killed the cascade
-// halfway). One scan serves every source of the call.
+// deletion is the state of ONE delete call, shared by the whole cascade: it is what stops a cycle in
+// a malformed ownership graph from deleting the same source twice.
 type deletion struct {
-	seen      map[string]bool
-	vault     []entities.Atom
-	scanned   bool
-	scanErr   error
-	scanTried bool
-}
-
-// atomsCiting returns every atom that cites the hash — from the index AND from the vault. The vault
-// scan is what catches files the index never indexed; it runs once per delete call.
-func (d *deletion) atomsCiting(ctx context.Context, uc DeleteSource, hash string) ([]entities.Atom, int, error) {
-	citing, err := uc.AtomRepo.ListAtomsBySource(ctx, hash)
-	if err != nil {
-		// Without the index answer we cannot know what cites this source: deleting it would leave
-		// claims pointing at nothing. Stop instead of guessing.
-		return nil, 0, err
-	}
-	seen := make(map[ulid.ULID]bool, len(citing))
-	for _, a := range citing {
-		seen[a.ID] = true
-	}
-	if uc.Atoms == nil {
-		return citing, 0, nil
-	}
-	if !d.scanTried {
-		d.scanTried = true
-		d.vault, d.scanErr = uc.Atoms.Scan(ctx)
-		d.scanned = d.scanErr == nil
-		if d.scanErr != nil && uc.Log != nil {
-			uc.Log.Warn("delete: the vault could not be scanned for atoms", "err", d.scanErr)
-		}
-	}
-	if !d.scanned {
-		return citing, 0, nil
-	}
-	vaultOnly := 0
-	for _, a := range d.vault {
-		if seen[a.ID] {
-			continue
-		}
-		for _, src := range a.Sources {
-			if src.Hash == hash {
-				citing = append(citing, a)
-				seen[a.ID] = true
-				vaultOnly++
-				break
-			}
-		}
-	}
-	return citing, vaultOnly, nil
+	seen map[string]bool
 }
 
 // Execute deletes one source by hash. A dependent source (a page a sitemap, a feed or a wiki page
@@ -167,8 +121,10 @@ func (uc DeleteSource) delete(ctx context.Context, hash string, allowDependent b
 			}
 		}
 	}
-	citing, vaultOnly, err := d.atomsCiting(ctx, uc, hash)
+	citing, err := uc.AtomRepo.ListAtomsBySource(ctx, hash)
 	if err != nil {
+		// Without the index answer we cannot know what cites this source: deleting it would leave
+		// claims pointing at nothing. Stop instead of guessing.
 		return DeleteResult{}, err
 	}
 
@@ -232,8 +188,7 @@ func (uc DeleteSource) delete(ctx context.Context, hash string, allowDependent b
 	}
 	if uc.Log != nil {
 		uc.Log.Info("source deleted", "hash", hash, "kind", string(src.Kind),
-			"atoms", res.AtomsRemoved, "atoms_from_vault", vaultOnly,
-			"sidecars", "removed", "object", "trashed")
+			"atoms", res.AtomsRemoved, "sidecars", "removed", "object", "trashed")
 	}
 	if uc.Steps != nil {
 		if err := uc.Steps.Remove(hash); err != nil && uc.Log != nil {

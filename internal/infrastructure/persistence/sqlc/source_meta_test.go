@@ -13,6 +13,49 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/persistence"
 )
 
+// TestGetSourceByHashProjectsTheAttachment: the source page needs to know that its snapshot was
+// attached by hand, so the wire projection is readable from the index without parsing meta in the UI.
+// An explicit null in a later meta write clears it — which is how a successful refetch regularizes the
+// source.
+func TestGetSourceByHashProjectsTheAttachment(t *testing.T) {
+	ctx := context.Background()
+	db, err := persistence.Open(filepath.Join(t.TempDir(), "index.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := persistence.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewSourceRepository(db)
+	hash := strings.Repeat("a7", 32)
+	if err := repo.UpsertSource(ctx, entities.Source{
+		ID: ulid.Make(), Hash: hash, Kind: entities.SourceKindURL, Ext: ".md",
+		Path: "sources/a7/a7/" + hash + ".md", URL: "https://example.com/member",
+		Title: "Member", TreeState: entities.TreeNone, ImportedAt: time.UnixMilli(1_700_000_000_000).UTC(),
+		Meta: `{"url":"https://example.com/member","attached":true,"attached_from":"page.html"}`,
+	}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	got, err := repo.GetSourceByHash(ctx, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Attached || got.AttachedFrom != "page.html" {
+		t.Fatalf("attachment = %v/%q, want true/page.html", got.Attached, got.AttachedFrom)
+	}
+
+	if err := repo.SetSourceMeta(ctx, hash, `{"url":"https://example.com/member","attached":null,"attached_from":null}`); err != nil {
+		t.Fatalf("clear meta: %v", err)
+	}
+	if got, err = repo.GetSourceByHash(ctx, hash); err != nil {
+		t.Fatal(err)
+	}
+	if got.Attached || got.AttachedFrom != "" {
+		t.Errorf("the attachment survived an explicit null: %+v", got)
+	}
+}
+
 // TestSetSourceMetaKeepsOwnership is the regression behind "this source was derived from a wiki page,
 // but the source page shows no wiki page". Ownership lives ONLY in the row's meta JSON, and writers
 // that rebuild that JSON from the snapshot's own fields (a refresh, a reindex) dropped it — silently,

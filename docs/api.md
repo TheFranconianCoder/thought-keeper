@@ -31,8 +31,9 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/sources/{hash}/log` | The source's own log |
 | `GET` | `/api/v1/sources/{hash}/favicon` | The site's stored icon |
 | `POST` | `/api/v1/sources/{hash}/capture` | Step 1 again for one source (the outline follows) |
-| `POST` | `/api/v1/sources/{hash}/refresh` | Refresh ONE URL source now (a feed or a sitemap re-expands its list, a page is re-fetched). The weekly cadence is ignored; attached snapshots are not fetched. Answers `{checked, changed, failed, blocked, attached, discovered, removed, detail}` |
-| `POST` | `/api/v1/sources/{hash}/attach` | Give a blocked URL source or a bookmark a snapshot the human supplied (multipart `file`: `.html`, `.pdf`, `.md`, `.txt`). A sitemap or a feed is refused. Answers 200 with the source. The URL stays the address; outline and distill are re-armed |
+| `POST` | `/api/v1/sources/{hash}/refresh` | Refresh ONE URL source now (a feed or a sitemap re-expands its list, a page is re-fetched). The weekly cadence is ignored; attached snapshots are not fetched (use `/refetch` for those). Answers `{checked, changed, failed, blocked, attached, discovered, removed, detail}` |
+| `POST` | `/api/v1/sources/{hash}/attach` | Give a blocked URL source or a bookmark a snapshot the human supplied (multipart `file`: `.html`, `.pdf`, `.md`, `.txt`). A sitemap or a feed is refused. Answers 200 with the source. The URL stays the address; the new file replaces an existing snapshot and resets the old derivation |
+| `POST` | `/api/v1/sources/{hash}/refetch` | Try the URL again even when the snapshot was attached by hand. A readable page replaces the attachment and clears the marker (a changed text also resets the old derivation); a wall/failure keeps it. Answers `{replaced, blocked, failed, detail}` |
 | `POST` | `/api/v1/sources/{hash}/rebuild-tree` | Rebuild this source's outline |
 | `POST` | `/api/v1/sources/{hash}/distill` | Document steps for a source (`{reset:true}` starts over) |
 | `PUT` | `/api/v1/sources/{hash}/tags` | Replace the source's HUMAN tags (`{tags:[…]}`); normalized and deduplicated. Auto tags are derived, never written here |
@@ -47,7 +48,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/wiki` | Wiki pages and their tag cloud |
 | `GET` | `/api/v1/wiki/{id}` | One wiki page (Markdown body included) |
 | `POST` | `/api/v1/wiki` | Create a wiki page (writes its source) |
-| `PUT` | `/api/v1/wiki/{id}` | Edit a wiki page (writes it, then reprocesses in the background) |
+| `PUT` | `/api/v1/wiki/{id}` | Edit a wiki page (writes it, then reprocesses and prunes removed links in the background) |
 | `DELETE` | `/api/v1/wiki/{id}` | Delete a wiki page and its source representation |
 | `GET` | `/api/v1/topics/claims` | Claim topics with claim counts |
 | `GET` | `/api/v1/atoms` | List claims: `topic, status, limit, offset` |
@@ -58,6 +59,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/atoms/duplicates` | Claims that exist more than once |
 | `POST` | `/api/v1/atoms/collapse` | Keep one copy of each duplicate |
 | `POST` | `/api/v1/atoms/reorganize` | Move claims to `atoms/<ab>/<cd>/<id>.md` |
+| `POST` | `/api/v1/atoms/quote-code` | One-time repair: wrap the bracket syntax a claim body quotes from its source in inline code (`{scanned, repaired, fragments, skipped}`) |
 | `GET` | `/api/v1/vocabulary` | The health of the name vocabularies (`topics`, `wiki-tags`, `source-tags`) |
 | `POST` | `/api/v1/vocabulary/curate` | Curate the vocabularies (observes, asks the model, renames) |
 | `POST` | `/api/v1/vocabulary/retopic` | Re-derive claim topics from the claims themselves |
@@ -69,7 +71,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `POST` | `/api/v1/query` | Ask the claims `{question}` → `202 {run_id}` |
 | `POST` | `/api/v1/lint` | Run lint → `202 {run_id}` |
 | `GET` | `/api/v1/lint/findings` | Lint findings |
-| `POST` | `/api/v1/cleanup` | Prune dead cluster members and repair claim links |
+| `POST` | `/api/v1/cleanup` | Prune dead cluster members and refresh the programmatic findings |
 | `GET` | `/api/v1/runs/{id}` | Run status, tokens, steps, answer, question |
 
 There is no list-all-runs endpoint; the UI follows the `run` events and the pipeline's `jobs`. A run
@@ -81,21 +83,24 @@ is read by id.
   and the vocabulary verbs record a run and return `202 {run_id}`; the client follows
   `GET /runs/{id}` or the event stream.
 - **Fast ones are synchronous.** `POST /add`, `POST /reindex`, `POST /rebuild-trees`,
-  `POST /reconcile`, `POST /cleanup` and the source verbs do their local work in the request.
+  `POST /reconcile`, `POST /cleanup`, `POST /atoms/quote-code`, `POST /sources/{hash}/refetch` and
+  the source verbs do their local work in the request.
   `POST /cluster` is the exception: it is queued and returns `202` (an empty run id means nothing
   was owed). Adding a source ends at the vault: URLs are queued, never fetched on the request path.
   A URL that answers with a sitemap is stored as a parent source; its pages are claimed and fetched
   in the background, and their `DELETE` is refused while the sitemap owns them.
 - **The CLI's `--wait`** is the client's poll loop, not a second server route.
 - **Gating is server-side.** Document steps take the shared side of the pipeline gate; the cluster
-  step and every synchronous vault rewrite take it exclusively. The router applies the same gate to
+  step and every synchronous vault rewrite take it exclusively (attaching or refetching a snapshot
+  may reset claims and tree, so both are exclusive). The router applies the same gate to
   the write endpoints.- **A query answer is saved automatically** to `asks/<run-id>.md`; there is no explicit filing step.
 - A saved ask carries automatic `tags`: the topics of the claims its answer cites, or the meaningful
   words of the question when it cites none. Tags label the query list and tag cloud; they never filter
   retrieval.
 - **A wiki save returns as soon as the page and its source representation are written.** The old
-  derivation is cleared and the source is pumped in the background; the save no longer waits for the
-  vault gate.
+  derivation is cleared and the source is pumped in the background, and a background `PruneWikiLinks`
+  pass reconciles the link sources the page owns with what it declares; the save never waits for the
+  vault gate or a delete.
 
 ## Events
 

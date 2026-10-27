@@ -203,9 +203,9 @@ func (uc RebranchClaims) Execute(ctx context.Context, runID ulid.ULID) (res Rebr
 				res.Changed++
 				continue
 			}
-			// The queue read carried the TEXT only. A SaveAtom is authoritative for provenance and
-			// links, so the claim is re-read whole before its label moves — writing back the queue
-			// row would silently delete what the queue row never held.
+			// The queue read carried the TEXT only. A SaveAtom is authoritative for provenance, so
+			// the claim is re-read whole before its label moves — writing back the queue row would
+			// silently delete what the queue row never held.
 			full, err := uc.Atoms.GetAtom(ctx, before.ID)
 			if err != nil {
 				if uc.Log != nil {

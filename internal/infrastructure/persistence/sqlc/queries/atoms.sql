@@ -40,9 +40,6 @@ DELETE FROM atom_sources WHERE atom_id = ?;
 -- name: InsertAtomSource :exec
 INSERT OR REPLACE INTO atom_sources (atom_id, source_id, node_id, ocr) VALUES (?, ?, ?, ?);
 
--- name: DeleteAtomLinks :exec
-DELETE FROM atom_links WHERE from_id = ?;
-
 -- name: ListAtomSources :many
 SELECT s.hash AS hash, s.title AS title, n.node_id AS node_id, n.ocr AS ocr
 FROM atom_sources n
@@ -58,10 +55,6 @@ JOIN atom_sources s ON a.id = s.atom_id
 JOIN sources src ON src.id = s.source_id
 WHERE src.hash = ?
 ORDER BY a.updated_at DESC;
-
--- name: InsertAtomLink :exec
-INSERT OR REPLACE INTO atom_links (from_id, raw_target, to_id, alias, heading, occurrences, position)
-VALUES (?, ?, ?, ?, ?, 1, ?);
 
 -- name: SupersedeAtomsBySource :execrows
 UPDATE atoms SET status = 'superseded', updated_at = ?
@@ -84,28 +77,6 @@ FROM atom_sources n
 JOIN sources s ON s.id = n.source_id
 WHERE s.hash = ?;
 
--- name: ResolveAtomLinks :execrows
--- An atom's [[Claim Text]] link is resolved by the claim it quotes: the claim IS an atom's title.
--- A target that names nothing stays red (to_id NULL) until somebody writes the claim it points at.
-UPDATE atom_links
-SET to_id = (
-    SELECT a.id FROM atoms a
-    WHERE lower(a.claim) = lower(atom_links.raw_target)
-    LIMIT 1
-)
-WHERE to_id IS NULL
-  AND EXISTS (
-    SELECT 1 FROM atoms a
-    WHERE lower(a.claim) = lower(atom_links.raw_target)
-  );
-
--- name: ListUnresolvedAtomLinks :many
-SELECT l.from_id, a.claim AS from_title, l.raw_target
-FROM atom_links l
-JOIN atoms a ON a.id = l.from_id
-WHERE l.to_id IS NULL
-LIMIT ?;
-
 -- name: AtomSourcesForAtoms :many
 -- The provenance of EXACTLY these atoms. The association pass reads the corpus as a stream and
 -- needs no per-page join; a LIST page needs its own rows only. Reading 170k provenance rows to
@@ -114,13 +85,6 @@ SELECT a.atom_id, s.hash, a.node_id, a.ocr
 FROM atom_sources a
 JOIN sources s ON s.id = a.source_id
 WHERE a.atom_id IN (sqlc.slice('ids'));
-
--- name: AtomLinksForAtoms :many
--- The links of EXACTLY these atoms: hydration carries what a SAVE would replace, for the page it
--- returns and nothing else.
-SELECT from_id, raw_target, to_id, alias, heading, occurrences, position
-FROM atom_links
-WHERE from_id IN (sqlc.slice('ids'));
 
 -- name: AtomSourceCountsForAtoms :many
 -- How many sources each of THESE atoms cites: a page's counts, never the table's.

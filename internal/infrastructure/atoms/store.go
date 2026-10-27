@@ -48,13 +48,29 @@ func Path(id ulid.ULID) string {
 
 // Write stores the atom file at its canonical path and returns the persisted atom. Writing the same
 // id again overwrites its file — one id is one file, exactly as one hash is one object.
-func (s *Store) Write(_ context.Context, a entities.Atom) (entities.Atom, error) {
+func (s *Store) Write(ctx context.Context, a entities.Atom) (entities.Atom, error) {
 	a.Topic = coremarkdown.NormalizeTopic(a.Topic)
 	if a.Topic == "" {
 		a.Topic = "inbox"
 	}
 	a.Path = Path(a.ID)
+	return s.writePath(a)
+}
 
+// WritePath stores the atom at the path it records, so a repair rewrites a claim in place — a vault
+// written before the ID layout keeps its file where it is instead of gaining a second copy.
+func (s *Store) WritePath(_ context.Context, a entities.Atom) (entities.Atom, error) {
+	a.Topic = coremarkdown.NormalizeTopic(a.Topic)
+	if a.Topic == "" {
+		a.Topic = "inbox"
+	}
+	if a.Path == "" {
+		a.Path = Path(a.ID)
+	}
+	return s.writePath(a)
+}
+
+func (s *Store) writePath(a entities.Atom) (entities.Atom, error) {
 	b, err := mdcodec.EncodeAtom(a)
 	if err != nil {
 		return entities.Atom{}, err
@@ -74,8 +90,14 @@ func (s *Store) Write(_ context.Context, a entities.Atom) (entities.Atom, error)
 }
 
 // Read loads an atom by its id.
-func (s *Store) Read(_ context.Context, id ulid.ULID) (entities.Atom, error) {
-	data, err := os.ReadFile(filepath.Join(s.root, filepath.FromSlash(Path(id))))
+func (s *Store) Read(ctx context.Context, id ulid.ULID) (entities.Atom, error) {
+	return s.ReadPath(ctx, Path(id))
+}
+
+// ReadPath loads an atom from a path relative to the atom store's root — the path the index recorded,
+// which is how a claim in the old folder layout is still found.
+func (s *Store) ReadPath(_ context.Context, path string) (entities.Atom, error) {
+	data, err := os.ReadFile(filepath.Join(s.root, filepath.FromSlash(path)))
 	if err != nil {
 		return entities.Atom{}, err
 	}

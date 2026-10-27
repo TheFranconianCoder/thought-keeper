@@ -3,6 +3,7 @@ package usecases_test
 import (
 	"bytes"
 	"context"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -56,8 +57,26 @@ func (s *fakeAtomStore) Write(_ context.Context, a entities.Atom) (entities.Atom
 	return a, nil
 }
 
+func (s *fakeAtomStore) WritePath(_ context.Context, a entities.Atom) (entities.Atom, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.m[a.ID.String()] = a
+	return a, nil
+}
+
 func (s *fakeAtomStore) Read(context.Context, ulid.ULID) (entities.Atom, error) {
 	return entities.Atom{}, nil
+}
+
+func (s *fakeAtomStore) ReadPath(_ context.Context, path string) (entities.Atom, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, a := range s.m {
+		if a.Path == path {
+			return a, nil
+		}
+	}
+	return entities.Atom{}, os.ErrNotExist
 }
 
 // DetectLegacyFolders and Reorganize exist so the fake satisfies the store's contract; the tests that
@@ -109,6 +128,12 @@ type fakeAtomRepo struct {
 func (r *fakeAtomRepo) SaveAtom(_ context.Context, a entities.Atom) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	for i := range r.saved {
+		if r.saved[i].ID == a.ID {
+			r.saved[i] = a
+			return nil
+		}
+	}
 	r.saved = append(r.saved, a)
 	return nil
 }
@@ -259,6 +284,19 @@ func (r *fakeAtomRepo) AtomAddresses(context.Context) ([]entities.Atom, error) {
 	out := make([]entities.Atom, 0, len(r.saved))
 	for _, a := range r.saved {
 		out = append(out, entities.Atom{ID: a.ID, Path: a.Path})
+	}
+	slices.SortFunc(out, byAtomID)
+	return out, nil
+}
+
+func (r *fakeAtomRepo) AtomsWithBracketSyntax(context.Context) ([]entities.Atom, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []entities.Atom
+	for _, a := range r.saved {
+		if strings.Contains(a.Body, "[[") {
+			out = append(out, entities.Atom{ID: a.ID, Path: a.Path})
+		}
 	}
 	slices.SortFunc(out, byAtomID)
 	return out, nil

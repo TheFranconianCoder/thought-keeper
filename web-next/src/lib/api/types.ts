@@ -119,6 +119,10 @@ export interface Source {
   // JavaScript); feed_hash is the feed it came from.
   from_feed?: boolean;
   feed_hash?: string;
+  /** A snapshot the human supplied (a login, a paywall, a JavaScript page). */
+  attached?: boolean;
+  /** The file the snapshot came from; the receipt, not a path. */
+  attached_from?: string;
   bytes: number;
   pages?: number;
   tree_state: string;
@@ -356,6 +360,14 @@ export interface AtomDuplicates {
   example?: string;
 }
 
+/** The one-time repair that wraps the bracket syntax in claim bodies as inline code. */
+export interface ClaimCode {
+  scanned: number;
+  repaired: number;
+  fragments: number;
+  skipped: number;
+}
+
 export interface AtomLayout {
   folders?: string[];
   claims: number;
@@ -431,6 +443,17 @@ export interface DeleteResult {
   dependents_removed?: number;
 }
 
+/** The result of trying the URL again for an attached snapshot. */
+export interface RefetchResult {
+  /** The page was readable: the attachment was replaced by a regular snapshot. */
+  replaced: boolean;
+  /** The page is still behind a wall; the attached snapshot was kept. */
+  blocked: boolean;
+  /** The fetch failed; the attached snapshot was kept. */
+  failed: boolean;
+  detail?: string;
+}
+
 export interface RefreshResult {
   checked: number;
   changed: number;
@@ -466,7 +489,6 @@ export interface RebuildTreeResult {
 export interface CleanupResult {
   clusters_pruned: number;
   clusters_removed: number;
-  links_repaired: number;
   findings: number;
 }
 

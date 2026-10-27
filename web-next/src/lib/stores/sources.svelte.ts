@@ -44,10 +44,12 @@ class SourcesStore {
   loaded = $state(false);
   error = $state('');
 
-  /** The list's search term, type filter and tag filter. View state with the lifetime of a session. */
+  /** The list's search term, type/tag filter, and whether only human-attached snapshots are shown.
+   *  View state with the lifetime of a session. */
   query = $state('');
   kind = $state<SourceKindFilter>('all');
   filter = $state('');
+  attachedOnly = $state(false);
 
   /** Live counters keyed by source hash, merged from `progress` events. */
   progress = $state<Record<string, LiveProgress>>({});

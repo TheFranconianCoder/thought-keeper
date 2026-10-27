@@ -46,7 +46,6 @@ type Atom struct {
 	Status      AtomStatus
 	Sources     []AtomSource
 	SourceCount int
-	Links       []Link
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	Frontmatter string // raw YAML map, round-tripped on write

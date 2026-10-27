@@ -36,7 +36,7 @@ func NewAtomRepository(db *sql.DB) *AtomRepository {
 	return &AtomRepository{db: db, q: dal.New(db)}
 }
 
-// SaveAtom upserts an atom, its provenance and its links in one transaction.
+// SaveAtom upserts an atom and its provenance in one transaction.
 func (r *AtomRepository) SaveAtom(ctx context.Context, a entities.Atom) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -44,7 +44,6 @@ func (r *AtomRepository) SaveAtom(ctx context.Context, a entities.Atom) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := r.q.WithTx(tx)
-	id := a.ID[:]
 
 	bodyHash := sha256.Sum256([]byte(a.Body))
 	if err := q.UpsertAtom(ctx, dal.UpsertAtomParams{
@@ -100,18 +99,6 @@ func (r *AtomRepository) SaveAtom(ctx context.Context, a entities.Atom) error {
 		}
 	}
 
-	if err := q.DeleteAtomLinks(ctx, id); err != nil {
-		return fmt.Errorf("clear links: %w", err)
-	}
-	for _, l := range a.Links {
-		if err := q.InsertAtomLink(ctx, dal.InsertAtomLinkParams{
-			FromID: id, RawTarget: l.RawTarget, ToID: linkTarget(l.ToID),
-			Alias: l.Alias, Heading: l.Heading, Position: int64(l.Position),
-		}); err != nil {
-			return fmt.Errorf("insert link: %w", err)
-		}
-	}
-
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit atom: %w", err)
 	}
@@ -142,21 +129,6 @@ func (r *AtomRepository) getAtomHydrated(ctx context.Context, id ulid.ULID) (ent
 		a.Sources = append(a.Sources, entities.AtomSource{Hash: s.Hash, Title: s.Title, NodeID: s.NodeID, OCR: s.Ocr != 0})
 	}
 	a.SourceCount = len(a.Sources)
-	// The links too: a SaveAtom is authoritative for them, so a read that handed back an atom without
-	// its links would DELETE them on the next save. "Round-trips" means ALL of what a save replaces.
-	linkRows, err := r.q.AtomLinksForAtoms(ctx, [][]byte{id[:]})
-	if err != nil {
-		return entities.Atom{}, fmt.Errorf("list links: %w", err)
-	}
-	for _, row := range linkRows {
-		link := entities.Link{
-			RawTarget: row.RawTarget, Alias: row.Alias, Heading: row.Heading, Position: int(row.Position),
-		}
-		if len(row.ToID) == len(ulid.ULID{}) {
-			link.ToID = idFromBytes(row.ToID)
-		}
-		a.Links = append(a.Links, link)
-	}
 	return a, nil
 }
 
@@ -174,8 +146,8 @@ func (r *AtomRepository) NodeRefsBySource(ctx context.Context, hash string) (map
 	return m, nil
 }
 
-// hydrate fills in what a SAVE replaces and a row does not carry: the tags, the PROVENANCE and the
-// links. It is the rule for every list read — a caller that re-saves what a read handed it (a rename, a
+// hydrate fills in what a SAVE replaces and a row does not carry: the tags and the PROVENANCE. It is
+// the rule for every list read — a caller that re-saves what a read handed it (a rename, a
 // repair) would otherwise silently DELETE the parts the read left out. Provenance is the worst of them:
 // an atom without it is invisible in its source's claim list, the source looks underived, and the next
 // sweep derives the whole document again.
@@ -192,10 +164,8 @@ func (r *AtomRepository) hydrate(ctx context.Context, out []entities.Atom) ([]en
 		return out, nil
 	}
 	ids := make([]ulid.ULID, 0, len(out))
-	raw := make([][]byte, 0, len(out))
 	for i := range out {
 		ids = append(ids, out[i].ID)
-		raw = append(raw, out[i].ID[:])
 	}
 	rows, err := r.q.AtomSourcesForAtoms(ctx, ids)
 	if err != nil {
@@ -207,24 +177,8 @@ func (r *AtomRepository) hydrate(ctx context.Context, out []entities.Atom) ([]en
 			Hash: row.Hash, NodeID: row.NodeID, OCR: row.Ocr != 0,
 		})
 	}
-	links, err := r.q.AtomLinksForAtoms(ctx, raw)
-	if err != nil {
-		return nil, fmt.Errorf("hydrate: links: %w", err)
-	}
-	byFrom := make(map[ulid.ULID][]entities.Link, len(links))
-	for _, row := range links {
-		link := entities.Link{
-			RawTarget: row.RawTarget, Alias: row.Alias, Heading: row.Heading, Position: int(row.Position),
-		}
-		from := idFromBytes(row.FromID)
-		if len(row.ToID) == len(ulid.ULID{}) {
-			link.ToID = idFromBytes(row.ToID)
-		}
-		byFrom[from] = append(byFrom[from], link)
-	}
 	for i := range out {
 		out[i].Sources = byAtom[out[i].ID]
-		out[i].Links = byFrom[out[i].ID]
 	}
 	counts, err := r.q.AtomSourceCountsForAtoms(ctx, ids)
 	if err != nil {
@@ -236,35 +190,6 @@ func (r *AtomRepository) hydrate(ctx context.Context, out []entities.Atom) ([]en
 	}
 	for i := range out {
 		out[i].SourceCount = n[out[i].ID]
-	}
-	return out, nil
-}
-
-// ResolveLinks resolves atom→atom wikilinks whose raw target is the claimed sentence. It is the
-// atom layer's only link resolution: the claim graph is the graph, and the claim
-// graph was not, so `[[Claim Text]]` stayed red forever.
-func (r *AtomRepository) ResolveLinks(ctx context.Context) (int64, error) {
-	n, err := r.q.ResolveAtomLinks(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("resolve atom links: %w", err)
-	}
-	return n, nil
-}
-
-// UnresolvedLinks lists atom links whose target does not exist: the lint finding for a claim that
-// points at a sentence nobody wrote.
-func (r *AtomRepository) UnresolvedLinks(ctx context.Context, limit int) ([]entities.UnresolvedLink, error) {
-	rows, err := r.q.ListUnresolvedAtomLinks(ctx, int64(limit))
-	if err != nil {
-		return nil, fmt.Errorf("unresolved atom links: %w", err)
-	}
-	out := make([]entities.UnresolvedLink, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, entities.UnresolvedLink{
-			FromID:    idFromBytes(row.FromID),
-			FromTitle: row.FromTitle,
-			RawTarget: row.RawTarget,
-		})
 	}
 	return out, nil
 }
@@ -304,7 +229,7 @@ func (r *AtomRepository) ListAtomsBySource(ctx context.Context, sourceHash strin
 }
 
 // ListOldestAtoms returns the oldest claims in (updated_at, id) order, up to limit: the queue a
-// time-bounded repair walks. No provenance, no links, no counts — and no whole-table read: the index
+// time-bounded repair walks. No provenance, no counts — and no whole-table read: the index
 // answers the order, so a budget of 12k claims costs 12k rows and nothing else.
 func (r *AtomRepository) ListOldestAtoms(ctx context.Context, limit int) ([]entities.Atom, error) {
 	rows, err := r.q.ListAtomsOldest(ctx, int64(limit))
@@ -477,6 +402,21 @@ func (r *AtomRepository) AtomIDs(ctx context.Context) ([]ulid.ULID, error) {
 	return ids, nil
 }
 
+// AtomsWithBracketSyntax returns the claims whose body still carries a bracket pair — the candidates
+// of the one-time code repair — with the path the index recorded for each, so the repair reads the
+// file the vault actually holds (a legacy folder included).
+func (r *AtomRepository) AtomsWithBracketSyntax(ctx context.Context) ([]entities.Atom, error) {
+	rows, err := r.q.AtomsWithBracketSyntax(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("atoms with bracket syntax: %w", err)
+	}
+	out := make([]entities.Atom, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, entities.Atom{ID: row.ID, Path: row.Path})
+	}
+	return out, nil
+}
+
 // AtomAddresses returns the id and the recorded file path of every claim, so a stale row can remove
 // the FILE it points at. A use case must not learn the store's folder convention to clean up.
 func (r *AtomRepository) AtomAddresses(ctx context.Context) ([]entities.Atom, error) {
@@ -504,20 +444,12 @@ func (r *AtomRepository) SupersedeAtomsBySource(ctx context.Context, sourceHash 
 	return n, nil
 }
 
-// DeleteAtom removes an atom row (links, provenance and note links cascade).
+// DeleteAtom removes an atom row (its provenance cascades).
 func (r *AtomRepository) DeleteAtom(ctx context.Context, id ulid.ULID) error {
 	if err := r.q.DeleteAtom(ctx, id); err != nil {
 		return fmt.Errorf("delete atom: %w", err)
 	}
 	return nil
-}
-
-// linkTarget turns a domain id into the nullable BLOB a link stores: a zero id stays NULL (a red link).
-func linkTarget(id ulid.ULID) []byte {
-	if id == (ulid.ULID{}) {
-		return nil
-	}
-	return []byte(id[:])
 }
 
 // CountAtomSources returns how many sources an atom cites.

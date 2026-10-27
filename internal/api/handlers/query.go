@@ -111,7 +111,6 @@ func (h LintHandler) CleanupPost(w http.ResponseWriter, r *http.Request) {
 	payloads.WriteJSON(w, http.StatusOK, payloads.CleanupResult{
 		ClustersPruned:  res.ClustersPruned,
 		ClustersRemoved: res.ClustersRemoved,
-		LinksRepaired:   res.LinksRepaired,
 		Findings:        res.Findings,
 	})
 }

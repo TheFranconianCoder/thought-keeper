@@ -2,6 +2,7 @@ package usecases_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,19 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/sourcemeta"
 	treestore "github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/tree"
 )
+
+// noVaultWalkAtomStore fails the test if a delete ever walks atoms/ again. The walk reads and decodes
+// every claim file; on a 172k-claim vault it cost 8–30 seconds per deleted source, which is what made
+// one wiki save take 73 seconds for three removed links.
+type noVaultWalkAtomStore struct {
+	interfaces.AtomStore
+	scans int
+}
+
+func (s *noVaultWalkAtomStore) Scan(context.Context) ([]entities.Atom, error) {
+	s.scans++
+	return nil, errors.New("the delete must answer from the index, not from a vault walk")
+}
 
 // TestDeletingASourceDeletesItsWholeStory: a source is ONE folder entry with everything about it —
 // the object and its sidecars (rendering, step record, outline, log) — and deleting the source
@@ -91,5 +105,34 @@ func TestDeletingASourceDeletesItsWholeStory(t *testing.T) {
 	})
 	if len(left) != 0 {
 		t.Errorf("the source left files behind: %v", left)
+	}
+}
+
+// TestDeleteSourceDoesNotWalkTheAtomVault: the atom lookup is the INDEX's answer. The vault walk is
+// O(vault) and ran once per deleted source — a sitemap reconciling 30 pages paid it 30 times, and a
+// wiki save that dropped three links paid it three times inside the request.
+func TestDeleteSourceDoesNotWalkTheAtomVault(t *testing.T) {
+	ctx := context.Background()
+	store := objects.New(t.TempDir())
+	idx := newFakeIndex()
+	hash := strings.Repeat("a", 64)
+	if err := idx.UpsertSource(ctx, entities.Source{
+		Hash: hash, Kind: entities.SourceKindMD, Ext: ".md",
+		Path: "aa/aa/" + hash + ".md", Meta: "{}",
+	}); err != nil {
+		t.Fatalf("source: %v", err)
+	}
+	spy := &noVaultWalkAtomStore{AtomStore: atomstore.New(t.TempDir())}
+	del := usecases.DeleteSource{
+		Store: store, Index: idx, Atoms: spy, AtomRepo: &fakeAtomRepo{}, Clock: fixedClock{},
+	}
+	if _, err := del.Execute(ctx, hash); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if spy.scans != 0 {
+		t.Fatalf("the delete walked atoms/ %d time(s); it must answer from the index", spy.scans)
+	}
+	if _, err := idx.GetSourceByHash(ctx, hash); err == nil {
+		t.Fatal("the source row survived the deletion")
 	}
 }

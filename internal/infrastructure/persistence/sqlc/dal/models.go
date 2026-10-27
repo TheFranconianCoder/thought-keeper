@@ -27,16 +27,6 @@ type Atom struct {
 	IndexedAt   int64     `json:"indexed_at"`
 }
 
-type AtomLink struct {
-	FromID      []byte `json:"from_id"`
-	RawTarget   string `json:"raw_target"`
-	ToID        []byte `json:"to_id"`
-	Alias       string `json:"alias"`
-	Heading     string `json:"heading"`
-	Occurrences int64  `json:"occurrences"`
-	Position    int64  `json:"position"`
-}
-
 type AtomSource struct {
 	AtomID   ulid.ULID `json:"atom_id"`
 	SourceID ulid.ULID `json:"source_id"`

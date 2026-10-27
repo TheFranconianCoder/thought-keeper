@@ -91,6 +91,12 @@ type Source struct {
 	// readable page may replace the copy; while it cannot, the copy is what the vault knows.
 	FromFeed bool
 	FeedHash string
+	// Attached marks a URL snapshot the human supplied because the app could not read the page. It
+	// is an identity fact (it survives a reindex), mirrored here from the record's meta so a reader
+	// can offer "replace snapshot" and "try the URL again" without parsing JSON. The automatic
+	// refresh still decides from the meta; this field is the wire projection.
+	Attached     bool
+	AttachedFrom string
 	// OriginalName is the raw input's own name (the dropped file's name, or the URL): shown
 	// *additionally*, because the title belongs to the document and is chosen from its content.
 	OriginalName string

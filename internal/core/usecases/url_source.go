@@ -1057,6 +1057,10 @@ type RefreshURLs struct {
 	// Delete removes a page that disappeared from a SITEMAP (which is a complete list). A feed is not:
 	// its items are a window, so a page that leaves it is kept. Zero value = no deletion (tests).
 	Delete DeleteSource
+	// Reset is the derivation reset used when a forced fetch REPLACES an attached snapshot. The old
+	// claims were derived from bytes that are gone; the snapshot and its claims start over. Nil skips
+	// the reset (tests that only check the fetch).
+	Reset SourceResetter
 	// MinAge is the minimum time since a source's last check before a pass re-fetches it. Zero means
 	// no limit. The cadence belongs to the SOURCE (`url_checked_at`), not to the process's uptime:
 	// with a plain ticker, restarting the app daily would mean a weekly refresh never happens.
@@ -1078,6 +1082,9 @@ type RefreshResult struct {
 	Failed   int
 	Blocked  int
 	Attached int
+	// Replaced counts attached snapshots a forced fetch replaced with a regular one. A wall or a
+	// failure leaves the attachment in place and does not count here.
+	Replaced int
 	// Discovered are the new children sitemaps and feeds declared.
 	Discovered []DiscoveredChildren
 	// Removed are the pages a SITEMAP no longer lists. A feed never removes an item.
@@ -1114,7 +1121,30 @@ func (uc RefreshURLs) ExecuteOne(ctx context.Context, hash string) (RefreshResul
 		return RefreshResult{}, types.New("unsupported_source",
 			"this source has no URL to refresh", types.ErrUnsupportedSource)
 	}
-	return uc.executeRows(ctx, []entities.Source{src}, 0)
+	return uc.executeRows(ctx, []entities.Source{src}, 0, false)
+}
+
+// ExecuteOneForce fetches ONE URL source now even when its snapshot was attached by hand. It is the
+// explicit way out of an attachment: a readable page replaces the snapshot and clears the marker; a
+// wall, a dead host or an empty page leaves the attachment (and its bytes) exactly where it is.
+func (uc RefreshURLs) ExecuteOneForce(ctx context.Context, hash string) (RefreshResult, error) {
+	src, err := uc.Index.GetSourceByHash(ctx, hash)
+	if err != nil {
+		return RefreshResult{}, err
+	}
+	if src.Kind != entities.SourceKindURL || src.URL == "" {
+		return RefreshResult{}, types.New("unsupported_source",
+			"only a URL source can be fetched again", types.ErrUnsupportedSource)
+	}
+	if src.Sitemap || src.RSS {
+		return RefreshResult{}, types.New("unsupported_source",
+			"a sitemap or a feed is a list, not a page to attach", types.ErrUnsupportedSource)
+	}
+	if !isAttached(src.Meta) {
+		return RefreshResult{}, types.New("unsupported_source",
+			"this snapshot is not attached; refresh the URL instead", types.ErrUnsupportedSource)
+	}
+	return uc.executeRows(ctx, []entities.Source{src}, 0, true)
 }
 
 func (uc RefreshURLs) execute(ctx context.Context, minAge time.Duration) (RefreshResult, error) {
@@ -1122,10 +1152,10 @@ func (uc RefreshURLs) execute(ctx context.Context, minAge time.Duration) (Refres
 	if err != nil {
 		return RefreshResult{}, err
 	}
-	return uc.executeRows(ctx, rows, minAge)
+	return uc.executeRows(ctx, rows, minAge, false)
 }
 
-func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, minAge time.Duration) (RefreshResult, error) {
+func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, minAge time.Duration, ignoreAttached bool) (RefreshResult, error) {
 	var res RefreshResult
 	seen := make(map[string]bool)
 	for _, s := range rows {
@@ -1135,7 +1165,10 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, m
 		seen[entities.URLKey(s.URL)] = true
 		// A snapshot the human attached is not checked at all. It exists BECAUSE the page cannot be
 		// fetched; asking the site every week would only write a 403 onto an article that is fine.
-		if isAttached(s.Meta) {
+		// A FORCED fetch (the explicit "try the URL again") asks anyway, and keeps the attachment if
+		// the answer is still a wall.
+		attached := isAttached(s.Meta)
+		if attached && !ignoreAttached {
 			res.Attached++
 			continue
 		}
@@ -1150,6 +1183,11 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, m
 			res.Failed++
 			res.LastError = fetchErr.Error()
 			_ = uc.Index.SetSourceURLState(ctx, s.Hash, 0, now)
+			if attached {
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+					"the URL was tried again — the fetch failed; the attached snapshot was kept",
+					map[string]any{"error": fetchErr.Error()})
+			}
 			if uc.Log != nil {
 				uc.Log.Warn("url refresh failed", "url", s.URL, "err", fetchErr)
 			}
@@ -1186,6 +1224,11 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, m
 				}), s))
 			}
 			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+			if attached {
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+					"the URL was tried again — still blocked; the attached snapshot was kept",
+					map[string]any{"wall": string(page.Wall), "http_status": page.Status})
+			}
 			if uc.Log != nil {
 				uc.Log.Info("url refresh: blocked", "url", s.URL, "wall", string(page.Wall), "status", page.Status)
 			}
@@ -1195,6 +1238,11 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, m
 			res.Failed++
 			res.LastError = fmt.Sprintf("HTTP %d", page.Status)
 			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+			if attached {
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+					fmt.Sprintf("the URL was tried again — HTTP %d; the attached snapshot was kept", page.Status),
+					nil)
+			}
 			if uc.Log != nil {
 				uc.Log.Info("url refresh: not ok", "url", s.URL, "status", page.Status)
 			}
@@ -1233,12 +1281,34 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, m
 			res.Failed++
 			res.LastError = convErr.Error()
 			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+			if attached {
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+					"the URL was tried again — the page could not be converted; the attached snapshot was kept",
+					map[string]any{"error": convErr.Error()})
+			}
 			continue
 		}
 		body := strings.TrimSpace(conv.Markdown)
 		title := conv.Title
 		if title == "" {
 			title = s.URL
+		}
+		// A retried attachment is only replaced by a page that is actually readable. A JavaScript
+		// shell or a teaser that carries a little navigation text must not overwrite the human's copy.
+		if attached && ignoreAttached {
+			minChars := uc.MinTextChars
+			if minChars <= 0 {
+				minChars = defaultMinTextChars
+			}
+			if utf8.RuneCountInString(body) < minChars {
+				res.Failed++
+				res.LastError = "the page gave no readable text"
+				_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+					"the URL was tried again — no readable text; the attached snapshot was kept",
+					map[string]any{"chars": utf8.RuneCountInString(body), "min": minChars})
+				continue
+			}
 		}
 
 		// A copy taken from a FEED must not be replaced by a page that still does not read (a
@@ -1271,6 +1341,10 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, m
 			res.Failed++
 			res.LastError = "the page gave no readable text"
 			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+			if attached {
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+					"the URL was tried again — no readable text; the attached snapshot was kept", nil)
+			}
 			continue
 		}
 
@@ -1309,7 +1383,8 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, m
 				}
 			}
 		}
-		if contentHash == contentHashFromMeta(s.Meta) {
+		sameContent := contentHash == contentHashFromMeta(s.Meta)
+		if sameContent && !attached {
 			// Same content: just record that we checked and the page still answers.
 			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
 			if uc.Log != nil {
@@ -1336,10 +1411,18 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, m
 		meta := metaWithFavicon(s.Meta, s.URL, contentHash, favicon)
 		// A readable page replaces the feed's copy: the snapshot is now the page's, so the marker goes.
 		meta = metaWith(meta, map[string]any{"from_feed": nil, "feed_hash": nil})
+		if attached {
+			// The fetched page is the source now, not the human's workaround. Clearing the marker is
+			// what lets the weekly refresh treat it as an ordinary URL again.
+			meta = metaWith(meta, map[string]any{
+				"attached": nil, "attached_from": nil, "attached_hash": nil,
+			})
+		}
 		updated := s
 		updated.Ext, updated.Path, updated.Bytes = obj.Ext, obj.Path, obj.Bytes
 		updated.Title, updated.Meta = title, meta
 		updated.Language = language
+		updated.Attached, updated.AttachedFrom = false, ""
 		if err := uc.Index.UpsertSource(ctx, updated); err != nil {
 			res.Failed++
 			res.LastError = err.Error()
@@ -1375,11 +1458,34 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, m
 				ContentHash: contentHash, FaviconHash: faviconHash(favicon), FaviconExt: faviconExt(favicon),
 			})
 		}
-		res.Changed++
+		if attached {
+			// The old derivation was built on OTHER bytes. A same-content fetch leaves it alone; a
+			// changed one is reset, so the new snapshot is not mixed with claims about the old one.
+			reset := false
+			if !sameContent && uc.Reset != nil {
+				reset = true
+				if _, rErr := uc.Reset.Execute(ctx, s.Hash); rErr != nil {
+					reset = false
+					if uc.Log != nil {
+						uc.Log.Warn("url refetch: attached snapshot replaced, derivation not reset",
+							"url", s.URL, "hash", s.Hash, "err", rErr)
+					}
+				}
+			}
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "info",
+				"attached snapshot replaced by a fetch", map[string]any{
+					"file": s.AttachedFrom, "http_status": page.Status, "reset": reset,
+				})
+			res.Replaced++
+		}
+		if !sameContent {
+			res.Changed++
+			res.ChangedURLs = append(res.ChangedURLs, s.URL)
+		}
 		res.Sources = append(res.Sources, partialentities.PartialFromSource(updated))
-		res.ChangedURLs = append(res.ChangedURLs, s.URL)
 		if uc.Log != nil {
-			uc.Log.Info("url changed", "url", s.URL, "hash", s.Hash, "markdown_bytes", len(body))
+			uc.Log.Info("url changed", "url", s.URL, "hash", s.Hash,
+				"markdown_bytes", len(body), "replaced_attachment", attached)
 		}
 	}
 	return res, nil

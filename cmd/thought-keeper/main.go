@@ -57,6 +57,8 @@ func run(args []string) error {
 		return cmdAdd(args[1:])
 	case "attach":
 		return cmdAttach(args[1:])
+	case "refetch":
+		return cmdRefetch(args[1:])
 	case "sources", "list-sources":
 		return cmdSources(args[1:])
 	case "tree":
@@ -85,6 +87,8 @@ func run(args []string) error {
 		return cmdPost(args[1:], "/reindex", "reindex")
 	case "rebuild-trees":
 		return cmdPost(args[1:], "/rebuild-trees", "rebuild-trees")
+	case "quote-claim-code":
+		return cmdPost(args[1:], "/atoms/quote-code", "quote-claim-code")
 	case "version", "-version", "--version":
 		fmt.Println(version.Full())
 		return nil
@@ -111,6 +115,8 @@ Usage:
   thought-keeper attach --url URL --file FILE             attach a saved page to a URL the app could
                                                           not read (a login, a paywall); --source HASH
                                                           works too
+  thought-keeper refetch (--source HASH | --url URL)      try the URL again for an attached snapshot;
+                                                          a wall keeps the attachment
   thought-keeper sources [--kind K] [--limit N]       list sources
   thought-keeper tree --source HASH                   print a source's tree
   thought-keeper distill --source HASH                run a source's document steps (outline → distill); --reset replaces the derivation
@@ -124,6 +130,7 @@ Usage:
   thought-keeper lint [--wait]                            run health checks
   thought-keeper reindex                              rebuild the source index
   thought-keeper rebuild-trees                        rebuild every source tree
+  thought-keeper quote-claim-code                     quote the bracket syntax in claim bodies as inline code
   thought-keeper new-id                               print one ULID
   thought-keeper version                              print the version
 
@@ -235,6 +242,56 @@ func cmdAttach(args []string) error {
 		return err
 	}
 	fmt.Printf("%s · %s · %d bytes\n", src.Hash[:12], src.Title, src.Bytes)
+	return nil
+}
+
+// cmdRefetch tries the URL again for an attached snapshot. A readable page replaces the attachment;
+// a wall or a failure leaves it exactly as it was.
+func cmdRefetch(args []string) error {
+	fs := flag.NewFlagSet("refetch", flag.ContinueOnError)
+	source := fs.String("source", "", "source hash (alternative to --url)")
+	urlFlag := fs.String("url", "", "URL of the source")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if (*source == "") == (*urlFlag == "") {
+		return errors.New("refetch requires exactly one of --source or --url")
+	}
+	hash := strings.ToLower(strings.TrimSpace(*source))
+	if *urlFlag != "" {
+		hash = entities.URLHash(strings.TrimSpace(*urlFlag))
+	}
+	if !entities.IsSHA256Hex(hash) {
+		return errors.New("refetch needs a source hash or an absolute URL")
+	}
+	addr, err := resolveAddr("")
+	if err != nil {
+		return err
+	}
+	status, body, err := apiRequest(addr, http.MethodPost, "/sources/"+hash+"/refetch", nil)
+	if err != nil {
+		return err
+	}
+	if status != http.StatusOK {
+		return fmt.Errorf("refetch failed: %s", string(body))
+	}
+	var res payloads.RefetchResult
+	if err := json.Unmarshal(body, &res); err != nil {
+		return err
+	}
+	switch {
+	case res.Replaced:
+		fmt.Println("the page was readable — the attached snapshot was replaced")
+	case res.Blocked:
+		fmt.Println("still blocked — the attached snapshot was kept")
+	case res.Failed:
+		fmt.Println("the fetch failed — the attached snapshot was kept")
+	default:
+		fmt.Println("nothing to replace — the source is unchanged")
+	}
+	if res.Detail != "" {
+		fmt.Println(res.Detail)
+	}
 	return nil
 }
 

@@ -103,7 +103,7 @@ export async function cleanupClusters(): Promise<void> {
   try {
     const result = await api.cleanup();
     toast(
-      `Cleanup: ${plural(result.clusters_pruned, 'cluster')} pruned · ${plural(result.clusters_removed, 'cluster')} removed · ${plural(result.links_repaired, 'link')} repaired · ${plural(result.findings, 'finding')}.`,
+      `Cleanup: ${plural(result.clusters_pruned, 'cluster')} pruned · ${plural(result.clusters_removed, 'cluster')} removed · ${plural(result.findings, 'finding')}.`,
       'success',
     );
     await Promise.all([system.loadFindings(), sources.loadList(), system.loadStatus()]);
@@ -144,6 +144,25 @@ export async function reorganizeClaims(): Promise<void> {
     await system.loadVault();
   } catch (error) {
     toast(`Reorganize failed: ${firstLine(humanError(error))}`, 'error');
+  }
+}
+
+export async function quoteClaimCode(): Promise<void> {
+  system.notice = 'Quoting bracket syntax in claim bodies…';
+  try {
+    const result = await api.quoteClaimCode();
+    toast(
+      result.repaired === 0
+        ? 'Nothing to quote — no claim body carries a bare bracket pair.'
+        : `Quoted ${plural(result.fragments, 'bracket span')} in ${plural(result.repaired, 'claim')}${result.skipped ? ` · ${result.skipped} skipped` : ''}.`,
+      result.skipped ? 'warning' : 'success',
+    );
+    await Promise.all([claims.refresh(), system.loadFindings(), system.loadStatus()]);
+    if (system.vaultLoaded) await system.loadVault();
+  } catch (error) {
+    toast(`Quote claim code failed: ${firstLine(humanError(error))}`, 'error');
+  } finally {
+    system.notice = '';
   }
 }
 

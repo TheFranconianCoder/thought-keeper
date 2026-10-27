@@ -16,6 +16,5 @@ type LintRepository interface {
 	ListFindings(ctx context.Context, kind string, limit, offset int) ([]entities.LintFinding, error)
 
 	// Analysis reads.
-	UnresolvedAtomLinks(ctx context.Context, limit int) ([]entities.UnresolvedLink, error)
 	AtomsWithoutSource(ctx context.Context, limit int) ([]entities.Atom, error)
 }

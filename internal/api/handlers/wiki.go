@@ -59,9 +59,14 @@ type WikiHandler struct {
 	// OnDeleted is called with the removed source hash, so the app can pump what is left.
 	OnDeleted func(hash string)
 	// URLs schedules the page's NEW links; the app fetches them off the request path. OnURLRemoved
-	// clean-up runs for a URL source the page stopped owning.
+	// clean-up runs for a URL source a deleted page stopped owning.
 	URLs         WikiURLScheduler
 	OnURLRemoved func(hash string)
+	// OnCleanup asks the app to prune what the saved page stopped owning: the link sources it no
+	// longer declares and an older representation it pointed at. It runs after EVERY save — the pass
+	// re-reads the page, so it is a no-op when nothing changed and heals a save whose cleanup was
+	// lost. It is a background job: a save deletes nothing, and the page file is already the truth.
+	OnCleanup func(pageID, staleHash string)
 }
 
 // List serves GET /api/v1/wiki.
@@ -122,6 +127,9 @@ func (h WikiHandler) save(w http.ResponseWriter, r *http.Request, id ulid.ULID) 
 	}
 	if h.URLs != nil && len(res.URLsAdded) > 0 {
 		h.URLs.ScheduleWikiURLs(res.Page.ID.String(), res.URLsAdded)
+	}
+	if h.OnCleanup != nil {
+		h.OnCleanup(res.Page.ID.String(), res.StaleSourceHash)
 	}
 	// Only a changed PROSE needs new tags: a save that moved a tag, or re-saved an unchanged page, must
 	// not spend a model call on it.

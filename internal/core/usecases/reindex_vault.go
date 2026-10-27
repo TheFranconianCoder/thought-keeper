@@ -31,9 +31,6 @@ type ReindexVault struct {
 	Log   *slog.Logger
 	// Maintenance prunes child rows whose parent vanished.
 	Maintenance interfaces.Maintenance
-	// LinkResolver is optional: a rebuilt index also resolves the atom→atom links it read from the
-	// claim files.
-	LinkResolver AtomLinkResolver
 	// SourceLog receives a line for every vault file that could not be indexed, with the reason.
 	SourceLog interfaces.SourceLog
 	// Steps rebuilds the index's mirror of the document-step state from the vault's .meta files.
@@ -341,15 +338,6 @@ func (uc ReindexVault) derived(ctx context.Context, res ReindexResult) (ReindexR
 			continue
 		}
 		res.Atoms++
-	}
-	if uc.LinkResolver != nil {
-		if n, err := uc.LinkResolver.ResolveLinks(ctx); err != nil {
-			if uc.Log != nil {
-				uc.Log.Warn("reindex: atom links not resolved", "err", err)
-			}
-		} else if n > 0 && uc.Log != nil {
-			uc.Log.Info("reindex: atom links resolved", "links", n)
-		}
 	}
 	return res, nil
 }

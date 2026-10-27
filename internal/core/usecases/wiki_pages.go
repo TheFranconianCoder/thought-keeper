@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -38,9 +37,9 @@ type WikiPageResult struct {
 	// background: a save never waits for the network. A link that already has a source — even one
 	// whose fetch failed — is only associated and does not appear here.
 	URLsAdded []string
-	// URLHashesRemoved are the stable addresses of the URL sources this save stopped owning.
-	URLHashesRemoved []string
-	URLsRemoved      int
+	// StaleSourceHash is an older content-addressed representation the page pointed at before the
+	// stable WikiHash. The caller removes it in the background, like a link that left.
+	StaleSourceHash string
 	// Retag says the page's own text (title or body) changed, so its derived tags are stale. A save
 	// that only moved a tag must not spend a model call on re-tagging what it did not touch.
 	Retag bool
@@ -128,16 +127,17 @@ func (uc GetWikiPage) Execute(ctx context.Context, id ulid.ULID) (entities.WikiP
 // capture instead of adding a second source. The old derivation is cleared first: the tree and the
 // claims describe the old text, and a page edit is a new document, not a correction of a node.
 //
-// NOTHING IS FETCHED HERE. A page with a hundred links used to fetch every new link, one after the
-// other, inside the request: minutes of saving for one page, and nothing written until the last link
-// answered. The links a page declares are the caller's to queue (WikiPageResult.URLsAdded); writing the
-// page is a local operation and stays one.
+// NOTHING IS FETCHED AND NOTHING IS DELETED HERE. A page with a hundred links used to fetch every new
+// link inside the request; fetching moves to the caller's queue (WikiPageResult.URLsAdded). A link
+// that LEFT the page used to be deleted inside the request too, and that delete walked the whole atom
+// vault — one save took 73 seconds for three removed links. The page file is the new truth; the
+// caller runs PruneWikiLinks in the background after every save, which reconciles the sources the
+// page owns with what it declares.
 type SaveWikiPage struct {
 	Pages     interfaces.WikiStore
 	Store     interfaces.SourceStore
 	Index     interfaces.IndexRepository
 	Steps     interfaces.StepTracker
-	Delete    DeleteSource
 	SourceLog interfaces.SourceLog
 	Clock     interfaces.Clock
 	Log       *slog.Logger
@@ -188,8 +188,7 @@ func (uc SaveWikiPage) Execute(ctx context.Context, in WikiPageInput) (WikiPageR
 	content := wikiSourceMarkdown(title, body)
 	res := WikiPageResult{Page: page, Hash: hash, Created: created}
 	res.Retag = created || oldErr != nil || old.Title != title || old.Body != body
-	res.URLsAdded, res.URLHashesRemoved = uc.planURLs(ctx, page, old)
-	res.URLsRemoved = len(res.URLHashesRemoved)
+	res.URLsAdded = uc.newLinks(ctx, page)
 	// A tag-only (or URL-only) edit changes the page, not the prose source. Do not throw a good
 	// derivation away for frontmatter or links that the document source does not need re-deriving.
 	sameContent := !created && old.SourceHash == hash && wikiSourceMarkdown(old.Title, old.Body) == content
@@ -217,10 +216,11 @@ func (uc SaveWikiPage) Execute(ctx context.Context, in WikiPageInput) (WikiPageR
 		existing.ImportedAt = now
 	}
 	// A page from an older scheme may point at a content-addressed source. That source must not
-	// linger beside the stable one: the page owns exactly one current representation.
+	// linger beside the stable one: the page owns exactly one current representation. It is removed
+	// in the background — checking that it exists is an index read, deleting it is vault work.
 	if old.SourceHash != "" && old.SourceHash != hash {
 		if _, err := uc.Index.GetSourceByHash(ctx, old.SourceHash); err == nil {
-			_, _ = uc.Delete.ExecuteOwned(ctx, old.SourceHash)
+			res.StaleSourceHash = old.SourceHash
 		}
 	}
 
@@ -263,88 +263,157 @@ func (uc SaveWikiPage) Execute(ctx context.Context, in WikiPageInput) (WikiPageR
 	return res, nil
 }
 
-// planURLs compares the page's URL set with the previous file, and nothing more. A URL that arrived is
-// only REPORTED (the caller queues the fetch); a URL that left is removed only if a wiki page created
-// its source and no other page still references it. The page body is not re-parsed for the old URLs,
-// and an existing URL source is never touched by a save — not refetched, and not by a link that merely
-// stays on the page.
-func (uc SaveWikiPage) planURLs(ctx context.Context, page, old entities.WikiPage) (added, removed []string) {
+// newLinks is the page's links that no source knows yet. The caller queues the fetches; the save
+// itself touches no network. Existence is by URL KEY (trailing slash and fragment ignored), and an
+// existing URL source — even a failed fetch — is only associated, never refetched.
+//
+// ONE index read, not one per link: FindURLSource lists every URL source on each call, and a page with
+// 63 links paid that whole list 63 times inside the save.
+func (uc SaveWikiPage) newLinks(ctx context.Context, page entities.WikiPage) []string {
+	if len(page.URLs) == 0 {
+		return nil
+	}
+	known := urlSourceKeys(ctx, uc.Index)
+	added := make([]string, 0, len(page.URLs))
 	for _, raw := range page.URLs {
-		if _, known := FindURLSource(ctx, uc.Index, raw); known {
-			continue
-		}
-		added = append(added, raw)
-	}
-
-	// The comparison is by URL KEY (trailing slash and fragment ignored): renaming "/a" to "/a/" is
-	// not a link that left the page, it is the same link.
-	newSet := make(map[string]bool, len(page.URLs))
-	for _, raw := range page.URLs {
-		newSet[entities.URLKey(raw)] = true
-	}
-	oldURLs := old.URLs
-	if len(oldURLs) == 0 && old.Body != "" {
-		oldURLs = coremarkdown.URLs(old.Body)
-	}
-	var gone []string
-	for _, raw := range oldURLs {
-		if !newSet[entities.URLKey(raw)] {
-			gone = append(gone, raw)
+		if !known[entities.URLKey(raw)] {
+			added = append(added, raw)
 		}
 	}
-	if len(gone) == 0 {
-		return added, nil
-	}
-	// One page list for the whole save, however many links leave it. A read error is conservative:
-	// not knowing is a reason to leave a source alone, never to delete one.
-	refs, ok := uc.referencesOfOthers(ctx, page.ID)
-	if !ok {
-		return added, nil
-	}
-	for _, raw := range gone {
-		if refs[entities.URLKey(raw)] {
-			continue
-		}
-		src, known := FindURLSource(ctx, uc.Index, raw)
-		if !known || src.Origin != entities.WikiLinkOrigin {
-			continue
-		}
-		if _, err := uc.Delete.ExecuteOwned(ctx, src.Hash); err != nil {
-			if uc.Log != nil {
-				uc.Log.Warn("wiki: URL source not removed", "page", page.ID.String(), "url", raw, "err", err)
-			}
-			continue
-		}
-		removed = append(removed, src.Hash)
-	}
-	return added, removed
+	return added
 }
 
-// referencesOfOthers is the set of URLs every OTHER page still claims, and whether it could be read.
-func (uc SaveWikiPage) referencesOfOthers(ctx context.Context, pageID ulid.ULID) (map[string]bool, bool) {
-	if uc.Pages == nil {
+// urlSourceKeys is the set of URL KEYS the index knows, from ONE read. A read failure answers "nothing
+// is known": the link is then reported as new, and the queue skips it after its own lookup.
+func urlSourceKeys(ctx context.Context, index interfaces.IndexRepository) map[string]bool {
+	keys := map[string]bool{}
+	if index == nil {
+		return keys
+	}
+	rows, err := index.ListURLSources(ctx)
+	if err != nil {
+		return keys
+	}
+	for _, src := range rows {
+		if src.URL != "" {
+			keys[entities.URLKey(src.URL)] = true
+		}
+	}
+	return keys
+}
+
+// pageURLs is the link set a page DECLARES. A page written before URL tracking has no frontmatter list;
+// its body is still the declaration.
+func pageURLs(page entities.WikiPage) []string {
+	if len(page.URLs) > 0 {
+		return page.URLs
+	}
+	return coremarkdown.URLs(page.Body)
+}
+
+// pageURLKeys is pageURLs as a set of URL KEYS.
+func pageURLKeys(page entities.WikiPage) map[string]bool {
+	urls := pageURLs(page)
+	keys := make(map[string]bool, len(urls))
+	for _, raw := range urls {
+		keys[entities.URLKey(raw)] = true
+	}
+	return keys
+}
+
+// otherPagesURLKeys is the set of URL KEYS every OTHER page still declares, and whether it could be
+// read. A read error is conservative: not knowing is a reason to leave a source alone, never to
+// delete one.
+func otherPagesURLKeys(ctx context.Context, pages interfaces.WikiStore, pageID ulid.ULID) (map[string]bool, bool) {
+	if pages == nil {
 		return nil, false
 	}
-	pages, err := uc.Pages.List(ctx)
+	all, err := pages.List(ctx)
 	if err != nil {
 		return nil, false
 	}
 	refs := map[string]bool{}
-	for _, other := range pages {
+	for _, other := range all {
 		if other.ID == pageID {
 			continue
 		}
-		urls := other.URLs
-		if len(urls) == 0 {
-			// A page written before URL tracking has no frontmatter list; its body is still the
-			// declaration. Parse it here rather than deleting a source another page still links.
-			urls = coremarkdown.URLs(other.Body)
-		}
-		for _, raw := range urls {
+		for _, raw := range pageURLs(other) {
 			refs[entities.URLKey(raw)] = true
 		}
 	}
 	return refs, true
+}
+
+// PruneWikiLinks removes what a page stopped owning: the URL sources it brought in and no longer
+// declares, plus an older representation it pointed at before the stable WikiHash.
+//
+// It runs OFF the request path and inside the vault gate, after EVERY save, and RE-READS the page
+// instead of trusting a diff. That makes it idempotent and race-safe (a link the reader re-added
+// before the job ran is declared again, so its source stays) and it heals what a diff could not: a
+// crash between the page file and the cleanup, or a page edited outside the app.
+type PruneWikiLinks struct {
+	Pages  interfaces.WikiStore
+	Index  interfaces.IndexRepository
+	Delete DeleteSource
+	Log    *slog.Logger
+}
+
+// PruneWikiLinksResult reports what the pass removed.
+type PruneWikiLinksResult struct {
+	LinksRemoved int
+	StaleRemoved bool
+}
+
+// Execute prunes one page's orphaned link sources. A page that is already gone is a no-op: its own
+// delete removed the links with it.
+func (uc PruneWikiLinks) Execute(ctx context.Context, pageID ulid.ULID, staleHash string) (PruneWikiLinksResult, error) {
+	var res PruneWikiLinksResult
+	if staleHash != "" {
+		if _, err := uc.Delete.ExecuteOwned(ctx, staleHash); err != nil {
+			if uc.Log != nil {
+				uc.Log.Warn("wiki: old representation not removed", "page", pageID.String(), "hash", staleHash, "err", err)
+			}
+		} else {
+			res.StaleRemoved = true
+		}
+	}
+	page, err := uc.Pages.Read(ctx, pageID)
+	if err != nil {
+		return res, nil
+	}
+	declared := pageURLKeys(page)
+	children, err := uc.Index.ListSourceChildren(ctx, "", pageID.String())
+	if err != nil {
+		return res, err
+	}
+	candidates := make([]entities.Source, 0, len(children))
+	for _, child := range children {
+		if child.Origin != entities.WikiLinkOrigin || declared[entities.URLKey(child.URL)] {
+			continue
+		}
+		candidates = append(candidates, child)
+	}
+	if len(candidates) == 0 {
+		return res, nil
+	}
+	// One page list for the whole pass, however many links left.
+	refs, ok := otherPagesURLKeys(ctx, uc.Pages, pageID)
+	if !ok {
+		return res, nil
+	}
+	for _, child := range candidates {
+		if refs[entities.URLKey(child.URL)] {
+			continue
+		}
+		if _, err := uc.Delete.ExecuteOwned(ctx, child.Hash); err != nil {
+			if uc.Log != nil {
+				uc.Log.Warn("wiki: URL source not removed", "page", pageID.String(), "url", child.URL, "err", err)
+			}
+			continue
+		}
+		res.LinksRemoved++
+	}
+	return res, nil
 }
 
 // DeleteWikiPage removes the page and the source representation it owns.
@@ -355,56 +424,34 @@ type DeleteWikiPage struct {
 	Log    *slog.Logger
 }
 
-func (uc DeleteWikiPage) referencedElsewhere(ctx context.Context, pageID ulid.ULID, rawURL string) bool {
-	if uc.Pages == nil {
-		return false
-	}
-	pages, err := uc.Pages.List(ctx)
-	if err != nil {
-		return true
-	}
-	for _, page := range pages {
-		if page.ID == pageID {
-			continue
-		}
-		urls := page.URLs
-		if len(urls) == 0 {
-			// A page written before URL tracking has no frontmatter list; its body is still the
-			// declaration. Parse it here rather than deleting a source another page still links.
-			urls = coremarkdown.URLs(page.Body)
-		}
-		if slices.ContainsFunc(urls, func(raw string) bool { return entities.URLKey(raw) == entities.URLKey(rawURL) }) {
-			return true
-		}
-	}
-	return false
-}
-
 func (uc DeleteWikiPage) Execute(ctx context.Context, id ulid.ULID) (string, []string, error) {
 	page, err := uc.Pages.Read(ctx, id)
 	if err != nil {
 		return "", nil, types.New("not_found", "no such wiki page", types.ErrNotFound)
 	}
 	var removedURLs []string
-	pageURLs := page.URLs
-	if len(pageURLs) == 0 && page.Body != "" {
-		pageURLs = coremarkdown.URLs(page.Body)
+	// The page's OWN link sources, from the index: one query, not one URL list per declared link.
+	children, err := uc.Index.ListSourceChildren(ctx, "", id.String())
+	if err != nil && uc.Log != nil {
+		uc.Log.Warn("wiki: link sources not listed", "page", id.String(), "err", err)
 	}
-	for _, raw := range pageURLs {
-		if uc.referencedElsewhere(ctx, page.ID, raw) {
+	// A read error here is conservative: not knowing what other pages declare is a reason to leave
+	// their link sources alone, never to delete one.
+	refs, refsOK := otherPagesURLKeys(ctx, uc.Pages, page.ID)
+	for _, child := range children {
+		if child.Origin != entities.WikiLinkOrigin {
 			continue
 		}
-		src, known := FindURLSource(ctx, uc.Index, raw)
-		if !known || src.Origin != entities.WikiLinkOrigin {
+		if refsOK && refs[entities.URLKey(child.URL)] {
 			continue
 		}
-		if _, err := uc.Delete.ExecuteOwned(ctx, src.Hash); err != nil {
+		if _, err := uc.Delete.ExecuteOwned(ctx, child.Hash); err != nil {
 			if uc.Log != nil {
-				uc.Log.Warn("wiki: URL source not removed with the page", "page", page.ID.String(), "url", raw, "err", err)
+				uc.Log.Warn("wiki: URL source not removed with the page", "page", page.ID.String(), "url", child.URL, "err", err)
 			}
 			continue
 		}
-		removedURLs = append(removedURLs, src.Hash)
+		removedURLs = append(removedURLs, child.Hash)
 	}
 	if page.SourceHash != "" {
 		if _, err := uc.Index.GetSourceByHash(ctx, page.SourceHash); err == nil {

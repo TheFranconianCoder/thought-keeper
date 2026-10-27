@@ -226,6 +226,45 @@ export async function distillSource(hash: string, reset = false): Promise<void> 
   }
 }
 
+/** refetchSource tries the URL again for an attached snapshot. If the page is readable, the fresh
+ *  snapshot replaces the attachment and the claims are rebuilt; a wall or a failure keeps it. */
+export async function refetchSource(hash: string): Promise<void> {
+  const source = sources.find(hash);
+  const label = labelOf(source, hash);
+  const attachedFrom = source?.attached_from ? ` (${source.attached_from})` : '';
+  const confirmed = await confirm({
+    title: `Try “${label}” again?`,
+    message: `The URL is fetched once. If the page is readable, its snapshot replaces the attached file${attachedFrom} and the claims are rebuilt when its text changed. If the page is still blocked or the fetch fails, the attached snapshot stays exactly as it is.`,
+    confirmLabel: 'Try the URL again',
+  });
+  if (!confirmed) return;
+
+  system.notice = 'Fetching the URL again…';
+  try {
+    const result = await api.refetchSource(hash);
+    if (result.replaced) {
+      toast('The page was readable — the attached snapshot was replaced.', 'success');
+    } else if (result.blocked) {
+      toast(
+        `Still blocked${result.detail ? ` (${result.detail})` : ''} — the attached snapshot is unchanged.`,
+        'warning',
+      );
+    } else if (result.failed) {
+      toast(
+        `The fetch failed — the attached snapshot is unchanged${result.detail ? `: ${firstLine(result.detail)}` : ''}.`,
+        'error',
+      );
+    } else {
+      toast('The URL answered with no new content; nothing was replaced.', 'info');
+    }
+    await refreshSourceViews(hash);
+  } catch (error) {
+    toast(`Refetch failed: ${firstLine(humanError(error))}`, 'error');
+  } finally {
+    system.notice = '';
+  }
+}
+
 export async function resetSource(hash: string): Promise<void> {
   const source = sources.find(hash);
   const label = labelOf(source, hash);

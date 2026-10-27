@@ -25,7 +25,6 @@ func scopedAtom(t *testing.T, n byte, topic string) entities.Atom {
 		Claim: "A scoped claim about the scoped thing.", Body: "With a body.",
 		Type: entities.AtomFact, Status: entities.AtomActive, Path: "atoms/" + string(rune('a'+n)) + ".md",
 		Sources:   []entities.AtomSource{{Hash: scopedHash, NodeID: "1.2"}},
-		Links:     []entities.Link{{RawTarget: "A scoped claim about the scoped thing.", Position: 0}},
 		CreatedAt: time.UnixMilli(1700000000000).UTC(), UpdatedAt: time.UnixMilli(1700000000000 + int64(n)).UTC(),
 	}
 }
@@ -101,7 +100,7 @@ func TestScopedAtomReads(t *testing.T) {
 		t.Fatalf("page = %v, want ids 2,1", page)
 	}
 	for _, a := range page {
-		if len(a.Sources) != 1 || a.SourceCount != 1 || len(a.Links) != 1 {
+		if len(a.Sources) != 1 || a.SourceCount != 1 {
 			t.Errorf("atom %v not hydrated from the scoped reads", a.ID)
 		}
 	}
@@ -237,7 +236,7 @@ func TestAtomReadsBatchLargeIDLists(t *testing.T) {
 	}
 	repo := NewAtomRepository(db)
 	ids := make([]ulid.ULID, 0, 1200)
-	for i := 0; i < 1200; i++ {
+	for i := range 1200 {
 		id := ulid.Make()
 		if sErr := repo.SaveAtom(ctx, entities.Atom{
 			ID: id, Topic: "batch", Claim: fmt.Sprintf("A batched claim number %d.", i), Body: "b",

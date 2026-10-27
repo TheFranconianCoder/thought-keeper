@@ -1,4 +1,5 @@
 import type { Pipeline, ProgressFrame, StreamFrame } from '../api/types';
+import { router } from '../router.svelte';
 import { EventStream } from './event-stream';
 import { noteFrame, setConnectionState, connection } from '../stores/connection.svelte';
 import { system } from '../stores/system.svelte';
@@ -16,29 +17,59 @@ import { asks } from '../stores/asks.svelte';
  *     and flushed once per animation-sized tick. A run that emits hundreds of log lines therefore
  *     causes a handful of reactive updates, not hundreds.
  *
- *  2. STATE — "this container changed". These are coalesced into a set of scopes. Each scope is
- *     re-read at most once per batch, and a batch that arrives while another is loading is picked up
- *     by the next turn. That is what keeps a burst of events from firing overlapping requests.
+ *  2. STATE — "this container changed". These are coalesced into a set of scopes over a short
+ *     window. Each scope is a SINGLE container read, so a burst cannot load the same list twice; a
+ *     batch that arrives while another is loading is picked up by the next turn. That is what keeps
+ *     a burst of events from firing overlapping requests.
  *
- *  Every store loader has its own generation counter, so even a late response cannot overwrite a
- *  newer one.
+ *  A scope is also VIEW-AWARE. A run publishes several events (source, clusters, run) for one
+ *  source; the list, the claim cloud and the vault report only change on screen if the reader is
+ *  looking at them. Hidden containers are skipped and — where a view does not reload on entry by
+ *  itself — marked stale, so opening the view still shows the truth. One pipeline run therefore
+ *  costs the visible lens a few reads, not every container in the app.
  */
 
-type Scope = 'sources' | 'claims' | 'clusters' | 'findings' | 'wiki' | 'asks' | 'vocabulary' | 'status';
+type Scope =
+  | 'sources' // the source list
+  | 'source' // the open source's detail
+  | 'claims' // the claim list
+  | 'topics' // the topic cloud
+  | 'claim' // the open claim
+  | 'status' // the badges and the job queue
+  | 'findings'
+  | 'vault' // layout, duplicates and vocabulary health (Status)
+  | 'vocabulary'
+  | 'wiki'
+  | 'asks';
+
+/** How long state scopes wait so one run's source/clusters/run frames become one batch. */
+const SCOPE_COALESCE_MS = 150;
 
 const scopes = new Set<Scope>();
 let scheduled = false;
+let flushTimer: ReturnType<typeof setTimeout> | undefined;
 let flushing = false;
 let liveTimer: ReturnType<typeof setTimeout> | undefined;
 
 const progressBuffer = new Map<string, ProgressFrame>();
 const logBuffer = new Map<string, string>();
 
+const viewIs = (...views: string[]): boolean => views.includes(router.current.view);
+const claimsVisible = (): boolean => viewIs('claims');
+const topicsVisible = (): boolean => viewIs('claims', 'ask');
+const sourceListVisible = (): boolean => viewIs('sources', 'bookmarks', 'attention');
+const sourceDetailVisible = (): boolean => viewIs('source');
+const findingsVisible = (): boolean => viewIs('attention', 'status');
+const vaultVisible = (): boolean => viewIs('status');
+
 function schedule(scope: Scope): void {
   scopes.add(scope);
   if (scheduled || flushing) return;
   scheduled = true;
-  queueMicrotask(() => void flushScopes());
+  flushTimer = setTimeout(() => {
+    flushTimer = undefined;
+    void flushScopes();
+  }, SCOPE_COALESCE_MS);
 }
 
 async function flushScopes(): Promise<void> {
@@ -53,45 +84,57 @@ async function flushScopes(): Promise<void> {
     }
   } finally {
     flushing = false;
+    // A schedule that arrived during the flush armed no second timer; its scope was drained by the
+    // loop above. Cancel one that was armed just before this flush started.
+    if (flushTimer !== undefined) {
+      clearTimeout(flushTimer);
+      flushTimer = undefined;
+    }
   }
 }
 
 async function loadScope(scope: Scope): Promise<void> {
   switch (scope) {
     case 'sources':
-      await Promise.all([sources.loadList(), system.loadStatus()]);
-      if (sources.selectedHash) await sources.refresh();
+      if (sourceListVisible()) await sources.loadList();
+      return;
+    case 'source':
+      if (sourceDetailVisible() && sources.selectedHash) await sources.refresh();
       return;
     case 'claims':
-      await Promise.all([claims.load(claims.topic), claims.loadTopics()]);
-      if (claims.selectedId) await claims.open(claims.selectedId);
+      if (!claimsVisible()) {
+        claims.markStale();
+        return;
+      }
+      await claims.load(claims.topic);
       return;
-    case 'clusters':
-      await Promise.all([
-        sources.loadList(),
-        claims.load(claims.topic),
-        claims.loadTopics(),
-        system.loadStatus(),
-      ]);
-      if (sources.selectedHash) await sources.refresh();
-      if (claims.selectedId) await claims.open(claims.selectedId);
-      if (system.vaultLoaded) await system.loadVault();
+    case 'topics':
+      if (topicsVisible()) {
+        await claims.loadTopics();
+        return;
+      }
+      claims.markTopicsStale();
+      return;
+    case 'claim':
+      if (claimsVisible() && claims.selectedId) await claims.open(claims.selectedId);
+      return;
+    case 'status':
+      await system.loadStatus();
       return;
     case 'findings':
-      await system.loadFindings();
+      if (findingsVisible()) await system.loadFindings();
+      return;
+    case 'vault':
+      if (vaultVisible() && system.vaultLoaded) await system.loadVault();
+      return;
+    case 'vocabulary':
+      if (vaultVisible()) await system.loadVocabulary();
       return;
     case 'wiki':
       await wiki.refresh();
       return;
     case 'asks':
       await asks.refresh();
-      return;
-    case 'vocabulary':
-      await system.loadVocabulary();
-      if (system.vaultLoaded) await system.loadVault();
-      return;
-    case 'status':
-      await system.loadStatus();
       return;
   }
 }
@@ -127,11 +170,65 @@ function mergeProgress(hash: string, data: Record<string, unknown>): void {
   queueLive();
 }
 
+/** handleSource refreshes the list and, only when it is the open one, the source's detail. */
+function handleSource(data: Record<string, unknown>): void {
+  // A summary completion carries the sidecar's size. It changes neither the list nor the claims;
+  // refreshing the whole list for each backfilled summary was a three-page read per summary and a
+  // burst of them could starve the reads that fill the screen.
+  if (typeof data.summary === 'number') {
+    const hash = String(data.hash ?? '');
+    if (hash && sources.selectedHash === hash) void sources.loadSummary(hash, true);
+    return;
+  }
+  const hash = String(data.hash ?? '');
+  schedule('sources');
+  schedule('status');
+  // A source event without a hash is about a wiki page's representation; the open source may be
+  // that representation. Keep the old "refresh what is open" answer for it.
+  if (!hash || sources.selectedHash === hash) schedule('source');
+}
+
+/** handleClusters tells a document run's claim write from a cluster pass's membership change. */
+function handleClusters(data: Record<string, unknown>): void {
+  if (typeof data.vocabulary === 'string') {
+    handleVocabulary();
+    return;
+  }
+  const hash = String(data.hash ?? '');
+  if (hash) {
+    // A document run wrote claims for this source: list counts, claim list and cloud changed.
+    schedule('sources');
+    schedule('claims');
+    schedule('topics');
+    schedule('status');
+    if (sources.selectedHash === hash) schedule('source');
+    if (claims.selectedId) schedule('claim');
+    return;
+  }
+  // The cluster pass groups claims; it changes neither their text nor their topics. Only the open
+  // claim's peers, the vault counts and the job status are different.
+  schedule('status');
+  schedule('vault');
+  if (claims.selectedId) schedule('claim');
+}
+
+/** handleVocabulary refreshes the name catalogs and the claims that carry those names. */
+function handleVocabulary(): void {
+  schedule('vocabulary');
+  schedule('claims');
+  schedule('topics');
+  schedule('sources');
+  schedule('status');
+  if (claims.selectedId) schedule('claim');
+  if (sources.selectedHash) schedule('source');
+}
+
 function handleRun(data: Record<string, unknown>): void {
   const runID = String(data.run_id ?? '');
   const op = String(data.op ?? '');
   const step = String(data.step ?? '');
   const status = String(data.status ?? '');
+  const hash = String(data.hash ?? '');
 
   if (status === 'running') {
     system.banner = { op: step || op, status };
@@ -142,6 +239,10 @@ function handleRun(data: Record<string, unknown>): void {
 
   system.finishRun(op || step, status, String(data.error ?? ''));
 
+  // A failed run may have left its source half-derived without publishing the source event that a
+  // successful run sends; the open detail still has to show the step record.
+  if (status !== 'succeeded' && hash && sources.selectedHash === hash) schedule('source');
+
   if (op === 'query') {
     asks.observeRun(runID);
     return;
@@ -150,7 +251,6 @@ function handleRun(data: Record<string, unknown>): void {
     // A summary is a sidecar write: no source row, no claim and no detail field changed. Only the
     // summary of the source it was about is re-read — and only when that source is open — so a
     // finished backfill for another source cannot clear the "generating" state of this one.
-    const hash = String(data.hash ?? '');
     if (hash && sources.selectedHash === hash) void sources.loadSummary(hash, true);
     // A finished summary lowers the backfill's missing/running counts.
     schedule('status');
@@ -159,8 +259,12 @@ function handleRun(data: Record<string, unknown>): void {
   if (op === 'tag') {
     // A tag run writes a source's or a page's labels, not claims. The run frame names the source it
     // was about; an empty hash means the wiki page's tag run.
-    if (String(data.hash ?? '')) schedule('sources');
-    else schedule('wiki');
+    if (hash) {
+      schedule('sources');
+      if (sources.selectedHash === hash) schedule('source');
+    } else {
+      schedule('wiki');
+    }
     return;
   }
   if (op === 'lint') {
@@ -169,14 +273,18 @@ function handleRun(data: Record<string, unknown>): void {
     return;
   }
   if (op === 'vocabulary') {
-    schedule('vocabulary');
-    schedule('clusters');
+    handleVocabulary();
     return;
   }
-  // Document steps and the cluster pass change claims, source counters and the vault report.
+
+  // Document runs and the cluster pass. The source's own event already refreshes its open detail;
+  // here only the global containers are named. A cluster pass changes memberships, not claim text.
   schedule('sources');
   schedule('claims');
+  schedule('topics');
   schedule('status');
+  if (claims.selectedId) schedule('claim');
+  if (step === 'cluster') schedule('vault');
 }
 
 function handleFrame(frame: StreamFrame): void {
@@ -204,18 +312,11 @@ function handleFrame(frame: StreamFrame): void {
       handleRun(data);
       return;
     case 'source':
-      // A summary completion carries the sidecar's size. It changes neither the list nor the
-      // claims; refreshing the whole list for each backfilled summary was a three-page read per
-      // summary and a burst of them could starve the reads that fill the screen.
-      if (typeof data.summary === 'number') {
-        const hash = String(data.hash ?? '');
-        if (hash && sources.selectedHash === hash) void sources.loadSummary(hash, true);
-        return;
-      }
-      schedule('sources');
+      handleSource(data);
       return;
     case 'urls':
       schedule('sources');
+      schedule('status');
       return;
     case 'wiki':
       schedule('wiki');
@@ -224,11 +325,10 @@ function handleFrame(frame: StreamFrame): void {
       schedule('findings');
       return;
     case 'clusters':
-      schedule('clusters');
-      if (typeof data.vocabulary === 'string') schedule('vocabulary');
+      handleClusters(data);
       return;
     case 'vocabulary':
-      schedule('vocabulary');
+      handleVocabulary();
       return;
     default:
       // Forward compatibility: unknown event types are ignored, never guessed at.
@@ -238,30 +338,34 @@ function handleFrame(frame: StreamFrame): void {
 
 let lastResync = 0;
 
-/** resyncAll is the catch-up after a dropped stream or a return to the window. It re-reads every
- *  container once, in parallel. A short guard keeps focus and visibility from firing twice. */
+/** resyncAll is the catch-up after a dropped stream or a return to the window. It re-reads the
+ *  containers the reader can see once, in parallel, and marks a hidden claim list stale instead of
+ *  loading it for nobody. A short guard keeps focus and visibility from firing twice. */
 export async function resyncAll(force = false): Promise<void> {
   const now = Date.now();
   if (!force && now - lastResync < 1500) return;
   lastResync = now;
 
+  if (!claimsVisible()) claims.markStale();
+  if (!topicsVisible()) claims.markTopicsStale();
+
   await Promise.all([
     system.loadStatus(),
     system.loadPipeline(),
-    sources.loadList(),
-    system.loadFindings(),
+    sourceListVisible() ? sources.loadList() : Promise.resolve(),
+    findingsVisible() ? system.loadFindings() : Promise.resolve(),
     wiki.load(),
-    claims.load(claims.topic),
-    claims.loadTopics(),
+    claimsVisible() ? claims.load(claims.topic) : Promise.resolve(),
+    topicsVisible() ? claims.loadTopics() : Promise.resolve(),
     asks.load(),
   ]);
 
   await Promise.all([
-    sources.selectedHash ? sources.refresh() : Promise.resolve(),
-    claims.selectedId ? claims.open(claims.selectedId) : Promise.resolve(),
+    sourceDetailVisible() && sources.selectedHash ? sources.refresh() : Promise.resolve(),
+    claimsVisible() && claims.selectedId ? claims.open(claims.selectedId) : Promise.resolve(),
     wiki.selectedId ? wiki.open(wiki.selectedId) : Promise.resolve(),
     asks.selectedId ? asks.open(asks.selectedId) : Promise.resolve(),
-    system.vaultLoaded ? system.loadVault() : Promise.resolve(),
+    vaultVisible() ? system.loadVault() : Promise.resolve(),
   ]);
 
   // A catch-up is also the place a banner from a run that ended while the stream was down can be
@@ -310,5 +414,6 @@ export function startSync(): () => void {
     window.removeEventListener('focus', onFocus);
     stream.stop();
     if (liveTimer !== undefined) clearTimeout(liveTimer);
+    if (flushTimer !== undefined) clearTimeout(flushTimer);
   };
 }

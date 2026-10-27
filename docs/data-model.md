@@ -63,7 +63,6 @@ source_nodes(source_id, node_id, parent_id, depth, ord, title, summary,
              start_page, end_page, text_hash)
 atoms(id, topic, path, claim, body, frontmatter, type, status, body_hash,
       size, mtime, created_at, updated_at, indexed_at)
-atom_links(from_id, raw_target, to_id, alias, heading, occurrences, position)
 atom_sources(atom_id, source_id, node_id, ocr)
 clusters(id, signature, created_at, updated_at)
 cluster_atoms(cluster_id, atom_id)
@@ -109,10 +108,9 @@ index keeps **one** connection — every connection to `:memory:` is a separate 
 
 - `clusters_of(atom) = cluster_atoms WHERE atom_id = atom.id`
 - `atoms_of(cluster) = cluster_atoms WHERE cluster_id = cluster.id`
-- `backlinks(x)`, `unresolved(x)`, `outbound(x)` for the atom layer
 - `topic_counts` (claim topics, with claim counts)
 - `unclustered = atoms with no cluster_atoms row` — the backlog of step 4
-- `graph` = atom graph + cluster membership + provenance edges (source node → atom)
+- `graph` = cluster membership + provenance edges (source node → atom)
 - `atom_count` of a source counts **resolvable** claims, never provenance rows alone
 - the fourth light of a source is derived from its claims and their memberships, never stored
 

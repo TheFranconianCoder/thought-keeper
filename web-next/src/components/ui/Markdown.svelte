@@ -6,10 +6,18 @@
     topics = [],
     footnotes = false,
     claimTopic = '',
+    wikilinks = true,
     class: cls = '',
-  }: { text?: string; topics?: string[]; footnotes?: boolean; claimTopic?: string; class?: string } = $props();
+  }: {
+    text?: string;
+    topics?: string[];
+    footnotes?: boolean;
+    claimTopic?: string;
+    wikilinks?: boolean;
+    class?: string;
+  } = $props();
 
-  const html = $derived(renderMarkdown(text, { topics, footnotes, claimTopic }));
+  const html = $derived(renderMarkdown(text, { topics, footnotes, claimTopic, wikilinks }));
   let root: HTMLDivElement | undefined = $state();
 
   $effect(() => {

@@ -20,6 +20,8 @@ type URLRefresher interface {
 	Execute(ctx context.Context) (usecases.RefreshResult, error)
 	ExecuteAll(ctx context.Context) (usecases.RefreshResult, error)
 	ExecuteOne(ctx context.Context, hash string) (usecases.RefreshResult, error)
+	// ExecuteOneForce fetches one URL even when its snapshot was attached by hand.
+	ExecuteOneForce(ctx context.Context, hash string) (usecases.RefreshResult, error)
 }
 
 // URLHandler serves the URL maintenance endpoints.
@@ -185,5 +187,38 @@ func (h URLHandler) PostOne(w http.ResponseWriter, r *http.Request) {
 		Discovered: discoveredCount(res.Discovered),
 		Removed:    res.Removed,
 		Detail:     res.LastError,
+	})
+}
+
+// Refetch serves POST /api/v1/sources/{hash}/refetch: try the URL again even when its snapshot was
+// attached by hand. A readable page replaces the attachment and clears the marker; a wall or a
+// failure keeps the human's snapshot exactly as it was. The explicit counterpart to the automatic
+// refresh, which never fetches an attached source.
+func (h URLHandler) Refetch(w http.ResponseWriter, r *http.Request) {
+	hash := chi.URLParam(r, "hash")
+	if !entities.IsSHA256Hex(hash) {
+		payloads.WriteError(w, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash))
+		return
+	}
+	if h.Mark != nil {
+		defer h.Mark.MarkMaintenance("refetch-url", hash)()
+	}
+	if h.Refresh == nil {
+		payloads.WriteError(w, types.New("not_implemented", "url refetch is not configured", types.ErrNotImplemented))
+		return
+	}
+	res, err := h.Refresh.ExecuteOneForce(r.Context(), hash)
+	if err != nil {
+		payloads.WriteError(w, err)
+		return
+	}
+	if h.OnChanged != nil {
+		h.OnChanged(hash)
+	}
+	payloads.WriteJSON(w, http.StatusOK, payloads.RefetchResult{
+		Replaced: res.Replaced > 0 || res.Changed > 0,
+		Blocked:  res.Blocked > 0,
+		Failed:   res.Failed > 0,
+		Detail:   res.LastError,
 	})
 }

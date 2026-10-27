@@ -33,6 +33,10 @@ type AttachURLSnapshot struct {
 	Store     interfaces.SourceStore
 	Index     interfaces.IndexRepository
 	Steps     interfaces.StepTracker
+	// Reset throws away the derivation a PREVIOUS snapshot produced. Replacing an attached file is a
+	// new source text: its claims and tree are not true any more, and re-arming the lights alone
+	// would mix them with the new derivation.
+	Reset     SourceResetter
 	SourceLog interfaces.SourceLog
 	Languages interfaces.LanguageDetector
 	Clock     interfaces.Clock
@@ -108,6 +112,14 @@ func (uc AttachURLSnapshot) Execute(ctx context.Context, in AttachInput) (partia
 	if body == "" {
 		return partialentities.PartialSource{}, types.New(
 			"unsupported_source", "the attached file has no readable text", types.ErrUnsupportedSource)
+	}
+
+	// A source that already has bytes is being REPLACED: the old derivation was built on other text.
+	// The conversion above succeeded, so the human's new file is good before anything is dropped.
+	if src.Path != "" && uc.Reset != nil {
+		if _, err := uc.Reset.Execute(ctx, src.Hash); err != nil {
+			return partialentities.PartialSource{}, err
+		}
 	}
 
 	sum := sha256.Sum256(in.Data)

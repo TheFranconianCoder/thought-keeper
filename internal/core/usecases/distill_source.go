@@ -43,12 +43,9 @@ type DistillSource struct {
 	AtomRepo interfaces.AtomRepository
 	// Vocab is the DECIDED name vocabulary. Its alias table is applied at write time: a claim that
 	// arrives with a name a curation absorbed is filed under the canonical one.
-	Vocab interfaces.VocabularyStore
-	// LinkResolver is optional: after a run, the atom→atom links created by the claims are resolved
-	// by their target sentence. Without it the links stay raw (honest, but red).
-	LinkResolver AtomLinkResolver
-	Gateway      interfaces.AgentGateway
-	Model        string
+	Vocab   interfaces.VocabularyStore
+	Gateway interfaces.AgentGateway
+	Model   string
 	// ReasoningEffort is passed to the model (see interfaces.AgentRequest).
 	ReasoningEffort string
 	MaxIterations   int
@@ -384,15 +381,6 @@ func (uc DistillSource) distill(ctx context.Context, hash string, rec *StepRecor
 		return DistillResult{Atoms: 0, PartsLeft: partsLeft, Iterations: iterations, TotalTokens: tokens},
 			fmt.Errorf("the model wrote no claim at all (%d parts, %d tool call(s)) — a document with parts always has claims, so this is a failed derivation, not an empty one", len(parts), steps)
 	}
-	if uc.LinkResolver != nil {
-		if n, err := uc.LinkResolver.ResolveLinks(ctx); err != nil {
-			if uc.Log != nil {
-				uc.Log.Warn("distill: atom links not resolved", "hash", hash, "err", err)
-			}
-		} else if n > 0 {
-			uc.log(ctx, runID, hash, "info", "distill", "atom links resolved", map[string]any{"links": n})
-		}
-	}
 	return DistillResult{
 		Atoms: totalAtoms, Written: int(created.Load()),
 		PartsTotal: len(parts), PartsDone: len(parts) - partsLeft,
@@ -509,9 +497,9 @@ func (uc DistillSource) writeClaim(ctx context.Context, hash string, nodeByID ma
 			a.Sources = append(a.Sources, entities.AtomSource{Hash: hash})
 		}
 	}
-	for _, l := range coremarkdown.Wikilinks(a.Body) {
-		a.Links = append(a.Links, entities.Link{RawTarget: l.RawTarget, Alias: l.Alias, Heading: l.Heading, Position: l.Position})
-	}
+	// A claim body has no links. A bracket pair the source quotes is syntax, and it is stored as
+	// inline code; the association lives in the clusters, never in the body.
+	a.Body, _ = coremarkdown.QuoteBracketSyntax(a.Body)
 	stored, err := uc.Atoms.Write(ctx, a)
 	if err != nil {
 		return entities.Atom{}, err

@@ -46,7 +46,7 @@
       if (current.id) void asks.open(current.id);
       else asks.clearSelection();
       if (!asks.loaded) void asks.load();
-      if (claims.topics.length === 0) void claims.loadTopics();
+      if (claims.topics.length === 0 || claims.topicsStale) void claims.loadTopics();
     });
   });
 

@@ -30,6 +30,12 @@ Rules:
   "see the next chapter" pointer or a link back to the table of contents says nothing about the
   subject. Skip it; a part that carries nothing but furniture gets no atom.
 - The body may expand the claim in 1-3 sentences. Do not repeat the claim verbatim.
+- A claim has NO links. Never write a bracketed pair as a reference: a claim's associations are its
+  clusters, not its text.
+- Quote code as code. A declaration, expression, literal, identifier or grammar fragment taken from
+  the source goes in the body as inline code (a backtick span), never as bare prose. Bracket syntax
+  such as an attribute or a grammar production is quoted syntax, not a link. In the claim sentence,
+  name what the code is instead of quoting the raw fragment.
 - Cover the source's substance: aim for one atom per distinct claim. Prefer more, smaller atoms over
   fewer large ones, but do not split a single claim artificially.
 - A sentence that bundles several facts is SEVERAL claims, not one: "X is fast, close to the

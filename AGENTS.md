@@ -3,8 +3,8 @@
 A local knowledge base that follows the **LLM-Wiki pattern** with an **atom layer**: immutable raw
 sources (Markdown, PDF, TXT, URL) are distilled by an agent into **atoms** (one claim per note — the
 Zettelkasten and the source of truth) and grouped into **titleless clusters** (the association
-layer). Retrieval is **vectorless** — hierarchical trees, the link graph and lexical search, no
-embeddings.
+layer). Retrieval is **vectorless** — hierarchical trees, the association layer and lexical search,
+no embeddings.
 
 It is a **desktop application**: one Go binary that serves a PWA from an embedded, loopback-only
 HTTP service and lives in the system tray. The human authors wiki pages, curates sources and asks
@@ -68,8 +68,8 @@ apart from the human's tags) and curates the three name vocabularies (`topics`, 
 
 ### Non-goals
 
-- **No embeddings and no vector database.** Retrieval is reasoning over trees, indexes, the link
-  graph and lexical search. `similarity ≠ relevance`.
+- **No embeddings and no vector database.** Retrieval is reasoning over trees, indexes, the
+  association layer and lexical search. `similarity ≠ relevance`.
 - **Only three source kinds: Markdown, PDF, TXT — plus URLs.** No `.docx`, no images, no archives,
   no audio/video.
 - **No credentials and no browser automation.** The app never stores a login, reads your browser's
@@ -101,7 +101,7 @@ apart from the human's tags) and curates the three name vocabularies (`topics`, 
 | **wiki page** | User-authored Markdown with a title, tags and a stable ULID. Saving it writes/updates its source representation and runs the document pipeline from capture. | `wiki/<ab>/<cd>/<id>.md` |
 | **snapshot** | A URL source's object: the page as it was fetched — or as the human attached it. | `sources/<hash>.md` |
 | **wall** | Why a fetch did not return the page: a login, a paywall, a consent gate (`login_required`, `paywalled`, `consent_required`). Reported with the reason, never read, never distilled. | the capture step record + `.meta` |
-| **attached** | A URL snapshot the human supplied from their browser because the page is walled. It is part of the source's identity, and the refresh never replaces it. | the source's record + `.meta` |
+| **attached** | A URL snapshot the human supplied from their browser because the page is walled. It is part of the source's identity; the automatic refresh never replaces it, but the human may replace the file or try the URL again explicitly. | the source's record + `.meta` |
 | **language** | A source's detected ISO 639-1 hint (ISO 639-3 when no 639-1 exists), stored in `<hash>.meta` and mirrored into the index. It tunes search, never filters a result. | `<hash>.meta` |
 | **sitemap** | A URL source whose snapshot is a page list; it owns the page sources it declared (`origin: sitemap`, `parent_hash`). A sitemap is COMPLETE: a page that left it is removed. | `<hash>.meta` |
 | **feed** | An RSS/Atom URL source whose snapshot is its item list; it owns the page sources its items point at (`origin: rss`, `parent_hash`). A feed is a WINDOW: a page that left it is kept, and only deleting the feed removes its pages. When the feed carries a post, that copy becomes the page's snapshot (`from_feed`) until a readable page replaces it. | `<hash>.meta` |
@@ -144,8 +144,9 @@ a blocked URL), and a failure is a barrier. Details, state and scheduling: `docs
 - **Cluster** prunes, attaches, graphs, splits, overlaps and writes titleless memberships. No model.
 
 A URL is refreshed once a week (`capture.refresh_interval: '168h'`); an attached snapshot is never
-fetched again. A sitemap refresh reconciles its pages 1:1, a feed refresh only adds — and a URL the
-human added by hand is released from its page/sitemap/feed, so it outlives its former owner.
+fetched by the cadence, only by the explicit refetch of its source. A sitemap refresh reconciles its
+pages 1:1, a feed refresh only adds — and a URL the human added by hand is released from its
+page/sitemap/feed, so it outlives its former owner.
 
 Derived things are caches (`outline`, `index.db`, `clusters/`); records are the truth (`<hash>.meta`,
 `<hash>.log`, `atoms/`, `wiki/`, `vocabulary/`).
@@ -195,8 +196,8 @@ Structure, layers, dependency rule and quality gates live in **`ARCHITECTURE.md`
 5. **Two layers plus associations:** `sources/` immutable; `wiki/` human-authored; `atoms/` claims
    (source of truth); `clusters/` derived. Indexes, trees and cluster records are rebuildable.
 6. Handlers and repositories stay dumb; time only through `Clock`; errors are sentinel types. A
-   `SaveAtom` is authoritative for its provenance and links; a `SaveCluster` replaces its
-   membership. Provenance is resolved **before** a write touches anything.
+   `SaveAtom` is authoritative for its provenance; a `SaveCluster` replaces its membership.
+   Provenance is resolved **before** a write touches anything.
 7. `dal/` is generated; migrations are append-only; one repository per entity.
 8. **The agent is a use case; the model is an adapter.** The core never imports `go-openai`.
 
@@ -211,7 +212,7 @@ internal/web              embeds the built PWA
 web-next/                 Svelte PWA sources (task web:build → internal/web/dist)
 web/                      previous PWA sources, kept as a reference
 internal/core/entities    domain types
-internal/core/markdown    pure: wikilinks, titles, slugs, topic/tag normalization
+internal/core/markdown    pure: titles, slugs, code quoting, topic/tag normalization
 internal/core/tree        pure: tree shape, node addressing, matter filter, rendering
 internal/core/usecases    use cases; interfaces/; agents/; partialentities/
 internal/infrastructure   config, objects, atoms, wiki, clusters, markdown, extract, tree,
@@ -244,7 +245,7 @@ instance, not clients of a server you operate.
 
 ```
 <vault>/
-├── index.db          # SQLite: FTS5, link graph, derived counts (rebuildable)
+├── index.db          # SQLite: FTS5, derived counts (rebuildable)
 ├── inbox/            # drop zone; the watcher intakes files into sources/
 ├── sources/          # immutable, content-addressed (object + sidecars)
 ├── wiki/             # user-authored Markdown pages (source of truth)

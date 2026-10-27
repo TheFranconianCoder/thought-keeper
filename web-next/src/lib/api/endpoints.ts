@@ -7,6 +7,7 @@ import type {
   AtomList,
   AtomRelated,
   CaptureResult,
+  ClaimCode,
   CleanupResult,
   ClusterResult,
   DeleteResult,
@@ -15,6 +16,7 @@ import type {
   Pipeline,
   RebuildTreeResult,
   ReconcileResult,
+  RefetchResult,
   RefreshResult,
   ReindexResult,
   Run,
@@ -89,6 +91,9 @@ export const api = {
   refreshURLs: () => request<RefreshResult>('/refresh-urls', { method: 'POST' }),
   refreshSource: (hash: string) =>
     request<RefreshResult>(`/sources/${enc(hash)}/refresh`, { method: 'POST' }),
+  // refetchSource tries the URL again for a snapshot the human attached by hand; a wall keeps it.
+  refetchSource: (hash: string) =>
+    request<RefetchResult>(`/sources/${enc(hash)}/refetch`, { method: 'POST' }),
   fixURLs: () => request<{ checked: number; fixed: number }>('/fix-urls', { method: 'POST' }),
   urlAddresses: () => request<{ checked: number; count: number; pending?: string[] }>('/urls/addresses'),
   migrateURLAddresses: () =>
@@ -155,6 +160,7 @@ export const api = {
   reorganizeAtoms: () => request<AtomLayout>('/atoms/reorganize', { method: 'POST' }),
   atomDuplicates: () => request<AtomDuplicates>('/atoms/duplicates'),
   collapseAtoms: () => request<AtomDuplicates>('/atoms/collapse', { method: 'POST' }),
+  quoteClaimCode: () => request<ClaimCode>('/atoms/quote-code', { method: 'POST' }),
 };
 
 export type { Status, Pipeline, Source, Atom, WikiPage, Run, SavedAsk };

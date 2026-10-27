@@ -78,11 +78,15 @@ runs** — in both directions. **Ask** (a query) is never gated.
   the human is already logged in, in their browser. Saving the page (HTML or PDF) and attaching it to
   the URL source (`POST /api/v1/sources/{hash}/attach`, `thought-keeper attach`) stores it as that
   source's snapshot at the same address and re-arms outline and distill. The record marks the source
-  `attached` (with the file's name and SHA-256), and the refresh **never overwrites an attached
-  snapshot** — a login page is not a correction of the article.
+  `attached` (with the file's name and SHA-256), and the automatic refresh **never overwrites an
+  attached snapshot** — a login page is not a correction of the article. The source page can
+  **replace** the file (a new attach; the old derivation is reset) or **try the URL again**
+  (`POST /sources/{hash}/refetch`): a readable page replaces the snapshot and clears the marker (a
+  changed text also resets the old derivation), a wall or a failure keeps the attachment.
 - **A URL is refreshed once a week** (`capture.refresh_interval: '168h'`), manually at any time. The
   cadence belongs to the source (`url_checked_at`), not to the process. Attached sources are not
-  fetched at all; a walled one is attempted again on the same cadence, because it may become readable.
+  fetched by the cadence; an explicit refetch may try one, and a walled normal source is attempted
+  again on the same cadence, because it may become readable.
 - PDF: extract the text layer with poppler; OCR a page that has none (`pdftocairo` + `tesseract`).
   Write the readable rendering to `sources/<ab>/<cd>/<hash>.capture.md`, with one
   `<!--part …-->` marker per part.
@@ -157,8 +161,8 @@ Deterministic, no model. Inputs: the claims no cluster owns yet and the existing
    (`overlap_max`), but only with at least `overlap_min_edges` edges and centroid similarity
    (`attach_min_score`). The size cap is enforced after overlap.
 5. **Write** one `clusters/<ab>/<cd>/<id>.meta` per cluster and its `cluster_atoms` membership.
-6. **Settle**: resolve claim links and refresh findings (the cleanup pass), so a finished pass leaves
-   no ghost claim link and no dead membership.
+6. **Settle**: refresh the findings (the cleanup pass), so a finished pass leaves no dead
+   membership.
 
 The pass runs only while no document step runs, and it is the only writer of the association layer.
 It has no model: a broad group is split deterministically, not reviewed by a prompt.
@@ -285,6 +289,12 @@ numbers is amber.
 - **The reconcile job** checks records against disk (missing outline/render invalidates the
   derivation) and asks step 4 for a pass when claims are unclustered. Its check is read-only and
   gate-free; only a real repair takes the exclusive gate.
+- **A wiki save's leftovers are pruned in the background.** The save writes the page and its source
+  representation and returns; `PruneWikiLinks` then re-reads the page under the exclusive gate and
+  removes the link sources it no longer declares (plus an older representation from before the stable
+  `WikiHash`). The pass runs after EVERY save: it is a no-op when the page and its sources agree, and
+  it heals a save whose cleanup was lost. A delete inside the save would make every removed link wait
+  for a vault walk.
 - **What the app is doing is listed, not just counted.** `GET /pipeline` carries `jobs` with
   `running` (executing) and `waiting` (blocked by the gate, with the real holder named).
 

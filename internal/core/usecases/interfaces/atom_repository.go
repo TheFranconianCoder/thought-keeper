@@ -16,9 +16,9 @@ type AtomRepository interface {
 	// ListAtomsBySource lists the atoms that cite a source.
 	ListAtomsBySource(ctx context.Context, sourceHash string) ([]entities.Atom, error)
 	// ListOldestAtoms returns the OLDEST claims in (updated_at, id) order, up to limit — id, topic,
-	// claim and body only. It is the queue a time-bounded pass reads: no provenance, no links, no
-	// whole-table hydration. Whatever it changes is re-read whole before the write, because a SAVE
-	// is authoritative for provenance and links.
+	// claim and body only. It is the queue a time-bounded pass reads: no provenance, no whole-table
+	// hydration. Whatever it changes is re-read whole before the write, because a SAVE is
+	// authoritative for provenance.
 	ListOldestAtoms(ctx context.Context, limit int) ([]entities.Atom, error)
 	// SupersedeAtomsBySource marks every atom citing that source as superseded —
 	// used when a URL's content changes and its old atoms are stale.
@@ -52,4 +52,8 @@ type AtomRepository interface {
 	// AtomAddresses returns the id and the recorded file path of every claim — what a stale index row
 	// needs in order to remove the file it points at.
 	AtomAddresses(ctx context.Context) ([]entities.Atom, error)
+	// AtomsWithBracketSyntax returns the id and the recorded path of the claims whose body still
+	// carries a [[...]] span: the candidates of the one-time code repair. The repair reads each file
+	// before it writes, so a stale row costs a skip, never a wrong rewrite.
+	AtomsWithBracketSyntax(ctx context.Context) ([]entities.Atom, error)
 }

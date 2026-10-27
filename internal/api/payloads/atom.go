@@ -80,6 +80,15 @@ type AtomLayout struct {
 	Kept           []string `json:"kept,omitempty"`
 }
 
+// ClaimCode is the response of POST /api/v1/atoms/quote-code: the one-time repair that wraps the
+// bracket syntax a claim body quotes from its source in inline code.
+type ClaimCode struct {
+	Scanned   int `json:"scanned"`
+	Repaired  int `json:"repaired"`
+	Fragments int `json:"fragments"`
+	Skipped   int `json:"skipped"`
+}
+
 // AtomDuplicates is the response of GET /api/v1/atoms/duplicates (what a collapse WOULD take out) and
 // of POST /api/v1/atoms/collapse (what it DID).
 //

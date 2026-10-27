@@ -593,8 +593,8 @@ func (a *App) runCluster(job runJob) {
 		if err != nil {
 			return err
 		}
-		// The pass settles itself: dead members are pruned and the claim links resolved, so a
-		// finished pass leaves no ghost trail and no stale membership.
+		// The pass settles itself: dead members are pruned and the findings refreshed, so a
+		// finished pass leaves no stale membership.
 		if a.cleanup.Clusters != nil {
 			if _, cErr := a.cleanup.Execute(ctx); cErr != nil {
 				a.log.Warn("cluster settle failed", "run", run, "err", cErr)

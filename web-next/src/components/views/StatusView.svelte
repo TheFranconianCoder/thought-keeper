@@ -6,6 +6,7 @@
     curateVocabulary,
     fixURLs,
     migrateURLAddresses,
+    quoteClaimCode,
     rebuildAllTrees,
     reconcileVault,
     refreshURLs,
@@ -39,9 +40,11 @@
 
   $effect(() => {
     if (router.current.view !== 'status') return;
+    // Entering the view is its catch-up point: live events only refresh the vault report while this
+    // view is visible, so a hidden Status page cannot keep re-reading layout, duplicates and names.
     void system.loadStatus();
     void system.loadFindings();
-    if (!system.vaultLoaded) void system.loadVault();
+    void system.loadVault();
   });
 
   const jobRows = $derived.by(() => {
@@ -146,6 +149,12 @@
       job: 'collapse-atoms',
       hint: 'Keep one copy of every claim that exists more than once and move the indistinguishable copies to the trash.',
       run: collapseDuplicateClaims,
+    },
+    {
+      label: 'Quote claim code',
+      job: 'quote-claim-code',
+      hint: 'Wrap the bracket syntax a claim body quotes from its source (a C attribute, a shell test, a grammar fragment) in inline code. A claim has no links; this repairs the bodies written before that rule.',
+      run: quoteClaimCode,
     },
     {
       label: 'Move URL sources to their URL address',

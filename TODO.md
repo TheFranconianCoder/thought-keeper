@@ -42,23 +42,20 @@ are.
    when a human edits one by hand and the claim is derived again. Decide: preserved, overwritten, or
    refused (a status/lock in frontmatter).
 
-6. **Rename with link rewrite.** Claim links resolve by **text** (`[[Claim Text]]`). An explicit
-   rename should rewrite inbound raw targets; today it makes them red until lint reports it.
-
-7. **TypeSpec.** `spec/main.tsp` is deferred until the API settles. The endpoint surface is stable
+6. **TypeSpec.** `spec/main.tsp` is deferred until the API settles. The endpoint surface is stable
    enough to start, but `docs/api.md` must remain the reference while there is no generated spec.
 
-8. **Semantic lint pass (agent).** Deferred. It reuses the query tools plus `report_finding`;
-   programmatic lint covers links, orphans, provenance, standalone-ness, vocabulary drift, empty
-   bodies and duplicate ids.
+7. **Semantic lint pass (agent).** Deferred. It reuses the query tools plus `report_finding`;
+   programmatic lint covers provenance, standalone-ness, vocabulary drift, empty bodies and
+   duplicate ids.
 
-9. **MCP tools.** Out of scope for v1 (see the non-goals). Revisit only when the claim workflow is
+8. **MCP tools.** Out of scope for v1 (see the non-goals). Revisit only when the claim workflow is
    stable enough that an external tool surface would not become a second write path.
 
-10. **Cluster count in the Job Queue.** Progress reports attach/new/remaining; whether the reader
+9. **Cluster count in the Job Queue.** Progress reports attach/new/remaining; whether the reader
     needs a per-cluster counter is open — a cluster has no name, so "37 clusters" is already all
     there is to say.
-11. **Cluster centroid cache.** `attach` still walks every claim once per pass to learn the
+10. **Cluster centroid cache.** `attach` still walks every claim once per pass to learn the
     document frequencies and the centroid sums — the stream made that walk CHEAP (a page at a
     time, nothing retained), but a per-cluster cache of the centroid's raw (term, tf) sums in
     `clusters/<...>.meta`, invalidated by the existing `Signature` and the claim-set fingerprint,
@@ -66,11 +63,16 @@ are.
     format, so it belongs in `docs/storage.md` before the code — and it must keep the arithmetic
     of the stream: the cached sums are corpus-independent tf, the IDF weighting stays at pass
     time.
-12. **poppler over a path, not stdin.** `capture` reads the object whole and pipes it to
+11. **poppler over a path, not stdin.** `capture` reads the object whole and pipes it to
     `pdftotext`/`pdftocairo` on stdin — per OCR'd page the WHOLE file travels again (a 36 MB PDF
     is held for the entire extraction). Handing poppler the object path removes the parent buffer;
     it trades away "the bytes are the object" at the tool boundary and the `pdf.max_bytes` check
     then belongs where the path is opened.
+12. **`Atoms.Scan` reads every claim file, serially.** `reindex` walks 172k atom files (13.6 s warm,
+    32 s cold on the reference vault) to answer "what does the vault hold". Nothing on a request path
+    uses it any more — deletes answer from the index — so it is a repair-time cost, not a save-time
+    one. Streaming it through a small worker pool, or reading only each file's frontmatter, would
+    turn a reindex from a hang into a repair.
 
 ## Open design questions
 

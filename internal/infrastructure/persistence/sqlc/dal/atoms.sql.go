@@ -12,55 +12,6 @@ import (
 	ulid "github.com/oklog/ulid/v2"
 )
 
-const atomLinksForAtoms = `-- name: AtomLinksForAtoms :many
-SELECT from_id, raw_target, to_id, alias, heading, occurrences, position
-FROM atom_links
-WHERE from_id IN (/*SLICE:ids*/?)
-`
-
-// The links of EXACTLY these atoms: hydration carries what a SAVE would replace, for the page it
-// returns and nothing else.
-func (q *Queries) AtomLinksForAtoms(ctx context.Context, ids [][]byte) ([]AtomLink, error) {
-	query := atomLinksForAtoms
-	var queryParams []interface{}
-	if len(ids) > 0 {
-		for _, v := range ids {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
-	}
-	rows, err := q.db.QueryContext(ctx, query, queryParams...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []AtomLink
-	for rows.Next() {
-		var i AtomLink
-		if err := rows.Scan(
-			&i.FromID,
-			&i.RawTarget,
-			&i.ToID,
-			&i.Alias,
-			&i.Heading,
-			&i.Occurrences,
-			&i.Position,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const atomSourceCountsForAtoms = `-- name: AtomSourceCountsForAtoms :many
 SELECT atom_id, count(*) AS count FROM atom_sources
 WHERE atom_id IN (/*SLICE:ids*/?)
@@ -181,15 +132,6 @@ func (q *Queries) DeleteAtom(ctx context.Context, id ulid.ULID) error {
 	return err
 }
 
-const deleteAtomLinks = `-- name: DeleteAtomLinks :exec
-DELETE FROM atom_links WHERE from_id = ?
-`
-
-func (q *Queries) DeleteAtomLinks(ctx context.Context, fromID []byte) error {
-	_, err := q.db.ExecContext(ctx, deleteAtomLinks, fromID)
-	return err
-}
-
 const deleteAtomSources = `-- name: DeleteAtomSources :exec
 DELETE FROM atom_sources WHERE atom_id = ?
 `
@@ -234,32 +176,6 @@ func (q *Queries) GetSourceIDByHash(ctx context.Context, hash string) (ulid.ULID
 	var id ulid.ULID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const insertAtomLink = `-- name: InsertAtomLink :exec
-INSERT OR REPLACE INTO atom_links (from_id, raw_target, to_id, alias, heading, occurrences, position)
-VALUES (?, ?, ?, ?, ?, 1, ?)
-`
-
-type InsertAtomLinkParams struct {
-	FromID    []byte `json:"from_id"`
-	RawTarget string `json:"raw_target"`
-	ToID      []byte `json:"to_id"`
-	Alias     string `json:"alias"`
-	Heading   string `json:"heading"`
-	Position  int64  `json:"position"`
-}
-
-func (q *Queries) InsertAtomLink(ctx context.Context, arg InsertAtomLinkParams) error {
-	_, err := q.db.ExecContext(ctx, insertAtomLink,
-		arg.FromID,
-		arg.RawTarget,
-		arg.ToID,
-		arg.Alias,
-		arg.Heading,
-		arg.Position,
-	)
-	return err
 }
 
 const insertAtomSource = `-- name: InsertAtomSource :exec
@@ -548,43 +464,6 @@ func (q *Queries) ListClaimTopics(ctx context.Context) ([]ListClaimTopicsRow, er
 	return items, nil
 }
 
-const listUnresolvedAtomLinks = `-- name: ListUnresolvedAtomLinks :many
-SELECT l.from_id, a.claim AS from_title, l.raw_target
-FROM atom_links l
-JOIN atoms a ON a.id = l.from_id
-WHERE l.to_id IS NULL
-LIMIT ?
-`
-
-type ListUnresolvedAtomLinksRow struct {
-	FromID    []byte `json:"from_id"`
-	FromTitle string `json:"from_title"`
-	RawTarget string `json:"raw_target"`
-}
-
-func (q *Queries) ListUnresolvedAtomLinks(ctx context.Context, limit int64) ([]ListUnresolvedAtomLinksRow, error) {
-	rows, err := q.db.QueryContext(ctx, listUnresolvedAtomLinks, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUnresolvedAtomLinksRow
-	for rows.Next() {
-		var i ListUnresolvedAtomLinksRow
-		if err := rows.Scan(&i.FromID, &i.FromTitle, &i.RawTarget); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const nodeRefsBySource = `-- name: NodeRefsBySource :many
 SELECT n.atom_id AS atom_id, n.node_id AS node_id
 FROM atom_sources n
@@ -618,30 +497,6 @@ func (q *Queries) NodeRefsBySource(ctx context.Context, hash string) ([]NodeRefs
 		return nil, err
 	}
 	return items, nil
-}
-
-const resolveAtomLinks = `-- name: ResolveAtomLinks :execrows
-UPDATE atom_links
-SET to_id = (
-    SELECT a.id FROM atoms a
-    WHERE lower(a.claim) = lower(atom_links.raw_target)
-    LIMIT 1
-)
-WHERE to_id IS NULL
-  AND EXISTS (
-    SELECT 1 FROM atoms a
-    WHERE lower(a.claim) = lower(atom_links.raw_target)
-  )
-`
-
-// An atom's [[Claim Text]] link is resolved by the claim it quotes: the claim IS an atom's title.
-// A target that names nothing stays red (to_id NULL) until somebody writes the claim it points at.
-func (q *Queries) ResolveAtomLinks(ctx context.Context) (int64, error) {
-	result, err := q.db.ExecContext(ctx, resolveAtomLinks)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
 }
 
 const supersedeAtomsBySource = `-- name: SupersedeAtomsBySource :execrows

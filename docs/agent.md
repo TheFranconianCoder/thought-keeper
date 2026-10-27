@@ -24,8 +24,7 @@ task.
 
 `read_atom` returns the claim together with its **cluster peers** (bounded to eight: id, claim,
 topic). The association is context for the answer, and the ids let the model read a peer in full if
-it needs the body. Atom→atom links are resolved by the app after a distill run, a reindex and a
-cleanup.
+it needs the body. A claim body carries no links; the cluster is the association.
 
 ## 2. The transcript stays bounded
 
@@ -57,6 +56,8 @@ Rules the prompt enforces (and the wire shape):
 - **A flat topic** derived from the claim and body alone (`caching`, `llm-agents`). Existing names
   are offered by `list_topics`; a topic is never a chapter, a document or a hierarchy.
 - **Provenance cites source node ids** from the outline; unknown ids are rejected.
+- **No links, and code is code.** A claim body carries no links; syntax quoted from the source is
+  inline code (a backtick span), and the claim sentence names it in prose.
 - **Page furniture is not a claim**: running heads, page numbers, copyright lines, cross-references.
 - More, smaller atoms beat fewer large ones; a compound sentence is several claims.
 
@@ -132,7 +133,7 @@ check itself.
   run; the next press continues). The queue is the clock: it reads the OLDEST claims through the
   index (`updated_at, id`), so a budget of 12k claims reads 12k rows — not the corpus. Only a claim
   whose label actually moves is re-read whole before the write, because the save is authoritative
-  for its provenance and links.
+  for its provenance.
 - Both are **renames**: no claim text is rewritten and no cluster moves.
 - A curation holds the **exclusive** side of the gate for the whole run: it rewrites claim names,
   so no document step may be writing claims beside it. While it waits for the drain it is reported as
@@ -141,14 +142,14 @@ check itself.
 
 ## 7. Lint
 
-- **Programmatic (Go, seconds):** ghost claim links, orphan atoms, atoms without provenance, atoms
+- **Programmatic (Go, seconds):** orphan atoms, atoms without provenance, atoms
   whose topic/claim/body are not standalone, vocabulary drift, empty bodies, duplicate ids. The
   vocabulary report is **aggregated** into at most three findings (collisions, near-duplicate
   families, long tail); it never emits one row per family. `info` findings are collapsed under
   Status → Knowledge health.
 - **Semantic (agent):** deferred. It reuses the query tools plus `report_finding`.
 - `POST /api/v1/cleanup` repairs what lint flags without the agent: dead cluster members are pruned
-  and claim links are resolved.
+  and the programmatic findings are refreshed.
 
 ## 8. Models, patience and audit
 

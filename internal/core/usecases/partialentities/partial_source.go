@@ -27,6 +27,8 @@ type PartialSource struct {
 	RSS            bool
 	FromFeed       bool
 	FeedHash       string
+	Attached       bool
+	AttachedFrom   string
 	Bytes          int64
 	Pages          int
 	TreeState      string
@@ -86,6 +88,8 @@ func (p PartialSource) ToEntity() entities.Source {
 		RSS:          p.RSS,
 		FromFeed:     p.FromFeed,
 		FeedHash:     p.FeedHash,
+		Attached:     p.Attached,
+		AttachedFrom: p.AttachedFrom,
 	}
 }
 
@@ -107,6 +111,8 @@ func PartialFromSource(s entities.Source) PartialSource {
 		RSS:            s.RSS,
 		FromFeed:       s.FromFeed,
 		FeedHash:       s.FeedHash,
+		Attached:       s.Attached,
+		AttachedFrom:   s.AttachedFrom,
 		Bytes:          s.Bytes,
 		Pages:          s.Pages,
 		TreeState:      string(s.TreeState),

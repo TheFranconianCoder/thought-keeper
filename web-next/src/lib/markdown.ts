@@ -60,6 +60,8 @@ export interface MarkdownOptions {
   topics?: string[];
   /** Turn `([1](#cite-1))` references into footnote links to the numbered Sources entries. */
   footnotes?: boolean;
+  /** Render `[[…]]` as a link. Off for a CLAIM BODY: a claim has no links, so its brackets are code. */
+  wikilinks?: boolean;
   /** The Claims list's topic filter: a claim link keeps it, so the list beside the detail stays filtered. */
   claimTopic?: string;
 }
@@ -98,6 +100,7 @@ export function renderMarkdown(markdown: string | null | undefined, options: Mar
   const withLinks = lines
     .map((line) => {
       if (/^(?:\*\*)?sources(?:\*\*)?:?/i.test(line.trim())) inSources = true;
+      if (options.wikilinks === false) return line;
       return replaceWikilinks(line, (target, alias) => renderLink(target, alias, !inSources));
     })
     .join('\n');
