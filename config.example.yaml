@@ -105,8 +105,10 @@ cluster:                                   # the claim graph behind the associat
 
 capture:                                   # URL sources
     dedupe_by_url: true
-    refresh_interval: '168h'               # how often ONE URL may be revisited (weekly); a due check
-                                           # runs hourly; empty = manual only
+    refresh_interval: '168h'               # how often ONE URL page or sitemap may be revisited
+                                           # (weekly); a due check runs hourly; empty = manual only
+    feed_refresh_interval: '24h'           # how often ONE RSS/Atom feed (its item list) is checked
+                                           # (daily); empty = feeds are not refreshed automatically
     min_text_chars: 400                    # below this a page becomes a bookmark
                                            # (video/app), never distilled; a login,
                                            # paywall or consent wall is BLOCKED instead

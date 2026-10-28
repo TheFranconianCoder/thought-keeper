@@ -36,12 +36,16 @@ func (s *summaryStore) RemoveRendered(hash, suffix string) error {
 type summaryGateway struct {
 	answer string
 	prompt string
+	system string
 }
 
 func (g *summaryGateway) Complete(_ context.Context, req interfaces.AgentRequest) (interfaces.AgentResponse, error) {
 	for _, m := range req.Messages {
-		if m.Role == "user" {
+		switch m.Role {
+		case "user":
 			g.prompt = m.Content
+		case "system":
+			g.system = m.Content
 		}
 	}
 	return interfaces.AgentResponse{
@@ -93,6 +97,13 @@ func TestSourceSummaryWritesFromTheClaims(t *testing.T) {
 	}
 	if !strings.Contains(gw.prompt, "Shape Up fixes time and appetite.") {
 		t.Fatalf("prompt = %q, want the claim in it", gw.prompt)
+	}
+	// A summary is always English, even when the source and its claims are not.
+	if !strings.Contains(gw.system, "Write in ENGLISH") {
+		t.Fatalf("system prompt = %q, want the English rule", gw.system)
+	}
+	if !strings.Contains(gw.prompt, "write the summary in English") {
+		t.Fatalf("user prompt = %q, want the English reminder", gw.prompt)
 	}
 }
 

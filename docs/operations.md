@@ -38,7 +38,7 @@ sync when a knob changes. Sections:
 | `openai` | base URL, key, `model_compile`, `model_reason`, reasoning efforts, retries, timeout, headers |
 | `pipeline` | auto, auto_distill, debounce, run/cluster timeouts, parts per run, parallel parts/runs, auto_continue, reconcile interval/batch |
 | `cluster` | the quality gates of the claim graph (no model) |
-| `capture` | URL dedupe, refresh interval (default `168h` — weekly), `min_text_chars` |
+| `capture` | URL dedupe, refresh interval (default `168h` — weekly for pages/sitemaps), feed interval (default `24h` — daily), `min_text_chars` |
 | `fetch` | timeout, max bytes, user agent, `allow_private` (SSRF guard) |
 | `pdf` | text tool, max bytes, max pages |
 | `ocr` | enabled, rasterizer, tesseract, languages, dpi, per-page threshold, max pages, timeout |
@@ -230,12 +230,13 @@ task hooks             # lefthook install
 - **Fetch guards.** Only http/https, a User-Agent, timeouts, max bytes, an SSRF guard
   (`fetch.allow_private`, off by default).
 - **No crawling.** The agent fetches the URLs you give it, one at a time (plus refresh).
-- **A URL is refreshed once a week.** `capture.refresh_interval: '168h'` is the cadence one SOURCE
-  may be revisited (the worker looks for due sources every hour); empty means manual only. The cadence
-  is stored per source (`url_checked_at`), so restarting the app neither postpones nor doubles a
-  refresh. A manual pass — `POST /api/v1/refresh-urls` — ignores it and checks everything now; the
-  **Refresh** button (or `POST /api/v1/sources/{hash}/refresh`) checks ONE source now. A
-  source with a **human-supplied snapshot** is not fetched by the cadence; the source page can
+- **Pages and sitemaps are refreshed weekly, feeds daily.** `capture.refresh_interval: '168h'` is the
+  cadence one page or sitemap may be revisited; `capture.feed_refresh_interval: '24h'` is the cadence
+  of a feed's item list (the worker looks for due sources every hour); either empty means manual only
+  for that kind. The cadence is stored per source (`url_checked_at`), so restarting the app neither
+  postpones nor doubles a refresh. A manual pass — `POST /api/v1/refresh-urls` — ignores it and checks
+  everything now; the **Refresh** button (or `POST /api/v1/sources/{hash}/refresh`) checks ONE source
+  now. A source with a **human-supplied snapshot** is not fetched by the cadence; the source page can
   **Try the URL again** (`POST /api/v1/sources/{hash}/refetch`), which replaces it only when the page
   is readable. A **blocked** page (a login, a paywall, a consent gate) is attempted again on the same
   cadence, because it may become readable.

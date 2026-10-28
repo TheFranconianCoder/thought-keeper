@@ -3210,16 +3210,45 @@ func (a *App) reportLinkFailure(job urlJob, cause error) {
 }
 
 func (a *App) refreshWorker() {
-	interval, err := time.ParseDuration(a.cfg.Capture.RefreshInterval)
-	if err != nil || interval <= 0 {
-		a.log.Info("url refresh disabled", "interval", a.cfg.Capture.RefreshInterval)
+	cadence := func(name, raw string) time.Duration {
+		if strings.TrimSpace(raw) == "" {
+			return 0
+		}
+		d, err := time.ParseDuration(raw)
+		if err != nil || d <= 0 {
+			a.log.Warn("url refresh: invalid cadence", "setting", name, "value", raw)
+			return 0
+		}
+		return d
+	}
+	interval := cadence("capture.refresh_interval", a.cfg.Capture.RefreshInterval)
+	feedInterval := cadence("capture.feed_refresh_interval", a.cfg.Capture.FeedRefreshInterval)
+	// Feeds may be daily while pages are weekly (or one of them may be manual only). The worker runs
+	// when either kind is automatic.
+	if interval <= 0 && feedInterval <= 0 {
+		a.log.Info("url refresh disabled",
+			"interval", a.cfg.Capture.RefreshInterval,
+			"feed_interval", a.cfg.Capture.FeedRefreshInterval)
 		return
 	}
 	// The ticker only decides how often the app LOOKS for sources that are due; the cadence itself
 	// belongs to each source's url_checked_at, so restarting the app cannot postpone a refresh — and
 	// cannot trigger a pass for everything at once either.
-	tick := min(interval, time.Hour)
-	a.log.Info("url refresh enabled", "cadence", interval.String(), "check", tick.String())
+	tick := time.Hour
+	if interval > 0 && interval < tick {
+		tick = interval
+	}
+	if feedInterval > 0 && feedInterval < tick {
+		tick = feedInterval
+	}
+	label := func(d time.Duration) string {
+		if d <= 0 {
+			return "manual"
+		}
+		return d.String()
+	}
+	a.log.Info("url refresh enabled", "cadence", label(interval), "feed_cadence", label(feedInterval),
+		"check", tick.String())
 	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
 	for {

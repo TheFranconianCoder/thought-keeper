@@ -399,10 +399,24 @@
           <div class="source-body">
             {#if tab === 'summary'}
               {#if sources.summary && !sources.summaryMissing}
-                <p class="file-intro muted">
-                  A standalone overview of this source, written from its claims. It is not a claim
-                  itself: the claims below stay the source of truth.
-                </p>
+                <div class="summary-head">
+                  <p class="file-intro muted">
+                    A standalone overview of this source, written from its claims, always in English.
+                    It is not a claim itself: the claims below stay the source of truth.
+                  </p>
+                  <button
+                    class="btn btn--ghost btn--sm"
+                    disabled={sources.summaryGenerating}
+                    title="Write the overview again from the current claims (in English)"
+                    onclick={() => void sources.generateSummary(selected!.hash)}
+                  >
+                    <Icon name="refresh" size={13} />
+                    {sources.summaryGenerating ? 'Rewriting…' : 'Rewrite summary'}
+                  </button>
+                </div>
+                {#if sources.summaryError}
+                  <p class="notice notice--error">{sources.summaryError}</p>
+                {/if}
                 <Markdown text={sources.summary} wikilinks={false} />
               {:else if sources.summaryLoading}
                 <p class="file-notice muted">Loading the summary…</p>
@@ -1086,6 +1100,18 @@
     margin: 0 0 14px;
     font-size: 12.5px;
     line-height: 1.6;
+  }
+
+  .summary-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 14px;
+  }
+
+  .summary-head .file-intro {
+    margin: 0;
   }
 
   .file-list {

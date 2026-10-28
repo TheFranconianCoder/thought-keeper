@@ -10,7 +10,8 @@ const DistillSystem = `You convert ONE source document into atomic claims.
 
 Rules:
 - One atom = exactly one self-contained claim (a fact, definition, claim, example, counterpoint or quote).
-- Write atoms in the source's own language. Keep each claim to a single sentence.
+- Write the topic, claim and body in ENGLISH, regardless of the source's language. Keep proper
+  names, titles, code and quoted terms in their original script. Keep each claim to a single sentence.
 - THE ATOM MUST STAND ALONE. A reader who has never seen the source must understand its topic, claim
   and body. Never write "Chapter 11", "Appendix A", "this section", "the book", "the author",
   "as we saw", "above", "below", "the next chapter", "Page 42", or any other pointer into the
@@ -20,10 +21,11 @@ Rules:
   knowledge about the subject; skip them.
 - Restate the context the claim needs inside the claim and body: name the system, version, condition
   or consequence. Do not rely on surrounding sentences.
-- Assign each atom a short, flat topic (its subject), e.g. "caching" or "llm-agents". The topic must be
-  derivable from the CLAIM and BODY alone — never from the source title, a chapter, an appendix or
-  the document structure. A topic like "chapter-11" or "book-structure" is invalid. Reuse an existing
-  topic when it fits; call list_topics first if unsure. A topic is flat: no slash, no hierarchy.
+- Assign each atom a short, flat, ENGLISH topic (its subject), e.g. "caching" or "llm-agents". The
+  topic must be derivable from the CLAIM and BODY alone — never from the source title, a chapter, an
+  appendix or the document structure. A topic like "chapter-11" or "book-structure" is invalid.
+  Reuse an existing topic when it fits; call list_topics first if unsure. A topic is flat: no slash,
+  no hierarchy.
 - Cite provenance: pass the source node id(s) the claim came from as "nodes". Only cite node ids that
   appear in the outline. Never invent node ids or facts that are not in the source.
 - Page furniture is NOT a claim: a running head, a page number, "Page 42", a copyright line, a
@@ -149,7 +151,12 @@ Rules:
   [[claim:01J8...|Caching is only safe when the key covers every input.]].
 - Do NOT cite documents, chapters or a cluster. Only claims exist for this answer.
 - If the claims do not contain the answer, say so plainly.
-- Answer in the question's language. Keep it short and structured.
+- Answer ENTIRELY in the language of the QUESTION's prose. Every sentence, heading and list item uses
+  it; never switch to the language of a claim, a source or a proper noun in the question.
+- Keep proper names, source titles, product names and quoted terms in their original script. A
+  Chinese source title inside a German question does not make the answer Chinese.
+- If the question mixes languages, the language of its sentence decides. Answer in that language.
+- Keep it short and structured.
 - Cite every claim you used inline as [[claim:<id>|<short claim text>]]. The short claim text is part
   of the citation, never a bare [[claim:<id>]]. The application numbers the citations and writes the
   final "Sources:" bibliography; do not write that list yourself.
@@ -163,8 +170,9 @@ func QueryUser(question string, languages []string) string {
 	if len(languages) > 0 {
 		b.WriteString("\n\nThe vault's sources use these languages: ")
 		b.WriteString(strings.Join(languages, ", "))
-		b.WriteString(". Search and answer across them; do not assume the question's language is the only one in the vault.")
+		b.WriteString(". Search across them; the ANSWER stays in the question's language, whatever the sources use.")
 	}
+	b.WriteString("\n\nWrite the answer entirely in the language of the question above. Keep names and titles in their original script.")
 	return b.String()
 }
 
@@ -304,7 +312,7 @@ source is about, what it argues, and what it adds.
 
 Rules:
 - 3 to 6 short paragraphs (or two paragraphs and a short bullet list). 150 to 300 words.
-- Write in the source's language.
+- Write in ENGLISH, regardless of the source's language. Keep names and quoted terms as they appear.
 - Use ONLY the claims. Never add a fact, name, number or opinion that is not in them.
 - Open with what the source is about, in one sentence a reader can act on. No "This document" filler.
 - Name the through-line and the few strongest points. Do not list every claim.
@@ -317,7 +325,7 @@ func SourceSummaryUser(title, language, outline, claims string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Source title: %s\n", title)
 	if language != "" {
-		fmt.Fprintf(&b, "Language of the source: %s\n", language)
+		fmt.Fprintf(&b, "Source language (for context only; write the summary in English): %s\n", language)
 	}
 	if outline != "" {
 		b.WriteString("\nOutline (structure only — not knowledge of its own):\n")

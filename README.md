@@ -104,7 +104,7 @@ The first three are **document steps** (one source, in order). The cluster step 
 vault and may only run while no document step runs — in both directions. **Ask is never gated.**
 
 **After a complete distillation** a source earns a **summary** (`<hash>.summary.md`): a short
-overview written from its claims, shown on its own tab. The consistency job fills in summaries that
+overview written from its claims in English, shown on its own tab. The consistency job fills in summaries that
 are missing, a few at a time, so a vault from before the feature catches up in the background.
 
 Every source carries the state of its steps (capture, outline, distill) and of its parts, so a long
@@ -120,8 +120,9 @@ of features.
 
 ### Claims
 
-- One claim per atom file with a flat topic, type, status, a 1–3 sentence body and **node-level
-  provenance**.
+- One claim per atom file with a flat English topic, type, status, a 1–3 sentence body and
+  **node-level provenance**. Claims are always written in English; names, code and quoted terms keep
+  their original script.
 - A detail view that shows where the claim came from, and two **disjoint** relation lists: its
   **cluster peers** (what it travels with) and the claims under the **same topic**.
 - A local FTS5 finder in the lens and a **command palette** (⌘K / Ctrl-K) across claims and sources.
@@ -154,8 +155,9 @@ of features.
   login form, and offers **Attach snapshot…** — save the page in your browser as HTML or PDF (for a
   JavaScript page, print it to PDF) and the URL keeps its address while the file becomes its snapshot.
   The same button is offered for a **bookmark** (a page that only renders with JavaScript). URLs are
-  re-checked weekly; an attached snapshot is never fetched automatically, but its source page can
-  **replace** it or **try the URL again** — a readable page then regularizes it, a wall keeps it.
+  re-checked weekly (a feed daily); an attached snapshot is never fetched automatically, but its
+  source page can **replace** it or **try the URL again** — a readable page then regularizes it, a
+  wall keeps it.
 - **Tags — human and derived**: the same coarse labels a wiki page carries. Edit the human ones in
   the detail rail; the agent writes **auto tags** from the source's claims after a complete distill,
   and the consistency job backfills sources that predate the feature. Both are observed by the
@@ -165,9 +167,10 @@ of features.
 - **Bookmarks** are URLs that cannot be read (a video, a JavaScript app): kept as metadata-only
   sources and collected in their own lens, never distilled. A page that answers with a login or a
   paywall is **blocked** instead, so it never becomes a bookmark that pretends there was no text.
-- **URLs are re-checked once a week** (configurable, and on demand), with a per-source and per-page
-  HTTP status; broken links stay visible. A sitemap is reconciled against its list 1:1; a feed only
-  extends. A URL you add yourself wins over any page, sitemap or feed that had claimed it.
+- **Pages and sitemaps are re-checked once a week, feeds daily** (configurable, and on demand), with
+  a per-source and per-page HTTP status; broken links stay visible. A sitemap is reconciled against
+  its list 1:1; a feed only extends. A URL you add yourself wins over any page, sitemap or feed that
+  had claimed it.
 
 ![A sitemap and its sub-sources](docs/screenshots/04-sub-sources.png)
 
@@ -198,8 +201,11 @@ of features.
 
 - Ask a question; the agent searches claims, reads at most a few, and answers with **inline citations**
   to the claims it used. Cite a claim, open it, come back: the scroll position survives the detour.
+- The answer is written **entirely in the language of the question's prose**; proper names and source
+  titles keep their original script and never switch the answer's language.
 - Every answer is saved as a Markdown note in `asks/`, with the question, the run and **automatic
-  tags** derived from the topics of the claims it cited.
+  tags** derived from the topics of the claims it cited. Its detail shows the **Ask ID** with a copy
+  button.
 - Ask is never blocked by a document or cluster run.
 
 ### Search
@@ -502,7 +508,7 @@ Everything lives in one YAML file; `${ENV}` expansion keeps secrets out of it. T
 | `openai` | endpoint, key, cheap/strong models, retries, timeouts, headers |
 | `pipeline` | automation, timeouts, parallel parts/runs, consistency interval/batch |
 | `cluster` | the association quality gates (neighbours, merge/split, attach, overlap, size cap) |
-| `capture` / `fetch` | URL dedupe (trailing slashes ignored), weekly refresh cadence, size limits, SSRF guard |
+| `capture` / `fetch` | URL dedupe (trailing slashes ignored), weekly page/sitemap and daily feed cadence, size limits, SSRF guard |
 | `pdf` / `ocr` | poppler/tesseract paths, page limits, OCR language and DPI |
 | `lint` | programmatic checks after each cluster pass |
 
@@ -520,7 +526,8 @@ A small JSON API on loopback, serving the PWA and the CLI. Highlights:
 - `POST /api/v1/sources/{hash}/attach` — give a blocked URL source the page you saved (multipart);
   replacing an attached snapshot resets the derivation the old bytes produced.
 - `POST /api/v1/sources/{hash}/refetch` — try the URL again for an attached snapshot; a wall keeps it.
-- `POST /api/v1/refresh-urls` — check every URL now (weekly otherwise); sitemaps reconcile 1:1,
+- `POST /api/v1/refresh-urls` — check every URL now (pages/sitemaps weekly, feeds daily otherwise);
+  sitemaps reconcile 1:1,
   feeds only extend.
 - `GET /api/v1/atoms…` — claims, topics, related (`peers` + `same_topic`); duplicates and collapse
   (`GET …/duplicates`, `POST …/collapse`).

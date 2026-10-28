@@ -50,11 +50,12 @@ For each part the agent:
 
 Rules the prompt enforces (and the wire shape):
 
-- **One claim per atom**, a single self-contained sentence, in the source's own language.
+- **One claim per atom**, a single self-contained sentence, **always in English**; proper names,
+  titles, code and quoted terms keep their original script.
 - **A claim stands alone.** No "Chapter 11", "this section", "the book", "as we saw". The source is
   provenance, never part of the statement.
-- **A flat topic** derived from the claim and body alone (`caching`, `llm-agents`). Existing names
-  are offered by `list_topics`; a topic is never a chapter, a document or a hierarchy.
+- **A flat, English topic** derived from the claim and body alone (`caching`, `llm-agents`). Existing
+  names are offered by `list_topics`; a topic is never a chapter, a document or a hierarchy.
 - **Provenance cites source node ids** from the outline; unknown ids are rejected.
 - **No links, and code is code.** A claim body carries no links; syntax quoted from the source is
   inline code (a backtick span), and the claim sentence names it in prose.
@@ -80,11 +81,11 @@ never deletes a cluster record: the next cluster pass prunes dead members.
 The summary is written **after** a source's distill step is `ok`, from the claims (capped at 250
 claims / 36 KiB) and the outline's titles — never from the raw document, so it cannot say more than
 the vault holds. One bounded completion, `reasoning_effort=minimal`, no tools. The answer is
-Markdown prose (3–6 short paragraphs or two paragraphs plus bullets, in the source's language) and is
-written to `<hash>.summary.md`. An answer cut off by the output limit is a failure: the file is not
-written, and the run retries later. A source with zero claims gets the honest one-line file without a
-model call. The consistency job queues summaries that are missing; it never writes one inside the
-check itself.
+Markdown prose (3–6 short paragraphs or two paragraphs plus bullets, **always in English**, whatever
+the source's language) and is written to `<hash>.summary.md`. An answer cut off by the output limit is
+a failure: the file is not written, and the run retries later. A source with zero claims gets the
+honest one-line file without a model call. The consistency job queues summaries that are missing; it
+never writes one inside the check itself.
 
 ## 4. Query: question → cited answer
 
@@ -101,8 +102,10 @@ check itself.
 - The answer is written in complete, grammatical sentences. A citation is a trailing reference after
   the statement it supports — never a word, phrase or missing object of the sentence.
 - If the claims do not contain the answer, the answer says so plainly.
-- The question is answered in the question's language; the vault's language set is part of the
-  prompt.
+- The answer is written **entirely in the language of the question's prose**; the vault's language
+  set is only a search hint. A source title or proper noun in another script stays in that script and
+  never decides the answer's language. A German question that names a Chinese source is answered in
+  German.
 - Every successful query writes an Ask record to `asks/<run-id>.md`. There is no filing step.
 
 ## 5. Tag: a wiki page's shelf

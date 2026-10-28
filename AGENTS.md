@@ -139,14 +139,16 @@ a blocked URL), and a failure is a barrier. Details, state and scheduling: `docs
   a paywall or a consent gate is **blocked**: reported with the reason, never read — and the human
   may attach the page they can see (HTML or PDF), which becomes the snapshot at the same URL address.
 - **Outline** reads that snapshot and builds the hierarchical tree of parts; it never extracts.
-- **Distill** runs the agent over one part at a time: one self-contained claim per statement, flat
-  topic, provenance to a source node, then an audit for statements left uncovered.
+- **Distill** runs the agent over one part at a time: one self-contained claim per statement, **in
+  English**, flat English topic, provenance to a source node, then an audit for statements left
+  uncovered.
 - **Cluster** prunes, attaches, graphs, splits, overlaps and writes titleless memberships. No model.
 
-A URL is refreshed once a week (`capture.refresh_interval: '168h'`); an attached snapshot is never
-fetched by the cadence, only by the explicit refetch of its source. A sitemap refresh reconciles its
-pages 1:1, a feed refresh only adds — and a URL the human added by hand is released from its
-page/sitemap/feed, so it outlives its former owner.
+A page or sitemap is refreshed once a week (`capture.refresh_interval: '168h'`), a feed once a day
+(`capture.feed_refresh_interval: '24h'`); an attached snapshot is never fetched by the cadence, only
+by the explicit refetch of its source. A sitemap refresh reconciles its pages 1:1, a feed refresh only
+adds — and a URL the human added by hand is released from its page/sitemap/feed, so it outlives its
+former owner.
 
 Derived things are caches (`outline`, `index.db`, `clusters/`); records are the truth (`<hash>.meta`,
 `<hash>.log`, `atoms/`, `wiki/`, `vocabulary/`).

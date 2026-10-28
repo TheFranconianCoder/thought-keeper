@@ -9,6 +9,7 @@
   import { scrollFade } from '../../lib/scroll-fade';
   import { asks } from '../../lib/stores/asks.svelte';
   import { claims } from '../../lib/stores/claims.svelte';
+  import CopyId from '../ui/CopyId.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
   import Markdown from '../ui/Markdown.svelte';
@@ -200,6 +201,7 @@
               <div class="answer-meta">
                 <span class="chip">{relTime(selected.updated_at)}</span>
                 <span class="grow"></span>
+                <CopyId text={selected.id} label="Ask ID" display={selected.id.slice(0, 10)} />
                 <button class="btn btn--danger btn--sm" onclick={() => deleteSavedAsk(selected!.id)}>
                   <Icon name="trash" size={13} /> Delete
                 </button>

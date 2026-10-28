@@ -115,7 +115,7 @@ func TestRefreshURLsDetectsChange(t *testing.T) {
 		Atoms: nil, Fetch: fetcher, Convert: conv, Store: store, Index: idx, Clock: fixedClock{},
 	}
 
-	res, err := refresh.Execute(ctx)
+	res, err := refresh.ExecuteAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestRefreshURLsDetectsChange(t *testing.T) {
 	}
 
 	conv.markdown = strings.Repeat("same text ", 60) + " but the page changed"
-	res, err = refresh.Execute(ctx)
+	res, err = refresh.ExecuteAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh 2: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestRefreshRepairsAMissingFaviconOnAnUnchangedPage(t *testing.T) {
 	delete(steps.identities, src.Hash)
 
 	refresh := usecases.RefreshURLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Steps: steps, Clock: fixedClock{}}
-	res, err := refresh.Execute(ctx)
+	res, err := refresh.ExecuteAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -306,7 +306,7 @@ func TestRefreshKeepsTheFaviconOfAChangedPage(t *testing.T) {
 	refresh := usecases.RefreshURLs{
 		Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Clock: fixedClock{},
 	}
-	res, err := refresh.Execute(ctx)
+	res, err := refresh.ExecuteAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -444,7 +444,7 @@ func TestRefreshLeavesAnAttachedSnapshotAlone(t *testing.T) {
 	fetcher := &fakeFetcher{page: interfaces.FetchedPage{Status: 200}}
 	refresh := usecases.RefreshURLs{Fetch: fetcher, Convert: &fakeConverter{}, Store: store, Index: idx, Clock: fixedClock{}}
 
-	res, err := refresh.Execute(ctx)
+	res, err := refresh.ExecuteAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -463,6 +463,80 @@ func lastState(steps *fakeSteps, step entities.Step) entities.StepState {
 		return ""
 	}
 	return seen[len(seen)-1].State
+}
+
+// TestFeedRefreshUsesADailyCadence: a feed's item list moves daily, while a page and a sitemap wait
+// for the weekly cadence. The intervals are per kind, not one interval for every URL.
+func TestFeedRefreshUsesADailyCadence(t *testing.T) {
+	ctx := context.Background()
+	idx := newFakeIndex()
+	store := objects.New(t.TempDir())
+	now := fixedClock{}.Now()
+
+	feedHash := entities.URLHash("https://example.com/feed")
+	idx.m[feedHash] = entities.Source{
+		ID: ulid.Make(), Hash: feedHash, Kind: entities.SourceKindURL, Ext: ".md",
+		URL: "https://example.com/feed", Title: "The Feed", RSS: true,
+		ImportedAt: now.Add(-30 * 24 * time.Hour), URLChecked: now.Add(-25 * time.Hour), Meta: "{}",
+	}
+	pageHash := entities.URLHash("https://example.com/page")
+	idx.m[pageHash] = entities.Source{
+		ID: ulid.Make(), Hash: pageHash, Kind: entities.SourceKindURL, Ext: ".md",
+		Path: "sources/aa/bb/page.md", URL: "https://example.com/page", Title: "The Page",
+		ImportedAt: now.Add(-30 * 24 * time.Hour), URLChecked: now.Add(-25 * time.Hour), Meta: "{}",
+	}
+	sitemapHash := entities.URLHash("https://example.com/sitemap.xml")
+	idx.m[sitemapHash] = entities.Source{
+		ID: ulid.Make(), Hash: sitemapHash, Kind: entities.SourceKindURL, Ext: ".md",
+		URL: "https://example.com/sitemap.xml", Title: "The Sitemap", Sitemap: true,
+		ImportedAt: now.Add(-30 * 24 * time.Hour), URLChecked: now.Add(-25 * time.Hour), Meta: "{}",
+	}
+
+	// An empty feed is enough to prove the feed itself was fetched.
+	const emptyFeed = `<?xml version="1.0"?><rss version="2.0"><channel><title>The Feed</title></channel></rss>`
+	fetcher := &fakeFetcher{page: interfaces.FetchedPage{
+		Status: 200, Body: []byte(emptyFeed), ContentType: "application/rss+xml",
+	}}
+	refresh := usecases.RefreshURLs{
+		Fetch: fetcher, Convert: &fakeConverter{}, Store: store, Index: idx, Clock: fixedClock{},
+		MinAge: 7 * 24 * time.Hour, FeedMinAge: 24 * time.Hour,
+	}
+	res, err := refresh.Execute(ctx)
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if res.Checked != 1 || fetcher.calls != 1 {
+		t.Fatalf("checked = %d (calls %d), want only the daily feed", res.Checked, fetcher.calls)
+	}
+	if got := idx.m[feedHash].URLChecked; !got.After(now.Add(-25 * time.Hour)) {
+		t.Errorf("the feed was not checked: %v", got)
+	}
+	if got := idx.m[pageHash].URLChecked; got.After(now.Add(-25 * time.Hour)) {
+		t.Errorf("a page was refreshed on the feed cadence: %v", got)
+	}
+	if got := idx.m[sitemapHash].URLChecked; got.After(now.Add(-25 * time.Hour)) {
+		t.Errorf("a sitemap was refreshed on the feed cadence: %v", got)
+	}
+
+	// A feed checked this morning is not due; the weekly page and sitemap are.
+	feed := idx.m[feedHash]
+	feed.URLChecked = now.Add(-12 * time.Hour)
+	idx.m[feedHash] = feed
+	page := idx.m[pageHash]
+	page.URLChecked = now.Add(-8 * 24 * time.Hour)
+	idx.m[pageHash] = page
+	sitemap := idx.m[sitemapHash]
+	sitemap.URLChecked = now.Add(-8 * 24 * time.Hour)
+	idx.m[sitemapHash] = sitemap
+	conv := &fakeConverter{title: "Page", markdown: strings.Repeat("readable text ", 40)}
+	refresh.Convert = conv
+	res, err = refresh.Execute(ctx)
+	if err != nil {
+		t.Fatalf("refresh 2: %v", err)
+	}
+	if res.Checked != 2 || fetcher.calls != 3 {
+		t.Errorf("checked = %d (calls %d), want the weekly page and sitemap", res.Checked, fetcher.calls)
+	}
 }
 
 // TestRefreshOnlyChecksDueURLs: the cadence belongs to the SOURCE, not to the process. With a plain

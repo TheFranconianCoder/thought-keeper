@@ -31,7 +31,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/sources/{hash}/log` | The source's own log |
 | `GET` | `/api/v1/sources/{hash}/favicon` | The site's stored icon |
 | `POST` | `/api/v1/sources/{hash}/capture` | Step 1 again for one source (the outline follows) |
-| `POST` | `/api/v1/sources/{hash}/refresh` | Refresh ONE URL source now (a feed or a sitemap re-expands its list, a page is re-fetched). The weekly cadence is ignored; attached snapshots are not fetched (use `/refetch` for those). Answers `{checked, changed, failed, blocked, attached, discovered, removed, detail}` |
+| `POST` | `/api/v1/sources/{hash}/refresh` | Refresh ONE URL source now (a feed or a sitemap re-expands its list, a page is re-fetched). The configured cadence is ignored; attached snapshots are not fetched (use `/refetch` for those). Answers `{checked, changed, failed, blocked, attached, discovered, removed, detail}` |
 | `POST` | `/api/v1/sources/{hash}/attach` | Give a blocked URL source or a bookmark a snapshot the human supplied (multipart `file`: `.html`, `.pdf`, `.md`, `.txt`). A sitemap or a feed is refused. Answers 200 with the source. The URL stays the address; the new file replaces an existing snapshot and resets the old derivation |
 | `POST` | `/api/v1/sources/{hash}/refetch` | Try the URL again even when the snapshot was attached by hand. A readable page replaces the attachment and clears the marker (a changed text also resets the old derivation); a wall/failure keeps it. Answers `{replaced, blocked, failed, detail}` |
 | `POST` | `/api/v1/sources/{hash}/rebuild-tree` | Rebuild this source's outline |
@@ -41,7 +41,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `DELETE` | `/api/v1/sources/{hash}` | Delete a source (object → trash, orphaned claims removed). A dependent wiki/sitemap page is refused with `dependent_source`; deleting its owner removes it. |
 | `POST` | `/api/v1/add` | Add a source (`{path}` \| `{url}` \| multipart). A URL that is a sitemap or an RSS/Atom feed expands into a parent source; a manual URL is released from any owner it had |
 | `POST` | `/api/v1/add-urls` | Queue URLs for background intake |
-| `POST` | `/api/v1/refresh-urls` | Check every known URL NOW (the weekly cadence is ignored; attached snapshots are left alone). Answers `{checked, changed, failed, blocked, attached, discovered, removed}`: `blocked` counts pages that answered with a wall, `attached` counts human-supplied snapshots (never fetched), `discovered` the new pages a sitemap/feed declared, `removed` the pages a sitemap no longer lists |
+| `POST` | `/api/v1/refresh-urls` | Check every known URL NOW (the configured weekly page/sitemap and daily feed cadences are ignored; attached snapshots are left alone). Answers `{checked, changed, failed, blocked, attached, discovered, removed}`: `blocked` counts pages that answered with a wall, `attached` counts human-supplied snapshots (never fetched), `discovered` the new pages a sitemap/feed declared, `removed` the pages a sitemap no longer lists |
 | `GET` | `/api/v1/urls/addresses` | Preview the URL address migration (old addresses still in the vault) |
 | `POST` | `/api/v1/urls/migrate` | Move URL sources onto their URL's address |
 | `POST` | `/api/v1/fix-urls` | Repair index rows that lost "this is a URL" (from the snapshot's frontmatter) |

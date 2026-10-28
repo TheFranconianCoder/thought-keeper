@@ -51,9 +51,10 @@ never consulted).
 - The reference behaves like a footnote in the UI: clicking `(1)` scrolls to bibliography entry 1
   and flashes it. Only the claim text in the bibliography opens the claim page. A small `↩` on the
   entry returns to the reference.
-- The answer itself is a complete, grammatical sentence or paragraph. The citation is appended as a
-  reference after the supported statement; it is never used as a word or as the object the sentence
-  is missing.
+- The answer itself is a complete, grammatical sentence or paragraph, written **entirely in the
+  language of the question's prose**. Proper names and source titles keep their original script; a
+  title in another language never switches the answer. The citation is appended as a reference after
+  the supported statement; it is never used as a word or as the object the sentence is missing.
 - A claim cited in the prose is already sourced and is **not** repeated under the final `Sources:`
   heading; that heading lists only additional supporting claims and disappears when there are none.
 - Pages, chapters and clusters are not part of Ask: it answers from claims only.

@@ -111,7 +111,7 @@ func TestFeedRefreshFillsAnExistingBookmark(t *testing.T) {
 		MinAge:       time.Hour,
 		MinTextChars: 40,
 	}
-	if _, err := refresh.Execute(ctx); err != nil {
+	if _, err := refresh.ExecuteAll(ctx); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	one := idx.m[oneHash]
@@ -159,7 +159,7 @@ func TestRefreshKeepsAFeedCopyWhenThePageStillDoesNotRead(t *testing.T) {
 		Clock:        fixedClock{},
 		MinTextChars: 40,
 	}
-	res, err := refresh.Execute(ctx)
+	res, err := refresh.ExecuteAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}

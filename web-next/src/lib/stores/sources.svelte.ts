@@ -54,6 +54,11 @@ class SourcesStore {
   /** Live counters keyed by source hash, merged from `progress` events. */
   progress = $state<Record<string, LiveProgress>>({});
 
+  /** pendingDeletes hides a confirmed deletion while the server waits for the pipeline gate. Source
+   *  events keep arriving under load; without this set, every list reload re-added the row the reader
+   *  had already deleted, until the DELETE finally got the gate. */
+  private pendingDeletes = new Set<string>();
+
   selectedHash = $state('');
   selected = $state<Source | null>(null);
   tree = $state<SourceNode[]>([]);
@@ -176,8 +181,10 @@ class SourcesStore {
         // the loop run forever.
         if (batch.length < PAGE || rows.length >= total || fresh === 0) break;
       }
-      this.items = rows;
-      this.count = Math.max(total, rows.length);
+      // A deletion that is waiting for the gate is still in the server's list. Keep it hidden.
+      const visible = rows.filter((source) => !this.pendingDeletes.has(source.hash));
+      this.items = visible;
+      this.count = Math.max(total, visible.length);
       this.loaded = true;
       this.error = '';
     } catch (error) {
@@ -425,12 +432,18 @@ class SourcesStore {
     }
   }
 
-  /** drop removes a source from the visible list NOW. A confirmed deletion returns to the list and
-   *  must not wait for the server (which may be waiting for the gate): the row leaves at once. A
-   *  failed delete reloads the list, which brings the row back — optimism a reload can correct. */
+  /** drop removes a source from the visible list NOW and keeps it hidden across the list reloads that
+   *  source events cause while the DELETE waits for the gate. */
   drop(hash: string): void {
+    this.pendingDeletes.add(hash);
     this.items = this.items.filter((source) => source.hash !== hash);
     this.count = Math.max(0, this.count - 1);
+  }
+
+  /** finishDelete stops hiding a source after the DELETE settled. On success the server no longer
+   *  lists it; on failure the following reload brings it back. */
+  finishDelete(hash: string): void {
+    this.pendingDeletes.delete(hash);
   }
 
   clearSelection(): void {    this.detailSeq++;

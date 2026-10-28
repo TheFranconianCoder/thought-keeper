@@ -103,7 +103,8 @@ export async function deleteSource(hash: string): Promise<void> {
 
   system.notice = `Deleting ${label}…`;
   // Back to the list NOW: a delete waits for running document/cluster work on the server, and the
-  // reader has already decided. The row leaves optimistically; a failure reloads the list.
+  // reader has already decided. The store keeps the row hidden across the list reloads that source
+  // events cause during that wait; only a failed delete brings it back.
   const leaving = router.current.view === 'source' && router.current.id === hash;
   sources.drop(hash);
   if (leaving) {
@@ -113,16 +114,20 @@ export async function deleteSource(hash: string): Promise<void> {
   try {
     const result = await api.deleteSource(hash);
     const dependents = result.dependents_removed ?? 0;
+    // Keep hiding it until the list has been read WITHOUT it: a read that started before the delete
+    // committed may still carry the row.
+    await refreshSourceViews();
+    sources.finishDelete(hash);
     toast(
       dependents > 0
         ? `Deleted ${label} and ${plural(dependents, 'dependent source')}.`
         : `Deleted ${label}.`,
       'success',
     );
-    await refreshSourceViews();
   } catch (error) {
     toast(`Could not delete the source: ${firstLine(humanError(error))}`, 'error');
-    // The server did not delete it: the optimistic removal is undone by reloading the list.
+    // The server did not delete it: stop hiding it and let the reload bring the row back.
+    sources.finishDelete(hash);
     await refreshSourceViews();
   } finally {
     system.notice = '';

@@ -188,7 +188,7 @@ func TestRefreshKeepsPagesThatLeftAFeed(t *testing.T) {
 		Convert: &fakeConverter{}, MinAge: time.Hour,
 		Store: store, Index: idx, Steps: steps, Clock: fixedClock{},
 	}
-	res, err := refresh.Execute(ctx)
+	res, err := refresh.ExecuteAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}

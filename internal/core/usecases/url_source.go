@@ -1061,10 +1061,12 @@ type RefreshURLs struct {
 	// claims were derived from bytes that are gone; the snapshot and its claims start over. Nil skips
 	// the reset (tests that only check the fetch).
 	Reset SourceResetter
-	// MinAge is the minimum time since a source's last check before a pass re-fetches it. Zero means
-	// no limit. The cadence belongs to the SOURCE (`url_checked_at`), not to the process's uptime:
-	// with a plain ticker, restarting the app daily would mean a weekly refresh never happens.
+	// MinAge is the minimum time since a PAGE or SITEMAP's last check before a scheduled pass
+	// re-fetches it. The cadence belongs to the SOURCE (`url_checked_at`), not to the process's
+	// uptime. A scheduled pass skips a kind whose interval is zero; manual passes ignore both.
 	MinAge time.Duration
+	// FeedMinAge is the same for a FEED source (its item list). A feed moves daily, a page weekly.
+	FeedMinAge time.Duration
 }
 
 // DiscoveredChildren are the NEW pages an owner declared in this pass (already claimed as sources).
@@ -1098,20 +1100,20 @@ type RefreshResult struct {
 	LastError string
 }
 
-// Execute refreshes the URL sources that are DUE (a scheduled pass: `MinAge` decides).
+// Execute refreshes the URL sources that are DUE (a scheduled pass: the per-kind intervals decide).
 func (uc RefreshURLs) Execute(ctx context.Context) (RefreshResult, error) {
-	return uc.execute(ctx, uc.MinAge)
+	return uc.execute(ctx, true)
 }
 
 // ExecuteAll refreshes every known URL now, whatever its age. It is the manual pass — the Status
 // button — and the only caller that is allowed to ignore the cadence.
 func (uc RefreshURLs) ExecuteAll(ctx context.Context) (RefreshResult, error) {
-	return uc.execute(ctx, 0)
+	return uc.execute(ctx, false)
 }
 
 // ExecuteOne refreshes ONE URL source now, whatever its age. It is the per-source Refresh button: a
 // feed or a sitemap is a list that only changes when it is fetched again, and a page may be checked
-// without waiting for the weekly cadence.
+// without waiting for its configured cadence.
 func (uc RefreshURLs) ExecuteOne(ctx context.Context, hash string) (RefreshResult, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
@@ -1121,7 +1123,7 @@ func (uc RefreshURLs) ExecuteOne(ctx context.Context, hash string) (RefreshResul
 		return RefreshResult{}, types.New("unsupported_source",
 			"this source has no URL to refresh", types.ErrUnsupportedSource)
 	}
-	return uc.executeRows(ctx, []entities.Source{src}, 0, false)
+	return uc.executeRows(ctx, []entities.Source{src}, false, false)
 }
 
 // ExecuteOneForce fetches ONE URL source now even when its snapshot was attached by hand. It is the
@@ -1144,18 +1146,18 @@ func (uc RefreshURLs) ExecuteOneForce(ctx context.Context, hash string) (Refresh
 		return RefreshResult{}, types.New("unsupported_source",
 			"this snapshot is not attached; refresh the URL instead", types.ErrUnsupportedSource)
 	}
-	return uc.executeRows(ctx, []entities.Source{src}, 0, true)
+	return uc.executeRows(ctx, []entities.Source{src}, false, true)
 }
 
-func (uc RefreshURLs) execute(ctx context.Context, minAge time.Duration) (RefreshResult, error) {
+func (uc RefreshURLs) execute(ctx context.Context, scheduled bool) (RefreshResult, error) {
 	rows, err := uc.Index.ListURLSources(ctx)
 	if err != nil {
 		return RefreshResult{}, err
 	}
-	return uc.executeRows(ctx, rows, minAge, false)
+	return uc.executeRows(ctx, rows, scheduled, false)
 }
 
-func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, minAge time.Duration, ignoreAttached bool) (RefreshResult, error) {
+func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, scheduled, ignoreAttached bool) (RefreshResult, error) {
 	var res RefreshResult
 	seen := make(map[string]bool)
 	for _, s := range rows {
@@ -1173,9 +1175,20 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, m
 			continue
 		}
 		now := uc.Clock.Now()
-		// Due means "not checked within the cadence". A URL that was never checked is always due.
-		if minAge > 0 && !s.URLChecked.IsZero() && now.Sub(s.URLChecked) < minAge {
-			continue
+		if scheduled {
+			// A feed (its item list) is checked daily; a page and a sitemap weekly. A kind whose
+			// interval is zero is not refreshed automatically at all.
+			age := uc.MinAge
+			if s.RSS {
+				age = uc.FeedMinAge
+			}
+			if age <= 0 {
+				continue
+			}
+			// Due means "not checked within the cadence". A source never checked is always due.
+			if !s.URLChecked.IsZero() && now.Sub(s.URLChecked) < age {
+				continue
+			}
 		}
 		res.Checked++
 		page, fetchErr := uc.Fetch.Fetch(ctx, s.URL)

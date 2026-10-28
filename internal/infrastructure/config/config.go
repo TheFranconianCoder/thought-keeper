@@ -168,12 +168,16 @@ type ClusterConfig struct {
 
 type CaptureConfig struct {
 	DedupeByURL bool `yaml:"dedupe_by_url"`
-	// RefreshInterval is the cadence at which ONE URL source may be revisited (e.g. "168h" — once a
-	// week). The worker looks for due sources every hour; the interval itself lives per source
-	// (url_checked_at), so a restart neither postpones nor doubles a refresh. Empty disables the
-	// automatic refresh (manual POST /api/v1/refresh-urls still works). A blocked page is attempted
-	// again on the same cadence: it may become readable.
+	// RefreshInterval is the cadence at which ONE URL source (a page or a sitemap) may be revisited
+	// (e.g. "168h" — once a week). The worker looks for due sources every hour; the interval itself
+	// lives per source (url_checked_at), so a restart neither postpones nor doubles a refresh. Empty
+	// disables the automatic refresh for pages and sitemaps (manual POST /api/v1/refresh-urls still
+	// works). A blocked page is attempted again on the same cadence: it may become readable.
 	RefreshInterval string `yaml:"refresh_interval"`
+	// FeedRefreshInterval is the cadence for a FEED source (its item list), e.g. "24h". Feeds carry
+	// new posts far more often than a page changes; empty disables the automatic feed refresh while
+	// leaving pages and sitemaps on RefreshInterval.
+	FeedRefreshInterval string `yaml:"feed_refresh_interval"`
 	// MinTextChars: a fetched page with less extracted text than this is kept as a
 	// bookmark (metadata only, never distilled) instead of an indexed document.
 	MinTextChars int `yaml:"min_text_chars"`
@@ -254,7 +258,7 @@ func Defaults() Config {
 			SplitMinCoreSize: 3, TopicSpanLimit: 12, MaxClusterClaims: 80,
 			AttachMinScore: 0.18, OverlapMinEdges: 4, OverlapMax: 2, CrossTopicMinEdges: 3,
 		},
-		Capture: CaptureConfig{DedupeByURL: true, RefreshInterval: "168h", MinTextChars: 400},
+		Capture: CaptureConfig{DedupeByURL: true, RefreshInterval: "168h", FeedRefreshInterval: "24h", MinTextChars: 400},
 		Fetch: FetchConfig{
 			Timeout:   "20s",
 			MaxBytes:  5 << 20,

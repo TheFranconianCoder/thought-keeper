@@ -102,9 +102,11 @@ func Build(
 	log *slog.Logger,
 ) Deps {
 	store := objects.New(cfg.SourcesDir())
-	// The URL cadence: `capture.refresh_interval` is how often ONE URL may be revisited. The worker
-	// checks for due sources far more often; the interval belongs to each source's url_checked_at.
+	// The URL cadences: `capture.refresh_interval` is for a page or a sitemap, and
+	// `capture.feed_refresh_interval` for a feed's item list. The worker checks for due sources far
+	// more often; each interval belongs to the source's url_checked_at.
 	refreshMinAge, _ := time.ParseDuration(cfg.Capture.RefreshInterval)
+	feedRefreshMinAge, _ := time.ParseDuration(cfg.Capture.FeedRefreshInterval)
 	index := sqlc.NewSourceRepository(db)
 	trees := treeStore.New(cfg.SourcesDir())
 	atomStore := atoms.New(cfg.AtomsDir())
@@ -249,7 +251,8 @@ func Build(
 	refreshURLs := usecases.RefreshURLs{
 		Fetch: fetcher, Convert: converter, Store: store, Index: index, Atoms: atomRepo,
 		Favicons: faviconStore, Clock: clock, Log: log, Steps: steps, Languages: languages,
-		SourceLog: sourceLog, MinAge: refreshMinAge, MinTextChars: cfg.Capture.MinTextChars,
+		SourceLog: sourceLog, MinAge: refreshMinAge, FeedMinAge: feedRefreshMinAge,
+		MinTextChars: cfg.Capture.MinTextChars,
 		// A sitemap is a complete list: a page that left it is deleted by its owner. A feed never
 		// deletes; the same use case decides from the parent's marker.
 		Delete: deleteSource,

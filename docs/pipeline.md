@@ -83,10 +83,11 @@ runs** — in both directions. **Ask** (a query) is never gated.
   **replace** the file (a new attach; the old derivation is reset) or **try the URL again**
   (`POST /sources/{hash}/refetch`): a readable page replaces the snapshot and clears the marker (a
   changed text also resets the old derivation), a wall or a failure keeps the attachment.
-- **A URL is refreshed once a week** (`capture.refresh_interval: '168h'`), manually at any time. The
-  cadence belongs to the source (`url_checked_at`), not to the process. Attached sources are not
-  fetched by the cadence; an explicit refetch may try one, and a walled normal source is attempted
-  again on the same cadence, because it may become readable.
+- **A page or sitemap is refreshed once a week, a feed once a day** (`capture.refresh_interval:
+  '168h'`, `capture.feed_refresh_interval: '24h'`), manually at any time. The cadence belongs to the
+  source (`url_checked_at`), not to the process. Attached sources are not fetched by the cadence; an
+  explicit refetch may try one, and a walled normal source is attempted again on the same cadence,
+  because it may become readable.
 - PDF: extract the text layer with poppler; OCR a page that has none (`pdftocairo` + `tesseract`).
   Write the readable rendering to `sources/<ab>/<cd>/<hash>.capture.md`, with one
   `<!--part …-->` marker per part.
@@ -129,7 +130,8 @@ runs** — in both directions. **Ask** (a query) is never gated.
 - The tool contract and prompt rules are in `agent.md`.
 
 **After a complete distill** the source earns a **summary**: a run of its own (`op=summary`) writes
-`<hash>.summary.md` from the claims (and the outline's shape), and the Summary tab shows it. It is
+`<hash>.summary.md` from the claims (and the outline's shape), always in English, and the Summary tab
+shows it. It is
 not a step: it never gates the pipeline, and a slow model only delays the overview. A source whose
 distill is not `ok` is refused — a summary of a half-derived source would describe a moving target —
 and a RESET is not a completion either: it removes the old summary and schedules no new run. A
@@ -261,7 +263,7 @@ numbers is amber.
 - **Per source:** `POST /api/v1/add`, `POST /api/v1/sources/{hash}/capture`,
   `POST /api/v1/sources/{hash}/rebuild-tree`, `POST /api/v1/sources/{hash}/distill`,
   `POST /api/v1/sources/{hash}/reset`, and `POST /api/v1/sources/{hash}/refresh` for a URL (a feed
-  or a sitemap re-expands its list, a page is re-fetched; the weekly cadence is ignored).
+  or a sitemap re-expands its list, a page is re-fetched; the cadence is ignored).
 - **Globally:** `POST /api/v1/cluster` (queued by hand; it waits for the gate),
   `POST /api/v1/lint` and `POST /api/v1/query` (read-only, never gated).
 - **Vault housekeeping (Status → Vault):** the repairs listed in `operations.md`. Every one is a
