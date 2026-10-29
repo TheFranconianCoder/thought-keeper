@@ -94,9 +94,9 @@ is read by id.
   step and every synchronous vault rewrite take it exclusively (attaching or refetching a snapshot
   may reset claims and tree, so both are exclusive). The router applies the same gate to
   the write endpoints.- **A query answer is saved automatically** to `asks/<run-id>.md`; there is no explicit filing step.
-- A saved ask carries automatic `tags`: the topics of the claims its answer cites, or the meaningful
-  words of the question when it cites none. Tags label the query list and tag cloud; they never filter
-  retrieval.
+- A saved ask carries automatic `tags`: the topics of the claims its answer cites, the tags of the
+  sources it cites when no claim is cited, or the meaningful words of the question. Tags label the
+  query list and tag cloud; they never filter retrieval.
 - **A wiki save returns as soon as the page and its source representation are written.** The old
   derivation is cleared and the source is pumped in the background, and a background `PruneWikiLinks`
   pass reconciles the link sources the page owns with what it declares; the save never waits for the

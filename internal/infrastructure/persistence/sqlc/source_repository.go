@@ -583,6 +583,62 @@ func (r *SourceRepository) ListSources(ctx context.Context, kind string, limit, 
 	return out, nil
 }
 
+// ListRecentSources returns the newest CONTENT sources in a recency window. Bookmarks and
+// sitemap/feed containers are counted, never listed: they are navigation, not knowledge, and have
+// no derivation to summarise. The window is inclusive; a zero `since` means the whole vault.
+func (r *SourceRepository) ListRecentSources(ctx context.Context, since time.Time, limit, offset int) (interfaces.RecentSources, error) {
+	var out interfaces.RecentSources
+	if limit <= 0 {
+		limit = 8
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	sinceMS := int64(0)
+	if !since.IsZero() {
+		sinceMS = since.UnixMilli()
+	}
+	rows, err := r.q.ListRecentContentSources(ctx, dal.ListRecentContentSourcesParams{
+		Since:  sinceMS,
+		Offset: int64(offset),
+		Limit:  int64(limit),
+	})
+	if err != nil {
+		return out, fmt.Errorf("list recent sources: %w", err)
+	}
+	ids := make([]ulid.ULID, 0, len(rows))
+	out.Sources = make([]entities.Source, 0, len(rows))
+	for _, row := range rows {
+		src := toEntity(row)
+		out.Sources = append(out.Sources, src)
+		ids = append(ids, src.ID)
+	}
+	total, err := r.q.CountRecentContentSources(ctx, sinceMS)
+	if err != nil {
+		return out, fmt.Errorf("count recent sources: %w", err)
+	}
+	out.Total = int(total)
+	excluded, err := r.q.CountRecentExcludedSources(ctx, sinceMS)
+	if err != nil {
+		return out, fmt.Errorf("count excluded recent sources: %w", err)
+	}
+	out.Bookmarks = int(excluded.Bookmarks)
+	out.Containers = int(excluded.Containers)
+	// The digest's claim count is a derived number like the list's: the page's ids scope it.
+	if len(ids) > 0 {
+		if counts, cErr := r.q.SourceAtomCountsForSources(ctx, ids); cErr == nil {
+			m := make(map[ulid.ULID]int, len(counts))
+			for _, c := range counts {
+				m[c.SourceID] = int(c.Count)
+			}
+			for i := range out.Sources {
+				out.Sources[i].AtomCount = m[out.Sources[i].ID]
+			}
+		}
+	}
+	return out, nil
+}
+
 // DeleteSourceByHash removes a source row (reindex reconciliation).
 func (r *SourceRepository) DeleteSourceByHash(ctx context.Context, hash string) error {
 	if err := r.q.DeleteSourceByHash(ctx, hash); err != nil {

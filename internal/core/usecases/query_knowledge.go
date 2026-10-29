@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 
@@ -15,11 +17,16 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
-// QueryKnowledge answers a question from the claims, with citations.
+// QueryKnowledge answers a question from the claims and source overviews, with citations.
 type QueryKnowledge struct {
 	Atoms    interfaces.AtomRepository
 	Clusters interfaces.ClusterRepository
 	Search   interfaces.SearchRepository
+	// Index answers the recency window (`list_sources`) and the source-tag fallback; Store reads a
+	// source's overview sidecar (`read_source_summary`). Both are optional so a unit test can run
+	// without a vault; the tools then report that the source side is not configured.
+	Index interfaces.IndexRepository
+	Store interfaces.SourceStore
 	// Asks persists every successful question/answer in the vault. Nil means no persistence (a
 	// unit test or an embedding without a vault).
 	Asks    interfaces.AskStore
@@ -39,6 +46,18 @@ type QueryResult struct {
 	Iterations  int
 	TotalTokens int
 }
+
+// The recency window's bounds. One tool answer is capped at 6 000 characters by the loop, so the
+// list is PAGED: eight sources with a short overview excerpt per page, and the agent follows
+// next_offset until the window is covered. A window too large for the transcript is grouped and
+// named, never silently truncated; the model opens a full overview only when it needs it.
+const (
+	recentSourceLimit    = 8
+	overviewExcerptChars = 400
+	summaryReadChars     = 5000
+	claimFallbackLimit   = 20
+	sourceClaimListLimit = 30
+)
 
 // Execute runs the agent and finishes the run row.
 func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question string) (QueryResult, error) {
@@ -140,16 +159,33 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 		},
 		{
 			Def: interfaces.AgentToolDef{
-				Name:        "list_atoms",
-				Description: "List claims (id, topic, claim), optionally filtered by topic.",
-				Parameters:  json.RawMessage(`{"type":"object","properties":{"topic":{"type":"string"}}}`),
+				Name: "list_atoms",
+				Description: "List claims (id, topic, claim), optionally filtered by topic or by the hash " +
+					"of the source they came from. Use `source` when a source has no overview yet and you " +
+					"need its claims for a digest.",
+				Parameters: json.RawMessage(`{"type":"object","properties":{"topic":{"type":"string"},"source":{"type":"string"}}}`),
 			},
 			Run: func(ctx context.Context, args json.RawMessage) (string, error) {
 				var in struct {
-					Topic string `json:"topic"`
+					Topic  string `json:"topic"`
+					Source string `json:"source"`
 				}
 				_ = json.Unmarshal(args, &in)
-				atoms, err := uc.Atoms.ListAtoms(ctx, in.Topic, 50, 0)
+				var (
+					atoms []entities.Atom
+					err   error
+				)
+				if hash := strings.TrimSpace(in.Source); hash != "" {
+					if !entities.IsSHA256Hex(hash) {
+						return "", fmt.Errorf("invalid source hash %q", hash)
+					}
+					atoms, err = uc.Atoms.ListAtomsBySource(ctx, hash)
+					if len(atoms) > sourceClaimListLimit {
+						atoms = atoms[:sourceClaimListLimit]
+					}
+				} else {
+					atoms, err = uc.Atoms.ListAtoms(ctx, in.Topic, 50, 0)
+				}
 				if err != nil {
 					return "", err
 				}
@@ -161,6 +197,173 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 					})
 				}
 				out, _ := json.Marshal(m)
+				return string(out), nil
+			},
+		},
+		{
+			Def: interfaces.AgentToolDef{
+				Name: "list_sources",
+				Description: "List the newest SOURCES in the vault, optionally within a time window. " +
+					"START HERE for questions about what is new, recent or \"the last 24 hours\" — do not " +
+					"search claims first. `since` accepts an RFC3339 timestamp or a duration back from " +
+					"now such as 24h, 7d or 168h; omit it for the newest sources without a window. Returns " +
+					"a page of sources: hash, title, arrival time, kind, tags, claim count, derivation " +
+					"state and a short excerpt of the overview, plus the window's total. If `next_offset` " +
+					"is greater than 0, call the tool again with that offset to read the rest of the " +
+					"window. Bookmarks and sitemap/feed containers are counted but not listed: they have " +
+					"no overview. The window is VAULT ARRIVAL, not the publication date.",
+				Parameters: json.RawMessage(`{"type":"object","properties":{"since":{"type":"string"},"limit":{"type":"integer"},"offset":{"type":"integer"}}}`),
+			},
+			Run: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct {
+					Since  string `json:"since"`
+					Limit  int    `json:"limit"`
+					Offset int    `json:"offset"`
+				}
+				if err := json.Unmarshal(args, &in); err != nil {
+					return "", err
+				}
+				if uc.Index == nil {
+					return "", fmt.Errorf("the source index is not configured")
+				}
+				since, err := ParseSince(in.Since, uc.Clock.Now())
+				if err != nil {
+					return "", err
+				}
+				limit := in.Limit
+				if limit <= 0 {
+					limit = recentSourceLimit
+				}
+				if limit > recentSourceLimit {
+					limit = recentSourceLimit
+				}
+				offset := in.Offset
+				if offset < 0 {
+					offset = 0
+				}
+				recent, err := uc.Index.ListRecentSources(ctx, since, limit, offset)
+				if err != nil {
+					return "", err
+				}
+				sources := make([]map[string]any, 0, len(recent.Sources))
+				for _, src := range recent.Sources {
+					state := src.Steps.State(entities.StepDistill)
+					item := map[string]any{
+						"hash":        src.Hash,
+						"title":       sourceLabel(src),
+						"kind":        string(src.Kind),
+						"imported_at": src.ImportedAt.UTC().Format(time.RFC3339),
+						"tags":        src.AllTags(),
+						"atoms":       src.AtomCount,
+						"distill":     string(state),
+						"overview":    false,
+					}
+					// An overview is written after a COMPLETE distill. A stale or failed step can
+					// leave an older summary behind; reading it would describe a text that is no
+					// longer the source.
+					if state == entities.StepOK && uc.Store != nil {
+						if rc, oErr := uc.Store.OpenRendered(src.Hash, entities.SidecarSummary); oErr == nil {
+							if text, rErr := readSummary(rc); rErr == nil && strings.TrimSpace(text) != "" {
+								item["overview"] = true
+								item["excerpt"] = Excerpt(text, overviewExcerptChars)
+							}
+						}
+					}
+					sources = append(sources, item)
+				}
+				nextOffset := 0
+				if offset+len(recent.Sources) < recent.Total {
+					nextOffset = offset + len(recent.Sources)
+				}
+				res := map[string]any{
+					"sources":     sources,
+					"count":       len(sources),
+					"total":       recent.Total,
+					"offset":      offset,
+					"next_offset": nextOffset,
+					"bookmarks":   recent.Bookmarks,
+					"containers":  recent.Containers,
+					"now":         uc.Clock.Now().UTC().Format(time.RFC3339),
+				}
+				if !since.IsZero() {
+					res["since"] = since.UTC().Format(time.RFC3339)
+				}
+				out, mErr := json.Marshal(res)
+				if mErr != nil {
+					return "", mErr
+				}
+				return string(out), nil
+			},
+		},
+		{
+			Def: interfaces.AgentToolDef{
+				Name: "read_source_summary",
+				Description: "Read one source's overview in full, by hash. Use it for at most THREE " +
+					"sources in a digest when the excerpt from list_sources is not enough. If no overview " +
+					"has been written yet, it returns the source's claims instead (or the derivation " +
+					"state while the source is still being processed).",
+				Parameters: json.RawMessage(`{"type":"object","properties":{"hash":{"type":"string"}},"required":["hash"]}`),
+			},
+			Run: func(ctx context.Context, args json.RawMessage) (string, error) {
+				var in struct {
+					Hash string `json:"hash"`
+				}
+				if err := json.Unmarshal(args, &in); err != nil {
+					return "", err
+				}
+				if uc.Index == nil {
+					return "", fmt.Errorf("the source index is not configured")
+				}
+				hash := strings.TrimSpace(in.Hash)
+				if !entities.IsSHA256Hex(hash) {
+					return "", fmt.Errorf("invalid source hash %q", hash)
+				}
+				src, err := uc.Index.GetSourceByHash(ctx, hash)
+				if err != nil {
+					return "", err
+				}
+				state := src.Steps.State(entities.StepDistill)
+				res := map[string]any{
+					"hash":        src.Hash,
+					"title":       sourceLabel(src),
+					"imported_at": src.ImportedAt.UTC().Format(time.RFC3339),
+					"available":   false,
+					"distill":     string(state),
+				}
+				if state == entities.StepOK && uc.Store != nil {
+					if rc, oErr := uc.Store.OpenRendered(hash, entities.SidecarSummary); oErr == nil {
+						if text, rErr := readSummary(rc); rErr == nil && strings.TrimSpace(text) != "" {
+							res["available"] = true
+							res["overview"] = Excerpt(text, summaryReadChars)
+						}
+					}
+				}
+				if available, _ := res["available"].(bool); !available {
+					if state == entities.StepOK && uc.Atoms != nil {
+						atoms, aErr := uc.Atoms.ListAtomsBySource(ctx, hash)
+						if aErr == nil && len(atoms) > 0 {
+							res["note"] = "No overview has been written yet; these are the source's claims."
+							claims := make([]map[string]string, 0, claimFallbackLimit)
+							for i, a := range atoms {
+								if i >= claimFallbackLimit {
+									break
+								}
+								claims = append(claims, map[string]string{
+									"id": a.ID.String(), "topic": a.Topic, "claim": a.Claim,
+								})
+							}
+							res["claims"] = claims
+						} else if aErr == nil {
+							res["note"] = "The source is derived but has no claims, so there is nothing to summarise."
+						}
+					} else if state != entities.StepOK {
+						res["note"] = "This source is still being derived; its content is not ready to summarise."
+					}
+				}
+				out, mErr := json.Marshal(res)
+				if mErr != nil {
+					return "", mErr
+				}
 				return string(out), nil
 			},
 		},
@@ -186,7 +389,7 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 		OnStep:          rec.OnStep,
 		OnTurn:          turnLogger(uc.Log, "query"),
 	}
-	res, runErr := loop.Run(ctx, agents.QueryUser(question, languages))
+	res, runErr := loop.Run(ctx, agents.QueryUser(question, languages, uc.Clock.Now()))
 
 	run := entities.Run{
 		ID: runID, Op: entities.RunQuery, Model: uc.Model,
@@ -205,8 +408,8 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 		uc.Log.Warn("query answered from what was read: the tool budget was spent", "iterations", res.Iterations)
 	}
 	run.Status = entities.RunSucceeded
-	// The saved file must already contain ordinary Markdown links; the [[claim:...]] syntax is only the
-	// model's intermediate citation form.
+	// The saved file must already contain ordinary Markdown links; the [[claim:...]] and
+	// [[source:...]] syntax is only the model's intermediate citation form.
 	answer := coremarkdown.NormalizeAskAnswer(res.Content)
 	run.Answer = answer
 	_ = uc.Runs.FinishRun(ctx, run)
@@ -215,7 +418,7 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 	if uc.Asks != nil {
 		now := uc.Clock.Now()
 		if err := uc.Asks.Write(ctx, entities.Ask{
-			ID: runID, Question: question, Answer: answer, Tags: AskTags(ctx, question, answer, uc.Atoms),
+			ID: runID, Question: question, Answer: answer, Tags: AskTags(ctx, question, answer, uc.Atoms, uc.Index),
 			CreatedAt: now, UpdatedAt: now,
 		}); err != nil && uc.Log != nil {
 			uc.Log.Warn("ask: could not save the question/answer", "run", runID, "err", err)
@@ -260,6 +463,34 @@ func (uc QueryKnowledge) clusterPeers(ctx context.Context, id ulid.ULID) []ulid.
 		}
 	}
 	return out
+}
+
+// sourceLabel is the name a reader sees for a source: the document's title, then the name it came
+// in under, then a short hash. It is the same fallback the Sources lens uses; the model needs a
+// name to link and never the raw address alone.
+func sourceLabel(src entities.Source) string {
+	if title := strings.TrimSpace(src.Title); title != "" {
+		return title
+	}
+	if name := strings.TrimSpace(src.OriginalName); name != "" {
+		return name
+	}
+	if len(src.Hash) > 12 {
+		return src.Hash[:12]
+	}
+	return src.Hash
+}
+
+// readSummary reads an overview sidecar and closes it. The cap is a safety net against a corrupted
+// file; a summary is prose, not a stream the answer keeps.
+func readSummary(rc io.ReadCloser) (text string, err error) {
+	defer func() {
+		if cerr := rc.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+	body, rErr := io.ReadAll(io.LimitReader(rc, 64<<10))
+	return string(body), rErr
 }
 
 // Excerpt cuts a page's text to n characters at a word boundary, and says that it was cut.

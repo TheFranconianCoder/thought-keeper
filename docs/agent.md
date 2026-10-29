@@ -17,7 +17,7 @@ task.
 | Operation | Tools |
 | --- | --- |
 | Distill (one part) | `list_topics`, `read_source_node` |
-| Query | `list_topics`, `search` (claims), `read_atom`, `list_atoms` |
+| Query | `list_topics`, `search` (claims), `read_atom`, `list_atoms`, `list_sources`, `read_source_summary` |
 | Lint (semantic, planned) | the query set plus `report_finding` |
 | Tag / vocabulary | none — one bounded completion, answer as JSON |
 | Summary (one source) | none — one bounded completion, answer as Markdown prose |
@@ -25,6 +25,13 @@ task.
 `read_atom` returns the claim together with its **cluster peers** (bounded to eight: id, claim,
 topic). The association is context for the answer, and the ids let the model read a peer in full if
 it needs the body. A claim body carries no links; the cluster is the association.
+
+`list_sources` reads a **recency window**: the newest content sources by vault arrival
+(`imported_at`), with a short excerpt of each overview. It is **paged**: a page carries
+`next_offset`, and the model asks for the next page with `offset` until the window is read.
+Bookmarks and sitemap/feed containers are counted, never listed — they have no derivation to
+summarise. `read_source_summary` opens one overview in full; when none has been written yet it
+returns the source's claims (or its derivation state while the source is still being processed).
 
 ## 2. The transcript stays bounded
 
@@ -89,19 +96,42 @@ never writes one inside the check itself.
 
 ## 4. Query: question → cited answer
 
-1. One search with the question's key words. The top hits carry the claim and its body.
-2. If needed, read at most three claims (`read_atom`). A second search only when the first found
-   nothing.
-3. Answer, citing the claims as `[[claim:<id>|short claim text]]` — never a document, a chapter or
-   a cluster.
+The question is classified first, and the two branches do not mix.
 
-- Every cited claim is numbered and repeated in the final `Sources:` bibliography; that block is
-  omitted when the answer cites no claim. Prose carries numbered references such as
-  `([1](#cite-1))`; the bibliography repeats the number beside the claim text and carries the actual
-  claim link. Clicking a reference scrolls to its bibliography entry, like a footnote.
+- **A subject question** ("what do the claims say about caching?"): one search with the question's
+  key words. The top hits carry the claim and its body. If needed, read at most three claims
+  (`read_atom`). A second search only when the first found nothing.
+- **A recency or digest question** ("what is new?", "summarise the sources of the last 24 hours"):
+  `list_sources` first, with the window the question named (`since` as `24h`, `7d` or an RFC3339
+  timestamp). The list carries each source's title, arrival time, tags, claim count, derivation
+  state and a short excerpt of its overview. Open at most three full overviews
+  (`read_source_summary`) when an excerpt is not enough. A source without an overview is still being
+  processed: say so, or read its claims with `list_atoms {source}` — never invent its content.
+  - The window is **vault arrival** (`imported_at`), not publication. The answer says "added to the
+    vault", never "published".
+  - An empty window is stated plainly; it is never widened silently.
+  - The list is a **page**: while `next_offset` is greater than zero the model asks for it, with the
+    same `since`, until the whole window has been read. Stopping at the first page is not a digest.
+  - If the window is too large for the tool budget, the answer groups what it read by theme, names
+    the total and says that it covers the newest ones. It never implies completeness it does not
+    have.
+  - Bookmarks and sitemap/feed containers are counted, not summarised: they have no derivation.
+
+The answer cites **claims** as `[[claim:<id>|short claim text]]` and a **source's overview** as
+`[[source:<hash>|<source title>]]`. A claim citation supports a precise statement; a source citation
+supports a statement taken from that source's overview. Clusters, pages and chapters are never
+citations.
+
+- Every cited claim or source is numbered and repeated in the final `Sources:` bibliography; that
+  block is omitted when the answer cites nothing. Prose carries numbered references such as
+  `([1](#cite-1))`; the bibliography repeats the number beside the claim text or the source title and
+  carries the actual link (a claim page or a source page). Clicking a reference scrolls to its
+  bibliography entry, like a footnote.
 - The answer is written in complete, grammatical sentences. A citation is a trailing reference after
   the statement it supports — never a word, phrase or missing object of the sentence.
-- If the claims do not contain the answer, the answer says so plainly.
+- A source's overview is written in English; the answer translates its meaning and never copies its
+  English sentences into another language.
+- If the claims and the source overviews do not contain the answer, the answer says so plainly.
 - The answer is written **entirely in the language of the question's prose**; the vault's language
   set is only a search hint. A source title or proper noun in another script stays in that script and
   never decides the answer's language. A German question that names a Chinese source is answered in

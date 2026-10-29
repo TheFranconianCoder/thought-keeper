@@ -13,6 +13,53 @@ import (
 	ulid "github.com/oklog/ulid/v2"
 )
 
+const countRecentContentSources = `-- name: CountRecentContentSources :one
+SELECT count(*) FROM sources
+WHERE imported_at >= ?
+  AND bookmark = 0
+  AND (CASE WHEN json_valid(meta) THEN
+              COALESCE(CAST(json_extract(meta, '$.sitemap') AS TEXT), '')
+            ELSE '' END) NOT IN ('true', '1')
+  AND (CASE WHEN json_valid(meta) THEN
+              COALESCE(CAST(json_extract(meta, '$.rss') AS TEXT), '')
+            ELSE '' END) NOT IN ('true', '1')
+`
+
+func (q *Queries) CountRecentContentSources(ctx context.Context, importedAt int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countRecentContentSources, importedAt)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countRecentExcludedSources = `-- name: CountRecentExcludedSources :one
+SELECT
+    CAST(COALESCE(SUM(CASE WHEN bookmark != 0 THEN 1 ELSE 0 END), 0) AS INTEGER) AS bookmarks,
+    CAST(COALESCE(SUM(CASE WHEN bookmark = 0
+        AND (
+            (CASE WHEN json_valid(meta) THEN COALESCE(CAST(json_extract(meta, '$.sitemap') AS TEXT), '') ELSE '' END) IN ('true', '1')
+            OR
+            (CASE WHEN json_valid(meta) THEN COALESCE(CAST(json_extract(meta, '$.rss') AS TEXT), '') ELSE '' END) IN ('true', '1')
+        )
+        THEN 1 ELSE 0 END), 0) AS INTEGER) AS containers
+FROM sources
+WHERE imported_at >= ?
+`
+
+type CountRecentExcludedSourcesRow struct {
+	Bookmarks  int64 `json:"bookmarks"`
+	Containers int64 `json:"containers"`
+}
+
+// What the recency window holds but does not list: collected links and the sitemap/feed containers
+// that are navigation rather than content. A bookmark that is also a container counts as a bookmark.
+func (q *Queries) CountRecentExcludedSources(ctx context.Context, importedAt int64) (CountRecentExcludedSourcesRow, error) {
+	row := q.db.QueryRowContext(ctx, countRecentExcludedSources, importedAt)
+	var i CountRecentExcludedSourcesRow
+	err := row.Scan(&i.Bookmarks, &i.Containers)
+	return i, err
+}
+
 const countSourceOpenParts = `-- name: CountSourceOpenParts :one
 SELECT count(*) FROM source_nodes n
 WHERE n.source_id = (SELECT id FROM sources WHERE hash = ?1)
@@ -195,6 +242,75 @@ func (q *Queries) LatestSourceByURL(ctx context.Context, url sql.NullString) (So
 		&i.AutoTagsAt,
 	)
 	return i, err
+}
+
+const listRecentContentSources = `-- name: ListRecentContentSources :many
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at FROM sources
+WHERE imported_at >= ?1
+  AND bookmark = 0
+  AND (CASE WHEN json_valid(meta) THEN
+              COALESCE(CAST(json_extract(meta, '$.sitemap') AS TEXT), '')
+            ELSE '' END) NOT IN ('true', '1')
+  AND (CASE WHEN json_valid(meta) THEN
+              COALESCE(CAST(json_extract(meta, '$.rss') AS TEXT), '')
+            ELSE '' END) NOT IN ('true', '1')
+ORDER BY imported_at DESC
+LIMIT ?3 OFFSET ?2
+`
+
+type ListRecentContentSourcesParams struct {
+	Since  int64 `json:"since"`
+	Offset int64 `json:"offset"`
+	Limit  int64 `json:"limit"`
+}
+
+// The query agent's recency window: the newest CONTENT sources (bookmarks and sitemap/feed
+// CONTAINERS excluded) that entered the vault at or after `since`, newest first, paged so the
+// agent can cover a whole day without one tool answer hitting the transcript cap. `meta` holds
+// the container flags as the strings "true" (withMetaFields writes strings); the CAST also accepts
+// a JSON boolean on an older row, and CASE keeps json_extract away from damaged JSON.
+func (q *Queries) ListRecentContentSources(ctx context.Context, arg ListRecentContentSourcesParams) ([]Source, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentContentSources, arg.Since, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Source
+	for rows.Next() {
+		var i Source
+		if err := rows.Scan(
+			&i.ID,
+			&i.Hash,
+			&i.Kind,
+			&i.Ext,
+			&i.Path,
+			&i.Url,
+			&i.Title,
+			&i.OriginalName,
+			&i.Bytes,
+			&i.Pages,
+			&i.TreeState,
+			&i.Steps,
+			&i.UrlStatus,
+			&i.UrlCheckedAt,
+			&i.Bookmark,
+			&i.ImportedAt,
+			&i.Meta,
+			&i.Tags,
+			&i.AutoTags,
+			&i.AutoTagsAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listSourceHashes = `-- name: ListSourceHashes :many

@@ -9,6 +9,16 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 )
 
+// RecentSources is one PAGE of a recency window as the query agent reads it. Sources is the page;
+// Total is how many content sources the window holds; Bookmarks and Containers count the rows the
+// window excludes because they are navigation rather than knowledge.
+type RecentSources struct {
+	Sources    []entities.Source
+	Total      int
+	Bookmarks  int
+	Containers int
+}
+
 // IndexRepository is the derived index. Everything here is rebuildable from the
 // vault with reindex.
 type IndexRepository interface {
@@ -20,6 +30,11 @@ type IndexRepository interface {
 	ListSources(ctx context.Context, kind string, limit, offset int) ([]entities.Source, error)
 	// CountSources is the total behind a page, so the list knows whether there is more.
 	CountSources(ctx context.Context, kind string) (int, error)
+	// ListRecentSources is the recency window the query agent reads: the newest CONTENT sources
+	// that entered the vault at or after `since` (zero means the whole vault), newest first.
+	// Bookmarks and sitemap/feed containers are counted, never listed: they have no derivation to
+	// summarise. `limit`/`offset` page the window, `Total` is how many content sources it holds.
+	ListRecentSources(ctx context.Context, since time.Time, limit, offset int) (RecentSources, error)
 	// ListSourceChildren returns the sources one source owns: a sitemap's pages (parent hash) and a
 	// wiki page's linked URLs (page id). The two sets are disjoint, one owner is set per child.
 	ListSourceChildren(ctx context.Context, parentHash, wikiPage string) ([]entities.Source, error)

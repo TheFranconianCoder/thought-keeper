@@ -271,8 +271,8 @@ func Build(
 
 	listAtoms := usecases.ListAtoms{AtomRepo: atomRepo, Clusters: clusterRepo}
 	listBranches := usecases.ListClaimTopics{AtomRepo: atomRepo}
-	listAsks := usecases.ListAsks{Asks: askStore, Atoms: atomRepo}
-	getAsk := usecases.GetAsk{Asks: askStore, Atoms: atomRepo}
+	listAsks := usecases.ListAsks{Asks: askStore, Atoms: atomRepo, Sources: index}
+	getAsk := usecases.GetAsk{Asks: askStore, Atoms: atomRepo, Sources: index}
 	deleteAsk := usecases.DeleteAsk{Asks: askStore}
 	getAtom := usecases.GetAtom{AtomRepo: atomRepo, Clusters: clusterRepo}
 	sourceAtoms := usecases.SourceAtoms{AtomRepo: atomRepo, Clusters: clusterRepo}
@@ -339,7 +339,8 @@ func Build(
 		Languages: languages, Trees: trees,
 	}
 	query := usecases.QueryKnowledge{
-		Atoms: atomRepo, Clusters: clusterRepo, Search: searchRepo, Asks: askStore, Runs: runRepo,
+		Atoms: atomRepo, Clusters: clusterRepo, Search: searchRepo, Index: index, Store: store,
+		Asks: askStore, Runs: runRepo,
 		Model: cfg.OpenAI.ModelReason, MaxIterations: cfg.OpenAI.MaxIterations,
 		ReasoningEffort: cfg.OpenAI.ReasoningEffortReason, Clock: clock, Log: log,
 	}

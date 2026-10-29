@@ -14,6 +14,7 @@ import (
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/objects"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/sourcemeta"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
@@ -157,6 +158,42 @@ func (f *fakeIndex) ListSources(_ context.Context, kind string, limit, offset in
 		all = all[:limit]
 	}
 	return all, nil
+}
+
+// ListRecentSources mirrors the window: content sources newest first, bookmarks and containers
+// counted but not listed.
+func (f *fakeIndex) ListRecentSources(_ context.Context, since time.Time, limit, offset int) (interfaces.RecentSources, error) {
+	var out interfaces.RecentSources
+	if limit <= 0 {
+		limit = 8
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	all := make([]entities.Source, 0, len(f.m))
+	for _, s := range f.m {
+		all = append(all, s)
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].ImportedAt.After(all[j].ImportedAt) })
+	content := 0
+	for _, s := range all {
+		if !since.IsZero() && s.ImportedAt.Before(since) {
+			continue
+		}
+		switch {
+		case s.Bookmark:
+			out.Bookmarks++
+		case s.Sitemap || s.RSS:
+			out.Containers++
+		default:
+			out.Total++
+			if content >= offset && len(out.Sources) < limit {
+				out.Sources = append(out.Sources, s)
+			}
+			content++
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeIndex) DeleteSourceByHash(_ context.Context, hash string) error {

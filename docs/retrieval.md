@@ -12,6 +12,7 @@ The agent picks the substrate that fits the question:
 | Claim topics | every FLAT claim topic with its claim count | `list_topics` |
 | Lexical search | FTS5 over claims and source outlines, answerable in any vault language | `search`, `GET /search` |
 | Claim proximity | the same cluster, and separately the same topic | `GET /atoms/{id}/related` |
+| Source recency | the newest sources by vault arrival, paged, with a short overview excerpt | `list_sources`, `read_source_summary` |
 | Tree index (PageIndex) | per-source hierarchical tree | `read_source_node` (distill), `GET /sources/{hash}/tree` |
 
 **The tree is built once per source.** Retrieval mimics a human using a table of contents: read the
@@ -42,24 +43,29 @@ never consulted).
 
 ## 4. Citations are mandatory and traceable
 
-- A query answer references the **claims** it used as `[[claim:<id>|short claim text]]` links.
-- Every cited claim is numbered and repeated in the final `Sources:` bibliography; that block is
-  omitted when the answer cites no claim. Prose carries `([1](#cite-1))`, and the `Sources:` block at
-  the end is a numbered list (`1. [short claim text](#/claims/<id>)`). The round parentheses are prose
-  punctuation, not part of the link; the claim's wording lives in the bibliography, never in the
-  middle of the answer sentence.
+- A query answer references the **claims** it used as `[[claim:<id>|short claim text]]` links and a
+  **source's overview** as `[[source:<hash>|<source title>]]`. A claim citation supports a precise
+  statement; a source citation supports a statement taken from that source's overview.
+- Every cited claim or source is numbered and repeated in the final `Sources:` bibliography; that
+  block is omitted when the answer cites nothing. Prose carries `([1](#cite-1))`, and the `Sources:`
+  block at the end is a numbered list (`1. [short claim text](#/claims/<id>)` or
+  `1. [source title](#/sources/<hash>)`). The round parentheses are prose punctuation, not part of
+  the link; the claim's wording lives in the bibliography, never in the middle of the answer
+  sentence.
+- A recency question is answered from **vault arrival** (`imported_at`), never from a publication
+  date: the vault does not store one, so the answer says "added to the vault".
 - The reference behaves like a footnote in the UI: clicking `(1)` scrolls to bibliography entry 1
-  and flashes it. Only the claim text in the bibliography opens the claim page. A small `↩` on the
-  entry returns to the reference.
+  and flashes it. Only the claim text or source title in the bibliography opens its page. A small
+  `↩` on the entry returns to the reference.
 - The answer itself is a complete, grammatical sentence or paragraph, written **entirely in the
   language of the question's prose**. Proper names and source titles keep their original script; a
   title in another language never switches the answer. The citation is appended as a reference after
   the supported statement; it is never used as a word or as the object the sentence is missing.
-- A claim cited in the prose is already sourced and is **not** repeated under the final `Sources:`
-  heading; that heading lists only additional supporting claims and disappears when there are none.
-- Pages, chapters and clusters are not part of Ask: it answers from claims only.
+- Everything the answer cites is repeated in the final `Sources:` bibliography; that heading
+  disappears when there is nothing to cite.
+- Pages, chapters and clusters are not part of Ask: it answers from claims and source overviews.
 - Every answer is saved as an Ask record (`asks/<run-id>.md`), so an answer stays traceable to its
-  run, its tool steps and the claims it cited.
+  run, its tool steps and the claims and sources it cited.
 
 ## 5. A claim's neighbours
 

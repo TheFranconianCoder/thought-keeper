@@ -45,6 +45,8 @@ index is disposable — deleting it loses nothing but time.
 | `00004_run_op_summary.sql` | rebuilds `runs` so `op` also accepts `summary` |
 | `00005_source_tags.sql` | adds `sources.tags` (a JSON array): the mirror of the human labels in the source record |
 | `00006_source_auto_tags.sql` | adds `sources.auto_tags` and `auto_tags_at` (the agent's labels and the backfill marker) |
+| `00007_drop_atom_links.sql` | drops `atom_links` (a claim body has no links) and raises the shape marker |
+| `00008_sources_imported_at.sql` | an index on `sources(imported_at)` for the recency window |
 
 A schema change is a **new** migration; a change of vocabulary is done in the initial file with the
 database thrown away. The initial file writes the shape marker (`PRAGMA user_version`), and

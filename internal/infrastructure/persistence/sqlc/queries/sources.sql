@@ -61,6 +61,50 @@ SELECT * FROM sources ORDER BY imported_at DESC LIMIT ? OFFSET ?;
 -- name: ListSourcesByKind :many
 SELECT * FROM sources WHERE kind = ? ORDER BY imported_at DESC LIMIT ? OFFSET ?;
 
+-- name: ListRecentContentSources :many
+-- The query agent's recency window: the newest CONTENT sources (bookmarks and sitemap/feed
+-- CONTAINERS excluded) that entered the vault at or after `since`, newest first, paged so the
+-- agent can cover a whole day without one tool answer hitting the transcript cap. `meta` holds
+-- the container flags as the strings "true" (withMetaFields writes strings); the CAST also accepts
+-- a JSON boolean on an older row, and CASE keeps json_extract away from damaged JSON.
+SELECT * FROM sources
+WHERE imported_at >= sqlc.arg(since)
+  AND bookmark = 0
+  AND (CASE WHEN json_valid(meta) THEN
+              COALESCE(CAST(json_extract(meta, '$.sitemap') AS TEXT), '')
+            ELSE '' END) NOT IN ('true', '1')
+  AND (CASE WHEN json_valid(meta) THEN
+              COALESCE(CAST(json_extract(meta, '$.rss') AS TEXT), '')
+            ELSE '' END) NOT IN ('true', '1')
+ORDER BY imported_at DESC
+LIMIT sqlc.arg(limit) OFFSET sqlc.arg(offset);
+
+-- name: CountRecentContentSources :one
+SELECT count(*) FROM sources
+WHERE imported_at >= ?
+  AND bookmark = 0
+  AND (CASE WHEN json_valid(meta) THEN
+              COALESCE(CAST(json_extract(meta, '$.sitemap') AS TEXT), '')
+            ELSE '' END) NOT IN ('true', '1')
+  AND (CASE WHEN json_valid(meta) THEN
+              COALESCE(CAST(json_extract(meta, '$.rss') AS TEXT), '')
+            ELSE '' END) NOT IN ('true', '1');
+
+-- name: CountRecentExcludedSources :one
+-- What the recency window holds but does not list: collected links and the sitemap/feed containers
+-- that are navigation rather than content. A bookmark that is also a container counts as a bookmark.
+SELECT
+    CAST(COALESCE(SUM(CASE WHEN bookmark != 0 THEN 1 ELSE 0 END), 0) AS INTEGER) AS bookmarks,
+    CAST(COALESCE(SUM(CASE WHEN bookmark = 0
+        AND (
+            (CASE WHEN json_valid(meta) THEN COALESCE(CAST(json_extract(meta, '$.sitemap') AS TEXT), '') ELSE '' END) IN ('true', '1')
+            OR
+            (CASE WHEN json_valid(meta) THEN COALESCE(CAST(json_extract(meta, '$.rss') AS TEXT), '') ELSE '' END) IN ('true', '1')
+        )
+        THEN 1 ELSE 0 END), 0) AS INTEGER) AS containers
+FROM sources
+WHERE imported_at >= ?;
+
 -- name: ListSourcesByParent :many
 -- The sources one source OWNS: the pages a sitemap declared. The owner fields are part of the
 -- source's meta JSON (they are identity, not columns), so the read extracts them. Ordered by title so a tab reads like a

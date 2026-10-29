@@ -3,6 +3,7 @@ package agents
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // DistillSystem is the system prompt for the distill step.
@@ -125,16 +126,40 @@ Extract the source's claims into atoms now.`, hash, title, outline)
 }
 
 // QuerySystem is the system prompt for the query operation.
-const QuerySystem = `You answer questions from a personal knowledge base of atomic CLAIMS. You are a
-careful researcher. Cluster prose does not exist: use only the claims you read through the tools.
+const QuerySystem = `You answer questions from a personal knowledge base of atomic CLAIMS and their
+SOURCES. You are a careful researcher. Cluster prose does not exist: use only what you read through
+the tools.
 
-How to work — short and deliberate, not exploratory:
-1. ONE search with the question's key words. The top hits carry the claim and its body. The search
-   already expands inflections and word families; if the vault's sources use another language than
-   the question, search the key terms in that language too.
-2. If that is not enough, read at most THREE claims (read_atom) — the ones that clearly bear on the
-   question. A second search only if the first found nothing.
-3. Then answer. Do not keep looking once the claims you have can answer the question.
+Classify the question first; the two branches do not mix:
+
+A. A SUBJECT question ("what do the claims say about caching?"): ONE search with the question's key
+   words. The top hits carry the claim and its body. The search already expands inflections and word
+   families; if the vault's sources use another language than the question, search the key terms in
+   that language too. If that is not enough, read at most THREE claims (read_atom). A second search
+   only if the first found nothing.
+
+B. A RECENCY or DIGEST question ("what is new?", "summarise the sources of the last 24 hours",
+   "this week", "the newest sources"): call list_sources FIRST with the window the question names
+   (since: 24h, 7d, 168h or an RFC3339 timestamp). Do not search claims first. The list carries each
+   source's title, arrival time, tags, claim count, derivation state and a short excerpt of its
+   overview. Open at most THREE full overviews (read_source_summary) when an excerpt is not enough.
+   - The window is when a source ENTERED THE VAULT (imported_at), not when it was published. Write
+     "added to the vault", never "published".
+   - A source without an overview is still being processed: say so, or read its claims with
+     list_atoms {source:<hash>}. Never invent its content.
+   - An empty window is stated plainly. Do not silently widen it.
+   - The list is a PAGE. If next_offset is greater than 0, call list_sources again with that
+     offset and the same since, until next_offset is 0. Cover the whole window before you
+     answer; do not stop at the first page.
+   - If the window is so large that the tool budget cannot cover it, group the sources you read by
+     theme, name the total, and say that the digest covers the newest ones. Never imply the list is
+     complete.
+   - For a digest, give each source one or two sentences: what it is about and what it adds. Cite
+     each source as [[source:<hash>|<source title>]] — the hash comes from list_sources. Never
+     write a bare [[<source title>]]; the UI turns that into a claim finder query, not a citation.
+     Group sources that share a theme instead of listing them mechanically.
+
+Then answer. Do not keep looking once what you have can answer the question.
 
 The claim set is curated: it does not need to be surveyed. list_topics and list_atoms are for
 orientation when a search comes back empty, not for a tour. Every extra round costs time.
@@ -149,24 +174,35 @@ Rules:
   sentence; the sentence must stand on its own.
 - Cite the claims you used as [[claim:<id>|<short claim text>]] — for example
   [[claim:01J8...|Caching is only safe when the key covers every input.]].
-- Do NOT cite documents, chapters or a cluster. Only claims exist for this answer.
-- If the claims do not contain the answer, say so plainly.
+- Cite a SOURCE's overview as [[source:<hash>|<source title>]] when a statement comes from that
+  overview. Use a source citation for the overview; use a claim citation for a precise fact.
+- A bare [[<title>]] is a claim finder query, never a citation. Every citation starts with
+  the prefix claim: or source:.
+- Do NOT cite a cluster, a page or a chapter.
+- A source's overview is written in English; translate its meaning into the answer's language. Never
+  copy an overview's English sentences into an answer in another language.
+- If the sources or claims do not contain the answer, say so plainly.
 - Answer ENTIRELY in the language of the QUESTION's prose. Every sentence, heading and list item uses
   it; never switch to the language of a claim, a source or a proper noun in the question.
 - Keep proper names, source titles, product names and quoted terms in their original script. A
   Chinese source title inside a German question does not make the answer Chinese.
 - If the question mixes languages, the language of its sentence decides. Answer in that language.
 - Keep it short and structured.
-- Cite every claim you used inline as [[claim:<id>|<short claim text>]]. The short claim text is part
-  of the citation, never a bare [[claim:<id>]]. The application numbers the citations and writes the
-  final "Sources:" bibliography; do not write that list yourself.
-  - [[claim:<id>|<short claim text>]]`
+- Cite every claim or source you used inline as [[claim:<id>|<short claim text>]] or
+  [[source:<hash>|<source title>]]. The label is part of the citation, never a bare
+  [[claim:<id>]]. The application numbers the citations and writes the final "Sources:"
+  bibliography; do not write that list yourself.`
 
 // QueryUser is the user message for a query.
-func QueryUser(question string, languages []string) string {
+func QueryUser(question string, languages []string, now time.Time) string {
 	var b strings.Builder
 	b.WriteString("Question: ")
 	b.WriteString(question)
+	if !now.IsZero() {
+		b.WriteString("\n\nCurrent time: ")
+		b.WriteString(now.UTC().Format(time.RFC3339))
+		b.WriteString(" (UTC). Resolve relative windows such as \"the last 24 hours\" against it.")
+	}
 	if len(languages) > 0 {
 		b.WriteString("\n\nThe vault's sources use these languages: ")
 		b.WriteString(strings.Join(languages, ", "))

@@ -8,21 +8,43 @@ import (
 )
 
 var (
-	askClaimCitation     = regexp.MustCompile(`\[\[claim:([^\]|]+)(?:\|([^\]]+))?\]\]`)
-	askClaimMarkdownLink = regexp.MustCompile(`\[((?:\\.|[^\]])*)\]\(#/claims/([0-9A-Za-z]+)\)`)
-	askSourcesLine       = regexp.MustCompile(`^\s*(?:\*\*)?sources(?:\*\*)?:?`)
+	askClaimCitation      = regexp.MustCompile(`\[\[claim:([^\]|]+)(?:\|([^\]]+))?\]\]`)
+	askSourceCitation     = regexp.MustCompile(`\[\[source:([^\]|]+)(?:\|([^\]]+))?\]\]`)
+	askClaimMarkdownLink  = regexp.MustCompile(`\[((?:\\.|[^\]])*)\]\(#/claims/([0-9A-Za-z]+)\)`)
+	askSourceMarkdownLink = regexp.MustCompile(`\[((?:\\.|[^\]])*)\]\(#/sources/([0-9A-Za-z]+)\)`)
+	askBareWikilink       = regexp.MustCompile(`\[\[([^\]|]+)(?:\|([^\]]+))?\]\]`)
+	askSourcesLine        = regexp.MustCompile(`^\s*(?:\*\*)?sources(?:\*\*)?:?`)
 )
 
-// NormalizeAskAnswer turns the model's [[claim:<id>|label]] citations into numbered references.
+// The two things an answer may cite. The key that numbers and labels them is prefixed, so a claim
+// id and a source hash can never collide (they could not anyway, but the code should not rely on
+// the shape of an id to stay honest).
+const (
+	citeClaim  = "claim"
+	citeSource = "source"
+)
+
+func citationKey(kind, id string) string { return kind + ":" + strings.TrimSpace(id) }
+
+func splitCitationKey(key string) (kind, id string) {
+	kind, id, ok := strings.Cut(key, ":")
+	if !ok {
+		return citeClaim, key
+	}
+	return kind, id
+}
+
+// NormalizeAskAnswer turns the model's [[claim:<id>|label]] and [[source:<hash>|title]] citations
+// into numbered references.
 //
-// A claim is EVIDENCE, not a phrase of the answer: pasting its text into the middle of a sentence
-// produces a half sentence. Prose therefore carries a small reference marker — `([1](#cite-1))`
-// with the round parentheses as plain prose punctuation — and the numbered Sources block at the end
-// carries the claim text. The marker behaves like a footnote: it points at its bibliography entry,
-// and that entry carries the actual link to the claim.
+// A claim (or a source's overview) is EVIDENCE, not a phrase of the answer: pasting its text into
+// the middle of a sentence produces a half sentence. Prose therefore carries a small reference
+// marker — `([1](#cite-1))` with the round parentheses as plain prose punctuation — and the numbered
+// Sources block at the end carries the label. The marker behaves like a footnote: it points at its
+// bibliography entry, and that entry carries the actual link to the claim or the source page.
 //
 // Labels are collected from the prose and from the model's own Sources block. The block is rebuilt
-// from every cited claim (not only the additional ones), because a numbered reference needs its
+// from everything cited (not only the additional entries), because a numbered reference needs its
 // bibliography. A missing block is added; an empty one disappears.
 func NormalizeAskAnswer(answer string) string {
 	lines := strings.Split(answer, "\n")
@@ -58,11 +80,11 @@ func NormalizeAskAnswer(answer string) string {
 	for i := 0; i < headEnd; i++ {
 		lines[i] = replaceProseCitations(lines[i], number)
 	}
-	// A claim listed only under the model's Sources block still needs an entry.
+	// A claim or source listed only under the model's Sources block still needs an entry.
 	if sourcesAt >= 0 {
 		for i := sourcesAt + 1; i < len(lines); i++ {
-			for _, id := range claimIDsInLine(lines[i]) {
-				_ = number(id)
+			for _, key := range citationKeysInLine(lines[i]) {
+				_ = number(key)
 			}
 		}
 	}
@@ -78,12 +100,17 @@ func NormalizeAskAnswer(answer string) string {
 		out.WriteString("\n\n")
 	}
 	out.WriteString("Sources:\n")
-	for _, id := range order {
-		label := labels[id]
+	for _, key := range order {
+		label := labels[key]
 		if label == "" {
-			label = fallbackCitationLabel(id)
+			label = fallbackCitationLabel(key)
 		}
-		fmt.Fprintf(&out, "%d. [%s](#/claims/%s)\n", numbers[id], escapeCitationLabel(label), id)
+		kind, id := splitCitationKey(key)
+		href := "#/claims/" + id
+		if kind == citeSource {
+			href = "#/sources/" + id
+		}
+		fmt.Fprintf(&out, "%d. [%s](%s)\n", numbers[key], escapeCitationLabel(label), href)
 	}
 	return strings.TrimRight(out.String(), "\n")
 }
@@ -96,23 +123,50 @@ func replaceProseCitations(line string, number func(string) string) string {
 		if len(m) < 3 {
 			return ""
 		}
-		n := number(m[2])
-		if n == "" {
+		return citationMarker(number(citationKey(citeClaim, m[2])))
+	})
+	line = replaceCitationMatches(line, askSourceMarkdownLink, func(m []string) string {
+		if len(m) < 3 {
 			return ""
 		}
-		return fmt.Sprintf("[%s](#cite-%s)", n, n)
+		return citationMarker(number(citationKey(citeSource, m[2])))
 	})
-	return replaceCitationMatches(line, askClaimCitation, func(m []string) string {
+	line = replaceCitationMatches(line, askClaimCitation, func(m []string) string {
 		if len(m) < 2 {
 			return ""
 		}
-		id := strings.TrimSpace(m[1])
-		n := number(id)
-		if n == "" {
+		return citationMarker(number(citationKey(citeClaim, m[1])))
+	})
+	line = replaceCitationMatches(line, askSourceCitation, func(m []string) string {
+		if len(m) < 2 {
 			return ""
 		}
-		return fmt.Sprintf("[%s](#cite-%s)", n, n)
+		return citationMarker(number(citationKey(citeSource, m[1])))
 	})
+	// A bare [[title]] is not a citation. The UI renders it as a claim finder query, so demote a
+	// leftover link to its label instead of letting a model slip produce a misleading search link.
+	// A wiki link is left alone: the Ask view can link a page even though the prompt asks for
+	// claims and sources.
+	return askBareWikilink.ReplaceAllStringFunc(line, func(raw string) string {
+		m := askBareWikilink.FindStringSubmatch(raw)
+		if len(m) < 2 {
+			return raw
+		}
+		if strings.HasPrefix(strings.TrimSpace(m[1]), "wiki:") {
+			return raw
+		}
+		if len(m) > 2 && strings.TrimSpace(m[2]) != "" {
+			return strings.TrimSpace(m[2])
+		}
+		return strings.TrimSpace(m[1])
+	})
+}
+
+func citationMarker(n string) string {
+	if n == "" {
+		return ""
+	}
+	return fmt.Sprintf("[%s](#cite-%s)", n, n)
 }
 
 func replaceCitationMatches(line string, re *regexp.Regexp, build func([]string) string) string {
@@ -146,40 +200,74 @@ func insideParentheses(line string, start, end int) bool {
 	return start > 0 && line[start-1] == '(' && end < len(line) && line[end] == ')'
 }
 
-// claimIDsInLine lists the claim addresses a line cites, in first-appearance order.
-func claimIDsInLine(line string) []string {
-	var ids []string
+// citationKeysInLine lists the claim and source addresses a line cites, in first-appearance order.
+func citationKeysInLine(line string) []string {
+	var keys []string
 	for _, m := range askClaimMarkdownLink.FindAllStringSubmatch(line, -1) {
 		if len(m) > 2 {
-			ids = append(ids, m[2])
+			keys = append(keys, citationKey(citeClaim, m[2]))
+		}
+	}
+	for _, m := range askSourceMarkdownLink.FindAllStringSubmatch(line, -1) {
+		if len(m) > 2 {
+			keys = append(keys, citationKey(citeSource, m[2]))
 		}
 	}
 	for _, m := range askClaimCitation.FindAllStringSubmatch(line, -1) {
 		if len(m) > 1 {
-			ids = append(ids, strings.TrimSpace(m[1]))
+			keys = append(keys, citationKey(citeClaim, m[1]))
 		}
 	}
-	return ids
+	for _, m := range askSourceCitation.FindAllStringSubmatch(line, -1) {
+		if len(m) > 1 {
+			keys = append(keys, citationKey(citeSource, m[1]))
+		}
+	}
+	return keys
 }
 
-// askCitationLabels collects the short claim text that appears anywhere in the answer, so a numbered
-// reference can name its claim in the bibliography.
+// askCitationLabels collects the short claim text or source title that appears anywhere in the
+// answer, so a numbered reference can name it in the bibliography. A label that is already a
+// placeholder ("claim", "source") or a bare reference number is not a name.
 func askCitationLabels(lines []string) map[string]string {
 	labels := make(map[string]string)
+	record := func(key, label string, skipNumber bool) {
+		label = strings.TrimSpace(label)
+		if label == "" {
+			return
+		}
+		if _, seen := labels[key]; seen {
+			return
+		}
+		if skipNumber && isNumber(label) {
+			return
+		}
+		labels[key] = label
+	}
 	for _, line := range lines {
 		for _, m := range askClaimCitation.FindAllStringSubmatch(line, -1) {
-			if len(m) > 2 && strings.TrimSpace(m[2]) != "" {
-				labels[strings.TrimSpace(m[1])] = strings.TrimSpace(m[2])
+			if len(m) > 2 {
+				record(citationKey(citeClaim, m[1]), m[2], false)
+			}
+		}
+		for _, m := range askSourceCitation.FindAllStringSubmatch(line, -1) {
+			if len(m) > 2 {
+				record(citationKey(citeSource, m[1]), m[2], false)
 			}
 		}
 		for _, m := range askClaimMarkdownLink.FindAllStringSubmatch(line, -1) {
 			label, _ := markdownCitationLabel(m[1])
-			if label == "" || strings.EqualFold(label, "claim") || isNumber(label) {
+			if strings.EqualFold(label, "claim") {
 				continue
 			}
-			if _, seen := labels[m[2]]; !seen {
-				labels[m[2]] = label
+			record(citationKey(citeClaim, m[2]), label, true)
+		}
+		for _, m := range askSourceMarkdownLink.FindAllStringSubmatch(line, -1) {
+			label, _ := markdownCitationLabel(m[1])
+			if strings.EqualFold(label, "source") {
+				continue
 			}
+			record(citationKey(citeSource, m[2]), label, false)
 		}
 	}
 	return labels
@@ -200,11 +288,15 @@ func markdownCitationLabel(content string) (string, bool) {
 	return unescapeCitationLabel(content), bracketed
 }
 
-func fallbackCitationLabel(id string) string {
-	if id == "" {
-		return "claim"
+func fallbackCitationLabel(key string) string {
+	kind, id := splitCitationKey(key)
+	if id != "" {
+		return id
 	}
-	return id
+	if kind == citeSource {
+		return "source"
+	}
+	return "claim"
 }
 
 func unescapeCitationLabel(s string) string {

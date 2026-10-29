@@ -11,8 +11,9 @@ import (
 
 // ListAsks lists the persisted Ask conversations, newest first.
 type ListAsks struct {
-	Asks  interfaces.AskStore
-	Atoms interfaces.AtomRepository
+	Asks    interfaces.AskStore
+	Atoms   interfaces.AtomRepository
+	Sources SourceTagReader
 }
 
 // Execute returns the bounded list (the Ask view never loads the whole history at once).
@@ -25,7 +26,7 @@ func (uc ListAsks) Execute(ctx context.Context, limit, offset int) ([]partialent
 	for _, a := range asks {
 		tags := a.Tags
 		if len(tags) == 0 {
-			tags = AskTags(ctx, a.Question, a.Answer, uc.Atoms)
+			tags = AskTags(ctx, a.Question, a.Answer, uc.Atoms, uc.Sources)
 		}
 		out = append(out, partialentities.PartialAsk{
 			ID: a.ID, Question: a.Question, Answer: a.Answer, Tags: tags,
@@ -37,8 +38,9 @@ func (uc ListAsks) Execute(ctx context.Context, limit, offset int) ([]partialent
 
 // GetAsk returns one persisted conversation.
 type GetAsk struct {
-	Asks  interfaces.AskStore
-	Atoms interfaces.AtomRepository
+	Asks    interfaces.AskStore
+	Atoms   interfaces.AtomRepository
+	Sources SourceTagReader
 }
 
 // Execute returns one ask with its answer.
@@ -49,7 +51,7 @@ func (uc GetAsk) Execute(ctx context.Context, id ulid.ULID) (partialentities.Par
 	}
 	tags := a.Tags
 	if len(tags) == 0 {
-		tags = AskTags(ctx, a.Question, a.Answer, uc.Atoms)
+		tags = AskTags(ctx, a.Question, a.Answer, uc.Atoms, uc.Sources)
 	}
 	return partialentities.PartialAsk{
 		ID: a.ID, Question: a.Question, Answer: a.Answer, Tags: tags,

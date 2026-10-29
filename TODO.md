@@ -80,6 +80,9 @@ are.
   `cache-strategies`. The curation/retopic verbs are the repair; a *naming lock* (ask once per
   document for the topic set, the way tags are curated) is the candidate prevention. Growth makes
   this worse, never better.
+- **Recency is arrival, not publication.** `imported_at` is when a source entered the vault; a
+  document can be years old. Capturing a publication date (HTML meta/JSON-LD, PDF metadata) would let
+  "the newest articles" mean what it says, but it is a new extraction path and a new field.
 - **Claim granularity.** "One claim per atom" is a judgement the model makes. Too fine and the
   Zettelkasten drowns; too coarse and provenance blurs. The audit bounds it from below, nothing
   bounds it from above.

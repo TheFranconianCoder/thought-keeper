@@ -126,3 +126,75 @@ func TestNormalizeAskAnswerIsIdempotentForNumberedAsks(t *testing.T) {
 		t.Fatalf("numbered ask changed on a second pass:\n got %q\nwant %q", out, in)
 	}
 }
+
+func TestNormalizeAskAnswerNumbersSourceCitations(t *testing.T) {
+	hash := strings.Repeat("a1", 32)
+	in := "Prose [[source:" + hash + "|A recent article]]."
+	out := NormalizeAskAnswer(in)
+	if strings.Contains(out, "[[source:") {
+		t.Fatalf("source syntax survived: %q", out)
+	}
+	if !strings.Contains(out, "Prose ([1](#cite-1)).") {
+		t.Errorf("source citation is not a numbered reference: %q", out)
+	}
+	if !strings.Contains(out, "1. [A recent article](#/sources/"+hash+")") {
+		t.Errorf("the source bibliography entry is missing or wrong: %q", out)
+	}
+}
+
+func TestNormalizeAskAnswerMixesClaimsAndSources(t *testing.T) {
+	hash := strings.Repeat("b2", 32)
+	in := "Claim [[claim:" + citeA + "|Alpha]], source [[source:" + hash + "|A recent article]]."
+	out := NormalizeAskAnswer(in)
+	if !strings.Contains(out, "Claim ([1](#cite-1)), source ([2](#cite-2)).") {
+		t.Errorf("references are not numbered in prose order: %q", out)
+	}
+	if !strings.Contains(out, "1. [Alpha](#/claims/"+citeA+")") {
+		t.Errorf("the claim is missing from the bibliography: %q", out)
+	}
+	if !strings.Contains(out, "2. [A recent article](#/sources/"+hash+")") {
+		t.Errorf("the source is missing from the bibliography: %q", out)
+	}
+}
+
+func TestNormalizeAskAnswerKeepsASourceBibliographyOnASecondPass(t *testing.T) {
+	hash := strings.Repeat("c3", 32)
+	in := "Prose ([1](#cite-1)).\n\nSources:\n1. [A recent article](#/sources/" + hash + ")"
+	out := NormalizeAskAnswer(in)
+	if out != in {
+		t.Fatalf("numbered ask changed on a second pass:\n got %q\nwant %q", out, in)
+	}
+}
+
+func TestNormalizeAskAnswerFallsBackToTheSourceHashWithoutATitle(t *testing.T) {
+	hash := strings.Repeat("d4", 32)
+	out := NormalizeAskAnswer("Sources:\n- [[source:" + hash + "]]")
+	if strings.Contains(out, `[source](#/sources/`) {
+		t.Errorf("unlabelled source fell back to the placeholder: %q", out)
+	}
+	if !strings.Contains(out, "1. ["+hash+"](#/sources/"+hash+")") {
+		t.Errorf("unlabelled source did not fall back to its hash: %q", out)
+	}
+}
+
+func TestNormalizeAskAnswerDemotesABareWikilinkToText(t *testing.T) {
+	in := "Prose [[The other Rust features]] and [[Another title|Alias]]."
+	out := NormalizeAskAnswer(in)
+	if strings.Contains(out, "[[") {
+		t.Errorf("bare wikilink survived: %q", out)
+	}
+	if !strings.Contains(out, "Prose The other Rust features and Alias.") {
+		t.Errorf("bare wikilinks were not demoted to text: %q", out)
+	}
+	if strings.Contains(out, "#/claims?q=") {
+		t.Errorf("a claim finder link was produced: %q", out)
+	}
+}
+
+func TestNormalizeAskAnswerKeepsAWikiLink(t *testing.T) {
+	in := "See [[wiki:01J8ABC|A page]]."
+	out := NormalizeAskAnswer(in)
+	if !strings.Contains(out, "[[wiki:01J8ABC|A page]]") {
+		t.Errorf("wiki link was changed: %q", out)
+	}
+}

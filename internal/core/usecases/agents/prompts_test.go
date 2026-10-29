@@ -3,6 +3,7 @@ package agents_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/agents"
 )
@@ -41,7 +42,7 @@ func TestQueryPromptKeepsTheAnswerInTheQuestionLanguage(t *testing.T) {
 		t.Error("QuerySystem still tells the model to answer across the vault's languages")
 	}
 
-	user := agents.QueryUser("Was weißt du über die Quelle 紫微斗数 · 开源排盘引擎?", []string{"zh", "en"})
+	user := agents.QueryUser("Was weißt du über die Quelle 紫微斗数 · 开源排盘引擎?", []string{"zh", "en"}, time.Time{})
 	for _, want := range []string{
 		"the ANSWER stays in the question's language",
 		"entirely in the language of the question above",
@@ -49,5 +50,29 @@ func TestQueryPromptKeepsTheAnswerInTheQuestionLanguage(t *testing.T) {
 		if !strings.Contains(user, want) {
 			t.Errorf("QueryUser lacks %q", want)
 		}
+	}
+}
+
+// TestQueryPromptHasTheRecencyBranch: a digest question must not start with a claim search, and the
+// window must be vault arrival. The clock is in the user message so the model can resolve "the last
+// 24 hours" without guessing today's date.
+func TestQueryPromptHasTheRecencyBranch(t *testing.T) {
+	for _, want := range []string{
+		"list_sources",
+		"read_source_summary",
+		"ENTERED THE VAULT",
+		"never \"published\"",
+		"next_offset",
+		"[[source:<hash>|<source title>]]",
+		"claim finder query",
+	} {
+		if !strings.Contains(agents.QuerySystem, want) {
+			t.Errorf("QuerySystem lacks %q", want)
+		}
+	}
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	user := agents.QueryUser("Fasse die jüngsten Sources der letzten 24h zusammen.", nil, now)
+	if !strings.Contains(user, "Current time: 2026-10-28T12:00:00Z") {
+		t.Errorf("QueryUser lacks the current time: %q", user)
 	}
 }

@@ -17,6 +17,11 @@ tasks:
     deps: [web:build]
     cmd: go build -o dist/thought-keeper ./cmd/thought-keeper
 
+  build:linux-arm64:
+    desc: Build the static arm64 binary (PWA included)
+    deps: [web:build]
+    cmd: CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dist/thought-keeper-linux-arm64 ./cmd/thought-keeper
+
   web:install:
     desc: Install the next PWA toolchain (npm)
     dir: web-next

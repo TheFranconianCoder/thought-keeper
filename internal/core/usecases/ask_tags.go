@@ -8,9 +8,16 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/markdown"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
+
+// SourceTagReader is what an answer that cites a source's overview needs: the source's labels.
+// IndexRepository satisfies it; a test can pass nil and fall back to the question's words.
+type SourceTagReader interface {
+	GetSourceByHash(ctx context.Context, hash string) (entities.Source, error)
+}
 
 // AskTags derives the automatic tags of one saved query.
 //
@@ -21,9 +28,11 @@ import (
 const maxAskTags = 6
 
 var (
-	askMarkdownClaim = regexp.MustCompile(`#/claims/([0-9A-HJKMNP-TV-Z]{26})`)
-	askWikiClaim     = regexp.MustCompile(`\[\[claim:([0-9A-HJKMNP-TV-Z]{26})`)
-	askWord          = regexp.MustCompile(`[\p{L}\p{N}][\p{L}\p{N}_-]*`)
+	askMarkdownClaim  = regexp.MustCompile(`#/claims/([0-9A-HJKMNP-TV-Z]{26})`)
+	askWikiClaim      = regexp.MustCompile(`\[\[claim:([0-9A-HJKMNP-TV-Z]{26})`)
+	askMarkdownSource = regexp.MustCompile(`#/sources/([0-9a-f]{64})`)
+	askWikiSource     = regexp.MustCompile(`\[\[source:([0-9a-f]{64})`)
+	askWord           = regexp.MustCompile(`[\p{L}\p{N}][\p{L}\p{N}_-]*`)
 )
 
 var askStopWords = map[string]bool{
@@ -42,43 +51,63 @@ var askStopWords = map[string]bool{
 }
 
 // AskTags returns the stored tags when there are any, otherwise derives them from the answer's
-// claim citations, and finally from the question's words.
-func AskTags(ctx context.Context, question, answer string, atoms interfaces.AtomRepository) []string {
-	tags := tagsFromCitations(ctx, answer, atoms)
+// claim citations, then from the tags of the sources it cites, and finally from the question's
+// words. A digest that cites only source overviews gets the sources' own shelves, not the words of
+// the question.
+func AskTags(ctx context.Context, question, answer string, atoms interfaces.AtomRepository, sources SourceTagReader) []string {
+	tags := tagsFromCitations(ctx, answer, atoms, sources)
 	if len(tags) > 0 {
 		return tags
 	}
 	return tagsFromQuestion(question)
 }
 
-func tagsFromCitations(ctx context.Context, answer string, atoms interfaces.AtomRepository) []string {
-	if atoms == nil {
-		return nil
-	}
-	ids := map[string]bool{}
-	for _, match := range askMarkdownClaim.FindAllStringSubmatch(answer, -1) {
-		ids[match[1]] = true
-	}
-	for _, match := range askWikiClaim.FindAllStringSubmatch(answer, -1) {
-		ids[match[1]] = true
-	}
-	if len(ids) == 0 {
-		return nil
-	}
-
+func tagsFromCitations(ctx context.Context, answer string, atoms interfaces.AtomRepository, sources SourceTagReader) []string {
 	counts := map[string]int{}
-	for id := range ids {
-		parsed, err := ulid.ParseStrict(id)
-		if err != nil {
-			continue
+	if atoms != nil {
+		ids := map[string]bool{}
+		for _, match := range askMarkdownClaim.FindAllStringSubmatch(answer, -1) {
+			ids[match[1]] = true
 		}
-		atom, err := atoms.GetAtom(ctx, parsed)
-		if err != nil {
-			continue
+		for _, match := range askWikiClaim.FindAllStringSubmatch(answer, -1) {
+			ids[match[1]] = true
 		}
-		topic := markdown.NormalizeTopic(atom.Topic)
-		if topic != "" {
-			counts[topic]++
+		for id := range ids {
+			parsed, err := ulid.ParseStrict(id)
+			if err != nil {
+				continue
+			}
+			atom, err := atoms.GetAtom(ctx, parsed)
+			if err != nil {
+				continue
+			}
+			topic := markdown.NormalizeTopic(atom.Topic)
+			if topic != "" {
+				counts[topic]++
+			}
+		}
+	}
+	// Claims are the sharper label. Only an answer that cites no claim at all falls back to the
+	// sources it cited: a digest's shelves are exactly what the reader filters the Ask list by.
+	if len(counts) == 0 && sources != nil {
+		hashes := map[string]bool{}
+		for _, match := range askMarkdownSource.FindAllStringSubmatch(answer, -1) {
+			hashes[match[1]] = true
+		}
+		for _, match := range askWikiSource.FindAllStringSubmatch(answer, -1) {
+			hashes[match[1]] = true
+		}
+		for hash := range hashes {
+			src, err := sources.GetSourceByHash(ctx, hash)
+			if err != nil {
+				continue
+			}
+			for _, tag := range src.AllTags() {
+				tag = markdown.NormalizeTag(tag)
+				if tag != "" {
+					counts[tag]++
+				}
+			}
 		}
 	}
 	return topTags(counts)
