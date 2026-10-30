@@ -112,7 +112,7 @@ series:
 | `0.3.0` | `f41245a` | published, pre-release |
 | `0.4.0` | `ce86ea6` | published, pre-release |
 | `0.5.0` | `bd7ed4c` | published, pre-release |
-| `1.0.0` | `HEAD` at the cut | the current release |
+| `1.0.0` | `80c05ad` | published |
 
 A pending release keeps its title and notes in `.release/` until it is cut.
 
