@@ -13,7 +13,7 @@
   } from '../../lib/actions';
   import { api } from '../../lib/api';
   import { fmtBytes, hostOf, prettyJson, relTime, splitFrontmatter } from '../../lib/format';
-  import { t, tn } from '../../lib/i18n/index.svelte';
+  import { n, t, tn } from '../../lib/i18n/index.svelte';
   import { navigate, previousView, router, sourcePath, wikiPath } from '../../lib/router.svelte';
   import { setPagePosition } from '../../lib/scroll-memory';
   import { sourcesTop } from '../../lib/sources-scroll';
@@ -429,7 +429,7 @@
             <button class="tab" class:on={tab === 'files'} onclick={() => setTab('files')}>{t('source.tabFiles')}</button>
             {#if hasChildrenTab}
               <button class="tab" class:on={tab === 'children'} onclick={() => setTab('children')}>
-                {t('source.tabChildren')}{selected.children ? ` ${selected.children}` : ''}
+                {t('source.tabChildren')}{selected.children ? ` ${n(selected.children)}` : ''}
               </button>
             {/if}
           </div>
@@ -766,7 +766,7 @@
               >{selected.language ||
                 (selected.bookmark ? t('source.notIndexed') : t('source.unknown'))}</span>
             </div>
-            {#if selected.pages}<div class="kv"><span class="k">{t('source.pagesLabel')}</span><span class="v">{selected.pages}</span></div>{/if}
+            {#if selected.pages}<div class="kv"><span class="k">{t('source.pagesLabel')}</span><span class="v">{n(selected.pages)}</span></div>{/if}
             {#if !selected.rss && !selected.sitemap}
               <div class="kv"><span class="k">{t('source.outlineLabel')}</span><span class="v">{selected.tree_state}</span></div>
             {/if}
@@ -904,11 +904,11 @@
 
           {#if topics.length > 0}
             <section class="rail-block">
-              <div class="rail-label">{t('source.topics')} <span class="rail-count">{topics.length}</span></div>
+              <div class="rail-label">{t('source.topics')} <span class="rail-count">{n(topics.length)}</span></div>
               <div class="rail-chips">
                 {#each topics.slice(0, 5) as topic (topic.name)}
                   <a class="chip" href={`#/claims?topic=${encodeURIComponent(topic.name)}`} title={tn('source.topicClaims', topic.count)}>
-                    {topic.name}<span class="chip-count">{topic.count}</span>
+                    {topic.name}<span class="chip-count">{n(topic.count)}</span>
                   </a>
                 {/each}
               </div>

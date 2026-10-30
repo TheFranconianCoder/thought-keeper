@@ -11,6 +11,7 @@
 
   const open = $derived(searchOpen());
   let input: HTMLInputElement | undefined = $state();
+  let results: HTMLDivElement | undefined = $state();
 
   $effect(() => {
     if (!open) return;
@@ -39,17 +40,44 @@
     navigate(target);
   }
 
-  function onKey(event: KeyboardEvent): void {
+  /** revealActive keeps the highlighted row inside the results box. Without it the arrow keys move
+   *  the selection past the last visible row and the palette looks stuck. */
+  function revealActive(): void {
+    const container = results;
+    const item = container?.querySelector<HTMLElement>('.hit.active');
+    if (!container || !item) return;
+    // A few pixels of air, so the row is not flush with the fade at the edge.
+    const pad = 4;
+    const view = container.getBoundingClientRect();
+    const box = item.getBoundingClientRect();
+    if (box.top < view.top + pad) {
+      container.scrollTop -= view.top + pad - box.top;
+    } else if (box.bottom > view.bottom - pad) {
+      container.scrollTop += box.bottom - (view.bottom - pad);
+    }
+  }
+
+  async function onKey(event: KeyboardEvent): Promise<void> {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       search.move(1);
+      await tick();
+      revealActive();
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       search.move(-1);
+      await tick();
+      revealActive();
     } else if (event.key === 'Enter') {
       event.preventDefault();
       pick();
     }
+  }
+
+  function onInput(value: string): void {
+    // A new term starts a new result list; the old scroll offset must not hide the first hit.
+    if (results) results.scrollTop = 0;
+    search.setQuery(value);
   }
 </script>
 
@@ -67,7 +95,7 @@
           autocomplete="off"
           spellcheck="false"
           aria-label={t('search.aria')}
-          oninput={(event) => search.setQuery(event.currentTarget.value)}
+          oninput={(event) => onInput(event.currentTarget.value)}
           onkeydown={onKey}
         />
         <div class="seg" role="tablist" aria-label={t('search.layerAria')}>
@@ -76,6 +104,7 @@
             class:on={search.layer === 'atoms'}
             onclick={() => {
               search.setLayer('atoms');
+              if (results) results.scrollTop = 0;
               input?.focus();
             }}>{t('search.claims')}</button
           >
@@ -84,13 +113,14 @@
             class:on={search.layer === 'sources'}
             onclick={() => {
               search.setLayer('sources');
+              if (results) results.scrollTop = 0;
               input?.focus();
             }}>{t('search.sources')}</button
           >
         </div>
       </div>
 
-      <div class="palette-results" use:scrollFade>
+      <div class="palette-results" bind:this={results} use:scrollFade>
         {#if search.busy}
           <p class="palette-note"><span class="spinner"></span> {t('search.searching')}</p>
         {:else if search.error}

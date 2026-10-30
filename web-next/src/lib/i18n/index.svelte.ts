@@ -91,9 +91,24 @@ function interpolate(text: string, params?: Record<string, string | number>): st
   if (!params) return text;
   let out = text;
   for (const [name, value] of Object.entries(params)) {
-    out = out.split(`{${name}}`).join(String(value));
+    // Numbers in a sentence follow the interface language too: 1,234 in English, 1.234 in German.
+    // An identifier that happens to be a number (a PID) is passed as a string instead.
+    out = out.split(`{${name}}`).join(typeof value === 'number' ? n(value) : String(value));
   }
   return out;
+}
+
+const numberFormats = new Map<Locale, Intl.NumberFormat>();
+
+/** n formats a number for the interface language: a grouped count, 1,234 in English and 1.234 in
+ *  German. Use it wherever a number is rendered directly rather than through `t` or `tn`. */
+export function n(value: number): string {
+  let format = numberFormats.get(i18n.locale);
+  if (!format) {
+    format = new Intl.NumberFormat(i18n.locale);
+    numberFormats.set(i18n.locale, format);
+  }
+  return format.format(value);
 }
 
 /** t returns one translated sentence, interpolating `{name}` placeholders. */

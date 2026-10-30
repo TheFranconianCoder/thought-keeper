@@ -11,11 +11,13 @@ The navigation is a small, finite set of lenses. In the **wide layout** it is th
 with an Attention badge and a **connection mark on Status** — green online, orange reconnecting,
 grey while connecting, red offline; the Status tab's label/tooltip names the state too. There is no
 drawer and no menu button — nothing covers the page, and the reader never has to dismiss a panel.
-**Page headers stack** in the narrow layout: the title and subtitle take the full width, the page
-action (Add source, Vault Status) sits on its own row beneath — the same place in every language.
-Narrow list rows also drop their action buttons (the detail carries them, **icon-only**), and the
-Sources list trades the four step lights and the status line for **one lamp**: its ring is the slower
-progress dimension, its colour the aggregate state.
+**Every head keeps one title row** at every width: the heading, an optional count and the page's
+action, with the action right-aligned and the title truncating rather than the row wrapping — so it
+keeps one place in every language, and the narrow layout needs no extra line for it. A subtitle, when
+a page has one (Start, Ask, Status), sits below the row and may wrap without moving the heading or
+the action. Narrow list rows also drop their action buttons (the detail carries them, **icon-only**),
+and the Sources list trades the four step lights and the status line for **one lamp**: its ring is the
+slower progress dimension, its colour the aggregate state.
 
 | Lens | What it shows |
 | --- | --- |
@@ -25,8 +27,15 @@ progress dimension, its colour the aggregate state.
 | **Bookmarks** | collected links: URL sources that exist as metadata only; newest first, each row names its host (the list is a window, not a host-grouped dump) |
 | **Claims** | newest claims and the busiest claim topics; a local FTS5 finder and the search palette; one claim opens its detail with provenance and cluster peers. The topic cloud stays while a topic is selected: the active chip is highlighted, clicking it again (or the “Filtered by” chip) clears the filter. Opening a claim keeps the filter in the URL (`#/claims/<id>?topic=…`), so the list beside the detail stays filtered |
 | **Ask** | saved queries with their automatic tags and row actions (open, ask again, delete); a question **appears in the list at once with its status** while it is answered — no separate “thinking” box — and questions run in parallel, so the reader can ask the next one without waiting; an answer appears on its own detail with its **Ask ID** (copy button), and its scroll position survives a visit to a cited claim or source; the answer is written in the question's language and may cite claims and source overviews |
-| **Attention** | failed source steps and non-info lint findings — a lens over existing state, not a second health model |
+| **Attention** | failed source steps and non-info lint findings — one search narrows both; a lens over existing state, not a second health model |
 | **Status** | counts, job queue, summary backfill (missing/queued/running), maintenance actions, vocabulary health, memory (live heap and peak) |
+
+**The five library lists share one skeleton.** A head carries the title, its count and the lens's
+single action — Sources: add source, Wiki: new page, Bookmarks: add link, Attention: vault status;
+Claims has none because claims are the agent's. Below the head comes a full-width search field; the
+lens's extra filters follow (Sources: kind and attached) and then its chip cloud (Sources tags, Wiki
+tags, Claims topics). Bookmarks and Attention have neither filters nor a cloud. No list describes
+itself in prose; only Claims keeps a caption, its “newest 50 of …”.
 
 A cluster is **never** a lens and never listed. The Claims detail shows the claim's cluster peers and
 the claims under the same topic **as two separate sections**;
@@ -44,7 +53,9 @@ The top bar carries the **interface language** switch beside the theme switch. T
 reader's choice and is remembered per browser; the server's `language.ui` is only the default for a
 reader who has not chosen one (the app ships English and German). The claims and overviews follow
 `language.claims` / `language.summary` instead — a vault can be read in one language and written in
-another.
+another. **Numbers follow the interface language too**: counts are grouped (`1,234` in English,
+`1.234` in German), including numbers interpolated into a sentence; an identifier such as the PID is
+passed as a string and stays ungrouped, and a byte size uses the language's decimal separator.
 
 Saved queries carry **automatic tags** — the topics of the claims their answer cites, the tags of
 the sources it cites when no claim is cited, or the meaningful words of the question — and the Ask

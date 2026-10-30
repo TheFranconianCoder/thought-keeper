@@ -1,10 +1,6 @@
 /** Die Linse „Quellen“: die Liste, ihre Filter und der Ablauf zum Hinzufügen. */
 export const sourcesDe: Record<string, string> = {
   // Die Linse und ihr Kopf.
-  'sources.sub.one': '{count} unveränderliche Quelle · jede Datei und jeder Link wird einmal gelesen',
-  'sources.sub.many':
-    '{count} unveränderliche Quellen · jede Datei und jeder Link wird einmal gelesen',
-  'sources.loading': 'Quellen werden geladen…',
   'sources.wordSource': 'Quelle',
 
   // Die Werkzeugleiste: Suche, Art, Anhang-Filter, Schlagwortwolke.

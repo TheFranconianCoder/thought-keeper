@@ -4,7 +4,7 @@
   import { captureSource, deleteSource, distillSource, openSourceFromHash, rebuildSourceTree, refreshSource, resetSource } from '../../lib/actions';
   import type { Source, SourceListFilter } from '../../lib/api/types';
   import { fmtBytes, relTime } from '../../lib/format';
-  import { t, tn } from '../../lib/i18n/index.svelte';
+  import { n, t } from '../../lib/i18n/index.svelte';
   import { openAdd } from '../../lib/overlays';
   import { router } from '../../lib/router.svelte';
   import { connection } from '../../lib/stores/connection.svelte';
@@ -23,6 +23,7 @@
   import SourceLamp from '../sources/SourceLamp.svelte';
   import SourceSteps from '../sources/SourceSteps.svelte';
   import SourceWindowList from '../sources/SourceWindowList.svelte';
+  import ListHead from '../ui/ListHead.svelte';
 
   // The vault total comes from the status report, so the header is right from the first paint; the
   // list itself reads only the window around the viewport.
@@ -135,25 +136,17 @@
 </script>
 
 <div class="page sources-page">
-  <div class="page-head">
-    <div>
-      <h1>{t('view.sources')}</h1>
-      <p class="sub">
-        {#if sourceWindow.loaded || totalSources > 0}
-          {tn('sources.sub', totalSources)}
-        {:else}
-          {t('sources.loading')}
-        {/if}
-      </p>
-    </div>
-    <span class="spacer"></span>
-    <button class="btn btn--primary" onclick={openAdd}>
-      <Icon name="plus" size={14} /> {t('nav.addSource')}
-    </button>
-  </div>
+  <ListHead
+    title={t('view.sources')}
+    count={sourceWindow.loaded || totalSources > 0 ? totalSources : null}
+  >
+    {#snippet action()}
+      <button class="btn btn--primary" onclick={openAdd}>
+        <Icon name="plus" size={14} /> <span class="btn-text">{t('nav.addSource')}</span>
+      </button>
+    {/snippet}
 
-  <div class="toolbar">
-    <div class="search-wrap source-search">
+    <div class="search-wrap list-search">
       <Icon name="search" size={14} />
       <input
         use:clearable
@@ -163,45 +156,53 @@
         aria-label={t('sources.filterAria')}
       />
     </div>
-    <div class="seg" role="tablist" aria-label={t('sources.kindAria')}>
-      <button class:on={sources.kind === 'all'} onclick={() => setKind('all')}>{t('sources.kindAll')}</button>
-      <button class:on={sources.kind === 'md'} onclick={() => setKind('md')}>{t('sources.kindMarkdown')}</button>
-      <button class:on={sources.kind === 'pdf'} onclick={() => setKind('pdf')}>{t('sources.kindPdf')}</button>
-      <button class:on={sources.kind === 'txt'} onclick={() => setKind('txt')}>{t('sources.kindText')}</button>
-      <button class:on={sources.kind === 'url'} onclick={() => setKind('url')}>{t('sources.kindUrls')}</button>
-    </div>
-    {#if attachedCount > 0 || sources.attachedOnly}
-      <button
-        class="chip attached-filter"
-        class:chip--warn={sources.attachedOnly}
-        aria-pressed={sources.attachedOnly}
-        title={t('sources.attachedTitle')}
-        onclick={() => (sources.attachedOnly = !sources.attachedOnly)}
-      >
-        <Icon name="paperclip" size={12} /> {t('sources.attached')}<span class="chip-count">{attachedCount}</span>
-      </button>
-    {/if}
-  </div>
 
-  {#if tagCloud.length > 0}
-    <div class="tag-cloud" use:scrollFade use:rememberScroll={'source-tags'} aria-label={t('sources.tagsAria')}>
-      {#each tagCloud as tag (tag.tag)}
+    <div class="list-filters">
+      <div class="seg" role="tablist" aria-label={t('sources.kindAria')}>
+        <button class:on={sources.kind === 'all'} onclick={() => setKind('all')}>{t('sources.kindAll')}</button>
+        <button class:on={sources.kind === 'md'} onclick={() => setKind('md')}>{t('sources.kindMarkdown')}</button>
+        <button class:on={sources.kind === 'pdf'} onclick={() => setKind('pdf')}>{t('sources.kindPdf')}</button>
+        <button class:on={sources.kind === 'txt'} onclick={() => setKind('txt')}>{t('sources.kindText')}</button>
+        <button class:on={sources.kind === 'url'} onclick={() => setKind('url')}>{t('sources.kindUrls')}</button>
+      </div>
+      {#if attachedCount > 0 || sources.attachedOnly}
         <button
-          class="chip"
-          class:chip--accent={sources.filter === tag.tag}
-          onclick={() => (sources.filter = sources.filter === tag.tag ? '' : tag.tag)}
+          class="chip attached-filter"
+          class:chip--warn={sources.attachedOnly}
+          aria-pressed={sources.attachedOnly}
+          title={t('sources.attachedTitle')}
+          onclick={() => (sources.attachedOnly = !sources.attachedOnly)}
         >
-          {tag.tag}<span class="chip-count">{tag.count}</span>
+          <Icon name="paperclip" size={12} /> {t('sources.attached')}<span class="chip-count">{n(attachedCount)}</span>
         </button>
-      {/each}
+      {/if}
     </div>
-  {/if}
-  {#if sources.filter}
-    <div class="tag-filter">
-      {t('sources.filteredBy')} <b>{sources.filter}</b>
-      <button class="link-button" onclick={() => (sources.filter = '')}>{t('common.clear')}</button>
-    </div>
-  {/if}
+
+    {#if tagCloud.length > 0}
+      <div
+        class="chip-cloud"
+        use:scrollFade
+        use:rememberScroll={'source-tags'}
+        aria-label={t('sources.tagsAria')}
+      >
+        {#each tagCloud as tag (tag.tag)}
+          <button
+            class="chip"
+            class:chip--accent={sources.filter === tag.tag}
+            onclick={() => (sources.filter = sources.filter === tag.tag ? '' : tag.tag)}
+          >
+            {tag.tag}<span class="chip-count">{n(tag.count)}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
+    {#if sources.filter}
+      <div class="filter-line">
+        {t('sources.filteredBy')} <b>{sources.filter}</b>
+        <button class="link-button" onclick={() => (sources.filter = '')}>{t('common.clear')}</button>
+      </div>
+    {/if}
+  </ListHead>
 
   {#if sourceWindow.error}
     <p class="notice notice--error">
@@ -369,10 +370,6 @@
     padding-top: 24px;
   }
 
-  .source-search {
-    width: min(320px, 100%);
-  }
-
   .source-list {
     border-top: 1px solid var(--line);
   }
@@ -505,40 +502,6 @@
     gap: 3px;
     background: var(--warning-soft);
     color: var(--warning);
-  }
-
-
-  .tag-cloud {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    max-height: 74px;
-    margin: 0 0 10px;
-    overflow: auto;
-    padding-bottom: 2px;
-  }
-
-  .tag-filter {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: -2px 0 10px;
-    color: var(--faint);
-    font-size: 11.5px;
-  }
-
-  .tag-filter b {
-    color: var(--ink-2);
-    font-weight: 550;
-  }
-
-  .link-button {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--accent);
-    font: inherit;
-    cursor: pointer;
   }
 
   .source-origin {

@@ -6,8 +6,6 @@ export const wikiDe: Record<string, string> = {
   'wiki.filterAria': 'Wiki-Seiten filtern',
   'wiki.tagsAria': 'Wiki-Schlagwörter',
   'wiki.filteredBy': 'Gefiltert nach',
-  'wiki.pageCount.one': '{count} Seite',
-  'wiki.pageCount.many': '{count} Seiten',
   'wiki.noMatch': 'Keine Seite passt',
   'wiki.noMatchText': 'Entferne den Filter, um alle Seiten zu sehen.',
   'wiki.emptyTitle': 'Noch keine Wiki-Seiten',

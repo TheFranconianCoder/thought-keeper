@@ -1,11 +1,11 @@
 /** Attention and Bookmarks: the trouble list and the saved links. */
 export const attentionEn: Record<string, string> = {
-  // Attention: the page head.
-  'attention.loading': 'Loading what needs attention…',
-  'attention.none': 'Nothing needs a decision or a repair.',
-  'attention.count.one': '{count} thing needs a decision or a repair.',
-  'attention.count.many': '{count} things need a decision or a repair.',
+  // Attention: the page head and its search.
   'attention.vaultStatus': 'Vault status',
+  'attention.filterPlaceholder': 'Filter attention…',
+  'attention.filterAria': 'Filter what needs attention',
+  'attention.noMatchTitle': 'Nothing matches',
+  'attention.noMatchText': 'Clear the filter to see everything that needs attention.',
 
   // Attention: the two halves of the list.
   'attention.unreachableTitle': 'Nothing loaded',
@@ -25,13 +25,10 @@ export const attentionEn: Record<string, string> = {
   'attention.findingsFailed': 'Could not load findings: {error}',
 
   // Bookmarks: the page head and the filter.
-  'bookmarks.sub': 'Collected links that exist as metadata only — not indexed, still yours.',
   'bookmarks.add': 'Add link',
   'bookmarks.addEmpty': 'Add a link',
   'bookmarks.filterPlaceholder': 'Filter bookmarks…',
   'bookmarks.filterAria': 'Filter bookmarks',
-  'bookmarks.count.one': '{count} bookmark',
-  'bookmarks.count.many': '{count} bookmarks',
   'bookmarks.otherHost': 'other',
 
   // Bookmarks: the empty and error states.

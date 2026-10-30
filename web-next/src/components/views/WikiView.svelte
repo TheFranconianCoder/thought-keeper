@@ -2,7 +2,7 @@
   import { clearable } from '../../lib/clearable';
   import { untrack } from 'svelte';
   import { deleteWikiPage, saveWikiPage } from '../../lib/actions';
-  import { t, tn } from '../../lib/i18n/index.svelte';
+  import { n, t } from '../../lib/i18n/index.svelte';
   import { navigate, router, sourcePath, wikiPath } from '../../lib/router.svelte';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
@@ -11,6 +11,7 @@
   import Icon from '../ui/Icon.svelte';
   import Markdown from '../ui/Markdown.svelte';
   import CopyId from '../ui/CopyId.svelte';
+  import ListHead from '../ui/ListHead.svelte';
   import VirtualList from '../ui/VirtualList.svelte';
   import type { WikiSummary } from '../../lib/api/types';
 
@@ -128,29 +129,27 @@
 
 <div class="page wiki-page" class:split={detailOpen}>
   <section class="wiki-list-pane" aria-label={t('wiki.listAria')}>
-    <div class="list-head">
-      <div class="list-title">
-        <h1>{t('view.wiki')}</h1>
-        <span class="count">{wiki.count}</span>
-      </div>
-      <div class="row-inline">
-        <div class="search-wrap grow">
-          <Icon name="search" size={14} />
-          <input
-            use:clearable
-            class="input input--search"
-            placeholder={t('wiki.filterPlaceholder')}
-            bind:value={query}
-            aria-label={t('wiki.filterAria')}
-          />
-        </div>
-        <button class="icon-btn icon-btn--bordered" title={t('wiki.newPage')} onclick={startNew}>
-          <Icon name="plus" />
+    <ListHead title={t('view.wiki')} count={wiki.loaded ? wiki.count : null}>
+      {#snippet action()}
+        <button class="btn btn--primary" onclick={startNew}>
+          <Icon name="plus" size={14} /> <span class="btn-text">{t('wiki.newPage')}</span>
         </button>
+      {/snippet}
+
+      <div class="search-wrap list-search">
+        <Icon name="search" size={14} />
+        <input
+          use:clearable
+          class="input input--search"
+          placeholder={t('wiki.filterPlaceholder')}
+          bind:value={query}
+          aria-label={t('wiki.filterAria')}
+        />
       </div>
+
       {#if wiki.tags.length > 0}
         <div
-          class="tag-cloud"
+          class="chip-cloud"
           use:scrollFade
           use:rememberScroll={'wiki-tags'}
           aria-label={t('wiki.tagsAria')}
@@ -161,20 +160,18 @@
               class:chip--accent={wiki.filter === tag.tag}
               onclick={() => chooseTag(tag.tag)}
             >
-              {tag.tag}<span class="chip-count">{tag.count}</span>
+              {tag.tag}<span class="chip-count">{n(tag.count)}</span>
             </button>
           {/each}
         </div>
       {/if}
-      <div class="list-caption">
-        {#if wiki.filter}
+      {#if wiki.filter}
+        <div class="filter-line">
           {t('wiki.filteredBy')} <b>{wiki.filter}</b>
           <button class="link-button" onclick={() => (wiki.filter = '')}>{t('common.clear')}</button>
-        {:else}
-          {tn('wiki.pageCount', pages.length)}
-        {/if}
-      </div>
-    </div>
+        </div>
+      {/if}
+    </ListHead>
 
     <div class="page-rows" bind:this={listEl} use:scrollFade use:rememberScroll={'wiki-list'}>
       {#if wiki.error}
@@ -407,48 +404,6 @@
     padding: 24px 0;
   }
 
-  .list-title {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-
-  .list-title h1 {
-    margin: 0;
-    font-size: 24px;
-    font-weight: 650;
-    letter-spacing: -0.025em;
-  }
-
-  .list-title .count {
-    color: var(--faint);
-    font-size: 12px;
-  }
-
-  .tag-cloud {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    max-height: 76px;
-    margin: 9px 0 6px;
-    overflow: auto;
-  }
-
-  .list-caption {
-    margin: 7px 0 8px;
-    color: var(--faint);
-    font-size: 11.5px;
-  }
-
-  .link-button {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--accent);
-    font-size: inherit;
-  }
-
   .page-rows {
     flex: 1;
     min-height: 0;
@@ -665,11 +620,19 @@
       height: auto;
       margin: 0;
       overflow: visible;
-      padding-right: 0;
+      /* Keep the frame's right padding: a zeroed one let the page title, tags and body run into the
+         border on a narrow screen. */
+      padding: 20px 18px 26px;
     }
 
     .page-detail-head {
       flex-direction: column;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .wiki-detail {
+      padding: 18px 15px 22px;
     }
   }
 </style>

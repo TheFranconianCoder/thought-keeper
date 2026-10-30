@@ -4,7 +4,7 @@
   import { api } from '../../lib/api';
   import type { Source } from '../../lib/api/types';
   import { relTime } from '../../lib/format';
-  import { t, tn } from '../../lib/i18n/index.svelte';
+  import { n, t, tn } from '../../lib/i18n/index.svelte';
   import { openAdd } from '../../lib/overlays';
   import { readError, readSignal } from '../../lib/read';
   import { recent, type RecentEntry } from '../../lib/recent.svelte';
@@ -128,14 +128,14 @@
 
 <div class="page home-page">
   <div class="page-head">
-    <div>
+    <div class="head-row">
       <h1>{t('home.title')}</h1>
-      <p class="sub">{t('home.sub')}</p>
+      <span class="spacer"></span>
+      <button class="btn btn--primary" onclick={openAdd}>
+        <Icon name="plus" size={14} /> <span class="btn-text">{t('nav.addSource')}</span>
+      </button>
     </div>
-    <span class="spacer"></span>
-    <button class="btn btn--primary" onclick={openAdd}>
-      <Icon name="plus" size={14} /> {t('nav.addSource')}
-    </button>
+    <p class="sub">{t('home.sub')}</p>
   </div>
 
   <section class="home-ask" aria-label={t('home.ask')}>
@@ -195,7 +195,7 @@
     <section class="home-card">
       <div class="card-head">
         <h2>{t('home.needs')}</h2>
-        {#if needs.length > 0}<span class="count">{needs.length}</span>{/if}
+        {#if needs.length > 0}<span class="count">{n(needs.length)}</span>{/if}
       </div>
       {#if !status}
         <p class="quiet">{t('common.loading')}</p>

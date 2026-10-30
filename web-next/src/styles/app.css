@@ -541,35 +541,125 @@ img {
 
 /* ── Page furniture ────────────────────────────────────────────────────── */
 
+/* One title row serves every page and every list (see .head-row): the heading never wraps, and an
+   action keeps its place on the right in every language. A subtitle, when a page has one, sits
+   below the row and can wrap without moving the heading or the action. */
 .page-head {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
   margin: 0 0 22px;
 }
 
-.page-head h1 {
-  margin: 0;
-  font-size: 25px;
-  font-weight: 650;
-  line-height: 1.15;
-  letter-spacing: -0.025em;
-}
-
 .page-head .sub {
-  margin: 3px 0 0;
+  margin: 0;
   color: var(--muted);
   font-size: 13px;
 }
 
-.page-head .spacer {
-  flex: 1;
-}
+/* ── Head row ──────────────────────────────────────────────────────────── */
 
-.page-head .head-actions {
+/* The row is shared by page heads and list heads: the title, an optional count and the one action.
+   It does not wrap — the title truncates instead — so the action keeps one place in every language
+   and in the narrow layout. */
+.head-row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.page-head .head-row {
+  margin: 0 0 4px;
+}
+
+.head-row h1 {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.head-row .count {
+  flex: none;
+  color: var(--faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.head-row .spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.head-row .btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
+}
+
+.head-row > .chip {
+  flex: none;
+}
+
+/* ── List head ─────────────────────────────────────────────────────────── */
+
+/* Every library list (Sources, Wiki, Bookmarks, Claims, Attention) starts with the same shape: one
+   row with the title, its count and the lens's one action; the full-width search below it; then the
+   lens's extra filters and its chip cloud. */
+.list-head {
+  flex: none;
+  margin: 0 0 12px;
+}
+
+.list-head .head-row {
+  margin: 0 0 12px;
+}
+
+.list-search {
+  margin: 0 0 10px;
+}
+
+.list-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+
+.chip-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 92px;
+  margin: 0 0 10px;
+  overflow-y: auto;
+  padding-bottom: 2px;
+}
+
+.filter-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -2px 0 10px;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+
+.filter-line b {
+  color: var(--ink-2);
+  font-weight: 550;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
 }
 
 .section {
@@ -1584,33 +1674,12 @@ html[data-wco="1"] .brand a {
   }
 }
 
-@media (max-width: 900px) {
-  /* The page head is a column in the narrow layout: the title/subtitle take the full width and the
-     actions sit on their own row underneath. A wrap driven by the text length put the same button
-     in a different place in every language. */
-  .page-head {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .page-head .spacer {
-    display: none;
-  }
-
-  .page-head > .btn,
-  .page-head .head-actions,
-  .page-head > .chip {
-    align-self: flex-start;
-  }
-}
-
 @media (max-width: 640px) {
   .page {
     padding: 18px 15px 48px;
   }
 
-  .page-head h1 {
+  .head-row h1 {
     font-size: 22px;
   }
 

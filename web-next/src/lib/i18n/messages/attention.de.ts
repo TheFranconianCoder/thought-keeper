@@ -1,11 +1,12 @@
 /** Aufmerksamkeit und Lesezeichen: die Problemliste und die gesammelten Links. */
 export const attentionDe: Record<string, string> = {
-  // Aufmerksamkeit: der Seitenkopf.
-  'attention.loading': 'Wird geladen, was Aufmerksamkeit braucht …',
-  'attention.none': 'Nichts braucht eine Entscheidung oder eine Reparatur.',
-  'attention.count.one': '{count} Sache braucht eine Entscheidung oder eine Reparatur.',
-  'attention.count.many': '{count} Sachen brauchen eine Entscheidung oder eine Reparatur.',
+  // Aufmerksamkeit: der Seitenkopf und seine Suche.
   'attention.vaultStatus': 'Tresorstatus',
+  'attention.filterPlaceholder': 'Aufmerksamkeit filtern …',
+  'attention.filterAria': 'Filtern, was Aufmerksamkeit braucht',
+  'attention.noMatchTitle': 'Kein Treffer',
+  'attention.noMatchText':
+    'Entferne den Filter, um alles zu sehen, was Aufmerksamkeit braucht.',
 
   // Aufmerksamkeit: die beiden Hälften der Liste.
   'attention.unreachableTitle': 'Nichts geladen',
@@ -25,14 +26,10 @@ export const attentionDe: Record<string, string> = {
   'attention.findingsFailed': 'Befunde konnten nicht geladen werden: {error}',
 
   // Lesezeichen: der Seitenkopf und der Filter.
-  'bookmarks.sub':
-    'Gesammelte Links, die nur als Metadaten existieren — nicht indexiert, aber deine.',
   'bookmarks.add': 'Link hinzufügen',
   'bookmarks.addEmpty': 'Link hinzufügen',
   'bookmarks.filterPlaceholder': 'Lesezeichen filtern …',
   'bookmarks.filterAria': 'Lesezeichen filtern',
-  'bookmarks.count.one': '{count} Lesezeichen',
-  'bookmarks.count.many': '{count} Lesezeichen',
   'bookmarks.otherHost': 'andere',
 
   // Lesezeichen: die leeren Zustände und der Fehler.

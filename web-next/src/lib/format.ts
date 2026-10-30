@@ -1,12 +1,29 @@
 /** Formatting helpers shared by every view. No domain logic lives here. */
 import { i18n, t, tn } from './i18n/index.svelte';
 
+let sizeFormat: { locale: string; format: Intl.NumberFormat } | undefined;
+
+/** fmtSize keeps one decimal but writes it the way the interface language does: 1.5 in English,
+ *  1,5 in German. */
+function fmtSize(value: number): string {
+  if (sizeFormat?.locale !== i18n.locale) {
+    sizeFormat = {
+      locale: i18n.locale,
+      format: new Intl.NumberFormat(i18n.locale, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }),
+    };
+  }
+  return sizeFormat.format.format(value);
+}
+
 export function fmtBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return '—';
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
+  if (bytes < 1024 * 1024) return `${fmtSize(bytes / 1024)} KiB`;
+  if (bytes < 1024 * 1024 * 1024) return `${fmtSize(bytes / (1024 * 1024))} MiB`;
+  return `${fmtSize(bytes / (1024 * 1024 * 1024))} GiB`;
 }
 
 export function relTime(iso?: string, now = Date.now()): string {

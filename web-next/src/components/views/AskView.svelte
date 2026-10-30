@@ -3,7 +3,7 @@
   import { untrack } from 'svelte';
   import { askAgain, deleteSavedAsk } from '../../lib/actions';
   import { relTime } from '../../lib/format';
-  import { t } from '../../lib/i18n/index.svelte';
+  import { n, t } from '../../lib/i18n/index.svelte';
   import { askPath, navigate, router } from '../../lib/router.svelte';
   import type { AskSummary } from '../../lib/api/types';
   import { rememberScroll } from '../../lib/scroll-memory';
@@ -13,6 +13,7 @@
   import CopyId from '../ui/CopyId.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
+  import ListHead from '../ui/ListHead.svelte';
   import Markdown from '../ui/Markdown.svelte';
   import VirtualList from '../ui/VirtualList.svelte';
 
@@ -95,7 +96,7 @@
           class:chip--accent={tagFilter === item.tag}
           onclick={() => chooseTag(item.tag)}
         >
-          {item.tag}<span class="chip-count">{item.count}</span>
+          {item.tag}<span class="chip-count">{n(item.count)}</span>
         </button>
       {/each}
     </div>
@@ -195,13 +196,9 @@
 <div class="page ask-page" class:split={detailOpen}>
   {#if detailOpen}
     <section class="ask-list-pane" aria-label={t('ask.savedQueries')}>
-      <div class="list-head">
-        <div class="list-title">
-          <h1>{t('ask.savedQueries')}</h1>
-          {#if asks.count}<span class="count">{asks.count}</span>{/if}
-        </div>
+      <ListHead title={t('ask.savedQueries')} count={asks.count || null}>
         <p class="list-sub">{t('ask.savedSub')}</p>
-      </div>
+      </ListHead>
       {@render askRows()}
     </section>
   {/if}
@@ -211,10 +208,10 @@
       <a class="back-link" href="#/ask">{t('ask.back')}</a>
     {:else}
       <div class="page-head ask-head">
-        <div>
+        <div class="head-row">
           <h1>{t('ask.title')}</h1>
-          <p class="sub">{t('ask.sub')}</p>
         </div>
+        <p class="sub">{t('ask.sub')}</p>
       </div>
     {/if}
 
@@ -294,7 +291,7 @@
       <section class="saved-section">
         <div class="section-head">
           <h2>{t('ask.savedQueries')}</h2>
-          {#if asks.count}<span class="count">{asks.count}</span>{/if}
+          {#if asks.count}<span class="count">{n(asks.count)}</span>{/if}
         </div>
         {@render askRows()}
       </section>
@@ -334,26 +331,8 @@
     padding: 24px 0;
   }
 
-  .list-title {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-
-  .list-title h1 {
-    margin: 0;
-    font-size: 24px;
-    font-weight: 650;
-    letter-spacing: -0.025em;
-  }
-
-  .list-title .count {
-    color: var(--faint);
-    font-size: 12px;
-  }
-
   .list-sub {
-    margin: 3px 0 12px;
+    margin: 0 0 12px;
     color: var(--faint);
     font-size: 11.5px;
   }

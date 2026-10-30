@@ -1,9 +1,6 @@
 /** The Sources lens: the list, its filters and the add-source flow. */
 export const sourcesEn: Record<string, string> = {
   // The lens and its header.
-  'sources.sub.one': '{count} immutable source · each file or link is read once',
-  'sources.sub.many': '{count} immutable sources · each file or link is read once',
-  'sources.loading': 'Loading sources…',
   'sources.wordSource': 'source',
 
   // The toolbar: search, kind selector, attachment switch, tag cloud.

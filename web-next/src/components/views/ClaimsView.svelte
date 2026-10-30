@@ -4,7 +4,7 @@
   import { api } from '../../lib/api';
   import { humanError } from '../../lib/api/errors';
   import type { Atom, SearchHit } from '../../lib/api/types';
-  import { t, tn } from '../../lib/i18n/index.svelte';
+  import { n, t, tn } from '../../lib/i18n/index.svelte';
   import { claimPath, claimTopicPath, navigate, router, sourcePath } from '../../lib/router.svelte';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
@@ -15,6 +15,7 @@
   import Icon from '../ui/Icon.svelte';
   import Markdown from '../ui/Markdown.svelte';
   import CopyId from '../ui/CopyId.svelte';
+  import ListHead from '../ui/ListHead.svelte';
   import VirtualList from '../ui/VirtualList.svelte';
 
   const detailOpen = $derived(router.current.view === 'claims' && !!router.current.id);
@@ -129,12 +130,8 @@
 
 <div class="page claims-page" class:split={detailOpen}>
   <section class="claims-list-pane" aria-label={t('view.claims')}>
-    <div class="list-head">
-      <div class="list-title">
-        <h1>{t('view.claims')}</h1>
-        <span class="count">{total}</span>
-      </div>
-      <div class="search-wrap">
+    <ListHead title={t('view.claims')} count={total}>
+      <div class="search-wrap list-search">
         <Icon name="search" size={14} />
         <input
           use:clearable
@@ -149,7 +146,7 @@
       </div>
       {#if !searchMode && claims.topics.length > 0}
         <div
-          class="topic-cloud"
+          class="chip-cloud"
           use:scrollFade
           use:rememberScroll={'claims-topics'}
           aria-label={t('claims.topicsAria')}
@@ -160,7 +157,7 @@
               class:chip--accent={topic === item.topic}
               href={topic === item.topic ? '#/claims' : claimTopicPath(item.topic)}
             >
-              {item.topic}<span class="chip-count">{item.count}</span>
+              {item.topic}<span class="chip-count">{n(item.count)}</span>
             </a>
           {/each}
         </div>
@@ -172,7 +169,7 @@
         </div>
       {/if}
       <div class="list-caption">{caption}</div>
-    </div>
+    </ListHead>
 
     <div class="claim-rows" use:scrollFade use:rememberScroll={'claims-list'}>
       {#if searchMode}
@@ -273,7 +270,7 @@
           <section class="detail-section">
             <div class="section-head">
               <h3>{t('claims.provenance')}</h3>
-              <span class="count">{claim.sources.length}</span>
+              <span class="count">{n(claim.sources.length)}</span>
             </div>
             <div class="provenance">
               {#each claim.sources as source (source.hash + ':' + (source.node ?? ''))}
@@ -297,7 +294,7 @@
         <section class="detail-section">
           <div class="section-head">
             <h3>{t('claims.peers')}</h3>
-            <span class="count">{claims.relatedPeers.length}</span>
+            <span class="count">{n(claims.relatedPeers.length)}</span>
           </div>
           {#if claims.relatedPeers.length > 0}
             <div class="related">
@@ -319,7 +316,7 @@
         <section class="detail-section">
           <div class="section-head">
             <h3>{t('claims.sameTopic')}</h3>
-            <span class="count">{claims.relatedSameTopic.length}</span>
+            <span class="count">{n(claims.relatedSameTopic.length)}</span>
           </div>
           {#if claims.relatedSameTopic.length > 0}
             <div class="related">
@@ -376,52 +373,6 @@
     min-height: 0;
     max-height: calc(100dvh - var(--topbar-h));
     padding: 24px 0;
-  }
-
-  .list-head {
-    flex: none;
-  }
-
-  .list-title {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-
-  .list-title h1 {
-    margin: 0;
-    font-size: 24px;
-    font-weight: 650;
-    letter-spacing: -0.025em;
-  }
-
-  .list-title .count {
-    color: var(--faint);
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .search-wrap {
-    margin-bottom: 10px;
-  }
-
-  .filter-line {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    margin: -2px 0 9px;
-    font-size: 12px;
-  }
-
-  .topic-cloud {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    max-height: 92px;
-    margin-bottom: 10px;
-    overflow: auto;
-    padding-bottom: 2px;
   }
 
   .list-caption {
@@ -512,6 +463,7 @@
     font-weight: 600;
     line-height: 1.32;
     letter-spacing: -0.015em;
+    overflow-wrap: break-word;
   }
 
   .claim-meta {
@@ -559,6 +511,8 @@
   .related {
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    max-width: 100%;
     border: 1px solid var(--line);
     border-radius: var(--radius);
     overflow: hidden;
@@ -657,7 +611,19 @@
       height: auto;
       margin: 0;
       overflow: visible;
-      padding-right: 0;
+      /* The detail frame keeps a right padding at every width: without it the body and the
+         provenance/related cards run into the border. */
+      padding: 20px 18px 26px;
+    }
+
+    .claim-body {
+      min-width: 0;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .claim-detail {
+      padding: 18px 15px 22px;
     }
   }
 </style>

@@ -17,7 +17,7 @@
   } from '../../lib/actions';
   import type { Finding } from '../../lib/api/types';
   import { elapsed, relTime } from '../../lib/format';
-  import { t, tn } from '../../lib/i18n/index.svelte';
+  import { n, t, tn } from '../../lib/i18n/index.svelte';
   import { claimPath, navigate, router, sourcePath } from '../../lib/router.svelte';
   import { sources } from '../../lib/stores/sources.svelte';
   import { system } from '../../lib/stores/system.svelte';
@@ -180,20 +180,20 @@
 
 <div class="page status-page">
   <div class="page-head">
-    <div>
+    <div class="head-row">
       <h1>{t('view.status')}</h1>
-      <p class="sub">
-        {#if system.status}
-          {t('status.subLine', { version: system.status.version, uptime: system.status.app.uptime, addr: system.status.app.addr })}
-        {:else}
-          {t('status.sub')}
-        {/if}
-      </p>
+      <span class="spacer"></span>
+      {#if system.status}
+        <span class="chip chip--mono">{t('status.pid', { pid: String(system.status.app.pid) })}</span>
+      {/if}
     </div>
-    <span class="spacer"></span>
-    {#if system.status}
-      <span class="chip chip--mono">{t('status.pid', { pid: system.status.app.pid })}</span>
-    {/if}
+    <p class="sub">
+      {#if system.status}
+        {t('status.subLine', { version: system.status.version, uptime: system.status.app.uptime, addr: system.status.app.addr })}
+      {:else}
+        {t('status.sub')}
+      {/if}
+    </p>
   </div>
 
   {#if !system.status}
@@ -208,11 +208,11 @@
     {/if}
 
     <div class="stat-grid">
-      <div class="stat"><span class="stat-num">{status.index.sources}</span><span class="stat-label">{t('status.statSources')}</span></div>
-      <div class="stat"><span class="stat-num">{status.index.atoms}</span><span class="stat-label">{t('status.statClaims')}</span></div>
-      <div class="stat"><span class="stat-num">{status.index.clusters}</span><span class="stat-label">{t('status.statClusters')}</span></div>
-      <div class="stat"><span class="stat-num">{status.index.unclustered}</span><span class="stat-label">{t('status.statUnclustered')}</span></div>
-      <div class="stat"><span class="stat-num">{status.index.runs}</span><span class="stat-label">{t('status.statRuns')}</span></div>
+      <div class="stat"><span class="stat-num">{n(status.index.sources)}</span><span class="stat-label">{t('status.statSources')}</span></div>
+      <div class="stat"><span class="stat-num">{n(status.index.atoms)}</span><span class="stat-label">{t('status.statClaims')}</span></div>
+      <div class="stat"><span class="stat-num">{n(status.index.clusters)}</span><span class="stat-label">{t('status.statClusters')}</span></div>
+      <div class="stat"><span class="stat-num">{n(status.index.unclustered)}</span><span class="stat-label">{t('status.statUnclustered')}</span></div>
+      <div class="stat"><span class="stat-num">{n(status.index.runs)}</span><span class="stat-label">{t('status.statRuns')}</span></div>
     </div>
 
     <div class="caps">
@@ -228,7 +228,7 @@
     <section class="section">
       <div class="section-head">
         <h2>{t('status.jobQueue')}</h2>
-        <span class="count">{jobs.length}</span>
+        <span class="count">{n(jobs.length)}</span>
       </div>
       {#if jobs.length === 0}
         <p class="muted small">{t('status.noJobs')}</p>
@@ -273,9 +273,9 @@
           {/if}
         </div>
         <div class="stat-grid stat-grid--three">
-          <div class="stat"><span class="stat-num">{status.summary.missing}</span><span class="stat-label">{t('status.missing')}</span></div>
-          <div class="stat"><span class="stat-num">{status.summary.queued}</span><span class="stat-label">{t('status.summaryQueued')}</span></div>
-          <div class="stat"><span class="stat-num">{status.summary.running}</span><span class="stat-label">{t('status.summaryRunning')}</span></div>
+          <div class="stat"><span class="stat-num">{n(status.summary.missing)}</span><span class="stat-label">{t('status.missing')}</span></div>
+          <div class="stat"><span class="stat-num">{n(status.summary.queued)}</span><span class="stat-label">{t('status.summaryQueued')}</span></div>
+          <div class="stat"><span class="stat-num">{n(status.summary.running)}</span><span class="stat-label">{t('status.summaryRunning')}</span></div>
         </div>
         <p class="muted small section-note">
           {t('status.summaryNote')}
@@ -318,7 +318,7 @@
               <span class="vocab-name">{vocab.namespace}</span>
               <span class="vocab-numbers">
                 {tn('status.vocabNames', vocab.names)} · {tn('status.vocabUses', vocab.uses)} · {t('status.vocabSingletons', { count: vocab.singletons })}
-                ({Math.round(vocab.singleton_share * 100)}%) · {t('status.vocabTop', { pct: Math.round(vocab.coverage * 100) })}
+                ({n(Math.round(vocab.singleton_share * 100))}%) · {t('status.vocabTop', { pct: Math.round(vocab.coverage * 100) })}
                 {#if vocab.canonical || vocab.absorbed}· {t('status.vocabCanonical', { canonical: vocab.canonical, absorbed: vocab.absorbed })}{/if}
                 {#if vocab.new?.length}· <b>{t('status.vocabNew', { count: vocab.new.length })}</b>{/if}
               </span>

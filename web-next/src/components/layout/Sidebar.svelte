@@ -3,7 +3,7 @@
   import { claims } from '../../lib/stores/claims.svelte';
   import { system } from '../../lib/stores/system.svelte';
   import { wiki } from '../../lib/stores/wiki.svelte';
-  import { t } from '../../lib/i18n/index.svelte';
+  import { n, t } from '../../lib/i18n/index.svelte';
   import { navigate, router } from '../../lib/router.svelte';
   import { openAdd, openSearch } from '../../lib/overlays';
   import Icon from '../ui/Icon.svelte';
@@ -61,22 +61,22 @@
     <button class="nav-item" class:active={active('sources')} aria-current={active('sources') ? 'page' : undefined} onclick={() => go('#/sources')}>
       <Icon name="sources" size={15} />
       <span>{t('view.sources')}</span>
-      {#if system.status}<span class="count">{system.status.index.sources}</span>{/if}
+      {#if system.status}<span class="count">{n(system.status.index.sources)}</span>{/if}
     </button>
     <button class="nav-item" class:active={active('wiki')} aria-current={active('wiki') ? 'page' : undefined} onclick={() => go('#/wiki')}>
       <Icon name="wiki" size={15} />
       <span>{t('view.wiki')}</span>
-      {#if wiki.pages.length}<span class="count">{wiki.pages.length}</span>{/if}
+      {#if wiki.pages.length}<span class="count">{n(wiki.pages.length)}</span>{/if}
     </button>
     <button class="nav-item" class:active={active('bookmarks')} aria-current={active('bookmarks') ? 'page' : undefined} onclick={() => go('#/bookmarks')}>
       <Icon name="bookmarks" size={15} />
       <span>{t('view.bookmarks')}</span>
-      {#if bookmarkCount}<span class="count">{bookmarkCount}</span>{/if}
+      {#if bookmarkCount}<span class="count">{n(bookmarkCount)}</span>{/if}
     </button>
     <button class="nav-item" class:active={active('claims')} aria-current={active('claims') ? 'page' : undefined} onclick={() => go('#/claims')}>
       <Icon name="claims" size={15} />
       <span>{t('view.claims')}</span>
-      {#if claimCount}<span class="count">{claimCount}</span>{/if}
+      {#if claimCount}<span class="count">{n(claimCount)}</span>{/if}
     </button>
   </nav>
 
@@ -89,7 +89,7 @@
     <button class="nav-item" class:active={active('attention')} aria-current={active('attention') ? 'page' : undefined} onclick={() => go('#/attention')}>
       <Icon name="attention" size={15} />
       <span>{t('view.attention')}</span>
-      {#if attentionCount}<span class="count">{attentionCount}</span>{/if}
+      {#if attentionCount}<span class="count">{n(attentionCount)}</span>{/if}
     </button>
     <button class="nav-item" class:active={active('status')} aria-current={active('status') ? 'page' : undefined} onclick={() => go('#/status')}>
       <Icon name="status" size={15} />

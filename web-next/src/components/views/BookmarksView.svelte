@@ -1,7 +1,7 @@
 <script lang="ts">
   import { clearable } from '../../lib/clearable';
   import { hostOf, relTime } from '../../lib/format';
-  import { t, tn } from '../../lib/i18n/index.svelte';
+  import { t } from '../../lib/i18n/index.svelte';
   import { openAdd } from '../../lib/overlays';
   import { navigate, sourcePath } from '../../lib/router.svelte';
   import { connection } from '../../lib/stores/connection.svelte';
@@ -11,6 +11,7 @@
   import Icon from '../ui/Icon.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
   import SourceWindowList from '../sources/SourceWindowList.svelte';
+  import ListHead from '../ui/ListHead.svelte';
 
   let query = $state('');
   const hasQuery = $derived(query.trim().length > 0);
@@ -53,26 +54,24 @@
 </script>
 
 <div class="page bookmarks-page">
-  <div class="page-head">
-    <div>
-      <h1>{t('view.bookmarks')}</h1>
-      <p class="sub">{t('bookmarks.sub')}</p>
-    </div>
-    <span class="spacer"></span>
-    <button class="btn btn--primary" onclick={openAdd}>
-      <Icon name="plus" size={14} /> {t('bookmarks.add')}
-    </button>
-  </div>
+  <ListHead title={t('view.bookmarks')} count={bookmarkWindow.loaded ? bookmarkWindow.count : null}>
+    {#snippet action()}
+      <button class="btn btn--primary" onclick={openAdd}>
+        <Icon name="plus" size={14} /> <span class="btn-text">{t('bookmarks.add')}</span>
+      </button>
+    {/snippet}
 
-  {#if bookmarkWindow.count > 0 || hasQuery}
-    <div class="toolbar">
-      <div class="search-wrap bookmark-search">
-        <Icon name="search" size={14} />
-        <input use:clearable class="input input--search" placeholder={t('bookmarks.filterPlaceholder')} bind:value={query} aria-label={t('bookmarks.filterAria')} />
-      </div>
-      <span class="muted small">{tn('bookmarks.count', bookmarkWindow.count)}</span>
+    <div class="search-wrap list-search">
+      <Icon name="search" size={14} />
+      <input
+        use:clearable
+        class="input input--search"
+        placeholder={t('bookmarks.filterPlaceholder')}
+        bind:value={query}
+        aria-label={t('bookmarks.filterAria')}
+      />
     </div>
-  {/if}
+  </ListHead>
 
   {#if bookmarkWindow.error}
     <p class="notice notice--error">
@@ -151,10 +150,6 @@
 <style>
   .bookmarks-page {
     padding-top: 24px;
-  }
-
-  .bookmark-search {
-    width: min(340px, 100%);
   }
 
   .bookmark-list {
