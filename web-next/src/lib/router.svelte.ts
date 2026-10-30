@@ -141,6 +141,11 @@ export function askPath(id?: string): string {
   return `#/ask${id ? `/${encodeURIComponent(id)}` : ''}`;
 }
 
+/** askSourcePath opens Ask with the composer scoped to ONE source. */
+export function askSourcePath(hash: string): string {
+  return `#/ask?source=${encodeURIComponent(hash)}`;
+}
+
 export interface SourceLinkOptions {
   tab?: string;
   part?: string;

@@ -10,9 +10,10 @@ export function askQuestion(question: string): void {
   void asks.submit(question);
 }
 
-/** askAgain re-asks a saved question. The old answer stays; the new one is a new saved query. */
-export function askAgain(question: string): void {
-  void asks.submit(question);
+/** askAgain re-asks a saved question. The old answer stays; the new one is a new saved query. A
+ *  question that was scoped to a source is asked against that source again. */
+export function askAgain(question: string, source = ''): void {
+  void asks.submit(question, source);
 }
 
 export async function deleteSavedAsk(id: string): Promise<void> {

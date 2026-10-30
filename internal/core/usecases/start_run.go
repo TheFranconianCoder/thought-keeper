@@ -60,12 +60,15 @@ func (uc StartRun) AbandonLeftovers(ctx context.Context, reason string) (int64, 
 // ExecuteQuery creates a QUERY run. The question is part of it from the start — it is what the run
 // answers, the Ask view shows it beside the answer, and filing the answer into the cluster layer files the
 // question with it — so it is written when the run is created, not only when it succeeds.
-func (uc StartRun) ExecuteQuery(ctx context.Context, model, question string) (ulid.ULID, error) {
+// ExecuteQuery creates the run row for one question. A non-empty source is the run's target: the
+// question is scoped to that source and may not read any other.
+func (uc StartRun) ExecuteQuery(ctx context.Context, model, question, source string) (ulid.ULID, error) {
 	id := ulid.Make()
 	run := entities.Run{
 		ID:        id,
 		Op:        entities.RunQuery,
 		Model:     model,
+		TargetID:  source,
 		Question:  strings.TrimSpace(question),
 		Status:    entities.RunRunning,
 		StartedAt: uc.Clock.Now(),

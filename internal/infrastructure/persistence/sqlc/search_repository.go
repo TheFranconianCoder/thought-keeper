@@ -35,7 +35,7 @@ func (r *SearchRepository) Search(ctx context.Context, query, layer string, limi
 	languages, _ := r.Languages(ctx)
 	var hits []interfaces.SearchHit
 	if layer == "" || layer == "atoms" {
-		h, err := r.searchTable(ctx, "atoms_fts", "atoms", "claim", q, limit, "atom", languages)
+		h, err := r.searchTable(ctx, "atoms_fts", "atoms", "claim", q, limit, "atom", languages, "")
 		if err != nil {
 			return nil, err
 		}
@@ -52,6 +52,21 @@ func (r *SearchRepository) Search(ctx context.Context, query, layer string, limi
 		hits = hits[:limit]
 	}
 	return hits, nil
+}
+
+// SearchInSource searches the claims of ONE source: the same lexical ladder as Search, restricted
+// by provenance. A scoped Ask must never see another source's claims.
+func (r *SearchRepository) SearchInSource(ctx context.Context, query, sourceHash string, limit int) ([]interfaces.SearchHit, error) {
+	q := strings.TrimSpace(query)
+	hash := strings.TrimSpace(sourceHash)
+	if q == "" || hash == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	languages, _ := r.Languages(ctx)
+	return r.searchTable(ctx, "atoms_fts", "atoms", "claim", q, limit, "atom", languages, hash)
 }
 
 // searchSources finds sources by their outline node titles/summaries — this is what
@@ -121,7 +136,7 @@ func scanSourceHits(rows *sql.Rows) ([]interfaces.SearchHit, error) {
 	return out, rows.Err()
 }
 
-func (r *SearchRepository) searchTable(ctx context.Context, ftsTable, contentTable, titleCol, q string, limit int, kind string, languages []string) ([]interfaces.SearchHit, error) {
+func (r *SearchRepository) searchTable(ctx context.Context, ftsTable, contentTable, titleCol, q string, limit int, kind string, languages []string, scope string) ([]interfaces.SearchHit, error) {
 	words, symbols := queryParts(q)
 	var out []interfaces.SearchHit
 	seen := map[string]bool{}
@@ -142,14 +157,14 @@ func (r *SearchRepository) searchTable(ctx context.Context, ftsTable, contentTab
 	// tokenizer would reduce C++ to a single `c`. Search those terms exactly on claim/body first.
 	if len(symbols) > 0 {
 		combo := append(append([]string(nil), symbols...), words...)
-		hits, err := r.likeTerms(ctx, contentTable, titleCol, combo, limit, true)
+		hits, err := r.likeTerms(ctx, contentTable, titleCol, combo, limit, true, scope)
 		if err != nil {
 			return nil, err
 		}
 		if len(hits) == 0 {
 			// Requiring every word can be too strict (a C++ claim need not literally contain
 			// "language" and "complexity"); fall back to the symbol itself.
-			hits, err = r.likeTerms(ctx, contentTable, titleCol, symbols, limit, false)
+			hits, err = r.likeTerms(ctx, contentTable, titleCol, symbols, limit, false, scope)
 			if err != nil {
 				return nil, err
 			}
@@ -162,7 +177,7 @@ func (r *SearchRepository) searchTable(ctx context.Context, ftsTable, contentTab
 		// every term makes user punctuation (quotes, parentheses, colons) harmless.
 		for _, joiner := range []string{" AND ", " OR "} {
 			query := ftsQuery(words, joiner)
-			hits, err := r.ftsSearch(ctx, ftsTable, contentTable, titleCol, query, limit, kind)
+			hits, err := r.ftsSearch(ctx, ftsTable, contentTable, titleCol, query, limit, kind, scope)
 			if err != nil {
 				continue
 			}
@@ -183,7 +198,7 @@ func (r *SearchRepository) searchTable(ctx context.Context, ftsTable, contentTab
 			if query == "" {
 				continue
 			}
-			hits, err := r.ftsSearch(ctx, ftsTable, contentTable, titleCol, query, limit, kind)
+			hits, err := r.ftsSearch(ctx, ftsTable, contentTable, titleCol, query, limit, kind, scope)
 			if err != nil {
 				continue
 			}
@@ -197,7 +212,7 @@ func (r *SearchRepository) searchTable(ctx context.Context, ftsTable, contentTab
 	// Last resort: the raw phrase, then any of its terms. This is what keeps a query with an
 	// unusual shape from returning an empty result while the claims are right there.
 	if len(out) == 0 {
-		hits, err := r.likeSearch(ctx, contentTable, titleCol, q, limit, kind)
+		hits, err := r.likeSearch(ctx, contentTable, titleCol, q, limit, kind, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -265,23 +280,40 @@ func ftsQuery(words []string, joiner string) string {
 }
 
 // likeTerms searches claim/body for terms. With all=true every term must occur; with all=false
-// any one is enough. LIKE wildcards in the user's term are escaped.
-func (r *SearchRepository) likeTerms(ctx context.Context, table, titleCol string, terms []string, limit int, all bool) ([]interfaces.SearchHit, error) {
+// any one is enough. LIKE wildcards in the user's term are escaped. A scope restricts the search to
+// the claims whose provenance points at that source.
+func (r *SearchRepository) likeTerms(ctx context.Context, table, titleCol string, terms []string, limit int, all bool, scope string) ([]interfaces.SearchHit, error) {
 	if len(terms) == 0 {
 		return nil, nil
+	}
+	prefix := ""
+	if scope != "" {
+		prefix = "a."
 	}
 	conds := make([]string, 0, len(terms))
 	args := make([]any, 0, len(terms)*2+1)
 	for _, term := range terms {
 		pat := "%" + escapeLike(term) + "%"
-		conds = append(conds, fmt.Sprintf("(%s LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')", titleCol))
+		conds = append(conds, fmt.Sprintf("(%s%s LIKE ? ESCAPE '\\' OR %sbody LIKE ? ESCAPE '\\')", prefix, titleCol, prefix))
 		args = append(args, pat, pat)
 	}
 	join := " OR "
 	if all {
 		join = " AND "
 	}
-	query := fmt.Sprintf("SELECT id, %s, substr(body, 1, 160) FROM %s WHERE %s LIMIT ?", titleCol, table, strings.Join(conds, join))
+	var query string
+	if scope != "" {
+		query = fmt.Sprintf(`SELECT a.id, a.%s, substr(a.body, 1, 160)
+			FROM atoms a
+			WHERE a.id IN (
+				SELECT s.atom_id FROM atom_sources s
+				JOIN sources src ON src.id = s.source_id
+				WHERE src.hash = ?
+			) AND %s LIMIT ?`, titleCol, strings.Join(conds, join))
+		args = append([]any{scope}, args...)
+	} else {
+		query = fmt.Sprintf("SELECT id, %s, substr(body, 1, 160) FROM %s WHERE %s LIMIT ?", titleCol, table, strings.Join(conds, join))
+	}
 	args = append(args, limit)
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -295,13 +327,31 @@ func escapeLike(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
 }
 
-func (r *SearchRepository) ftsSearch(ctx context.Context, ftsTable, contentTable, titleCol, q string, limit int, kind string) ([]interfaces.SearchHit, error) {
-	query := fmt.Sprintf(
-		`SELECT c.id, c.%s, snippet(%s, 1, '[', ']', '…', 12)
-		 FROM %s JOIN %s c ON c.rowid = %s.rowid
-		 WHERE %s MATCH ? ORDER BY rank LIMIT ?`,
-		titleCol, ftsTable, ftsTable, contentTable, ftsTable, ftsTable)
-	rows, err := r.db.QueryContext(ctx, query, q, limit)
+func (r *SearchRepository) ftsSearch(ctx context.Context, ftsTable, contentTable, titleCol, q string, limit int, kind string, scope string) ([]interfaces.SearchHit, error) {
+	var (
+		query string
+		args  []any
+	)
+	if scope != "" {
+		query = fmt.Sprintf(
+			`SELECT a.id, a.%s, snippet(%s, 1, '[', ']', '…', 12)
+			 FROM %s JOIN atoms a ON a.rowid = %s.rowid
+			 WHERE %s MATCH ? AND a.id IN (
+				SELECT s.atom_id FROM atom_sources s
+				JOIN sources src ON src.id = s.source_id
+				WHERE src.hash = ?
+			 ) ORDER BY rank LIMIT ?`,
+			titleCol, ftsTable, ftsTable, ftsTable, ftsTable)
+		args = []any{q, scope, limit}
+	} else {
+		query = fmt.Sprintf(
+			`SELECT c.id, c.%s, snippet(%s, 1, '[', ']', '…', 12)
+			 FROM %s JOIN %s c ON c.rowid = %s.rowid
+			 WHERE %s MATCH ? ORDER BY rank LIMIT ?`,
+			titleCol, ftsTable, ftsTable, contentTable, ftsTable, ftsTable)
+		args = []any{q, limit}
+	}
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -309,12 +359,29 @@ func (r *SearchRepository) ftsSearch(ctx context.Context, ftsTable, contentTable
 	return scanHits(rows, kind)
 }
 
-func (r *SearchRepository) likeSearch(ctx context.Context, table, titleCol, q string, limit int, kind string) ([]interfaces.SearchHit, error) {
-	query := fmt.Sprintf(
-		`SELECT id, %s, substr(body, 1, 160) FROM %s WHERE (%s LIKE ? OR body LIKE ?) LIMIT ?`,
-		titleCol, table, titleCol)
+func (r *SearchRepository) likeSearch(ctx context.Context, table, titleCol, q string, limit int, kind string, scope string) ([]interfaces.SearchHit, error) {
 	pat := "%" + q + "%"
-	rows, err := r.db.QueryContext(ctx, query, pat, pat, limit)
+	var (
+		query string
+		args  []any
+	)
+	if scope != "" {
+		query = fmt.Sprintf(
+			`SELECT a.id, a.%s, substr(a.body, 1, 160) FROM atoms a
+			 WHERE a.id IN (
+				SELECT s.atom_id FROM atom_sources s
+				JOIN sources src ON src.id = s.source_id
+				WHERE src.hash = ?
+			 ) AND (a.%s LIKE ? OR a.body LIKE ?) LIMIT ?`,
+			titleCol, titleCol)
+		args = []any{scope, pat, pat, limit}
+	} else {
+		query = fmt.Sprintf(
+			`SELECT id, %s, substr(body, 1, 160) FROM %s WHERE (%s LIKE ? OR body LIKE ?) LIMIT ?`,
+			titleCol, table, titleCol)
+		args = []any{pat, pat, limit}
+	}
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("search %s: %w", table, err)
 	}

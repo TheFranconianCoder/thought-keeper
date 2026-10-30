@@ -58,7 +58,9 @@ have their own languages (`language.ui`, `language.claims`, `language.summary`; 
 to English).
 **Ask** puts a question in flight directly in the saved-query list, with its status, and runs
 questions in parallel, so the reader never waits on a spinner to ask the next one; a saved query's
-row carries the same actions as a source row (open, ask again, delete). The **source lists are
+row carries the same actions as a source row (open, ask again, delete). A source page's **Ask**
+action scopes the composer to that one source — the reference sits under the input, and the answer
+may use nothing else. The **source lists are
 windowed**: filters and paging are server-side, only the visible range (± overscan) is read, and the
 filtered count is the scroll height. A cluster is
 **not** a lens: it has no title and no page, and it is visible only as the **peers** of a claim.

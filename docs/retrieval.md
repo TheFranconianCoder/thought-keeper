@@ -19,6 +19,11 @@ The agent picks the substrate that fits the question:
 outline, reason about which part is relevant, open the part, cite it. An outline stores structure
 and references into the readable text, never a second copy of the text.
 
+**Ask can narrow every substrate to ONE source.** Asking from a source page scopes the run to that
+source's hash: the lexical ladder runs with a provenance restriction, the source recency list and
+the topic catalogue are not offered, and a claim read from another source is refused. The source is
+then the only evidence the answer may use.
+
 ## 2. Search is multilingual and morphology-aware
 
 - Every source records a **language hint** in its `<hash>.meta` (ISO 639-1, or ISO 639-3 when no

@@ -17,6 +17,8 @@ type SearchResult struct {
 // QueryRequest is the body of POST /api/v1/query.
 type QueryRequest struct {
 	Question string `json:"question"`
+	// Source scopes the answer to ONE source and that source's claims. Empty means the whole vault.
+	Source string `json:"source,omitempty"`
 }
 
 // LintRequest is the body of POST /api/v1/lint.

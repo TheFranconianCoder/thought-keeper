@@ -69,7 +69,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/asks` | Saved Ask conversations |
 | `GET` | `/api/v1/asks/{id}` | One saved question and answer |
 | `DELETE` | `/api/v1/asks/{id}` | Move a saved Ask to `.trash/asks/` |
-| `POST` | `/api/v1/query` | Ask the claims `{question}` → `202 {run_id}` |
+| `POST` | `/api/v1/query` | Ask the claims `{question, source?}` → `202 {run_id}` |
 | `POST` | `/api/v1/lint` | Run lint → `202 {run_id}` |
 | `GET` | `/api/v1/lint/findings` | Lint findings |
 | `POST` | `/api/v1/cleanup` | Prune dead cluster members and refresh the programmatic findings |
@@ -94,7 +94,12 @@ is read by id.
 - **Gating is server-side.** Document steps take the shared side of the pipeline gate; the cluster
   step and every synchronous vault rewrite take it exclusively (attaching or refetching a snapshot
   may reset claims and tree, so both are exclusive). The router applies the same gate to
-  the write endpoints.- **A query answer is saved automatically** to `asks/<run-id>.md`; there is no explicit filing step.
+  the write endpoints.
+- **A query answer is saved automatically** to `asks/<run-id>.md`; there is no explicit filing step.
+- **A query may be scoped to one source.** `source` is that source's SHA-256 hash; the run records it
+  as its target, the agent may only read that source and its claims, and the saved ask keeps the
+  hash, so asking the same question again stays scoped. A malformed hash is `invalid_hash`; an
+  unknown source is `not_found`.
 - A saved ask carries automatic `tags`: the topics of the claims its answer cites, the tags of the
   sources it cites when no claim is cited, or the meaningful words of the question. Tags label the
   query list and tag cloud; they never filter retrieval.

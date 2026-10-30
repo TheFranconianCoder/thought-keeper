@@ -16,7 +16,10 @@ type Ask struct {
 	// Tags are automatic labels derived from the answer's cited claim topics (or, without
 	// citations, from the question's meaningful words). They are a label on the saved query list,
 	// never a filter on retrieval.
-	Tags      []string
+	Tags []string
+	// Source is the hash of the one source the question was scoped to, or empty for a vault-wide
+	// answer. A scoped answer may only cite that source and its claims.
+	Source    string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

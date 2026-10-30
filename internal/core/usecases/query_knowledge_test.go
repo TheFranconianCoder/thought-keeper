@@ -77,3 +77,62 @@ func TestQueryAnswersWithCitations(t *testing.T) {
 		t.Errorf("saved asks = %+v, want the asked question", asks.saved)
 	}
 }
+
+// TestScopedQueryStaysInOneSource: a question asked from a source may only use that source. The
+// search is issued with the scope, the vault-wide tools are not offered, and the saved ask carries
+// the source so "ask again" can stay scoped.
+func TestScopedQueryStaysInOneSource(t *testing.T) {
+	ctx := context.Background()
+	hash := strings.Repeat("a", 64)
+	runRepo := &fakeRunRepo{}
+	search := &fakeScopedSearch{hits: []interfaces.SearchHit{
+		{ID: ulid.Make().String(), Kind: "atom", Title: "A claim of the source", Snippet: "s"},
+	}}
+	gw := &fakeGateway{responses: []interfaces.AgentResponse{
+		{
+			Message: interfaces.AgentMessage{Role: "assistant", ToolCalls: []interfaces.AgentToolCall{
+				{ID: "c1", Name: "search", Arguments: `{"query":"claim"}`},
+			}},
+			TotalTokens: 40,
+		},
+		{
+			Message:     interfaces.AgentMessage{Role: "assistant", Content: "The source says so."},
+			TotalTokens: 10,
+		},
+	}}
+	asks := &fakeAskStore{}
+	uc := usecases.QueryKnowledge{
+		Atoms: &fakeAtomRepo{}, Search: search, Asks: asks, Runs: runRepo,
+		Gateway: gw, Model: "test", MaxIterations: 4, Clock: fixedClock{},
+	}
+
+	if _, err := uc.ExecuteScoped(ctx, ulid.Make(), "What does this source say?", hash); err != nil {
+		t.Fatalf("scoped query: %v", err)
+	}
+	if !search.scoped || search.scope != hash {
+		t.Errorf("search scope = %q (called %v), want %q", search.scope, search.scoped, hash)
+	}
+	if len(asks.saved) != 1 || asks.saved[0].Source != hash {
+		t.Errorf("saved asks = %+v, want the source on the ask", asks.saved)
+	}
+	if len(gw.requests) == 0 || !strings.Contains(gw.requests[0].Messages[0].Content, "ONE source") {
+		t.Error("the scoped system prompt was not used")
+	}
+	for _, tool := range gw.requests[0].Tools {
+		if tool.Name == "list_sources" || tool.Name == "list_topics" {
+			t.Errorf("scoped query was offered the vault-wide tool %q", tool.Name)
+		}
+	}
+}
+
+type fakeScopedSearch struct {
+	fakeSearch
+	scoped bool
+	scope  string
+}
+
+func (f *fakeScopedSearch) SearchInSource(_ context.Context, _ string, source string, _ int) ([]interfaces.SearchHit, error) {
+	f.scoped = true
+	f.scope = source
+	return f.hits, nil
+}

@@ -45,7 +45,7 @@ func (h AskHandler) List(w http.ResponseWriter, r *http.Request) {
 	out := make([]payloads.AskSummary, 0, len(asks))
 	for _, a := range asks {
 		out = append(out, payloads.AskSummary{
-			ID: a.ID.String(), Question: a.Question, Tags: a.Tags,
+			ID: a.ID.String(), Question: a.Question, Tags: a.Tags, Source: a.Source,
 			CreatedAt: a.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt: a.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		})
@@ -66,7 +66,7 @@ func (h AskHandler) GetOne(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	payloads.WriteJSON(w, http.StatusOK, payloads.Ask{
-		ID: a.ID.String(), Question: a.Question, Answer: a.Answer, Tags: a.Tags,
+		ID: a.ID.String(), Question: a.Question, Answer: a.Answer, Tags: a.Tags, Source: a.Source,
 		CreatedAt: a.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt: a.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 	})

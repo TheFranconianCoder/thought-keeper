@@ -291,6 +291,8 @@ export interface AskSummary {
   id: string;
   question: string;
   tags?: string[];
+  /** The hash of the one source this question was scoped to; absent for a vault-wide answer. */
+  source?: string;
   created_at: string;
   updated_at: string;
 }

@@ -29,7 +29,7 @@ func (uc ListAsks) Execute(ctx context.Context, limit, offset int) ([]partialent
 			tags = AskTags(ctx, a.Question, a.Answer, uc.Atoms, uc.Sources)
 		}
 		out = append(out, partialentities.PartialAsk{
-			ID: a.ID, Question: a.Question, Answer: a.Answer, Tags: tags,
+			ID: a.ID, Question: a.Question, Answer: a.Answer, Tags: tags, Source: a.Source,
 			CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt,
 		})
 	}
@@ -54,7 +54,7 @@ func (uc GetAsk) Execute(ctx context.Context, id ulid.ULID) (partialentities.Par
 		tags = AskTags(ctx, a.Question, a.Answer, uc.Atoms, uc.Sources)
 	}
 	return partialentities.PartialAsk{
-		ID: a.ID, Question: a.Question, Answer: a.Answer, Tags: tags,
+		ID: a.ID, Question: a.Question, Answer: a.Answer, Tags: tags, Source: a.Source,
 		CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt,
 	}, nil
 }

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/payloads"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
@@ -16,9 +18,9 @@ type Searcher interface {
 	Execute(ctx context.Context, query, layer string, limit int) ([]partialentities.PartialHit, error)
 }
 
-// QueryScheduler schedules a query run.
+// QueryScheduler schedules a query run. A non-empty source scopes it to that one source.
 type QueryScheduler interface {
-	ScheduleQuery(question string) (string, error)
+	ScheduleQuery(question, source string) (string, error)
 }
 
 // LintScheduler schedules a lint run.
@@ -73,7 +75,12 @@ func (h QueryHandler) Post(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("invalid_body", "question is required", types.ErrInvalidURL))
 		return
 	}
-	runID, err := h.Query.ScheduleQuery(req.Question)
+	source := strings.TrimSpace(req.Source)
+	if source != "" && !entities.IsSHA256Hex(source) {
+		payloads.WriteError(w, types.New("invalid_hash", "source must be a SHA-256 hash", types.ErrInvalidHash))
+		return
+	}
+	runID, err := h.Query.ScheduleQuery(req.Question, source)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return

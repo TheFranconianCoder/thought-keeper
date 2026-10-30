@@ -2,6 +2,7 @@
 export const sourceEn: Record<string, string> = {
   // Header and actions.
   'source.backToSources': 'Back to sources',
+  'source.ask': 'Ask',
   'source.openUrl': 'Open URL',
   'source.refresh': 'Refresh',
   'source.capture': 'Capture',

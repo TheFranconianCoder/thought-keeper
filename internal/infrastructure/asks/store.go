@@ -32,6 +32,7 @@ type askFrontmatter struct {
 	ID       string   `yaml:"id"`
 	Question string   `yaml:"question"`
 	Tags     []string `yaml:"tags,omitempty"`
+	Source   string   `yaml:"source,omitempty"`
 	Created  string   `yaml:"created"`
 	Updated  string   `yaml:"updated"`
 }
@@ -193,7 +194,7 @@ func (s *Store) Normalize(_ context.Context) (int, error) {
 
 func encode(a entities.Ask) ([]byte, error) {
 	fm := askFrontmatter{
-		ID: a.ID.String(), Question: a.Question, Tags: a.Tags,
+		ID: a.ID.String(), Question: a.Question, Tags: a.Tags, Source: a.Source,
 		Created: a.CreatedAt.UTC().Format(time.RFC3339), Updated: a.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 	var b bytes.Buffer
@@ -234,5 +235,5 @@ func decode(b []byte) (entities.Ask, error) {
 	created, _ := time.Parse(time.RFC3339, fm.Created)
 	updated, _ := time.Parse(time.RFC3339, fm.Updated)
 	body := strings.TrimSpace(after)
-	return entities.Ask{ID: id, Question: fm.Question, Answer: body, Tags: fm.Tags, CreatedAt: created, UpdatedAt: updated}, nil
+	return entities.Ask{ID: id, Question: fm.Question, Answer: body, Tags: fm.Tags, Source: fm.Source, CreatedAt: created, UpdatedAt: updated}, nil
 }

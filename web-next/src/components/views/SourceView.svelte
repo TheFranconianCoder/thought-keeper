@@ -14,7 +14,7 @@
   import { api } from '../../lib/api';
   import { fmtBytes, hostOf, prettyJson, relTime, splitFrontmatter } from '../../lib/format';
   import { n, t, tn } from '../../lib/i18n/index.svelte';
-  import { navigate, previousView, router, sourcePath, wikiPath } from '../../lib/router.svelte';
+  import { askSourcePath, navigate, previousView, router, sourcePath, wikiPath } from '../../lib/router.svelte';
   import { setPagePosition } from '../../lib/scroll-memory';
   import { sourcesTop } from '../../lib/sources-scroll';
   import { sources } from '../../lib/stores/sources.svelte';
@@ -347,6 +347,13 @@
           </div>
         </div>
         <div class="source-head-actions">
+          <button
+            class="btn btn--primary btn--sm btn--action"
+            title={t('source.ask')}
+            onclick={() => navigate(askSourcePath(selected!.hash))}
+          >
+            <Icon name="ask" size={13} /> <span class="btn-label">{t('source.ask')}</span>
+          </button>
           {#if isURLSource && selected.url}
             <a
               class="btn btn--secondary btn--sm btn--action"

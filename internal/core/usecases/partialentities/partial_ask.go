@@ -12,6 +12,7 @@ type PartialAsk struct {
 	Question  string
 	Answer    string
 	Tags      []string
+	Source    string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

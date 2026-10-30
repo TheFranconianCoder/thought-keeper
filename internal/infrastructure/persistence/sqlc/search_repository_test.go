@@ -65,3 +65,39 @@ func TestSearchHandlesSymbolTerms(t *testing.T) {
 		t.Fatalf("C++ claim not found: %+v", hits)
 	}
 }
+
+// TestSearchInSourceKeepsTheBoundary: scoped Ask must not see another source's claim even when the
+// global index matches both.
+func TestSearchInSourceKeepsTheBoundary(t *testing.T) {
+	ctx := context.Background()
+	db, atoms, sources, _, _ := seedVault(t)
+	if !persistence.EnsureFTS(db, slog.Default()) {
+		t.Skip("no FTS5")
+	}
+	other := strings.Repeat("b", 64)
+	now := testClock{}.Now()
+	if err := sources.UpsertSource(ctx, entities.Source{
+		ID: ulid.Make(), Hash: other, Kind: entities.SourceKindMD, Ext: ".md",
+		Path: other + ".md", Title: "Another source", Bytes: 10, TreeState: entities.TreeBuilt,
+		ImportedAt: now, Meta: "{}",
+	}); err != nil {
+		t.Fatalf("upsert source: %v", err)
+	}
+	if err := atoms.SaveAtom(ctx, entities.Atom{
+		ID: ulid.Make(), Topic: "eng", Path: "eng/b-claim.md", Claim: "A claim from the other source",
+		Body: "b", Status: entities.AtomActive,
+		Sources:   []entities.AtomSource{{Hash: other, NodeID: "0.1"}},
+		CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("save atom: %v", err)
+	}
+
+	search := NewSearchRepository(db, true)
+	hits, err := search.SearchInSource(ctx, "claim", other, 10)
+	if err != nil {
+		t.Fatalf("search in source: %v", err)
+	}
+	if len(hits) != 1 || !strings.Contains(hits[0].Title, "other source") {
+		t.Fatalf("hits = %+v, want only the scoped source's claim", hits)
+	}
+}

@@ -7,6 +7,9 @@ export const askEn: Record<string, string> = {
   'ask.placeholder': 'What do the claims say about…',
   'ask.ariaQuestion': 'Ask a question',
   'ask.submit': 'Ask',
+  'ask.onlySource': 'Only this source',
+  'ask.clearSource': 'Ask across the whole vault',
+  'ask.answeredFrom': 'Answered from this source',
 
   'ask.savedQueries': 'Saved queries',
   'ask.savedSub': 'Every answer is saved automatically.',

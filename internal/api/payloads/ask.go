@@ -5,6 +5,7 @@ type AskSummary struct {
 	ID        string   `json:"id"`
 	Question  string   `json:"question"`
 	Tags      []string `json:"tags,omitempty"`
+	Source    string   `json:"source,omitempty"`
 	CreatedAt string   `json:"created_at"`
 	UpdatedAt string   `json:"updated_at"`
 }
@@ -15,6 +16,7 @@ type Ask struct {
 	Question  string   `json:"question"`
 	Answer    string   `json:"answer"`
 	Tags      []string `json:"tags,omitempty"`
+	Source    string   `json:"source,omitempty"`
 	CreatedAt string   `json:"created_at"`
 	UpdatedAt string   `json:"updated_at"`
 }

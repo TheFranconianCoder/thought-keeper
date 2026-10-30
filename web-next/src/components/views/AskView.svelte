@@ -2,9 +2,10 @@
   import { clearable } from '../../lib/clearable';
   import { untrack } from 'svelte';
   import { askAgain, deleteSavedAsk } from '../../lib/actions';
+  import { api } from '../../lib/api';
   import { relTime } from '../../lib/format';
   import { n, t } from '../../lib/i18n/index.svelte';
-  import { askPath, navigate, router } from '../../lib/router.svelte';
+  import { askPath, navigate, router, sourcePath, withQuery } from '../../lib/router.svelte';
   import type { AskSummary } from '../../lib/api/types';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
@@ -25,6 +26,12 @@
   const detailOpen = $derived(route.view === 'ask' && !!route.id);
   const selected = $derived(asks.selected);
   const topics = $derived(claims.topics.map((topic) => topic.topic));
+
+  // The composer's scope comes from the address: the source page's Ask button links here with
+  // ?source=<hash>. It is a boundary for the answer, not a suggestion.
+  const routeSource = $derived(route.view === 'ask' ? (route.params.get('source') ?? '') : '');
+  let sourceNames = $state<Record<string, string>>({});
+  const loadingSources = new Set<string>();
 
   let question = $state('');
   let tagFilter = $state('');
@@ -63,12 +70,45 @@
     });
   });
 
+  $effect(() => {
+    const hash = routeSource;
+    if (hash) untrack(() => void ensureSourceName(hash));
+  });
+
+  $effect(() => {
+    const hash = selected?.source ?? '';
+    if (hash) untrack(() => void ensureSourceName(hash));
+  });
+
+  function sourceName(hash: string): string {
+    return sourceNames[hash] || hash.slice(0, 12);
+  }
+
+  /** ensureSourceName resolves the readable title of a source for the reference chip. The hash is
+   *  the fallback: the boundary still has a name when the source can no longer be read. */
+  async function ensureSourceName(hash: string): Promise<void> {
+    if (!hash || sourceNames[hash] || loadingSources.has(hash)) return;
+    loadingSources.add(hash);
+    try {
+      const source = await api.source(hash);
+      sourceNames = { ...sourceNames, [hash]: source.title || hash.slice(0, 12) };
+    } catch {
+      sourceNames = { ...sourceNames, [hash]: hash.slice(0, 12) };
+    } finally {
+      loadingSources.delete(hash);
+    }
+  }
+
+  function clearSource(): void {
+    navigate(withQuery('source', ''));
+  }
+
   function submit(): void {
     const value = question.trim();
     if (!value) return;
     question = '';
     tagFilter = '';
-    void asks.submit(value);
+    void asks.submit(value, routeSource);
   }
 
   function openSaved(id: string): void {
@@ -173,7 +213,7 @@
                 <button
                   class="icon-btn"
                   title={t('ask.askAgain')}
-                  onclick={(event) => act(event, () => askAgain(row.ask.question))}
+                  onclick={(event) => act(event, () => askAgain(row.ask.question, row.ask.source))}
                 >
                   <Icon name="refresh" size={14} />
                 </button>
@@ -230,6 +270,17 @@
           {t('ask.submit')}
         </button>
       </div>
+      {#if routeSource}
+        <div class="composer-scope">
+          <Icon name="sources" size={13} />
+          <span class="composer-scope-label">{t('ask.onlySource')}</span>
+          <span class="composer-scope-title truncate" title={sourceName(routeSource)}>{sourceName(routeSource)}</span>
+          <span class="spacer"></span>
+          <button type="button" class="icon-btn" title={t('ask.clearSource')} onclick={clearSource}>
+            <Icon name="close" size={12} />
+          </button>
+        </div>
+      {/if}
     </form>
 
     {#if detailOpen}
@@ -255,12 +306,17 @@
               {/if}
               <div class="answer-meta">
                 <span class="chip">{relTime(selected.updated_at)}</span>
+                {#if selected.source}
+                  <a class="chip" href={sourcePath(selected.source)} title={t('ask.answeredFrom')}>
+                    <Icon name="sources" size={11} /> {sourceName(selected.source)}
+                  </a>
+                {/if}
                 <span class="grow"></span>
                 <CopyId text={selected.id} label={t('ask.idLabel')} display={selected.id.slice(0, 10)} />
                 <button
                   class="btn btn--secondary btn--sm btn--action"
                   title={t('ask.askAgain')}
-                  onclick={() => askAgain(selected!.question)}
+                  onclick={() => askAgain(selected!.question, selected!.source)}
                 >
                   <Icon name="refresh" size={13} /> <span class="btn-label">{t('ask.againShort')}</span>
                 </button>
@@ -537,6 +593,44 @@
     font-size: 14px;
   }
 
+  .composer-scope {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin-top: 9px;
+    padding-top: 9px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+
+  .composer-scope :global(.ico) {
+    flex: none;
+    color: var(--accent);
+  }
+
+  .composer-scope-label {
+    flex: none;
+    color: var(--faint);
+  }
+
+  .composer-scope-title {
+    min-width: 0;
+    color: var(--ink-2);
+    font-weight: 550;
+  }
+
+  .composer-scope .spacer {
+    flex: 1;
+  }
+
+  .composer-scope .icon-btn {
+    flex: none;
+    width: 24px;
+    height: 24px;
+  }
+
   .answer {
     padding-bottom: 30px;
   }
@@ -569,6 +663,7 @@
   .answer-meta {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 7px;
   }
 

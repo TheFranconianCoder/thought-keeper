@@ -383,3 +383,35 @@ the records, never a claim or a page. Auto tags are derived from the claims: a f
 record — it never triggers a model call per source.
 `POST /api/v1/vocabulary/curate` merges names, `POST /api/v1/vocabulary/retopic` re-derives claim
 topics, and both are renames — no claim text is rewritten and no cluster moves.
+
+## 9. Ask records
+
+Every successful query writes `asks/<run-id>.md`: YAML frontmatter plus the answer body. The id is
+the query run's id, so an answer stays traceable to its run and tool steps.
+
+```markdown
+---
+id: 01J8ZC5V9P0R7T2QK4W6Y8B3ND
+question: What does this chapter say about caching?
+tags:
+  - caching
+source: 7f3a1c0000000000000000000000000000000000000000000000000000000000
+created: 2026-10-22T09:00:00Z
+updated: 2026-10-22T09:00:00Z
+---
+
+Caching is safe only when the key covers every input.
+```
+
+| Key | Owner | Meaning |
+| --- | --- | --- |
+| `id` | service | ULID; the query run's id |
+| `question` | human | the question as asked |
+| `tags` | agent | automatic labels derived from the cited topics/sources |
+| `source` | service | the hash of the ONE source the question was scoped to; omitted for a vault-wide answer |
+| `created` / `updated` | service | server clock |
+
+- **The answer body is ordinary Markdown.** The model's `[[claim:…]]` / `[[source:…]]` form is
+  normalised to real links when the record is written (and repaired by `Normalize`).
+- **A scoped ask is a record of its boundary.** `source` is written from the run's scope; opening
+  the answer shows the reference again, and asking it again uses the same source.

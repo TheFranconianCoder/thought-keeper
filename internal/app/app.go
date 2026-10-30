@@ -1753,17 +1753,24 @@ func (a *App) releaseSourceTag(hash string) {
 	a.sourceTagMu.Unlock()
 }
 
-// ScheduleQuery creates a query run and enqueues it.
-func (a *App) ScheduleQuery(question string) (string, error) {
+// ScheduleQuery creates a query run and enqueues it. A non-empty source scopes the answer to that
+// source: the run records it as its target and the query tools refuse everything else.
+func (a *App) ScheduleQuery(question, source string) (string, error) {
 	if !a.agentAvailable {
 		return "", agentNotConfigured()
 	}
-	runID, err := a.startRun.ExecuteQuery(context.Background(), a.cfg.OpenAI.ModelReason, question)
+	source = strings.TrimSpace(source)
+	if source != "" && a.query.Index != nil {
+		if _, err := a.query.Index.GetSourceByHash(context.Background(), source); err != nil {
+			return "", err
+		}
+	}
+	runID, err := a.startRun.ExecuteQuery(context.Background(), a.cfg.OpenAI.ModelReason, question, source)
 	if err != nil {
 		return "", err
 	}
 	select {
-	case a.queryQueue <- runJob{runID: runID, op: entities.RunQuery, question: question}:
+	case a.queryQueue <- runJob{runID: runID, op: entities.RunQuery, question: question, hash: source}:
 	default:
 		return "", types.New("conflict", "run queue is full", types.ErrConflict)
 	}
@@ -2733,7 +2740,7 @@ func (a *App) runOne(job runJob) {
 	case entities.RunQuery:
 		a.publish("run", map[string]any{"run_id": run, "op": string(job.op), "step": string(job.step), "status": "running"})
 		a.enterAsk()
-		res, err := a.query.Execute(ctx, job.runID, job.question)
+		res, err := a.query.ExecuteScoped(ctx, job.runID, job.question, job.hash)
 		a.leaveAsk()
 		if err != nil {
 			status = "failed"

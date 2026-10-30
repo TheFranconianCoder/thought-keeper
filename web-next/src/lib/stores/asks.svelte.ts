@@ -1,7 +1,7 @@
 import { api } from '../api';
 import { humanError } from '../api/errors';
 import type { AskSummary, Run, SavedAsk } from '../api/types';
-import { askPath, navigate, router } from '../router.svelte';
+import { askPath, askSourcePath, navigate, router } from '../router.svelte';
 import { firstLine } from '../format';
 import { t } from '../i18n/index.svelte';
 
@@ -20,6 +20,8 @@ export interface PendingAsk {
   key: string;
   runId: string;
   question: string;
+  /** The source the question is scoped to, or empty for the whole vault. */
+  source?: string;
   status: PendingStatus;
   error?: string;
   startedAt: number;
@@ -95,23 +97,30 @@ class AsksStore {
     this.detailLoading = false;
   }
 
-  /** submit starts one question. It never waits for another one: answers run in parallel. */
-  async submit(question: string): Promise<void> {
+  /** submit starts one question. It never waits for another one: answers run in parallel. A source
+   *  scopes the answer to that one source. */
+  async submit(question: string, source = ''): Promise<void> {
     const value = question.trim();
+    const scope = source.trim();
     if (!value) return;
 
     // The detail is a saved answer; a new question belongs to the list, where its status is visible.
-    if (router.current.view === 'ask' && router.current.id) navigate('#/ask');
+    // Keep the source in the address, so the composer still says what the answer may read.
+    if (router.current.view === 'ask' && router.current.id) {
+      navigate(scope ? askSourcePath(scope) : '#/ask');
+    } else if (scope && router.current.view === 'ask' && !router.current.params.get('source')) {
+      navigate(askSourcePath(scope));
+    }
 
     const key = `q-${++this.localSeq}`;
     this.pending = [
-      { key, runId: '', question: value, status: 'starting', startedAt: Date.now() },
+      { key, runId: '', question: value, source: scope || undefined, status: 'starting', startedAt: Date.now() },
       ...this.pending,
     ];
 
     let runID = '';
     try {
-      runID = (await api.query(value)).run_id;
+      runID = (await api.query(value, scope)).run_id;
     } catch (error) {
       this.patch(key, {
         status: 'failed',
@@ -132,12 +141,12 @@ class AsksStore {
     if (pending) void this.finish(pending.key, runID);
   }
 
-  /** retry asks a failed question again, as a new run. */
+  /** retry asks a failed question again, as a new run. Its source scope travels with it. */
   retry(key: string): void {
     const failed = this.pending.find((run) => run.key === key);
     if (!failed) return;
     this.drop(key);
-    void this.submit(failed.question);
+    void this.submit(failed.question, failed.source ?? '');
   }
 
   /** dismiss removes one failed row; a running row is not dismissible. */
@@ -210,6 +219,7 @@ class AsksStore {
         {
           id: run.id,
           question: run.question || pending?.question || '',
+          source: pending?.source,
           created_at: run.started_at || now,
           updated_at: run.ended_at || now,
         },

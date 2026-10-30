@@ -124,6 +124,13 @@ the vault as it is; a half-associated vault is still worth asking.
     have.
   - Bookmarks and sitemap/feed containers are counted, not summarised: they have no derivation.
 
+A question can be **scoped to one source** — the Ask action on a source page. The source hash travels
+with the run: the system prompt names it and every tool is restricted to that source. `list_topics`
+and `list_sources` are not offered; `search` is the same lexical ladder with a provenance filter;
+`list_atoms` and `read_source_summary` are pinned to the source; `read_atom` refuses a claim that does
+not come from it and omits cluster peers (a peer may belong to another source). If that one source
+does not contain the answer, the answer says so; it never widens the scope silently.
+
 The answer cites **claims** as `[[claim:<id>|short claim text]]` and a **source's overview** as
 `[[source:<hash>|<source title>]]`. A claim citation supports a precise statement; a source citation
 supports a statement taken from that source's overview. Clusters, pages and chapters are never

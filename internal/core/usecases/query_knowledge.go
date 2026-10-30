@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -59,8 +60,28 @@ const (
 	sourceClaimListLimit = 30
 )
 
-// Execute runs the agent and finishes the run row.
+// Execute answers a vault-wide question.
 func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question string) (QueryResult, error) {
+	return uc.ExecuteScoped(ctx, runID, question, "")
+}
+
+// ExecuteScoped answers a question, optionally from ONE source only. A non-empty source is a
+// boundary, not a hint: every tool is restricted to that source and its claims.
+func (uc QueryKnowledge) ExecuteScoped(ctx context.Context, runID ulid.ULID, question, sourceHash string) (QueryResult, error) {
+	scope := strings.TrimSpace(sourceHash)
+	if scope != "" && !entities.IsSHA256Hex(scope) {
+		return QueryResult{}, fmt.Errorf("query: invalid source hash %q", scope)
+	}
+	sourceName := scope
+	if scope != "" && uc.Index != nil {
+		src, err := uc.Index.GetSourceByHash(ctx, scope)
+		if err != nil {
+			return QueryResult{}, err
+		}
+		sourceName = sourceLabel(src)
+	}
+	scoped := scope != ""
+
 	tools := []agents.Tool{
 		{
 			Def: interfaces.AgentToolDef{
@@ -101,7 +122,7 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 				if err := json.Unmarshal(args, &in); err != nil {
 					return "", err
 				}
-				hits, err := uc.Search.Search(ctx, in.Query, "atoms", 20)
+				hits, err := uc.searchForScope(ctx, in.Query, scope, 20)
 				if err != nil {
 					return "", err
 				}
@@ -138,22 +159,27 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 				if err != nil {
 					return "", err
 				}
-				// The claim's cluster is CONTEXT for the answer: the claims it travels with are the
-				// nearest evidence that the subject has more to it than this one sentence. Bounded, and
-				// ids only for the follow-up — the model reads a peer if it needs the body.
-				peerIDs := uc.clusterPeers(ctx, a.ID)
-				peers := make([]map[string]string, 0, len(peerIDs))
-				for _, pid := range peerIDs {
-					if p, gErr := uc.Atoms.GetAtom(ctx, pid); gErr == nil {
-						peers = append(peers, map[string]string{
-							"id": p.ID.String(), "claim": p.Claim, "topic": p.Topic,
-						})
-					}
+				if scoped && !atomFromSource(a, scope) {
+					return "", fmt.Errorf("claim %s does not belong to the selected source", a.ID)
 				}
-				out, _ := json.Marshal(map[string]any{
+				res := map[string]any{
 					"id": a.ID.String(), "claim": a.Claim, "body": a.Body, "topic": a.Topic,
-					"type": string(a.Type), "status": string(a.Status), "cluster_peers": peers,
-				})
+					"type": string(a.Type), "status": string(a.Status),
+				}
+				// A scoped answer may not travel into another source's claims through a cluster peer.
+				if !scoped {
+					peerIDs := uc.clusterPeers(ctx, a.ID)
+					peers := make([]map[string]string, 0, len(peerIDs))
+					for _, pid := range peerIDs {
+						if p, gErr := uc.Atoms.GetAtom(ctx, pid); gErr == nil {
+							peers = append(peers, map[string]string{
+								"id": p.ID.String(), "claim": p.Claim, "topic": p.Topic,
+							})
+						}
+					}
+					res["cluster_peers"] = peers
+				}
+				out, _ := json.Marshal(res)
 				return string(out), nil
 			},
 		},
@@ -171,6 +197,11 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 					Source string `json:"source"`
 				}
 				_ = json.Unmarshal(args, &in)
+				// A scoped question may list this source's claims, whatever the model asked for.
+				if scoped {
+					in.Source = scope
+					in.Topic = ""
+				}
 				var (
 					atoms []entities.Atom
 					err   error
@@ -311,6 +342,9 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 				if uc.Index == nil {
 					return "", fmt.Errorf("the source index is not configured")
 				}
+				if scoped {
+					in.Hash = scope
+				}
 				hash := strings.TrimSpace(in.Hash)
 				if !entities.IsSHA256Hex(hash) {
 					return "", fmt.Errorf("invalid source hash %q", hash)
@@ -366,6 +400,14 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 		},
 	}
 
+	// A scoped answer cannot survey the vault: the topic catalog and the recency list are
+	// vault-wide tools, so they are not offered at all.
+	if scoped {
+		tools = slices.DeleteFunc(tools, func(t agents.Tool) bool {
+			return t.Def.Name == "list_topics" || t.Def.Name == "list_sources"
+		})
+	}
+
 	var languages []string
 	if finder, ok := uc.Search.(interface {
 		Languages(context.Context) ([]string, error)
@@ -376,11 +418,15 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 	}
 
 	rec := NewStepRecorder(ctx, uc.Runs, runID, uc.Log)
+	system := agents.QuerySystem
+	if scoped {
+		system = agents.QuerySourceSystem(sourceName, scope)
+	}
 	loop := agents.Loop{
 		Gateway:         uc.Gateway,
 		Model:           uc.Model,
 		ReasoningEffort: uc.ReasoningEffort,
-		System:          agents.QuerySystem,
+		System:          system,
 		Tools:           tools,
 		MaxIterations:   uc.MaxIterations,
 		OnStep:          rec.OnStep,
@@ -416,7 +462,7 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 		now := uc.Clock.Now()
 		if err := uc.Asks.Write(ctx, entities.Ask{
 			ID: runID, Question: question, Answer: answer, Tags: AskTags(ctx, question, answer, uc.Atoms, uc.Index),
-			CreatedAt: now, UpdatedAt: now,
+			Source: scope, CreatedAt: now, UpdatedAt: now,
 		}); err != nil && uc.Log != nil {
 			uc.Log.Warn("ask: could not save the question/answer", "run", runID, "err", err)
 		}
@@ -430,6 +476,52 @@ const (
 	searchExcerpts     = 3
 	searchExcerptChars = 1200
 )
+
+// searchForScope searches claims, restricted to the source when one is selected. The index's
+// scoped search is preferred; the fallback filters global hits by provenance, so even a repository
+// without the scoped method cannot leak another source's claims.
+func (uc QueryKnowledge) searchForScope(ctx context.Context, query, scope string, limit int) ([]interfaces.SearchHit, error) {
+	if scope == "" {
+		return uc.Search.Search(ctx, query, "atoms", limit)
+	}
+	if scoped, ok := uc.Search.(interface {
+		SearchInSource(context.Context, string, string, int) ([]interfaces.SearchHit, error)
+	}); ok {
+		return scoped.SearchInSource(ctx, query, scope, limit)
+	}
+	hits, err := uc.Search.Search(ctx, query, "atoms", limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]interfaces.SearchHit, 0, len(hits))
+	for _, hit := range hits {
+		if uc.Atoms == nil {
+			continue
+		}
+		id, parseErr := ulid.ParseStrict(hit.ID)
+		if parseErr != nil {
+			continue
+		}
+		a, getErr := uc.Atoms.GetAtom(ctx, id)
+		if getErr != nil {
+			continue
+		}
+		if atomFromSource(a, scope) {
+			out = append(out, hit)
+		}
+	}
+	return out, nil
+}
+
+// atomFromSource says whether a claim carries provenance in this source.
+func atomFromSource(a entities.Atom, hash string) bool {
+	for _, src := range a.Sources {
+		if src.Hash == hash {
+			return true
+		}
+	}
+	return false
+}
 
 // clusterPeers returns the other claims of the claim's clusters, bounded: the answer may use them as
 // context, and the ids let the model read one in full if it needs the body.

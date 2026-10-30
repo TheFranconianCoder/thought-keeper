@@ -123,3 +123,14 @@ func TestQueryPromptHasTheRecencyBranch(t *testing.T) {
 		t.Errorf("QueryUser lacks the current time: %q", user)
 	}
 }
+
+// TestQuerySourcePromptNamesOneSource: a scoped answer is about exactly one source and may not
+// widen the scope.
+func TestQuerySourcePromptNamesOneSource(t *testing.T) {
+	prompt := agents.QuerySourceSystem("A book", "7f3a1c0000000000000000000000000000000000000000000000000000000000")
+	for _, want := range []string{"ONE source", "A book", "7f3a1c", "do not widen the scope", "language of the QUESTION"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("QuerySourceSystem lacks %q", want)
+		}
+	}
+}

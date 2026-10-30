@@ -7,6 +7,9 @@ export const askDe: Record<string, string> = {
   'ask.placeholder': 'Was sagen die Aussagen über …',
   'ask.ariaQuestion': 'Eine Frage stellen',
   'ask.submit': 'Fragen',
+  'ask.onlySource': 'Nur diese Quelle',
+  'ask.clearSource': 'Im ganzen Tresor fragen',
+  'ask.answeredFrom': 'Aus dieser Quelle beantwortet',
 
   'ask.savedQueries': 'Gespeicherte Fragen',
   'ask.savedSub': 'Jede Antwort wird automatisch gespeichert.',

@@ -148,7 +148,8 @@ export const api = {
   asks: () => request<AskList>('/asks'),
   ask: (id: string) => request<SavedAsk>(`/asks/${enc(id)}`),
   deleteAsk: (id: string) => request<{ id: string }>(`/asks/${enc(id)}`, { method: 'DELETE' }),
-  query: (question: string) => request<DistillResponse>('/query', json('POST', { question })),
+  query: (question: string, source = '') =>
+    request<DistillResponse>('/query', json('POST', { question, ...(source ? { source } : {}) })),
   run: (id: string) => request<Run>(`/runs/${enc(id)}`),
 
   // ── Search ─────────────────────────────────────────────────────────────
