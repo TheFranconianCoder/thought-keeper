@@ -19,6 +19,7 @@ export const commonDe: Record<string, string> = {
   'common.cancel': 'Abbrechen',
   'common.confirm': 'Bestätigen',
   'common.delete': 'Löschen',
+  'common.close': 'Schließen',
   'common.dismiss': 'Ausblenden',
   'common.retry': 'Erneut versuchen',
   'common.clear': 'entfernen',

@@ -415,3 +415,83 @@ Caching is safe only when the key covers every input.
   normalised to real links when the record is written (and repaired by `Normalize`).
 - **A scoped ask is a record of its boundary.** `source` is written from the run's scope; opening
   the answer shows the reference again, and asking it again uses the same source.
+
+## 10. Command records
+
+The assistant is a command line, not a chat: one utterance in, one GUI state out. Every command it
+reads is written to `commands/<ulid>.md` — a RECORD of the request, the criteria it was understood
+as, and the set it produced.
+
+```markdown
+---
+id: 01J9A1B2C3D4E5F6G7H8J9K0MN
+text: zeige mir alle Quellen zum Thema Cloud, letzte Woche, noch nicht destilliert
+lens: sources
+url: '#/sources?command=01J9A1B2C3D4E5F6G7H8J9K0MN'
+resolution: research
+rationale: 7 sources own claims about 37signals
+notes:
+  - '"topic" was read as provenance: sources whose claims are about "37signals"'
+generated: llm
+total: 8
+vault: 340
+scanned: 340
+created: 2026-10-30T14:02:11Z
+criteria:
+  tags: [software-architecture]
+  topics: [architecture]
+  order: newest
+mapped:
+  - name: software-architecture
+    kind: tag
+    count: 67
+    found: 67
+  - name: architecture
+    kind: topic
+    count: 340
+    found: 210
+items:
+  - ref: 7f3a1c0000000000000000000000000000000000000000000000000000000000
+    title: Cloud Architecture
+    kind: pdf
+    why: its claims are about running Rails at small scale
+---
+
+# zeige mir alle Quellen zum Thema Cloud, letzte Woche, noch nicht destilliert
+
+8 of 8 shown
+
+- Cloud Architecture — `7f3a1c00…`
+```
+
+| Key | Owner | Meaning |
+| --- | --- | --- |
+| `text` | human | the utterance, verbatim |
+| `lens` | service | which lens the answer belongs to (`sources`, `claims`, `wiki`, `status`, `attention`, `ask`) |
+| `criteria` | service | the interpretation: what the banner shows and what "run again" re-resolves |
+| `items` | service | the MATERIALIZED set, in the command's order — never a copy of the rows |
+| `total` / `vault` / `scanned` | service | how many matched, how many the filter alone matched, how many rows the resolution read |
+| `url` | service | the address the GUI follows; built from the record, never from the model |
+| `resolution` | service | `filter` (exact, deterministic), `research` (a model read the vault and curated the set) or `ask` (a question, delegated) |
+| `rationale` | model/service | one sentence: what this set is and why these items are in it |
+| `criteria.source` / `criteria.atom` | human | an explicit reference: the source or claim the reader pointed at (or pasted) |
+| `notes` | service | honest footnotes — a criterion read differently, a reference that does not exist, a cut set |
+| `mapped` | service | the vocabulary names the request was matched to, each with `count` (how often the vault uses it) and `found` (how many items of THIS set it produced). Only names that produced items are kept |
+| `generated` | service | `llm` (a model read it) or `rules` (the deterministic parser did) |
+
+- **The set is materialized, not re-derived.** A source that arrived after the command ran is not
+  in it; a source deleted since simply fails to resolve, and the list says "1 no longer present".
+  That is what keeps the answer stable while the vault moves on — and it is why the order is part
+  of the record: a lexical ranking cannot be re-derived later.
+- **Free text never enters the address.** A command that searched (or filtered) by words hands out
+  `#/sources?command=<id>`; a command that named facets hands out the facets beside the id, so the
+  list still means something after the record is gone.
+- **The records expire.** `assistant.retention` (default `168h`) sends older commands to
+  `.trash/commands/`; the pass runs on its own cadence (`assistant.prune_interval`, default `24h`)
+  and once right after start — a week-long window does not need a per-minute walk. An address that
+  outlives its record is answered honestly ("this command was pruned"), never as an unfiltered list.
+- **`commands/` is git-ignored** (`vault.git.ignore_derived`): it is short-lived UI state, not
+  knowledge. The file stays in the vault — a restart does not lose the history — but it is not
+  versioned.
+- **No index table.** Like `asks/`, the directory is read directly: the history is small by design.
+  `reindex` does not touch it.

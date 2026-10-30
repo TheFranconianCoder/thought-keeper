@@ -8,6 +8,7 @@ import { bookmarkWindow, failedWindow, sourceWindow } from '../stores/source-win
 import { claims } from '../stores/claims.svelte';
 import { wiki } from '../stores/wiki.svelte';
 import { asks } from '../stores/asks.svelte';
+import { assistant } from '../stores/assistant.svelte';
 
 /**
  * The event pipeline.
@@ -336,6 +337,12 @@ function handleFrame(frame: StreamFrame): void {
       return;
     case 'vocabulary':
       handleVocabulary();
+      return;
+    case 'command':
+      // One command, one GUI state: any window may have sent it (this one, another device, the
+      // CLI). The store follows the address once per command id, so a frame cannot move the reader
+      // twice.
+      assistant.applyFrame(data);
       return;
     default:
       // Forward compatibility: unknown event types are ignored, never guessed at.

@@ -543,6 +543,125 @@ html[data-wco="1"] .topbar-search:focus-visible {
   display: none;
 }
 
+/* The assistant is a FAB, not a bar button.
+ *
+ * It is the app's command line — the one thing that is always reachable and not a lens — and a bar
+ * button made it look like another utility (search, language, theme). A round button, centered,
+ * hanging a little below the bar, says "action" rather than "control", and it is the same button in
+ * the wide and the narrow layout.
+ *
+ * It must overlap the content (that is what makes it float), so the bar needs a stacking order of
+ * its own: the backdrop-filter already creates a context, and z-index only works if the bar is
+ * positioned.
+ */
+.topbar {
+  position: relative;
+  z-index: 30;
+}
+
+.assistant-fab {
+  position: absolute;
+  left: 50%;
+  /* It hangs out of the bar, but keeps its distance from the OS title bar above it. */
+  top: calc(100% - 32px);
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 10%) inset,
+    0 6px 18px rgb(0 0 0 / 28%);
+  /* The spark's mass sits a hair high in its own box; half a pixel of optical correction is the
+     difference between "centred" and "looks off". */
+  transform: translateX(-50%) translateY(-0.5px);
+  transition:
+    background 0.15s var(--ease),
+    transform 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+
+.assistant-fab:hover {
+  background: var(--accent-hover);
+  transform: translateX(-50%) translateY(1px);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 10%) inset,
+    0 8px 22px rgb(0 0 0 / 34%);
+}
+
+.assistant-fab:active {
+  transform: translateX(-50%) translateY(2px) scale(0.97);
+}
+
+.assistant-fab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* The installed PWA's bar IS the OS title bar and is shallower: the button sits higher and a little
+   smaller, so it does not crowd the window controls. */
+html[data-wco="1"] .assistant-fab {
+  top: calc(100% - 28px);
+}
+
+.assistant-fab .ico {
+  display: block;
+  animation: assistant-twinkle 4.5s var(--ease) infinite;
+}
+
+@keyframes assistant-twinkle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.82;
+  }
+}
+
+/* A command is being read: somewhere in this vault, maybe not in this window. The spark breathes
+   and a ring runs out of the button, so "the assistant is working" is visible without a banner. */
+.assistant-fab.is-busy .ico {
+  animation: assistant-pulse 1.1s var(--ease) infinite;
+}
+
+.assistant-fab.is-busy::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: assistant-ring 1.6s var(--ease) infinite;
+}
+
+@keyframes assistant-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+@keyframes assistant-ring {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-soft);
+  }
+  70% {
+    box-shadow: 0 0 0 9px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -1725,6 +1844,7 @@ html[data-wco="1"] .brand a {
   .topbar-search-icon {
     display: inline-flex;
   }
+
 
   .activity-chip {
     max-width: 190px;

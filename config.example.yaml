@@ -25,6 +25,7 @@ vault:
     wiki: 'wiki'                           # user-authored Markdown pages (source of truth)
     clusters: 'clusters'                   # titleless associations of claims (derived cache)
     asks: 'asks'                           # saved Ask conversations (records)
+    commands: 'commands'                   # the assistant's short-lived requests (pruned; git-ignored)
     vocabulary: 'vocabulary'               # the canonical NAME vocabularies: claim topics, wiki tags
                                            # and source tags — decisions about what a thing is called,
                                            # as opposed to what it says. Records, not caches: a
@@ -104,6 +105,18 @@ cluster:                                   # the claim graph behind the associat
     attach_min_score: 0.18                 # cosine to an existing cluster centroid for a free claim to join it
     overlap_max: 2                         # clusters one claim may belong to
     cross_topic_min_edges: 3               # real claim edges needed to merge two topic blocks
+
+assistant:                                 # the command line: "show me X" → a lens and a filter
+    retention: '168h'                      # how long a command lives; it is pruned after this and
+                                           # its address dies with it (empty = keep forever)
+    prune_interval: '24h'                  # how often the retention is enforced (the pass walks
+                                           # commands/, so hourly or per-tick is pointless);
+                                           # empty = never prune automatically
+    max_items: 2000                        # members one command materializes. The list below is
+                                           # windowed, so a long set is fine; the banner says when
+                                           # it was cut (beyond this size)
+    scan_limit: 1000                       # rows one resolution looks at — a time window or a step
+                                           # state is applied over that window, and the record says so
 
 capture:                                   # URL sources
     dedupe_by_url: true

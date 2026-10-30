@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import AddSourceDialog from './components/overlays/AddSourceDialog.svelte';
+  import AssistantDialog from './components/overlays/AssistantDialog.svelte';
   import DuplicateWindow from './components/overlays/DuplicateWindow.svelte';
   import SearchPalette from './components/overlays/SearchPalette.svelte';
   import ConfirmDialog from './components/ui/ConfirmDialog.svelte';
@@ -19,7 +20,7 @@
   import WikiView from './components/views/WikiView.svelte';
   import { startSync, resyncAll } from './lib/events/sync';
   import { adoptServerDefault, initLocale, t } from './lib/i18n/index.svelte';
-  import { openSearch } from './lib/overlays';
+  import { openAssistant, openSearch } from './lib/overlays';
   import { navigate, router, startRouter } from './lib/router.svelte';
   import { rememberScroll, restoreScroll } from './lib/scroll-memory';
   import { claimWindow } from './lib/single-window';
@@ -100,9 +101,16 @@
     if (scroller) pageScroll = rememberScroll(scroller, 'page');
 
     const onKey = (event: KeyboardEvent): void => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === 'k') {
         event.preventDefault();
         openSearch();
+      } else if (key === 'j') {
+        // The assistant's field, one key away from the search: both are ways INTO the app, and the
+        // difference is that one finds and the other drives.
+        event.preventDefault();
+        openAssistant();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -166,6 +174,7 @@
 </div>
 
 <SearchPalette />
+<AssistantDialog />
 <AddSourceDialog />
 <ConfirmDialog />
 <DuplicateWindow />

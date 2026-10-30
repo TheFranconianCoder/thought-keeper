@@ -5,7 +5,8 @@ OpenAI SDK. Prompting, tool definitions and the loop live in the core; the SDK l
 `infrastructure/gateways/openai_agent.go` behind `interfaces.AgentGateway`.
 
 Its operations are **distill**, **query**, **tag** (a wiki page's tags or a source's auto tags),
-**summary** (a source's overview), **lint** (programmatic today) and the **vocabulary** verbs
+**summary** (a source's overview), **command** (the assistant: one utterance → one GUI state),
+**lint** (programmatic today) and the **vocabulary** verbs
 (curate, retopic, learn broad tokens). **The cluster step is deterministic and has no model**: it is a claim graph, not a naming
 task.
 
@@ -151,6 +152,67 @@ citations.
   never decides the answer's language. A German question that names a Chinese source is answered in
   German.
 - Every successful query writes an Ask record to `asks/<run-id>.md`. There is no filing step.
+
+## 4.1 Command: one utterance → one GUI state
+
+The assistant is not a chat and not a second answer: a person says what to SHOW, and the app shows
+it. The model's only job is the READING — which lens, which of the app's own dimensions, which
+order. It never writes a URL, never invents a hash and never answers the request.
+
+- **A closed schema.** `lens` (`sources|claims|wiki|status|attention|ask`), `text`, `tag`, `topic`,
+  `kind` (`md|pdf|txt|url`), `since`, `state` (`open|failed|done`), `order`, `bookmarks`,
+  `attached`. Every field is optional; unknown fields are dropped, and an unknown clause is not
+  silently accepted — the reading is validated field by field in Go.
+- **The vault's own vocabulary goes in.** The prompt carries the known source tags and claim topics
+  (bounded), so a plausible word cannot become a filter that matches nothing. A word that is not in
+  them stays free text and goes to the lexical search.
+- **A reading that narrows nothing is not a reading.** If the model returns only the default lens,
+  the answer is discarded and the deterministic parser decides — and that parser refuses to call an
+  unrecognised utterance a command at all (`422 unparsed`). An assistant that answers "I did not
+  understand" with the whole vault is worse than one that says it.
+- **A SUBJECT is never a filter.** A filter is decidable without reading anything: a tag, a kind, an
+  arrival window, a step state, a reference the reader pointed at, or words the user names AS words
+  ("sources that mention Kamal"). Everything else — anything with "about"/"über"/"zum Thema", any
+  request that would need the model to look at the content — is research, even when the lens is as
+  small as the wiki. Word-matching is the no-model fallback, not the answer: a page that says
+  "projects" once is not a page ABOUT projects, and only a reading can tell the two apart.
+- **Two routes, and the model picks one.** `filter` is for a request that is EXACTLY expressible
+  with the vault's own fields (tag, kind, arrival window, step state, bookmarks, attached, a literal
+  word search): the resolution is deterministic, exact and complete. `research` is for everything
+  that needs judgement about what the content says — "sources about 37signals" is not a source field,
+  it is a question about the claims. `ask` delegates a question to the query agent.
+- **A subject request is mapped onto the vault's OWN semantic layer.** Every source carries tags an
+  LLM derived from its claims; every claim carries a flat topic. Those names are the index a subject
+  request is answered from: the tag `software-architecture` covers 67 sources without reading one.
+  The flow is `words → terms → NAMES → the set`:
+  - the model turns the reader's words into 3–6 search terms (translation, the established domain
+    noun, hyphenated forms). It never names a tag or a topic — the vocabulary is the authority on
+    names, and a model that invents one produces a filter for nothing;
+  - the server matches those terms (and the request's own words) against the real names, in Go, with
+    word-level matching and inverse document frequency: "architecture" identifies a name that
+    "software" (in three names) does not. Four similarity rules, weakest last: exact name, the same
+    word after a plural/German suffix, one edit away (two in a long word), and the same Cologne
+    phonetic code — which is what carries "Müller/Miller". The curated ALIAS table is consulted
+    first, so a name a curation merged away still lands on the one the vault uses now;
+  - the set is a JOIN: tagged sources, plus the sources whose claims carry the mapped topics.
+  Both are index reads. No content is read, no candidate is judged with an excerpt, nothing is
+  summarized. Reading content was the earlier design: slow, unreproducible, and worse than the
+  metadata the vault already had.
+- **Without a model the same matcher runs on the request's own words.** When the wording agrees with
+  the vault's names it still finds them; when it does not, the record says the match ran without the
+  model instead of pretending the vault is empty.
+- **The text of a filter is matched WORD BY WORD, not as a substring.** "Software Architektur" must
+  not depend on that exact phrase appearing in a title: every word must be found (in a source's
+  title/name/URL/tags, in a wiki page's title/tags/prose), and only when nothing has all of them is
+  the reading relaxed to "any word" — with a note that says so. Its one-sentence rationale is
+  stored with the set and shown in the banner: a curated set is a different promise from an exact
+  filter, and the reader must be able to tell them apart.
+- **The set is materialized** (`commands/<id>.md`), which is what makes "what was true then" and
+  "what is true now" two different, honest things: the record keeps its members, a deleted source
+  stops resolving, and "run again" re-resolves the criteria into a new record.
+- **No tools and no run row of its own.** It is one bounded completion, like the summary: the
+  command record IS the audit (the utterance, the criteria, `generated: llm|rules`). It writes no
+  claim, no source and no wiki page.
 
 ## 5. Tag: a wiki page's shelf
 

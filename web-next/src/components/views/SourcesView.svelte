@@ -6,7 +6,7 @@
   import { fmtBytes, relTime } from '../../lib/format';
   import { n, t } from '../../lib/i18n/index.svelte';
   import { openAdd } from '../../lib/overlays';
-  import { router } from '../../lib/router.svelte';
+  import { navigate, router, sourcePath, withoutQuery } from '../../lib/router.svelte';
   import { connection } from '../../lib/stores/connection.svelte';
   import { sourceWindow } from '../../lib/stores/source-window.svelte';
   import { sources, type SourceKindFilter } from '../../lib/stores/sources.svelte';
@@ -14,8 +14,6 @@
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
   import { rememberSourcesTop } from '../../lib/sources-scroll';
-  import { sourcePath } from '../../lib/router.svelte';
-  import { navigate } from '../../lib/router.svelte';
   import { statusLabel } from '../../lib/source-state';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -24,6 +22,7 @@
   import SourceSteps from '../sources/SourceSteps.svelte';
   import SourceWindowList from '../sources/SourceWindowList.svelte';
   import ListHead from '../ui/ListHead.svelte';
+  import AssistantBanner from '../assistant/AssistantBanner.svelte';
 
   // The vault total comes from the status report, so the header is right from the first paint; the
   // list itself reads only the window around the viewport.
@@ -36,15 +35,37 @@
 
   // The filter is server-side: a page must be the page of the FILTERED list, or its count would lie
   // about the scroll height.
+  const commandId = $derived(
+    router.current.view === 'sources' ? (router.current.params.get('command') ?? '') : '',
+  );
   const activeFilter = $derived<SourceListFilter>({
     kind: sources.kind === 'all' ? '' : sources.kind,
     query: sources.query,
     tag: sources.filter,
     attachedOnly: sources.attachedOnly,
+    // An assistant result is ONE filter dimension beside the named ones — the server reads the set
+    // from the record, and the window keeps its count, pages and scroll height.
+    command: commandId,
   });
   const hasFilter = $derived(
     !!sources.query.trim() || sources.kind !== 'all' || !!sources.filter || sources.attachedOnly,
   );
+
+  // An assistant result arrives as an address, and the address is the truth about what is shown: the
+  // controls are SEEDED from it, so the visible filter bar cannot disagree with the list. Free text
+  // never appears here — it lives in the record, not in the URL.
+  $effect(() => {
+    const id = commandId;
+    if (!id) return;
+    untrack(() => {
+      const params = router.current.params;
+      const kind = params.get('kind') ?? '';
+      sources.kind = (['md', 'pdf', 'txt', 'url'].includes(kind) ? kind : 'all') as SourceKindFilter;
+      sources.filter = params.get('tag') ?? '';
+      sources.attachedOnly = params.get('attached') === '1';
+      sources.query = '';
+    });
+  });
 
   // Seed the window with the filter that survived a trip into a source; the effect below only has
   // to react to later changes.
@@ -54,6 +75,7 @@
       query: sources.query,
       tag: sources.filter,
       attachedOnly: sources.attachedOnly,
+      command: router.current.params.get('command') ?? '',
     }),
   );
   // The first page must be read even before the total is known: the list cannot ask for a range
@@ -146,6 +168,16 @@
       </button>
     {/snippet}
 
+    {#if commandId}
+      <AssistantBanner
+        id={commandId}
+        expired={sourceWindow.commandRef?.expired ?? false}
+        total={sourceWindow.commandRef?.total ?? sourceWindow.count}
+        missing={sourceWindow.commandRef?.missing ?? 0}
+        lens="sources"
+      />
+    {/if}
+
     <div class="search-wrap list-search">
       <Icon name="search" size={14} />
       <input
@@ -153,6 +185,11 @@
         class="input input--search"
         placeholder={t('sources.filterPlaceholder')}
         bind:value={sources.query}
+        oninput={() => {
+          // Typing is the human taking the filter back: an assistant result is not a box to type
+          // over, so the command leaves the address and the words apply to the whole vault.
+          if (commandId) navigate(withoutQuery('command'));
+        }}
         aria-label={t('sources.filterAria')}
       />
     </div>

@@ -45,6 +45,8 @@ type AtomList struct {
 	Count  int           `json:"count"`
 	Total  int           `json:"total,omitempty"`
 	Topics []SourceTopic `json:"topics,omitempty"`
+	// Command is set when the list is an assistant result (see SourceList.Command).
+	Command *CommandRef `json:"command,omitempty"`
 }
 
 // SourceTopic is one of a source's claim topics and how many of its claims carry it: the rail shows

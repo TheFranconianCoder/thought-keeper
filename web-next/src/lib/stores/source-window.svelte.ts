@@ -1,5 +1,5 @@
 import { api } from '../api';
-import type { Source, SourceFacets, SourceListFilter } from '../api/types';
+import type { CommandRef, Source, SourceFacets, SourceListFilter } from '../api/types';
 import { readError, readSignal } from '../read';
 
 /** Pages kept on each side of the visible range. The window is a cache, not a growing copy of the
@@ -38,6 +38,13 @@ class SourceWindowStore {
   facetsLoaded = $state(false);
   facetsError = $state('');
 
+  /**
+   * commandRef is what the server said about the assistant result this window is showing: the
+   * record it came from, whether it has expired, and how many of its members a deletion took with
+   * it. It is part of the LIST response, so the banner costs no extra read.
+   */
+  commandRef = $state<CommandRef | null>(null);
+
   private filter: SourceListFilter = {};
   private filterKey = '';
   private pages = new Map<number, Source[]>();
@@ -57,6 +64,9 @@ class SourceWindowStore {
       kind: next.kind || undefined,
       query: next.query?.trim() || undefined,
       tag: next.tag || undefined,
+      // An assistant result is ONE filter dimension: the server reads the set from the record, so
+      // the window keeps its count, its pages and its scroll height exactly as with a tag filter.
+      command: next.command || undefined,
       attachedOnly: next.attachedOnly ? true : undefined,
       bookmarksOnly: next.bookmarksOnly ? true : undefined,
       failedOnly: next.failedOnly ? true : undefined,
@@ -76,6 +86,7 @@ class SourceWindowStore {
     this.runs.clear();
     this.loading = true;
     this.error = '';
+    this.commandRef = null;
     this.epoch++;
     this.version++;
   }
@@ -162,6 +173,7 @@ class SourceWindowStore {
         if (seq !== this.seq) return;
         this.pages.set(page, result.sources ?? []);
         this.count = result.count ?? result.total ?? this.count;
+        this.commandRef = result.command ?? null;
         this.loaded = true;
         this.loading = false;
         this.error = '';

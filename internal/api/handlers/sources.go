@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oklog/ulid/v2"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/payloads"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
@@ -56,6 +57,11 @@ type SourceDeleter interface {
 // paywall). The URL stays the source's address; the file becomes its snapshot.
 type URLAttacher interface {
 	Execute(ctx context.Context, in usecases.AttachInput) (partialentities.PartialSource, error)
+}
+
+// CommandSourceSet is an assistant result's materialized source set, in the command's order.
+type CommandSourceSet interface {
+	Execute(ctx context.Context, id ulid.ULID, limit, offset int) ([]partialentities.PartialSource, usecases.CommandWindow, error)
 }
 
 // SourceOpener opens a source's raw bytes for inline viewing, and its readable rendering — the
@@ -249,11 +255,25 @@ type SourcesHandler struct {
 	OnRemoved func(hash string)
 	// Mark shows a synchronous pass in the Running list while it works.
 	Mark MaintenanceMarker
+	// Commands resolves an assistant result (?command=<id>) into rows. Nil means the address is
+	// not understood here; the named criteria beside it still filter.
+	Commands CommandSourceSet
 }
 
 // List serves GET /api/v1/sources.
 func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+	limit := atoiDefault(q.Get("limit"), 200)
+	offset := atoiDefault(q.Get("offset"), 0)
+
+	// An assistant result is read from its RECORD, not from the filter: the set was materialized
+	// when the command ran, so a source that arrived later is not in it and a deleted one simply
+	// fails to resolve. A record that has been pruned leaves the named criteria in the address, and
+	// the payload says so instead of pretending the list is the assistant's answer.
+	handled, expired := h.serveCommand(w, r, limit, offset)
+	if handled {
+		return
+	}
 	filter := entities.SourceFilter{
 		Kind:          strings.TrimSpace(q.Get("kind")),
 		Query:         strings.TrimSpace(q.Get("q")),
@@ -262,17 +282,13 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 		BookmarksOnly: truthy(q.Get("bookmarks")),
 		FailedOnly:    truthy(q.Get("failed")),
 	}
-	srcs, err := h.Lister.Execute(r.Context(), filter, atoiDefault(q.Get("limit"), 200), atoiDefault(q.Get("offset"), 0))
+	srcs, err := h.Lister.Execute(r.Context(), filter, limit, offset)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
 	}
 	out := payloads.SourcesFromPartials(srcs)
-	if h.Distill != nil {
-		for i := range out {
-			out[i].RunningStep = h.Status.RunningStep(out[i].Hash)
-		}
-	}
+	h.decorate(out)
 	// Count is the TOTAL of the SAME filter, not the page: the reader shows it and the windowed
 	// list uses it as the scroll height.
 	total := len(out)
@@ -281,7 +297,47 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 			total = n
 		}
 	}
-	payloads.WriteJSON(w, http.StatusOK, payloads.SourceList{Sources: out, Count: total, Total: total})
+	payloads.WriteJSON(w, http.StatusOK, payloads.SourceList{Sources: out, Count: total, Total: total, Command: expired})
+}
+
+// serveCommand serves an assistant result. It reports whether it wrote the response, and — when the
+// record named in the address no longer exists — the ref that marks the address as expired. A
+// command for another lens is neither: the list is then simply the named filter, and saying
+// "expired" about a record that is there would be a lie.
+func (h SourcesHandler) serveCommand(w http.ResponseWriter, r *http.Request, limit, offset int) (bool, *payloads.CommandRef) {
+	raw := strings.TrimSpace(r.URL.Query().Get("command"))
+	if raw == "" || h.Commands == nil {
+		return false, nil
+	}
+	id, err := ulid.ParseStrict(raw)
+	if err != nil {
+		return false, nil
+	}
+	srcs, window, cErr := h.Commands.Execute(r.Context(), id, limit, offset)
+	if cErr != nil {
+		if types.CodeOf(cErr) == "not_found" {
+			return false, &payloads.CommandRef{ID: id.String(), Expired: true}
+		}
+		return false, nil
+	}
+	out := payloads.SourcesFromPartials(srcs)
+	h.decorate(out)
+	payloads.WriteJSON(w, http.StatusOK, payloads.SourceList{
+		Sources: out, Count: window.Total, Total: window.Total,
+		Command: &payloads.CommandRef{ID: id.String(), Total: window.Total, Missing: window.Missing},
+	})
+	return true, nil
+}
+
+// decorate adds the step that runs for a row RIGHT NOW. It is the live part of a row: the record's
+// lights are the last write, the spinner is the present.
+func (h SourcesHandler) decorate(out []payloads.Source) {
+	if h.Distill == nil || h.Status == nil {
+		return
+	}
+	for i := range out {
+		out[i].RunningStep = h.Status.RunningStep(out[i].Hash)
+	}
 }
 
 // Facets serves GET /api/v1/sources/facets: the Sources tag cloud and the attached count. It is

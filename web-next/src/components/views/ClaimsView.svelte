@@ -17,9 +17,13 @@
   import CopyId from '../ui/CopyId.svelte';
   import ListHead from '../ui/ListHead.svelte';
   import VirtualList from '../ui/VirtualList.svelte';
+  import AssistantBanner from '../assistant/AssistantBanner.svelte';
 
   const detailOpen = $derived(router.current.view === 'claims' && !!router.current.id);
   const topic = $derived(router.current.view === 'claims' ? (router.current.params.get('topic') ?? '') : '');
+  const commandId = $derived(
+    router.current.view === 'claims' ? (router.current.params.get('command') ?? '') : '',
+  );
 
   let query = $state('');
   let results = $state<SearchHit[]>([]);
@@ -61,10 +65,20 @@
     if (route.view !== 'claims') return;
 
     const nextTopic = route.params.get('topic') ?? '';
+    // An assistant result in the Claims lens is the materialized set of its record, not the topic
+    // filter: the address names the command, and the list reads its members.
+    const nextCommand = route.params.get('command') ?? '';
     // Store methods read their own reactive fields. They must stay untracked: an effect that
     // depended on them would rerun after every load and reload the same container forever.
     untrack(() => {
-      if (nextTopic !== claims.topic || !claims.loaded || claims.stale) void claims.load(nextTopic);
+      if (
+        nextTopic !== claims.topic ||
+        nextCommand !== claims.command ||
+        !claims.loaded ||
+        claims.stale
+      ) {
+        void claims.load(nextTopic, nextCommand);
+      }
       if (claims.topics.length === 0 || claims.topicsStale) void claims.loadTopics();
 
       if (route.id) void claims.open(route.id);
@@ -131,6 +145,15 @@
 <div class="page claims-page" class:split={detailOpen}>
   <section class="claims-list-pane" aria-label={t('view.claims')}>
     <ListHead title={t('view.claims')} count={total}>
+      {#if commandId}
+        <AssistantBanner
+          id={commandId}
+          expired={claims.commandRef?.expired ?? false}
+          total={claims.commandRef?.total ?? claims.total}
+          missing={claims.commandRef?.missing ?? 0}
+          lens="claims"
+        />
+      {/if}
       <div class="search-wrap list-search">
         <Icon name="search" size={14} />
         <input

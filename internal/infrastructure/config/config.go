@@ -24,10 +24,13 @@ type Config struct {
 	Pipeline PipelineConfig `yaml:"pipeline"`
 	Cluster  ClusterConfig  `yaml:"cluster"`
 	Capture  CaptureConfig  `yaml:"capture"`
-	Fetch    FetchConfig    `yaml:"fetch"`
-	PDF      PDFConfig      `yaml:"pdf"`
-	OCR      OCRConfig      `yaml:"ocr"`
-	Lint     LintConfig     `yaml:"lint"`
+	// Assistant is the command assistant: how long its records live, how big a materialized set may
+	// get, and how many rows one resolution may look at.
+	Assistant AssistantConfig `yaml:"assistant"`
+	Fetch     FetchConfig     `yaml:"fetch"`
+	PDF       PDFConfig       `yaml:"pdf"`
+	OCR       OCRConfig       `yaml:"ocr"`
+	Lint      LintConfig      `yaml:"lint"`
 	// Language holds the language of what the app WRITES: the interface's default, the claims the
 	// distill step derives and the overviews the summary step writes. A source's own language is
 	// detected per source and only tunes search; it never decides the output language.
@@ -77,6 +80,10 @@ type VaultConfig struct {
 	Wiki     string `yaml:"wiki"`
 	Clusters string `yaml:"clusters"`
 	Asks     string `yaml:"asks"`
+	// Commands holds the assistant's short-lived records: one utterance, the criteria it was
+	// understood as, and the set it produced. They are pruned after `assistant.retention`, so the
+	// directory is bounded by design.
+	Commands string `yaml:"commands"`
 	Trash    string `yaml:"trash"`
 	// Vocabulary holds the canonical name vocabularies (topics, branches, tags) — the agent's
 	// decisions about what a thing is CALLED, as opposed to what it says. A record, not a cache: a
@@ -200,6 +207,24 @@ type CaptureConfig struct {
 	MinTextChars int `yaml:"min_text_chars"`
 }
 
+// AssistantConfig is the command assistant. A command is a short-lived record: the retention is
+// what keeps the history small, and the set is bounded because a command is a UI state, not an
+// export.
+type AssistantConfig struct {
+	// Retention is how long a command lives, e.g. "168h" (one week). Emptied, the history is kept
+	// forever — and every address it ever handed out keeps working.
+	Retention string `yaml:"retention"`
+	// PruneInterval is how often the retention is ENFORCED, e.g. "24h". It is not a cadence that
+	// needs to be fine: a command that lives an hour longer costs nothing, and the pass walks the
+	// whole commands/ directory. Empty disables the automatic pass (the files stay).
+	PruneInterval string `yaml:"prune_interval"`
+	// MaxItems bounds the materialized set of one command. The banner says when it was cut.
+	MaxItems int `yaml:"max_items"`
+	// ScanLimit bounds how many rows one resolution looks at. Criteria the index cannot express (a
+	// time window, a derivation state) are applied over that window, and the record says so.
+	ScanLimit int `yaml:"scan_limit"`
+}
+
 type FetchConfig struct {
 	Timeout      string `yaml:"timeout"`
 	MaxBytes     int64  `yaml:"max_bytes"`
@@ -241,6 +266,7 @@ func Defaults() Config {
 			Wiki:       "wiki",
 			Clusters:   "clusters",
 			Asks:       "asks",
+			Commands:   "commands",
 			Trash:      ".trash",
 			Vocabulary: "vocabulary",
 			Git:        GitConfig{IgnoreDerived: true, CommitOnWrite: true, Author: "thought-keeper <agent@localhost>"},
@@ -276,6 +302,11 @@ func Defaults() Config {
 			AttachMinScore: 0.18, OverlapMinEdges: 4, OverlapMax: 2, CrossTopicMinEdges: 3,
 		},
 		Capture: CaptureConfig{DedupeByURL: true, RefreshInterval: "168h", FeedRefreshInterval: "24h", MinTextChars: 400},
+		Assistant: AssistantConfig{
+			// A week is long enough to find yesterday's request again, and short enough that the
+			// history never becomes a second vault.
+			Retention: "168h", PruneInterval: "24h", MaxItems: 2000, ScanLimit: 1000,
+		},
 		Fetch: FetchConfig{
 			Timeout:   "20s",
 			MaxBytes:  5 << 20,
@@ -523,6 +554,16 @@ func (c Config) AsksDir() string {
 	dir := strings.TrimSpace(c.Vault.Asks)
 	if dir == "" {
 		dir = "asks"
+	}
+	return filepath.Join(c.VaultRoot(), dir)
+}
+
+// CommandsDir returns the absolute assistant directory. It is a record area with an expiry: the
+// consistency job moves commands older than `assistant.retention` to the trash.
+func (c Config) CommandsDir() string {
+	dir := strings.TrimSpace(c.Vault.Commands)
+	if dir == "" {
+		dir = "commands"
 	}
 	return filepath.Join(c.VaultRoot(), dir)
 }

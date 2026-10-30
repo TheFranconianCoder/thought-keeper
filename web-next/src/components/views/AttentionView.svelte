@@ -1,5 +1,6 @@
 <script lang="ts">
   import { clearable } from '../../lib/clearable';
+  import { untrack } from 'svelte';
   import { navigate, claimPath, router, sourcePath } from '../../lib/router.svelte';
   import { connection } from '../../lib/stores/connection.svelte';
   import { failedWindow } from '../../lib/stores/source-window.svelte';
@@ -13,6 +14,7 @@
   import ListHead from '../ui/ListHead.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
   import SourceWindowList from '../sources/SourceWindowList.svelte';
+  import AssistantBanner from '../assistant/AssistantBanner.svelte';
 
   // The source half is a WINDOW over the failed steps: the server filters, the count is the whole
   // failed list. Findings are a separate, small list from the lint pass. One search narrows both.
@@ -25,15 +27,29 @@
   const actionable = $derived(allActionable.filter((finding) => matches(finding, term)));
   const informational = $derived(allInformational.filter((finding) => matches(finding, term)));
   const failedCount = $derived(failedWindow.count);
+
+  // An assistant result in the Attention lens is the same materialized set: the window reads the
+  // record instead of the failed flag, and the banner says which request it came from.
+  const commandId = $derived(
+    router.current.view === 'attention' ? (router.current.params.get('command') ?? '') : '',
+  );
   // The head counts what the page holds, not what the current search happens to show: the unfiltered
-  // failed total is remembered while no search is active.
+  // failed total is remembered while no search is active. An assistant result is its own set, so it
+  // counts alone — the findings are not part of that request.
   let failedTotal = $state(0);
-  const total = $derived(failedTotal + allActionable.length);
+  const total = $derived(
+    commandId ? failedWindow.count : failedTotal + allActionable.length,
+  );
   // Both halves have to be here before the page may say "nothing needs attention": an empty list
   // while the sources are still loading is not a finding.
   const ready = $derived(failedWindow.loaded && system.findingsLoaded);
 
   failedWindow.setFilter({ failedOnly: true });
+
+  $effect(() => {
+    const id = commandId;
+    untrack(() => failedWindow.setFilter({ failedOnly: true, command: id }));
+  });
 
   $effect(() => {
     if (!searching && failedWindow.loaded) failedTotal = failedWindow.count;
@@ -44,7 +60,7 @@
     const next = term;
     clearTimeout(filterTimer);
     filterTimer = setTimeout(() => {
-      failedWindow.setFilter({ failedOnly: true, query: next });
+      failedWindow.setFilter({ failedOnly: true, query: next, command: commandId });
     }, 100);
     return () => clearTimeout(filterTimer);
   });
@@ -89,6 +105,16 @@
       </button>
     {/snippet}
 
+    {#if commandId}
+      <AssistantBanner
+        id={commandId}
+        expired={failedWindow.commandRef?.expired ?? false}
+        total={failedWindow.commandRef?.total ?? failedWindow.count}
+        missing={failedWindow.commandRef?.missing ?? 0}
+        lens="attention"
+      />
+    {/if}
+
     <div class="search-wrap list-search">
       <Icon name="search" size={14} />
       <input
@@ -96,6 +122,11 @@
         class="input input--search"
         placeholder={t('attention.filterPlaceholder')}
         bind:value={query}
+        oninput={() => {
+          // Taking the filter back from the assistant: the command leaves the address and the
+          // search applies to the whole failed list.
+          if (commandId) navigate('#/attention');
+        }}
         aria-label={t('attention.filterAria')}
       />
     </div>

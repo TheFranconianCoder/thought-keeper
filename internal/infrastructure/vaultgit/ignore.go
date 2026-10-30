@@ -48,6 +48,10 @@ func Patterns() []string {
 		"sources/**/*.log.1",
 		// The association layer is a cache: the claims are the truth.
 		"clusters/**/*.meta",
+		// The assistant's commands are UI states with an expiry: they are deleted after
+		// `assistant.retention`, so versioning them would only fill the history with churn that is
+		// gone a week later.
+		"commands/",
 	}
 }
 

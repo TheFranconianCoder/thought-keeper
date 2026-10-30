@@ -47,7 +47,9 @@ the sitemap; wiki-page and sitemap children cannot be deleted apart from their o
 The PWA is **event-driven** (SSE) and **claim-first**: a calm, Notion-flavored reader whose navigation
 is a finite set of lenses — **Start, Sources, Wiki, Bookmarks, Claims, Ask, Attention, Status** — in a
 sidebar on the wide layout and in a **footer navigation** when the window is narrow (no drawer, no menu
-button), with an Attention badge and a connection mark on Status. **Start** is the front door: an Ask
+button), with an Attention badge and a connection mark on Status. **The assistant sits in the top bar**
+and is not one of the lenses: it is how the app is driven from outside a click. A command resolves to
+a lens, a filter and a materialized set, and every open window follows the address it hands out. **Start** is the front door: an Ask
 box, Continue (the last opened details, local memory),
 Needs you, the newest sources and one vault-pulse line — never the newest-claims wall. A **wiki
 page** is user-authored Markdown with tags; saving it writes a source representation and runs the
@@ -124,6 +126,8 @@ filtered count is the scroll height. A cluster is
 | **atom** | One claim as a FILE. | `atoms/<ab>/<cd>/<id>.md` |
 | **claim** | What an atom says: one statement with provenance. "Atom" is the file, "claim" the sentence. | the atom's `claim` |
 | **cluster** | A titleless group of related claims: the association the fourth step derives. It is a CACHE. | `clusters/<ab>/<cd>/<id>.meta` |
+| **command** | One assistant request as a RECORD: the utterance, the criteria it was read as, and the **materialized set** it produced. Not a chat — one request, one GUI state. Short-lived: pruned after `assistant.retention`, so the address it hands out expires. | `commands/<ulid>.md` |
+| **assistant** | The UI's command line: the field in the top bar (`⌘J`) and the button beside it. It reads a command into a lens + a filter + a set, and drives the open windows over SSE. It is **not a lens** and has no page. | the top bar + `?assistant=1` |
 | **topic** | The FLAT subject of one claim (`caching`, `llm-agents`). A claim has exactly one. | the claim's `topic` |
 | **vocabulary** | The canonical names of a namespace, what they absorbed (the alias table), and the **broad tokens** learned from this vault for near-duplicate detection. Three namespaces: `topics`, `wiki-tags` and `source-tags`. | `vocabulary/topics.md`, `vocabulary/wiki-tags.md`, `vocabulary/source-tags.md` |
 | **capture / outline / distill / cluster** | The four steps, in order. The first three are DOCUMENT steps (one source); cluster is the VAULT-LEVEL step (the whole vault). | `.meta` records |
@@ -133,6 +137,11 @@ filtered count is the scroll height. A cluster is
 | **owed** | Work that is due but not started (a claim no cluster owns yet). | the Job Queue |
 | **finding** | One result of a health check (lint). | `lint_findings` |
 | **reconcile / reindex / cleanup** | The repairs: check records against the vault; rebuild the index from the vault; prune dead cluster members. | Status → Vault |
+
+**The URL is the truth about UI state — with one exception that is deliberate.** A command's address
+names its record (`#/sources?command=<id>`), and that record expires; a link into an assistant
+result therefore dies with it. Free text never enters an address. Named filters do, so "keep as a
+filter" leaves an address that means the same thing forever.
 
 **There is no claim page, no note and no dirty marker.** A cluster has no prose and no name, so
 there is nothing to render or mark stale. A claim is read through the Claims lens. A **wiki page**
@@ -270,6 +279,7 @@ instance, not clients of a server you operate.
 ├── clusters/         # titleless associations (derived cache)
 ├── vocabulary/       # canonical names + aliases: topics.md, wiki-tags.md, source-tags.md
 ├── asks/             # saved Ask conversations (<run-id>.md)
+├── commands/         # the assistant's requests (pruned after a week; git-ignored)
 ├── .thought-keeper/  # derived, hidden: favicons/
 ├── .trash/           # deletions (trash, not delete)
 └── (.git/ if you version the vault — the app keeps .gitignore current)

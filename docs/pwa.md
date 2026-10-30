@@ -66,6 +66,21 @@ Saved queries carry **automatic tags** — the topics of the claims their answer
 the sources it cites when no claim is cited, or the meaningful words of the question — and the Ask
 list shows them as a tag cloud.
 
+The field sends what the reader is looking at with the request, so a claim or a source can be
+referenced as "this one" without typing its id; on a claim's page the field offers "the sources of
+this claim" as a starting point. The wiki honours an assistant result too (`?command=`) and shows
+the record's pages in the record's order, with the same banner; typing in its search field takes the
+filter back. **The assistant is a command line, not a chat.** A permanent button in the top bar (`⌘J`) opens one
+field: say what to show, and the app resolves it to a lens, a filter and a set. It is not a
+conversation — one request, one GUI state — and it is not a second brain: the request is read once
+and the result is an ordinary list. While a command is in flight the button pulses, including when
+another window or the CLI sent it. A list that is an assistant result carries a **banner** above the
+rows: the utterance, the criteria the request was actually read as (`tag cloud · added ≤ 7 days ·
+not finished`), the count, "run again", "keep as a filter" (only when the reading has named facets)
+and a close button. The same banner appears when an old request is opened again — it is the same
+address, so it is the same view. The Start lens lists the last few commands; there is no history
+lens, and no command is kept forever.
+
 ## 2. Routes and state
 
 - **Hash routing; the URL is the truth about UI state.** `#/home` is the default (and the Start lens),
@@ -81,6 +96,18 @@ list shows them as a tag cloud.
 - **The theme toggle has three states**: light / dark / auto (follows the system), persisted in
   `localStorage`.
 - **A second window focuses the first** (BroadcastChannel election).
+- **The assistant's field is an overlay too** (`?assistant=1`), so closing it never loses the
+  reader's place.
+- **An assistant result has its own kind of address.** A command that named facets hands out those
+  facets beside its id (`#/sources?tag=cloud&kind=pdf&command=…`); a command that searched by words
+  hands out only the id (`#/sources?command=…`) — free text never enters the address, because an
+  address that carries a question is a different address on every visit. The id is a real filter
+  dimension: the server reads the materialized set from the record, so the windowed list keeps its
+  count, its pages and its scroll height exactly as with a tag filter.
+- **That address expires.** `assistant.retention` (a week by default) prunes the records on its own
+  daily cadence (`assistant.prune_interval`), so a bookmark on an assistant result dies with it —
+  and says so. "Keep as a filter" is the escape: it
+  drops the id and leaves an address that means the same thing forever.
 - **Lists are flat indexes.** Claims, Wiki, Sources, Ask and Bookmarks share one row grammar
   (leading icon, title, secondary line, trailing metadata/actions). Grouping — a host in Bookmarks,
   a tag in Ask — is a section header, not a card; framed cards belong to detail pages.
@@ -121,6 +148,10 @@ One SSE connection (`GET /api/v1/events`) replaces polling. Event types:
   keeps a stale picture until reload.
 - **A source's live counts win over the last API snapshot** while a run is in flight (claims written,
   parts done, queued-ahead), so a list row and the detail overlay cannot disagree.
+- **A `command` frame is an action, not a state.** It is keyed by the command's id so two commands
+  cannot coalesce into one, and every open window follows the URL it carries — once. Replaying the
+  same frame (a reconnect) cannot move the reader twice, because the store remembers which command
+  it already followed.
 
 ## 4. Empty states and honesty
 

@@ -19,7 +19,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `POST` | `/api/v1/reindex` | Rebuild index + clusters from the vault |
 | `POST` | `/api/v1/rebuild-trees` | Rebuild every outline from captured sources |
 | `GET` | `/api/v1/events` | Server-sent events (see below) |
-| `GET` | `/api/v1/sources` | List sources: `kind, q, tag, attached, bookmarks, failed, limit, offset`. The filters are applied in SQL; `count`/`total` is the **filtered** total (the windowed list's scroll height), not the page length |
+| `GET` | `/api/v1/sources` | List sources: `kind, q, tag, attached, bookmarks, failed, command, limit, offset`. The filters are applied in SQL; `count`/`total` is the **filtered** total (the windowed list's scroll height), not the page length |
 | `GET` | `/api/v1/sources/facets` | The Sources tag cloud (`{tags:[{tag,count}], attached}`); vault-wide, not a fact about the loaded window |
 | `GET` | `/api/v1/sources/{hash}` | A source, its step lights, counts, `tags`/`auto_tags` and `sidecars` |
 | `GET` | `/api/v1/sources/{hash}/tree` | The tree outline (`has_text` marks parts) |
@@ -52,7 +52,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `PUT` | `/api/v1/wiki/{id}` | Edit a wiki page (writes it, then reprocesses and prunes removed links in the background) |
 | `DELETE` | `/api/v1/wiki/{id}` | Delete a wiki page and its source representation |
 | `GET` | `/api/v1/topics/claims` | Claim topics with claim counts |
-| `GET` | `/api/v1/atoms` | List claims: `topic, status, limit, offset` |
+| `GET` | `/api/v1/atoms` | List claims: `topic, status, command, limit, offset` |
 | `GET` | `/api/v1/atoms/{id}` | One claim (provenance, `clusters`, `cluster_count`) |
 | `GET` | `/api/v1/atoms/{id}/related` | Two separate lists: `peers` (same cluster) and `same_topic` |
 | `GET` | `/api/v1/atoms/{id}/cluster` | The same peer answer, named for what it is |
@@ -70,6 +70,10 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/asks/{id}` | One saved question and answer |
 | `DELETE` | `/api/v1/asks/{id}` | Move a saved Ask to `.trash/asks/` |
 | `POST` | `/api/v1/query` | Ask the claims `{question, source?}` → `202 {run_id}` |
+| `POST` | `/api/v1/commands` | **The assistant.** `{text, context?}` (`context: {view, id}` names the surface the request was made from, so "this claim" resolves) → `201` with the command record (`id, lens, url, criteria, total, vault, scanned, items`). Synchronous: the reading plus one bounded completion. An utterance that names no lens and no criterion answers `422 unparsed` — never "the whole vault". Publishes the `command` event (`running` → `done`) so every open window follows it |
+| `GET` | `/api/v1/commands` | The command history, newest first (`limit, offset`) |
+| `GET` | `/api/v1/commands/{id}` | One command, its criteria and its materialized set |
+| `DELETE` | `/api/v1/commands/{id}` | Move one command to `.trash/commands/` |
 | `POST` | `/api/v1/lint` | Run lint → `202 {run_id}` |
 | `GET` | `/api/v1/lint/findings` | Lint findings |
 | `POST` | `/api/v1/cleanup` | Prune dead cluster members and refresh the programmatic findings |
@@ -113,10 +117,16 @@ is read by id.
 One SSE stream (`GET /api/v1/events`) pushes events by type:
 
 `run` · `source` · `wiki` · `clusters` · `findings` · `urls` · `pipeline` · `progress` · `log` ·
-`vocabulary`
+`vocabulary` · `command`
 
 State events coalesce per type and are never dropped; `progress` coalesces per source; `log` is a
 bounded live tail. The PWA patches only the containers each event names. See `pwa.md`.
+
+`command` is the one event that carries an ACTION rather than a container name:
+`{status:"running", text}` when a command starts, `{status:"done", id, url, lens, total, text}`
+when it has been resolved, `{status:"failed", error}` when it could not be read. Every open window
+follows the address once per command id — that is what makes the assistant a remote control, and
+why the event is keyed by the command's id instead of being coalesced by type.
 
 ## Error format
 
@@ -126,6 +136,10 @@ bounded live tail. The PWA patches only the containers each event names. See `pw
 
 Map sentinel errors from `internal/types/errors.go` to the wire once (`internal/api/payloads`). No
 stack traces. API misses return the same JSON error; non-API paths go to the embedded PWA.
+
+`422 unparsed` is the assistant's "I heard you, but this is not a command I can run": the request
+named no lens and no criterion, so answering with an unfiltered list would be a lie. The UI offers
+examples instead.
 
 ## Not API
 

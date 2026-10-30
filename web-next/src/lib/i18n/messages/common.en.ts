@@ -23,6 +23,7 @@ export const commonEn: Record<string, string> = {
   'common.cancel': 'Cancel',
   'common.confirm': 'Confirm',
   'common.delete': 'Delete',
+  'common.close': 'Close',
   'common.dismiss': 'Dismiss',
   'common.retry': 'Try again',
   'common.clear': 'clear',

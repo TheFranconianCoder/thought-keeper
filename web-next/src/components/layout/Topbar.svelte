@@ -4,7 +4,8 @@
   import { navigate } from '../../lib/router.svelte';
   import { pipelineLabel } from '../../lib/source-state';
   import { cycleTheme, themeIcon, themeLabel } from '../../lib/theme.svelte';
-  import { openSearch } from '../../lib/overlays';
+  import { openAssistant, openSearch } from '../../lib/overlays';
+  import { assistant } from '../../lib/stores/assistant.svelte';
   import Icon from '../ui/Icon.svelte';
 
   const activity = $derived(
@@ -26,6 +27,20 @@
     <Icon name="search" size={15} />
     <span class="topbar-search-label">{t('nav.search')}</span>
     <span class="kbd">⌘K</span>
+  </button>
+
+  <!-- The assistant is a permanent part of the bar, not a lens: it is how the app is driven, and it
+       works from every page. While a command is in flight it says so, even when another window (or
+       the CLI) sent it. -->
+  <button
+    class="assistant-fab"
+    class:is-busy={assistant.busy}
+    title={t('assistant.openTitle')}
+    aria-label={t('assistant.openTitle')}
+    aria-busy={assistant.busy}
+    onclick={openAssistant}
+  >
+    <Icon name="assistant" size={21} />
   </button>
 
   <div class="topbar-actions">

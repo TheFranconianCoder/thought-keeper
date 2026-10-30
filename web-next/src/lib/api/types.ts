@@ -161,6 +161,8 @@ export interface SourceList {
   /** The TOTAL the list holds, not the page length: more exist past this page. */
   count: number;
   total: number;
+  /** Set when the list is an assistant result (see CommandRef). */
+  command?: CommandRef;
 }
 
 /** SourceListFilter is the server-side narrowing of the Sources window. Empty fields mean "all". */
@@ -171,6 +173,12 @@ export interface SourceListFilter {
   attachedOnly?: boolean;
   bookmarksOnly?: boolean;
   failedOnly?: boolean;
+  /**
+   * command is an assistant result: the server reads the materialized set from the record instead
+   * of filtering. It is one filter dimension, so the window (count, pages, scroll height) works
+   * exactly like a tag filter.
+   */
+  command?: string;
 }
 
 export interface SourceTagFacet {
@@ -254,6 +262,8 @@ export interface AtomList {
   count: number;
   total?: number;
   topics?: SourceTopic[];
+  /** Set when the list is an assistant result. */
+  command?: CommandRef;
 }
 
 export interface Branch {
@@ -531,7 +541,8 @@ export type EventType =
   | 'pipeline'
   | 'progress'
   | 'log'
-  | 'vocabulary';
+  | 'vocabulary'
+  | 'command';
 
 export interface StreamFrame {
   type: EventType | string;
@@ -544,4 +555,92 @@ export interface ProgressFrame {
   phase?: string;
   msg?: string;
   fields: Record<string, number>;
+}
+
+// ── Assistant ─────────────────────────────────────────────────────────────
+
+/** CommandCriteria is what a command MEANT: the reading the banner shows. */
+export interface CommandCriteria {
+  text?: string;
+  tag?: string;
+  kind?: string;
+  topic?: string;
+  /** A topic read as PROVENANCE: the sources that own claims with it. */
+  from_topic?: string;
+  /** The vault's own names the words were mapped onto. */
+  tags?: string[];
+  topics?: string[];
+  /** The source the reader pointed at (or pasted). */
+  source?: string;
+  /** The claim the reader pointed at (or pasted). */
+  atom?: string;
+  since?: string;
+  state?: string;
+  order?: string;
+  bookmarks_only?: boolean;
+  attached_only?: boolean;
+}
+
+export interface CommandName {
+  name: string;
+  kind: 'tag' | 'topic';
+  /** How often the vault uses the name. */
+  count: number;
+  /** How many items of THIS set the name produced. */
+  found: number;
+}
+
+export interface CommandItem {
+  ref: string;
+  title?: string;
+  kind?: string;
+  /** The model's reason for putting THIS item in a researched set. */
+  why?: string;
+}
+
+/**
+ * Command is one "request → GUI state" record. It is short-lived: the server prunes the history, so
+ * an address that names one has an expiry date.
+ */
+export interface Command {
+  id: string;
+  text: string;
+  lens: string;
+  url: string;
+  /** "filter" (deterministic), "research" (a model curated it) or "ask" (delegated question). */
+  resolution?: string;
+  /** Why THIS set: the assistant's one-sentence answer to the request. */
+  rationale?: string;
+  /** Honest footnotes: a criterion read differently, a reference that vanished, a cut set. */
+  notes?: string[];
+  /** The vocabulary names the request was mapped onto, with what each contributed. */
+  mapped?: CommandName[];
+  total: number;
+  vault?: number;
+  scanned?: number;
+  generated?: string;
+  /** End-to-end time of the request, in milliseconds. */
+  took_ms?: number;
+  created_at: string;
+  criteria: CommandCriteria;
+  items?: CommandItem[];
+}
+
+/** CommandContext is the surface a request was made from: "this claim" needs to know which one. */
+export interface CommandContext {
+  view?: string;
+  id?: string;
+}
+
+export interface CommandList {
+  commands: Command[];
+  count: number;
+}
+
+/** CommandRef is what a list says about the command it is showing. */
+export interface CommandRef {
+  id: string;
+  expired?: boolean;
+  total: number;
+  missing?: number;
 }

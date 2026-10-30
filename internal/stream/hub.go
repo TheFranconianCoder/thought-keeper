@@ -94,6 +94,16 @@ func coalesceKey(typ string, data any) string {
 			}
 		}
 		return "progress"
+	case "command":
+		// A command is an ACTION, not a container: coalescing two of them would drop one, and a
+		// dropped command means a window that silently did not follow. The key is the command's
+		// own id, so every finished command keeps its own slot.
+		if m, ok := data.(map[string]any); ok {
+			if id, ok := m["id"].(string); ok && id != "" {
+				return "command#" + id
+			}
+		}
+		return "command#running"
 	}
 	return ""
 }

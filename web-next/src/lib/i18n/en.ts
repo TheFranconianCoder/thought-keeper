@@ -8,6 +8,7 @@ import { claimsEn } from './messages/claims.en';
 import { wikiEn } from './messages/wiki.en';
 import { statusEn } from './messages/status.en';
 import { attentionEn } from './messages/attention.en';
+import { assistantEn } from './messages/assistant.en';
 
 /** The English catalog: every key the interface asks for, and the fallback for every other locale. */
 export const en: Record<string, string> = {
@@ -21,4 +22,5 @@ export const en: Record<string, string> = {
   ...wikiEn,
   ...statusEn,
   ...attentionEn,
+  ...assistantEn,
 };

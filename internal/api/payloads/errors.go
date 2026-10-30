@@ -27,11 +27,15 @@ func HTTPStatus(err error) int {
 	case "invalid_id", "invalid_hash", "invalid_url", "invalid_tags", "unsupported_source",
 		"invalid_body", "unknown_action":
 		return http.StatusBadRequest
+	case "unparsed":
+		// 422: the request was understood as a request, just not as anything this app can do. It is
+		// the honest answer to a sentence that names no lens and no criterion.
+		return http.StatusUnprocessableEntity
 	case "not_implemented":
 		return http.StatusNotImplemented
 	case "forbidden":
 		return http.StatusForbidden
-	case "fetch_failed":
+	case "fetch_failed", "research_failed":
 		return http.StatusBadGateway
 	default:
 		return http.StatusInternalServerError

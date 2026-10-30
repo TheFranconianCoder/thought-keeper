@@ -2,8 +2,10 @@
   import { clearable } from '../../lib/clearable';
   import { untrack } from 'svelte';
   import { deleteWikiPage, saveWikiPage } from '../../lib/actions';
+  import { api } from '../../lib/api';
   import { n, t } from '../../lib/i18n/index.svelte';
   import { navigate, router, sourcePath, wikiPath } from '../../lib/router.svelte';
+  import AssistantBanner from '../assistant/AssistantBanner.svelte';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
   import { wiki } from '../../lib/stores/wiki.svelte';
@@ -30,7 +32,45 @@
   let shownRoute = '';
   let listEl = $state<HTMLDivElement | undefined>();
 
+  // An assistant result in the wiki is the record's set, in the record's order: a requested list
+  // ("my pages about GitHub") is not the same thing as the whole wiki with a search box.
+  const commandId = $derived(route.view === 'wiki' ? (route.params.get('command') ?? '') : '');
+  // The record's items, in the record's order, WITH the model's reason for each: a researched set
+  // is a judgement, and the reason is what lets the reader check it.
+  let commandItems = $state<{ ref: string; why: string }[]>([]);
+
+  $effect(() => {
+    const id = commandId;
+    if (!id) {
+      commandItems = [];
+      return;
+    }
+    untrack(() => {
+      void api
+        .command(id)
+        .then((cmd) => {
+          if (commandId === id) {
+            commandItems = (cmd.items ?? []).map((item) => ({ ref: item.ref, why: item.why ?? '' }));
+          }
+        })
+        .catch(() => {
+          if (commandId === id) commandItems = [];
+        });
+    });
+  });
+
+  /** whyFor is the model's reason for this row, when the set was researched. */
+  function whyFor(id: string): string {
+    return commandItems.find((item) => item.ref === id)?.why ?? '';
+  }
+
   const pages = $derived.by(() => {
+    if (commandId) {
+      const byId = new Map(wiki.pages.map((page) => [page.id, page]));
+      return commandItems
+        .map((item) => byId.get(item.ref))
+        .filter((page): page is WikiSummary => page !== undefined);
+    }
     const term = query.trim().toLowerCase();
     return wiki.filteredPages().filter((page) => !term || page.title.toLowerCase().includes(term));
   });
@@ -136,6 +176,14 @@
         </button>
       {/snippet}
 
+      {#if commandId}
+        <AssistantBanner
+          id={commandId}
+          total={commandItems.length}
+          lens="wiki"
+        />
+      {/if}
+
       <div class="search-wrap list-search">
         <Icon name="search" size={14} />
         <input
@@ -143,11 +191,15 @@
           class="input input--search"
           placeholder={t('wiki.filterPlaceholder')}
           bind:value={query}
+          oninput={() => {
+            // Typing takes the filter back from the assistant.
+            if (commandId) navigate('#/wiki');
+          }}
           aria-label={t('wiki.filterAria')}
         />
       </div>
 
-      {#if wiki.tags.length > 0}
+      {#if wiki.tags.length > 0 && !commandId}
         <div
           class="chip-cloud"
           use:scrollFade
@@ -196,6 +248,7 @@
             <button
               class="page-item"
               class:active={selected?.id === page.id}
+              title={whyFor(page.id)}
               onclick={() => navigate(wikiPath(page.id))}
             >
               <span class="page-title">{page.title || t('wiki.untitled')}</span>

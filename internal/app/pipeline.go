@@ -432,6 +432,20 @@ func (a *App) reconcile(reason string) {
 		}
 	}
 	a.reconcileOffset = res.Next
+	// The assistant's history has an expiry, enforced on its own cadence: a 7-day window does not
+	// need a per-minute walk over commands/. Once a day (and once right after start) is enough —
+	// a command that lives an hour longer costs nothing.
+	if a.pruneInterval > 0 && !time.Now().Before(a.nextPrune) {
+		a.nextPrune = time.Now().Add(a.pruneInterval)
+		if n, pErr := a.pruneCommands.Execute(ctx); pErr != nil {
+			a.log.Warn("assistant: pruning the command history failed", "err", pErr)
+		} else if n > 0 {
+			a.log.Info("assistant: pruned expired commands", "removed", n)
+			a.publish("command", map[string]any{"status": "pruned", "removed": n})
+		} else {
+			a.log.Debug("assistant: no expired commands")
+		}
+	}
 	if err == nil && a.reconcilePass.Index != nil {
 		// The backlog the Status lens shows. A walk that starts at the first source starts a new
 		// measurement; every slice of the walk adds what it found, so a sliced walk still shows the

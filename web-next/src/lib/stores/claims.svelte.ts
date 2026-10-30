@@ -1,6 +1,6 @@
 import { api } from '../api';
 import { humanError } from '../api/errors';
-import type { Atom, Branch, TopicUse } from '../api/types';
+import type { Atom, Branch, CommandRef, TopicUse } from '../api/types';
 
 export const CLAIM_PAGE_SIZE = 50;
 export const TOPIC_CLOUD_SIZE = 32;
@@ -9,6 +9,9 @@ class ClaimsStore {
   items = $state<Atom[]>([]);
   total = $state(0);
   topic = $state('');
+  /** The assistant result this list is showing, when the address names one. */
+  command = $state('');
+  commandRef = $state<CommandRef | null>(null);
   topics = $state<Branch[]>([]);
   topicCounts = $state<Record<string, number>>({});
   loaded = $state(false);
@@ -34,15 +37,17 @@ class ClaimsStore {
   private staleSeq = 0;
   private topicsStaleSeq = 0;
 
-  async load(topic = this.topic): Promise<void> {
+  async load(topic = this.topic, command = this.command): Promise<void> {
     this.topic = topic;
+    this.command = command;
     const seq = ++this.listSeq;
     const staleSeq = this.staleSeq;
     try {
-      const result = await api.atoms(topic, CLAIM_PAGE_SIZE);
+      const result = await api.atoms(topic, CLAIM_PAGE_SIZE, command);
       if (seq !== this.listSeq) return;
       this.items = result.atoms ?? [];
       this.total = result.count ?? this.items.length;
+      this.commandRef = result.command ?? null;
       this.loaded = true;
       this.error = '';
       if (staleSeq === this.staleSeq) this.stale = false;
@@ -50,6 +55,7 @@ class ClaimsStore {
       if (seq !== this.listSeq) return;
       this.items = [];
       this.total = 0;
+      this.commandRef = null;
       this.error = humanError(error);
     }
   }

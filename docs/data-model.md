@@ -21,6 +21,7 @@ true.
 | `Vocabulary` | A namespace's canonical names and what they absorbed. Three namespaces: `topics`, `wiki-tags` and `source-tags`. |
 | `Run` | One run: `op` (`pipeline` \| `query` \| `lint` \| `vocabulary` \| `tag` \| `summary`), `step` (capture/outline/distill/cluster), model, tokens, status, and the question for a query. |
 | `StepRecord` | One tool call of a run: `tool`, argument/result digests, error flag, duration. |
+| `Command` | One assistant request: `id`, `text`, `lens`, `criteria`, `items` (the materialized set, in order), `total`/`vault`/`scanned`, `url`, `generated`, `created`. A FILE record (`commands/<id>.md`), short-lived, with **no index table** — the directory is read directly, like `asks/`, and `reindex` leaves it alone. |
 
 ## 2. Identifiers
 

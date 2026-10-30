@@ -38,9 +38,12 @@ type Deps struct {
 	Wiki       handlers.WikiHandler
 	Search     handlers.SearchHandler
 	Asks       handlers.AskHandler
-	Query      handlers.QueryHandler
-	Lint       handlers.LintHandler
-	Events     handlers.SSEHandler
+	// Commands is the assistant: one utterance in, one address out. It publishes its own SSE frame,
+	// so a client that did not send the request still follows it.
+	Commands handlers.CommandHandler
+	Query    handlers.QueryHandler
+	Lint     handlers.LintHandler
+	Events   handlers.SSEHandler
 	// Pipeline serves the GLOBAL status: which of the four separated steps is running, and queues
 	// the cluster step by hand.
 	Pipeline  handlers.PipelineHandler
@@ -173,6 +176,13 @@ func New(deps Deps, web http.Handler) http.Handler {
 		r.Get("/asks", deps.Asks.List)
 		r.Get("/asks/{id}", deps.Asks.GetOne)
 		r.Delete("/asks/{id}", deps.Asks.DeleteOne)
+
+		// The assistant. A command is a read of the vault that ANSWERS with a UI state: it resolves,
+		// records and publishes, and never writes to the vault itself.
+		r.Post("/commands", deps.Commands.Post)
+		r.Get("/commands", deps.Commands.List)
+		r.Get("/commands/{id}", deps.Commands.GetOne)
+		r.Delete("/commands/{id}", deps.Commands.DeleteOne)
 
 		r.Get("/search", deps.Search.Get)
 		r.Post("/query", deps.Query.Post)

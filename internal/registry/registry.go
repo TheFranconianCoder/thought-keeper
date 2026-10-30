@@ -16,6 +16,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/asks"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/atoms"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/clusters"
+	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/commands"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/config"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/extract"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/favicons"
@@ -53,7 +54,9 @@ type Deps struct {
 	DocumentRun         usecases.DocumentRun
 	Reconcile           usecases.ReconcileVault
 	Reindex             usecases.ReindexVault
-	Capture             usecases.CaptureSource
+	// PruneCommands enforces the assistant's retention in the same tick as the consistency job.
+	PruneCommands usecases.PruneCommands
+	Capture       usecases.CaptureSource
 	// ClusterPass is step 4: the titleless association of claims.
 	ClusterPass usecases.ClusterPass
 	Cleanup     usecases.Cleanup
@@ -119,6 +122,7 @@ func Build(
 	runRepo := sqlc.NewRunRepository(db)
 	lintRepo := sqlc.NewLintRepository(db)
 	searchRepo := sqlc.NewSearchRepository(db, persistence.HasFTS5(db))
+	commandStore := commands.New(cfg.CommandsDir())
 	clock := gateways.SystemClock{}
 	runner := gateways.ExecRunner{}
 	languages := langdetect.Detector{}
@@ -150,7 +154,7 @@ func Build(
 		retryBackoff = 2 * time.Second
 	}
 	retryPolicy := interfaces.RetryPolicy{Attempts: cfg.OpenAI.Retries, Base: retryBackoff, Budget: timeout}
-	gw, agentOK := gateways.NewOpenAIAgent(gateways.OpenAIConfig{
+	agent, agentOK := gateways.NewOpenAIAgent(gateways.OpenAIConfig{
 		BaseURL: cfg.OpenAI.BaseURL,
 		APIKey:  cfg.OpenAI.APIKey,
 		Timeout: timeout,
@@ -158,6 +162,13 @@ func Build(
 		Log:     log,
 		Retry:   retryPolicy,
 	})
+	// The gateway is an INTERFACE on purpose: a typed nil (*OpenAIAgent)(nil) in an interface field is
+	// NOT nil, so every "if uc.Gateway != nil" guard would pass and the first call would dereference
+	// nil. Without a key the field stays a nil interface, and the agent-less paths keep working.
+	var gw interfaces.AgentGateway
+	if agentOK {
+		gw = agent
+	}
 
 	sourceLog := sourcelog.New(cfg.SourcesDir())
 	// Every line of a source's log is pushed as it is written: the overlay shows the run live.
@@ -275,6 +286,19 @@ func Build(
 	listAsks := usecases.ListAsks{Asks: askStore, Atoms: atomRepo, Sources: index}
 	getAsk := usecases.GetAsk{Asks: askStore, Atoms: atomRepo, Sources: index}
 	deleteAsk := usecases.DeleteAsk{Asks: askStore}
+	runCommand := usecases.RunCommand{
+		Index: index, Atoms: atomRepo, Wiki: wikiStore, Vocab: vocabStore,
+		Search: searchRepo, Commands: commandStore,
+		Clock: clock, Log: log,
+		MaxItems: cfg.Assistant.MaxItems, ScanLimit: cfg.Assistant.ScanLimit,
+	}
+	listCommands := usecases.ListCommands{Commands: commandStore}
+	getCommand := usecases.GetCommand{Commands: commandStore}
+	deleteCommand := usecases.DeleteCommand{Commands: commandStore}
+	commandSources := usecases.CommandSources{Commands: commandStore, Index: index}
+	commandAtoms := usecases.CommandAtoms{Commands: commandStore, Atoms: atomRepo, Clusters: clusterRepo}
+	commandRetention, _ := time.ParseDuration(cfg.Assistant.Retention)
+	pruneCommands := usecases.PruneCommands{Commands: commandStore, Retention: commandRetention, Clock: clock}
 	getAtom := usecases.GetAtom{AtomRepo: atomRepo, Clusters: clusterRepo}
 	sourceAtoms := usecases.SourceAtoms{AtomRepo: atomRepo, Clusters: clusterRepo}
 	getRun := usecases.GetRun{Runs: runRepo}
@@ -365,6 +389,10 @@ func Build(
 		distill.Gateway = gw
 		query.Gateway = gw
 		documentRun.Distill = distill
+		// The assistant reads an utterance, it does not write the vault; a wrong key must not take
+		// the deterministic parser with it.
+		runCommand.Gateway = gw
+		runCommand.Model = cfg.OpenAI.ModelCompile
 	}
 	listFindings := usecases.ListFindings{Lint: lintRepo}
 	hasAtoms := usecases.SourceHasAtoms{Index: index}
@@ -385,6 +413,7 @@ func Build(
 			Content: sourceContent, Favicon: sourceFavicon, Log: sourceLog, Reset: scheduler, OnRemoved: onRemoved,
 			OnAttached: onAdded,
 			Mark:       scheduler,
+			Commands:   commandSources,
 		},
 		Add: handlers.AddHandler{Intake: intake, URL: addURL, OnAdded: onAdded, Children: scheduler},
 		URL: handlers.URLHandler{
@@ -404,6 +433,7 @@ func Build(
 			AtomRelated: usecases.RelatedAtoms{Atoms: atomRepo, Clusters: clusterRepo},
 			AtomLayout:  reorganizeAtoms, AtomReorganize: reorganizeAtoms,
 			AtomDuplicates: duplicates, AtomCollapse: duplicates, QuoteCode: quoteClaimCode, Mark: scheduler,
+			Commands: commandAtoms,
 		},
 		Wiki: handlers.WikiHandler{
 			List: listWiki, Get: getWiki, Save: saveWiki, Delete: deleteWiki,
@@ -414,6 +444,10 @@ func Build(
 		},
 		Search: handlers.SearchHandler{Search: searchUC},
 		Asks:   handlers.AskHandler{Lister: listAsks, Getter: getAsk, Deleter: deleteAsk},
+		Commands: handlers.CommandHandler{
+			Runner: runCommand, Lister: listCommands, Getter: getCommand, Deleter: deleteCommand,
+			Notifier: hub,
+		},
 		Query:  handlers.QueryHandler{Query: scheduler},
 		Lint:   handlers.LintHandler{Lint: scheduler, Findings: listFindings, Cleanup: cleanup, Mark: scheduler},
 		Events: handlers.SSEHandler{Hub: hub},
@@ -439,6 +473,7 @@ func Build(
 		StartRun:               startRun,
 		DocumentRun:            documentRun,
 		Reconcile:              reconcile,
+		PruneCommands:          pruneCommands,
 		Reindex:                reindex,
 		ClusterPass:            clusterPass,
 		Cleanup:                cleanup,

@@ -23,3 +23,17 @@ export function openAdd(): void {
 export function closeAdd(): void {
   navigate(withoutQuery('add'));
 }
+
+/** The assistant's field is an overlay on the current route, like search and add: closing it never
+ *  loses the reader's place. */
+export function assistantOpen(): boolean {
+  return router.current.params.get('assistant') === '1';
+}
+
+export function openAssistant(): void {
+  navigate(withQuery('assistant', '1'));
+}
+
+export function closeAssistant(): void {
+  navigate(withoutQuery('assistant'));
+}

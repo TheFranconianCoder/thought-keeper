@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oklog/ulid/v2"
@@ -91,6 +92,14 @@ type AtomHandler struct {
 	QuoteCode ClaimCodeQuoter
 	// Mark shows a synchronous pass in the Running list while it works.
 	Mark MaintenanceMarker
+	// Commands resolves an assistant result (?command=<id>) into claims. Nil means the address is
+	// not understood here; the named criteria beside it still filter.
+	Commands CommandAtomSet
+}
+
+// CommandAtomSet is an assistant result's materialized claim set, in the command's order.
+type CommandAtomSet interface {
+	Execute(ctx context.Context, id ulid.ULID, limit, offset int) ([]partialentities.PartialAtom, usecases.CommandWindow, error)
 }
 
 // GetAtomLayout serves GET /api/v1/atoms/layout: the legacy topic folders a vault written before the ID
@@ -219,12 +228,47 @@ func (h AtomHandler) ListSourceAtoms(w http.ResponseWriter, r *http.Request) {
 // ListAtoms serves GET /api/v1/atoms.
 func (h AtomHandler) ListAtoms(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	atoms, err := h.Atoms.Execute(r.Context(), q.Get("topic"), atoiDefault(q.Get("limit"), 200), atoiDefault(q.Get("offset"), 0))
+	limit := atoiDefault(q.Get("limit"), 200)
+	offset := atoiDefault(q.Get("offset"), 0)
+	// An assistant result is read from its record: the set is what the command found, not what the
+	// current filter would find.
+	handled, expired := h.serveCommand(w, r, limit, offset)
+	if handled {
+		return
+	}
+	atoms, err := h.Atoms.Execute(r.Context(), q.Get("topic"), limit, offset)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
 	}
-	payloads.WriteJSON(w, http.StatusOK, payloads.AtomList{Atoms: payloads.AtomsFromPartials(atoms), Count: len(atoms)})
+	payloads.WriteJSON(w, http.StatusOK, payloads.AtomList{
+		Atoms: payloads.AtomsFromPartials(atoms), Count: len(atoms), Command: expired,
+	})
+}
+
+// serveCommand serves an assistant result's claim set and reports whether it wrote the response
+// (and, for a pruned record, the ref that marks the address as expired).
+func (h AtomHandler) serveCommand(w http.ResponseWriter, r *http.Request, limit, offset int) (bool, *payloads.CommandRef) {
+	raw := strings.TrimSpace(r.URL.Query().Get("command"))
+	if raw == "" || h.Commands == nil {
+		return false, nil
+	}
+	id, err := ulid.ParseStrict(raw)
+	if err != nil {
+		return false, nil
+	}
+	atoms, window, cErr := h.Commands.Execute(r.Context(), id, limit, offset)
+	if cErr != nil {
+		if types.CodeOf(cErr) == "not_found" {
+			return false, &payloads.CommandRef{ID: id.String(), Expired: true}
+		}
+		return false, nil
+	}
+	payloads.WriteJSON(w, http.StatusOK, payloads.AtomList{
+		Atoms: payloads.AtomsFromPartials(atoms), Count: window.Total, Total: window.Total,
+		Command: &payloads.CommandRef{ID: id.String(), Total: window.Total, Missing: window.Missing},
+	})
+	return true, nil
 }
 
 // ListClaimTopics serves GET /api/v1/topics/claims.

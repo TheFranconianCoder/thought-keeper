@@ -19,6 +19,7 @@ import (
 	coretree "github.com/TheFranconianCoder/thought-keeper/internal/core/tree"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/agents"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
+	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
 // DistillSource is the DISTILL step: it exposes a source's outline as
@@ -279,6 +280,14 @@ func (uc DistillSource) distill(ctx context.Context, hash string, rec *StepRecor
 			}
 		}
 		todo = append(todo, part)
+	}
+
+	// Without a model there is nothing to derive FOR the parts that still need work. The guard is
+	// here, not at the top of Distill: a document whose parts are all finished needs no model at all
+	// (its record is still mirrored), and refusing that would be a lie about the work left.
+	if len(todo) > 0 && (uc.Gateway == nil || uc.Model == "") {
+		return DistillResult{}, types.New("not_implemented",
+			"distill needs a model: set OPENAI_API_KEY to derive claims", types.ErrNotImplemented)
 	}
 
 	// Parts are independent of each other (they only need the tree), so they are derived

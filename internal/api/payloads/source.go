@@ -95,6 +95,9 @@ type SourceList struct {
 	// Count is the TOTAL the list holds, not len(Sources): a page has to know that more exist.
 	Count int `json:"count"`
 	Total int `json:"total"`
+	// Command is set when the list is an assistant result: the record it came from, whether it has
+	// expired, and how many of its members a deleted source took with it.
+	Command *CommandRef `json:"command,omitempty"`
 }
 
 // SourceTagFacet is one tag of the Sources cloud and how many sources carry it.

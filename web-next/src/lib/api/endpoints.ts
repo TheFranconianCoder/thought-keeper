@@ -10,6 +10,9 @@ import type {
   ClaimCode,
   CleanupResult,
   ClusterResult,
+  Command,
+  CommandContext,
+  CommandList,
   DeleteResult,
   DistillResponse,
   FindingList,
@@ -58,6 +61,7 @@ export const api = {
         kind: filter.kind,
         q: filter.query,
         tag: filter.tag,
+        command: filter.command,
         attached: filter.attachedOnly ? 1 : undefined,
         bookmarks: filter.bookmarksOnly ? 1 : undefined,
         failed: filter.failedOnly ? 1 : undefined,
@@ -138,8 +142,8 @@ export const api = {
 
   // ── Claims ─────────────────────────────────────────────────────────────
   claimTopics: () => request<TopicUseList>('/topics/claims'),
-  atoms: (topic = '', limit = 50) =>
-    request<AtomList>(withQuery('/atoms', { topic, limit })),
+  atoms: (topic = '', limit = 50, command = '') =>
+    request<AtomList>(withQuery('/atoms', { topic, limit, command })),
   atom: (id: string) => request<Atom>(`/atoms/${enc(id)}`),
   atomRelated: (id: string, limit = 20) =>
     request<AtomRelated>(withQuery(`/atoms/${enc(id)}/related`, { limit })),
@@ -151,6 +155,13 @@ export const api = {
   query: (question: string, source = '') =>
     request<DistillResponse>('/query', json('POST', { question, ...(source ? { source } : {}) })),
   run: (id: string) => request<Run>(`/runs/${enc(id)}`),
+
+  // ── Assistant ──────────────────────────────────────────────────────────
+  commands: (limit = 20) => request<CommandList>(withQuery('/commands', { limit })),
+  command: (id: string) => request<Command>(`/commands/${enc(id)}`),
+  runCommand: (text: string, context?: CommandContext) =>
+    request<Command>('/commands', json('POST', context ? { text, context } : { text })),
+  deleteCommand: (id: string) => request<{ id: string }>(`/commands/${enc(id)}`, { method: 'DELETE' }),
 
   // ── Search ─────────────────────────────────────────────────────────────
   search: (q: string, layer: 'atoms' | 'sources' = 'atoms', limit = 30, signal?: AbortSignal) =>

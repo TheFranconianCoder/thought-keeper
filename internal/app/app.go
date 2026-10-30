@@ -89,6 +89,11 @@ type App struct {
 	// reconcilePass is the consistency job; reconcileOffset is where its next slice starts.
 	reconcilePass   usecases.ReconcileVault
 	reconcileOffset int
+	// pruneCommands enforces the assistant's retention. The pass walks commands/, so it runs on its
+	// own (daily) cadence — not on every consistency tick.
+	pruneCommands usecases.PruneCommands
+	pruneInterval time.Duration
+	nextPrune     time.Time
 	// clusterBacklog/clusterStalled bound the automatic cluster passes: two passes in a row without
 	// progress stop the asking until something changes. requestClusterMu serialises the
 	// CHECK-then-queue of a pass, so two triggers cannot both see "nothing queued".
@@ -414,6 +419,16 @@ func New(opts Options) (*App, error) {
 	a.cleanup = reg.Cleanup
 	a.reindex = reg.Reindex
 	a.reconcilePass = reg.Reconcile
+	a.pruneCommands = reg.PruneCommands
+	if d, err := time.ParseDuration(cfg.Assistant.PruneInterval); err == nil && d > 0 {
+		a.pruneInterval = d
+	} else if cfg.Assistant.PruneInterval != "" {
+		log.Warn("assistant: invalid prune_interval; the prune stays off",
+			"value", cfg.Assistant.PruneInterval)
+	}
+	// The first tick after start prunes once: a restart must not postpone yesterday's expiry by a
+	// whole day. (The pass is idempotent and only touches commands/.)
+	a.nextPrune = time.Now()
 	return a, nil
 }
 
