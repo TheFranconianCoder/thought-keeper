@@ -23,7 +23,7 @@ func NewSearchRepository(db *sql.DB, fts bool) *SearchRepository {
 	return &SearchRepository{db: db, fts: fts}
 }
 
-// Search runs a query over claims and/or source outlines.
+// Search runs a query over claims and/or source metadata.
 func (r *SearchRepository) Search(ctx context.Context, query, layer string, limit int) ([]interfaces.SearchHit, error) {
 	q := strings.TrimSpace(query)
 	if q == "" {
@@ -32,9 +32,9 @@ func (r *SearchRepository) Search(ctx context.Context, query, layer string, limi
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	languages, _ := r.Languages(ctx)
 	var hits []interfaces.SearchHit
 	if layer == "" || layer == "atoms" {
+		languages, _ := r.Languages(ctx)
 		h, err := r.searchTable(ctx, "atoms_fts", "atoms", "claim", q, limit, "atom", languages, "")
 		if err != nil {
 			return nil, err
@@ -42,7 +42,7 @@ func (r *SearchRepository) Search(ctx context.Context, query, layer string, limi
 		hits = append(hits, h...)
 	}
 	if layer == "" || layer == "sources" {
-		h, err := r.searchSources(ctx, q, limit, languages)
+		h, err := r.searchSources(ctx, q, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -69,54 +69,24 @@ func (r *SearchRepository) SearchInSource(ctx context.Context, query, sourceHash
 	return r.searchTable(ctx, "atoms_fts", "atoms", "claim", q, limit, "atom", languages, hash)
 }
 
-// searchSources finds sources by their outline node titles/summaries — this is what
-// makes bookmarks (which have one outline node) findable.
-func (r *SearchRepository) searchSources(ctx context.Context, q string, limit int, languages []string) ([]interfaces.SearchHit, error) {
-	if r.fts {
-		words, _ := queryParts(q)
-		ftsQ := ftsQuery(words, " OR ")
-		if ftsQ != "" {
-			query := `SELECT src.hash, n.title, snippet(source_nodes_fts, 0, '[', ']', '…', 12)
-			          FROM source_nodes_fts
-			          JOIN source_nodes n ON n.rowid = source_nodes_fts.rowid
-			          JOIN sources src ON src.id = n.source_id
-			          WHERE source_nodes_fts MATCH ?
-			          ORDER BY rank LIMIT ?`
-			rows, err := r.db.QueryContext(ctx, query, ftsQ, limit)
-			if err == nil {
-				hits, serr := scanSourceHits(rows)
-				_ = rows.Close()
-				if serr == nil && len(hits) > 0 {
-					return hits, nil
-				}
-				// An EMPTY FTS result is not proof of no match: an index written before the triggers
-				// existed has no rows. Fall through to LIKE rather than reporting nothing.
-			}
-		}
-		// A title may use another inflection or derivation ("Chaos" vs "chaotisch"). Expand only
-		// after the exact FTS query came back empty: precision first, recall second.
-		if groups := variantGroups(words, languages); len(groups) > 0 {
-			vq := ftsVariantQuery(groups, " OR ")
-			if vq != "" {
-				query := `SELECT src.hash, n.title, snippet(source_nodes_fts, 0, '[', ']', '…', 12)
-				          FROM source_nodes_fts
-				          JOIN source_nodes n ON n.rowid = source_nodes_fts.rowid
-				          JOIN sources src ON src.id = n.source_id
-				          WHERE source_nodes_fts MATCH ?
-				          ORDER BY rank LIMIT ?`
-				if rows, err := r.db.QueryContext(ctx, query, vq, limit); err == nil {
-					vh, serr := scanSourceHits(rows)
-					_ = rows.Close()
-					if serr == nil && len(vh) > 0 {
-						return vh, nil
-					}
-				}
-			}
-		}
-	}
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT hash, title, substr(title, 1, 160) FROM sources WHERE title LIKE ? LIMIT ?`,
-		"%"+q+"%", limit)
+// searchSources matches the Sources lens predicate: title, original name, URL and both tag
+// columns. This is the text the list itself filters on. The outline-node FTS is deliberately not
+// scanned here: it made the palette wait on the whole node table and it did not match what the list
+// finds.
+func (r *SearchRepository) searchSources(ctx context.Context, q string, limit int) ([]interfaces.SearchHit, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT hash,
+		       COALESCE(NULLIF(title, ''), NULLIF(original_name, ''), hash),
+		       substr(COALESCE(NULLIF(url, ''), NULLIF(original_name, ''), title), 1, 160)
+		FROM sources
+		WHERE instr(lower(title), lower(?)) > 0
+		   OR instr(lower(original_name), lower(?)) > 0
+		   OR instr(lower(COALESCE(url, '')), lower(?)) > 0
+		   OR instr(lower(tags), lower(?)) > 0
+		   OR instr(lower(auto_tags), lower(?)) > 0
+		ORDER BY (instr(lower(title), lower(?)) > 0) DESC, imported_at DESC
+		LIMIT ?`,
+		q, q, q, q, q, q, limit)
 	if err != nil {
 		return nil, fmt.Errorf("search sources: %w", err)
 	}

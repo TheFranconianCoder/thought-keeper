@@ -65,7 +65,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `POST` | `/api/v1/vocabulary/curate` | Curate the vocabularies (observes, asks the model, renames) |
 | `POST` | `/api/v1/vocabulary/retopic` | Re-derive claim topics from the claims themselves |
 | `POST` | `/api/v1/vocabulary/rebranch` | Alias of `retopic` (legacy name) |
-| `GET` | `/api/v1/search` | FTS5: `q, layer=atoms\|sources, limit` |
+| `GET` | `/api/v1/search` | Lexical search: `q, layer=atoms\|sources, limit` (claims use FTS5; sources match the list's title/URL/tag fields) |
 | `GET` | `/api/v1/asks` | Saved Ask conversations |
 | `GET` | `/api/v1/asks/{id}` | One saved question and answer |
 | `DELETE` | `/api/v1/asks/{id}` | Move a saved Ask to `.trash/asks/` |

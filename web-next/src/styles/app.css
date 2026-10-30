@@ -469,16 +469,19 @@ img {
 .topbar-search {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: min(380px, 42vw);
-  height: 32px;
-  padding: 0 10px;
+  flex: none;
+  gap: 10px;
+  width: min(460px, 44vw);
+  height: 38px;
+  margin: 9px 0;
+  padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg-muted);
-  color: var(--muted);
-  font-size: 12.5px;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: var(--ink-2);
+  font-size: 13px;
   text-align: left;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 2%);
   transition: border-color 0.15s var(--ease), background 0.15s var(--ease), color 0.15s var(--ease);
 }
 
@@ -486,6 +489,19 @@ img {
   border-color: var(--line-strong);
   background: var(--bg-hover);
   color: var(--ink);
+}
+
+.topbar-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.topbar-search .ico {
+  color: var(--faint);
+}
+
+.topbar-search:hover .ico {
+  color: var(--accent);
 }
 
 .topbar-search-label {

@@ -10,8 +10,8 @@ type SearchHit struct {
 	Snippet string
 }
 
-// SearchRepository is lexical (FTS5, or LIKE when degraded) search over claims and source outlines.
-// Pages are not searched: there are none.
+// SearchRepository is lexical (FTS5, or LIKE when degraded) search over claims and the text fields
+// of sources. Pages are not searched: there are none.
 type SearchRepository interface {
 	Search(ctx context.Context, query string, layer string, limit int) ([]SearchHit, error)
 }

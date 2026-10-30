@@ -7,7 +7,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
-// Search runs a lexical search over claims and source outlines. There is no page layer to search.
+// Search runs a lexical search over claims and source metadata. There is no page layer to search.
 type Search struct {
 	Search interfaces.SearchRepository
 }

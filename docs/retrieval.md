@@ -83,10 +83,13 @@ eight, id + claim + topic) so the model can open one if it needs the body.
 
 ## 6. The in-app finders
 
-- **Claims** has a local FTS5 finder and a search palette (hash-routed).
-- **Sources** are browsed as a list; there is no separate source search in the PWA.
-- There is no separate search page and no global palette over everything: claims are searched where
-  they live.
+- The **search palette** (top bar, `⌘K` / `Ctrl K`) searches claims first and can switch to sources.
+  The Sources layer uses the **same text fields as the Sources list** — title, original name, URL,
+  human tags and auto tags — ordered by vault arrival. It does not scan the outline node table, so a
+  search never waits on the whole node index; it matches metadata, not the overview prose.
+- **Claims** also has its local FTS5 finder in the list.
+- There is no separate search page: the palette is the one global finder, and claims remain
+  searchable where they live.
 
 ## 7. Scale
 

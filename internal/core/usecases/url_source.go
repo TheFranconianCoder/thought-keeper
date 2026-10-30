@@ -562,8 +562,8 @@ func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool)
 		return partialentities.PartialSource{}, err
 	}
 	if bookmark {
-		// One outline node makes the bookmark findable (source_nodes_fts) while the
-		// sweep keeps ignoring it (sources.bookmark = 1).
+		// One outline node gives the bookmark a title and excerpt on its own page; the search
+		// palette finds it by its title, URL or tags. The sweep keeps ignoring it (sources.bookmark = 1).
 		_ = uc.Index.ReplaceSourceNodes(ctx, src.ID, []entities.SourceNode{{
 			NodeID: "0", Depth: 0, Ord: 0, Title: title, Summary: conv.Excerpt,
 		}})

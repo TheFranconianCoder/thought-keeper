@@ -50,9 +50,10 @@ right height. The Sources tag cloud is a **facet** over the vault (`/sources/fac
 over the loaded window. Home reads only the five newest sources.
 
 The top bar is a **tool bar, not a breadcrumb**: pages carry their own title, and the bar holds the
-global search (a field in the wide layout, an icon beside the utilities in the narrow one), the
-activity chip, and the **interface language** switch beside the theme switch. In the narrow layout
-the bar's left side is only the logo and “Thought Keeper”, because the sidebar is gone. The language
+global search over claims and sources (a field in the wide layout, an icon beside the utilities in
+the narrow one), the activity chip, and the **interface language** switch beside the theme switch.
+In the narrow layout the bar's left side is only the logo and “Thought Keeper”, because the sidebar
+is gone. The language
 is the reader's choice and is remembered per browser; the server's `language.ui` is only the default
 for a reader who has not chosen one (the app ships English and German). The claims and overviews
 follow `language.claims` / `language.summary` instead — a vault can be read in one language and
