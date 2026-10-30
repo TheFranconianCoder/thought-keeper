@@ -296,6 +296,9 @@ records are specified in **`docs/storage.md`**.
 - **All repository artifacts are written in English** — code comments, docs, commit messages.
 - **Do not commit on your own initiative.** Commits are made by the user; a requested commit message
   follows Conventional Commits, present tense, no Markdown.
+- **Releases are cut from `main` with the `release` skill** (`.opencode/skills/release/`). It
+  preflights the branch, cross-builds the three binaries with the tag stamped into `internal/version`,
+  and creates the tag and GitHub release. It never commits and never moves a tag.
 - **Errors are sentinel types** from `internal/types/errors.go`, mapped to the wire once.
 - **No silent writes and no invented records.** A failed step is recorded; a dead link is listed;
   an unavailable OCR path is flagged, never silently empty.

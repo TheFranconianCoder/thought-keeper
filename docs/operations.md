@@ -123,6 +123,23 @@ task audit             # syft + grype + grant
 task hooks             # lefthook install
 ```
 
+### Releases
+
+A release is cut from a clean `main` that is level with `origin/main` with the `release` skill in
+`.opencode/skills/release/`:
+
+```bash
+.opencode/skills/release/scripts/preflight.sh       # branch, tree, auth, last tag
+.opencode/skills/release/scripts/changes.sh         # commits since the last tag
+.opencode/skills/release/scripts/release.sh 1.2.3   # build + tag + gh release create
+```
+
+The skill writes `.release/title.txt` and `.release/notes.md` (git-ignored) from the commit log;
+`release.sh` stamps `v1.2.3`, the commit and the build time into `internal/version` via `-ldflags`,
+builds `dist/thought-keeper-linux-amd64`, `dist/thought-keeper-linux-arm64`,
+`dist/thought-keeper-windows-amd64.exe` and `dist/SHA256SUMS`, and publishes them. It does **not**
+commit: the tag points at the commit already on `origin/main`. Requires `gh auth login`.
+
 ## 5. Debugging
 
 - **Debugging lives in the terminal.** `app --log-level debug` logs every API request, every LLM

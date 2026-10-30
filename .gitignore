@@ -8,6 +8,9 @@
 *.db-wal
 *.db-shm
 
+# Release notes drafted by the release skill before publishing
+/.release/
+
 # A local vault created while testing
 /thought-keeper/
 
