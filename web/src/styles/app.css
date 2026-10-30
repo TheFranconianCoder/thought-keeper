@@ -576,9 +576,9 @@ html[data-wco="1"] .topbar-search:focus-visible {
   box-shadow:
     0 1px 0 rgb(255 255 255 / 10%) inset,
     0 6px 18px rgb(0 0 0 / 28%);
-  /* The spark's mass sits a hair high in its own box; half a pixel of optical correction is the
-     difference between "centred" and "looks off". */
-  transform: translateX(-50%) translateY(-0.5px);
+  /* The spark's mass sits a hair high in its own box; one full pixel of optical correction keeps
+     the 21px mark on the pixel grid instead of anti-aliasing it across two. */
+  transform: translateX(-50%) translateY(-1px);
   transition:
     background 0.15s var(--ease),
     transform 0.15s var(--ease),
