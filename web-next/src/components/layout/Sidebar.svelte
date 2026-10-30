@@ -5,7 +5,7 @@
   import { wiki } from '../../lib/stores/wiki.svelte';
   import { n, t } from '../../lib/i18n/index.svelte';
   import { navigate, router } from '../../lib/router.svelte';
-  import { openAdd, openSearch } from '../../lib/overlays';
+  import { openAdd } from '../../lib/overlays';
   import Icon from '../ui/Icon.svelte';
 
   const active = (name: string): boolean => {
@@ -42,12 +42,6 @@
     <img class="brand-mark" src="/icon.svg" alt="" width="26" height="26" />
     <span class="brand-name">{t('app.brand')}</span>
   </div>
-
-  <button class="command-button" onclick={openSearch} title={t('nav.searchTitle')}>
-    <Icon name="search" size={14} />
-    <span>{t('nav.search')}</span>
-    <span class="kbd">⌘K</span>
-  </button>
 
   <nav class="nav-section nav-section--home" aria-label={t('view.home')}>
     <button class="nav-item" class:active={active('home')} aria-current={active('home') ? 'page' : undefined} onclick={() => go('#/home')}>

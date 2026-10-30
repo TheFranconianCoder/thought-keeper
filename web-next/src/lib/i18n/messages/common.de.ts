@@ -14,7 +14,6 @@ export const commonDe: Record<string, string> = {
   'nav.primary': 'Hauptnavigation',
   'nav.search': 'Suchen…',
   'nav.searchTitle': 'Aussagen und Quellen durchsuchen (Strg/Cmd+K)',
-  'nav.breadcrumb': 'Pfad',
   'nav.addSource': 'Quelle hinzufügen',
 
   'common.cancel': 'Abbrechen',

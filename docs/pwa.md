@@ -49,12 +49,16 @@ list without loading the rows in between. Rows that have not arrived render as p
 right height. The Sources tag cloud is a **facet** over the vault (`/sources/facets`), never a count
 over the loaded window. Home reads only the five newest sources.
 
-The top bar carries the **interface language** switch beside the theme switch. The language is the
-reader's choice and is remembered per browser; the server's `language.ui` is only the default for a
-reader who has not chosen one (the app ships English and German). The claims and overviews follow
-`language.claims` / `language.summary` instead — a vault can be read in one language and written in
-another. **Numbers follow the interface language too**: counts are grouped (`1,234` in English,
-`1.234` in German), including numbers interpolated into a sentence; an identifier such as the PID is
+The top bar is a **tool bar, not a breadcrumb**: pages carry their own title, and the bar holds the
+global search (a field in the wide layout, an icon beside the utilities in the narrow one), the
+activity chip, and the **interface language** switch beside the theme switch. In the narrow layout
+the bar's left side is only the logo and “Thought Keeper”, because the sidebar is gone. The language
+is the reader's choice and is remembered per browser; the server's `language.ui` is only the default
+for a reader who has not chosen one (the app ships English and German). The claims and overviews
+follow `language.claims` / `language.summary` instead — a vault can be read in one language and
+written in another. **Numbers follow the interface language too**: counts are grouped (`1,234` in
+English, `1.234` in German), including numbers interpolated into a sentence; an identifier such as
+the PID is
 passed as a string and stays ungrouped, and a byte size uses the language's decimal separator.
 
 Saved queries carry **automatic tags** — the topics of the claims their answer cites, the tags of

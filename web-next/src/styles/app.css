@@ -322,32 +322,6 @@ img {
   white-space: nowrap;
 }
 
-.command-button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  height: 34px;
-  margin: 0 0 14px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
-  color: var(--muted);
-  font-size: 13px;
-  text-align: left;
-  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
-}
-
-.command-button:hover {
-  border-color: var(--line-strong);
-  background: var(--bg-hover);
-}
-
-.command-button .kbd {
-  margin-left: auto;
-}
-
 .nav-section {
   margin-top: 10px;
 }
@@ -470,25 +444,64 @@ img {
   flex: none;
 }
 
-.crumbs {
-  display: flex;
+.topbar-brand {
+  display: none;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
-  color: var(--muted);
-  font-size: 13px;
+}
+
+.topbar-mark {
+  flex: none;
+}
+
+.topbar-brand-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.crumbs .sep {
-  color: var(--faint);
+.topbar-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: min(380px, 42vw);
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-muted);
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: left;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease), color 0.15s var(--ease);
 }
 
-.crumbs .current {
+.topbar-search:hover {
+  border-color: var(--line-strong);
+  background: var(--bg-hover);
   color: var(--ink);
-  font-weight: 550;
+}
+
+.topbar-search-label {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-search .kbd {
+  flex: none;
+}
+
+.topbar-search-icon {
+  display: none;
 }
 
 .topbar-spacer {
@@ -1665,12 +1678,24 @@ html[data-wco="1"] .brand a {
     padding-left: 12px;
   }
 
-  .page {
-    padding: 22px 20px 56px;
+  .topbar-brand {
+    display: flex;
   }
 
-  .topbar .crumbs .crumb-parent {
+  .topbar-search {
     display: none;
+  }
+
+  .topbar-search-icon {
+    display: inline-flex;
+  }
+
+  .activity-chip {
+    max-width: 190px;
+  }
+
+  .page {
+    padding: 22px 20px 56px;
   }
 }
 
@@ -1689,7 +1714,13 @@ html[data-wco="1"] .brand a {
   }
 
   .activity-chip {
-    max-width: 150px;
+    max-width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .activity-chip .truncate {
+    display: none;
   }
 
   .row__actions {

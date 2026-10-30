@@ -1,39 +1,11 @@
 <script lang="ts">
   import { system } from '../../lib/stores/system.svelte';
-  import { claims } from '../../lib/stores/claims.svelte';
-  import { sources } from '../../lib/stores/sources.svelte';
-  import { wiki } from '../../lib/stores/wiki.svelte';
-  import { asks } from '../../lib/stores/asks.svelte';
   import { cycleLocale, localeLabel, t } from '../../lib/i18n/index.svelte';
-  import { router, navigate } from '../../lib/router.svelte';
+  import { navigate } from '../../lib/router.svelte';
   import { pipelineLabel } from '../../lib/source-state';
   import { cycleTheme, themeIcon, themeLabel } from '../../lib/theme.svelte';
+  import { openSearch } from '../../lib/overlays';
   import Icon from '../ui/Icon.svelte';
-
-  const viewLabel = (view: string): string => {
-    const key = `view.${view}`;
-    const label = t(key);
-    return label === key ? view : label;
-  };
-
-  const crumb = $derived.by(() => {
-    const route = router.current;
-    if (route.view === 'claims' && claims.selected) {
-      return { parent: t('view.claims'), current: claims.selected.topic || claims.selected.claim };
-    }
-    if (route.view === 'source') {
-      return { parent: t('view.sources'), current: sources.selected?.title || route.id.slice(0, 12) };
-    }
-    if (route.view === 'wiki') {
-      if (route.id === 'new') return { parent: t('view.wiki'), current: t('wiki.newPage') };
-      if (wiki.selected) return { parent: t('view.wiki'), current: wiki.selected.title };
-      return { parent: '', current: t('view.wiki') };
-    }
-    if (route.view === 'ask' && asks.selected) {
-      return { parent: t('view.ask'), current: asks.selected.question };
-    }
-    return { parent: '', current: viewLabel(route.view) };
-  });
 
   const activity = $derived(
     pipelineLabel(system.pipeline) ||
@@ -42,13 +14,19 @@
 </script>
 
 <header class="topbar">
-  <div class="crumbs" aria-label={t('nav.breadcrumb')}>
-    {#if crumb.parent}
-      <span class="crumb-parent">{crumb.parent}</span>
-      <span class="sep">/</span>
-    {/if}
-    <span class="current">{crumb.current}</span>
+  <!-- Narrow layout: the sidebar is gone, so the bar carries the brand and the search becomes an
+       icon beside the other utilities. Wide: the sidebar carries the brand and the bar carries the
+       global search. Orientation comes from the page title, never from a breadcrumb here. -->
+  <div class="topbar-brand">
+    <img class="topbar-mark" src="/icon.svg" alt="" width="24" height="24" />
+    <span class="topbar-brand-name">{t('app.brand')}</span>
   </div>
+
+  <button class="topbar-search" title={t('nav.searchTitle')} aria-label={t('nav.searchTitle')} onclick={openSearch}>
+    <Icon name="search" size={15} />
+    <span class="topbar-search-label">{t('nav.search')}</span>
+    <span class="kbd">⌘K</span>
+  </button>
 
   <span class="topbar-spacer"></span>
 
@@ -63,6 +41,9 @@
         <span class="truncate">{activity}</span>
       </button>
     {/if}
+    <button class="icon-btn topbar-search-icon" title={t('nav.searchTitle')} aria-label={t('nav.searchTitle')} onclick={openSearch}>
+      <Icon name="search" size={17} />
+    </button>
     <button class="icon-btn" title={t('language.title', { language: localeLabel() })} onclick={cycleLocale}>
       <Icon name="language" size={17} />
     </button>

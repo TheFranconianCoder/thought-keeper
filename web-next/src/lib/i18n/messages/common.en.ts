@@ -18,7 +18,6 @@ export const commonEn: Record<string, string> = {
   'nav.primary': 'Main navigation',
   'nav.search': 'Search…',
   'nav.searchTitle': 'Search claims and sources (Ctrl/Cmd+K)',
-  'nav.breadcrumb': 'Breadcrumb',
   'nav.addSource': 'Add source',
 
   'common.cancel': 'Cancel',
