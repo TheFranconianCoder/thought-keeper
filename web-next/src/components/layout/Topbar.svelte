@@ -28,8 +28,6 @@
     <span class="kbd">⌘K</span>
   </button>
 
-  <span class="topbar-spacer"></span>
-
   <div class="topbar-actions">
     {#if activity}
       <button
