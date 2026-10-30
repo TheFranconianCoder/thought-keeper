@@ -1,0 +1,38 @@
+/** Die Hülle der Anwendung: Navigation, Kopfleiste, Suchpalette und die kleinen Dialoge. */
+export const shellDe: Record<string, string> = {
+  'shell.activity.title': 'Warteschlange öffnen',
+  'shell.activity.working': 'arbeitet…',
+
+  'search.close': 'Suche schließen',
+  'search.aria': 'Suchen',
+  'search.layerAria': 'Suchebene',
+  'search.claims': 'Aussagen',
+  'search.sources': 'Quellen',
+  'search.placeholderClaims': 'Aussagen durchsuchen…',
+  'search.placeholderSources': 'Quellen durchsuchen…',
+  'search.searching': 'Wird durchsucht…',
+  'search.typeTwo': 'Gib mindestens zwei Zeichen ein.',
+  'search.noClaimMatch': 'Keine Aussage passt zu „{query}“.',
+  'search.noSourceMatch': 'Keine Quelle passt zu „{query}“.',
+  'search.hitClaim': 'Aussage',
+  'search.hitSource': 'Quelle',
+  'search.navigate': 'navigieren',
+  'search.open': 'öffnen',
+  'search.closeHint': 'schließen',
+
+  'add.title': 'Quelle hinzufügen',
+  'add.description':
+    'Eine Markdown-Datei, ein PDF, reiner Text, eine URL, ein RSS/Atom-Feed — oder viele URLs, eine pro Zeile.',
+  'add.pathLabel': 'Dateipfad oder URL',
+  'add.placeholder': '/pfad/zur/datei.pdf\nhttps://example.com/artikel\nhttps://anderes.example.org/beitrag',
+  'add.bookmarkTitle': 'Als Lesezeichen behalten',
+  'add.bookmarkHint': 'Den Link sammeln, ohne seinen Text zu indizieren.',
+  'add.dropPrefix': 'Dateien hier ablegen oder ',
+  'add.browse': 'durchsuchen',
+  'add.dropSuffix': '.',
+  'add.batchPrefix': 'Eine ',
+  'add.batchMiddle': '- oder ',
+  'add.batchSuffix': '-Datei mit URLs wird zu einem Stapel.',
+  'add.oneAtATime': 'Füge einen Dateipfad auf einmal hinzu oder eine URL pro Zeile für einen Stapel.',
+  'add.submit': 'Quelle hinzufügen',
+};

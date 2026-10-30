@@ -44,12 +44,23 @@ the peak. Query,
 lexical search and programmatic lint are in place. A sitemap URL expands into page sources owned by
 the sitemap; wiki-page and sitemap children cannot be deleted apart from their owner.
 
-The PWA is **event-driven** (SSE) and **claim-first**: a calm, Notion-flavored reader whose sidebar
-is a finite set of lenses — **Claims, Wiki, Sources, Attention, Bookmarks, Ask, Status**. A **wiki
+The PWA is **event-driven** (SSE) and **claim-first**: a calm, Notion-flavored reader whose navigation
+is a finite set of lenses — **Start, Sources, Wiki, Bookmarks, Claims, Ask, Attention, Status** — in a
+sidebar on the wide layout and in a **footer navigation** when the window is narrow (no drawer, no menu
+button), with an Attention badge and a connection mark on Status. **Start** is the front door: an Ask
+box, Continue (the last opened details, local memory),
+Needs you, the newest sources and one vault-pulse line — never the newest-claims wall. A **wiki
 page** is user-authored Markdown with tags; saving it writes a source representation and runs the
-document pipeline from capture. The app also tags a page and a source (auto tags, kept
-apart from the human's tags) and curates the three name vocabularies (`topics`, `wiki-tags`,
-`source-tags`). Search is language-aware. A cluster is
+document pipeline from capture. The app also tags a page and a source
+(auto tags, kept apart from the human's tags) and curates the three name vocabularies (`topics`,
+`wiki-tags`, `source-tags`). Search is language-aware, and the interface and the content it writes
+have their own languages (`language.ui`, `language.claims`, `language.summary`; every one defaults
+to English).
+**Ask** puts a question in flight directly in the saved-query list, with its status, and runs
+questions in parallel, so the reader never waits on a spinner to ask the next one; a saved query's
+row carries the same actions as a source row (open, ask again, delete). The **source lists are
+windowed**: filters and paging are server-side, only the visible range (± overscan) is read, and the
+filtered count is the scroll height. A cluster is
 **not** a lens: it has no title and no page, and it is visible only as the **peers** of a claim.
 
 ## Positioning
@@ -131,8 +142,10 @@ backed by a source representation so its prose follows the same capture → outl
 Four steps, strictly separated, in this order: **capture → outline → distill → cluster**. The first
 three are document steps (one source, per source) and never touch the association layer; `cluster`
 is the vault-level step and may only run while no document step runs — in both directions. **Ask is
-never gated.** A step may only run when every earlier step is `ok` (or `skipped`, for a bookmark or
-a blocked URL), and a failure is a barrier. Details, state and scheduling: `docs/pipeline.md`.
+never gated**, and queries run **in parallel** (`pipeline.parallel_queries`): a question waiting for
+a slow model does not hold the next one. A step may only run when every earlier step is `ok` (or
+`skipped`, for a bookmark or a blocked URL), and a failure is a barrier. Details, state and
+scheduling: `docs/pipeline.md`.
 
 - **Capture** makes the source readable locally (bytes are already readable for Markdown/text/URL;
   a PDF gets its text layer or OCR) and leaves a static snapshot. A URL that answers with a login,
@@ -140,8 +153,8 @@ a blocked URL), and a failure is a barrier. Details, state and scheduling: `docs
   may attach the page they can see (HTML or PDF), which becomes the snapshot at the same URL address.
 - **Outline** reads that snapshot and builds the hierarchical tree of parts; it never extracts.
 - **Distill** runs the agent over one part at a time: one self-contained claim per statement, **in
-  English**, flat English topic, provenance to a source node, then an audit for statements left
-  uncovered.
+  the configured claim language** (`language.claims`, default English), a flat topic in the same
+  language, provenance to a source node, then an audit for statements left uncovered.
 - **Cluster** prunes, attaches, graphs, splits, overlaps and writes titleless memberships. No model.
 
 A page or sitemap is refreshed once a week (`capture.refresh_interval: '168h'`), a feed once a day

@@ -23,7 +23,9 @@ import type {
   SavedAsk,
   SearchResult,
   Source,
+  SourceFacets,
   SourceList,
+  SourceListFilter,
   SourceNode,
   SourceReset,
   SourceTree,
@@ -50,8 +52,21 @@ export const api = {
   pipeline: () => request<Pipeline>('/pipeline'),
 
   // ── Sources ────────────────────────────────────────────────────────────
-  sources: (kind = '', limit = 200, offset = 0, signal?: AbortSignal) =>
-    request<SourceList>(withQuery('/sources', { kind, limit, offset }), { signal }),
+  sources: (filter: SourceListFilter = {}, limit = 200, offset = 0, signal?: AbortSignal) =>
+    request<SourceList>(
+      withQuery('/sources', {
+        kind: filter.kind,
+        q: filter.query,
+        tag: filter.tag,
+        attached: filter.attachedOnly ? 1 : undefined,
+        bookmarks: filter.bookmarksOnly ? 1 : undefined,
+        failed: filter.failedOnly ? 1 : undefined,
+        limit,
+        offset,
+      }),
+      { signal },
+    ),
+  sourceFacets: (signal?: AbortSignal) => request<SourceFacets>('/sources/facets', { signal }),
   source: (hash: string, signal?: AbortSignal) => request<Source>(`/sources/${enc(hash)}`, { signal }),
   sourceTree: (hash: string, signal?: AbortSignal) =>
     request<SourceTree>(`/sources/${enc(hash)}/tree`, { signal }),

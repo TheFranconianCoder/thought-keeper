@@ -16,7 +16,8 @@
     runLint,
   } from '../../lib/actions';
   import type { Finding } from '../../lib/api/types';
-  import { elapsed, plural, relTime } from '../../lib/format';
+  import { elapsed, relTime } from '../../lib/format';
+  import { t, tn } from '../../lib/i18n/index.svelte';
   import { claimPath, navigate, router, sourcePath } from '../../lib/router.svelte';
   import { sources } from '../../lib/stores/sources.svelte';
   import { system } from '../../lib/stores/system.svelte';
@@ -72,16 +73,22 @@
     const status = system.status;
     if (!status) return [] as { label: string; ok: boolean; text: string; why?: string }[];
     return [
-      { label: 'PDF', ok: status.tools.pdf, text: status.tools.pdf ? 'ready' : 'missing' },
-      { label: 'OCR', ok: status.tools.ocr, text: status.tools.ocr ? 'ready' : 'missing' },
-      { label: 'Agent', ok: status.agent.configured, text: status.agent.configured ? status.agent.model || 'ready' : 'not configured' },
-      { label: 'Vault', ok: status.vault.writable, text: status.vault.writable ? 'writable' : 'read-only' },
-      { label: 'Search', ok: status.index.search === 'fts5', text: status.index.search },
+      { label: 'PDF', ok: status.tools.pdf, text: status.tools.pdf ? t('status.ready') : t('status.missing') },
+      { label: 'OCR', ok: status.tools.ocr, text: status.tools.ocr ? t('status.ready') : t('status.missing') },
       {
-        label: 'Inbox',
+        label: t('status.capAgent'),
+        ok: status.agent.configured,
+        text: status.agent.configured ? status.agent.model || t('status.ready') : t('status.notConfigured'),
+      },
+      { label: t('status.capVault'), ok: status.vault.writable, text: status.vault.writable ? t('status.writable') : t('status.readOnly') },
+      { label: t('status.capSearch'), ok: status.index.search === 'fts5', text: status.index.search },
+      {
+        label: t('status.capInbox'),
         ok: status.app.inbox?.watched ?? true,
-        text: status.app.inbox?.watched === false ? 'polled' : 'watched',
-        why: status.app.inbox?.error ? `Polled instead of watched — ${status.app.inbox.error}` : undefined,
+        text: status.app.inbox?.watched === false ? t('status.polled') : t('status.watched'),
+        why: status.app.inbox?.error
+          ? t('status.polledReason', { error: status.app.inbox.error })
+          : undefined,
       },
     ];
   });
@@ -92,8 +99,8 @@
     if (!live) return '';
     const done = live.fields.parts_done;
     const total = live.fields.parts_total;
-    const parts = typeof done === 'number' && total ? ` · ${done}/${total} parts` : '';
-    if (live.phase === 'queued') return live.msg || 'waiting';
+    const parts = typeof done === 'number' && total ? tn('status.liveParts', total, { done, total }) : '';
+    if (live.phase === 'queued') return live.msg || t('status.waiting');
     if (live.msg) return `${live.msg}${parts}`;
     if (live.phase) return `${live.phase}${parts}`;
     return parts.replace(' · ', '');
@@ -104,108 +111,108 @@
     else if (finding.subject_kind === 'source' && finding.subject_id) navigate(sourcePath(finding.subject_id));
   }
 
-  const clusterActions = [
+  const clusterActions = $derived([
     {
-      label: 'Cluster claims',
+      label: t('status.clusterClaims'),
       job: 'cluster',
-      hint: 'Step 4 by hand: group the claims no cluster owns yet. It waits until no document step is running.',
+      hint: t('status.clusterClaimsHint'),
       run: clusterClaims,
     },
-  ];
+  ]);
 
-  const vaultActions = [
+  const vaultActions = $derived([
     {
-      label: 'Check consistency',
+      label: t('status.reconcile'),
       job: 'reconcile',
-      hint: 'Walk the vault and verify that every step record matches what is on disk, and that the index mirrors the records — a source that lost its owner is restored from its record (no source is derived again). A missing outline invalidates its derivation.',
+      hint: t('status.reconcileHint'),
       run: reconcileVault,
     },
     {
-      label: 'Reindex',
+      label: t('status.reindex'),
       job: 'reindex',
-      hint: 'Rebuild the index from the vault: sources, claims and clusters; drop rows whose file is gone.',
+      hint: t('status.reindexHint'),
       run: reindexVault,
     },
     {
-      label: 'Rebuild outlines',
+      label: t('status.rebuildOutlines'),
       job: 'rebuild-trees',
-      hint: 'Rebuild every source’s outline (step 2) from its capture — no extraction, no model.',
+      hint: t('status.rebuildOutlinesHint'),
       run: rebuildAllTrees,
     },
     {
-      label: 'Fix URLs',
+      label: t('status.fixUrls'),
       job: 'fix-urls',
-      hint: 'Repair sources that lost the fact that they are URL snapshots. Their frontmatter still names the address.',
+      hint: t('status.fixUrlsHint'),
       run: fixURLs,
     },
     {
-      label: 'Refresh URL sources',
+      label: t('status.refreshUrls'),
       job: 'refresh-urls',
-      hint: 'Re-fetch every known URL once. A changed page is corrected through its existing source.',
+      hint: t('status.refreshUrlsHint'),
       run: refreshURLs,
     },
     {
-      label: 'Collapse duplicate claims',
+      label: t('status.collapseDuplicates'),
       job: 'collapse-atoms',
-      hint: 'Keep one copy of every claim that exists more than once and move the indistinguishable copies to the trash.',
+      hint: t('status.collapseDuplicatesHint'),
       run: collapseDuplicateClaims,
     },
     {
-      label: 'Quote claim code',
+      label: t('status.quoteClaimCode'),
       job: 'quote-claim-code',
-      hint: 'Wrap the bracket syntax a claim body quotes from its source (a C attribute, a shell test, a grammar fragment) in inline code. A claim has no links; this repairs the bodies written before that rule.',
+      hint: t('status.quoteClaimCodeHint'),
       run: quoteClaimCode,
     },
     {
-      label: 'Move URL sources to their URL address',
+      label: t('status.migrateUrls'),
       job: 'migrate-urls',
-      hint: 'A URL source is addressed by its URL now. This is a rename; nothing is derived again.',
+      hint: t('status.migrateUrlsHint'),
       run: migrateURLAddresses,
     },
     {
-      label: 'Reorganize claims',
+      label: t('status.reorganizeClaims'),
       job: 'reorganize-atoms',
-      hint: 'Move claims out of legacy topic folders to atoms/<ab>/<cd>/<id>.md and remove the folders that empty out.',
+      hint: t('status.reorganizeClaimsHint'),
       run: reorganizeClaims,
     },
-  ];
+  ]);
 </script>
 
 <div class="page status-page">
   <div class="page-head">
     <div>
-      <h1>Status</h1>
+      <h1>{t('view.status')}</h1>
       <p class="sub">
         {#if system.status}
-          Thought Keeper {system.status.version} · up {system.status.app.uptime} · {system.status.app.addr}
+          {t('status.subLine', { version: system.status.version, uptime: system.status.app.uptime, addr: system.status.app.addr })}
         {:else}
-          The vault, the index and the work in flight.
+          {t('status.sub')}
         {/if}
       </p>
     </div>
     <span class="spacer"></span>
     {#if system.status}
-      <span class="chip chip--mono">PID {system.status.app.pid}</span>
+      <span class="chip chip--mono">{t('status.pid', { pid: system.status.app.pid })}</span>
     {/if}
   </div>
 
   {#if !system.status}
-    <EmptyState icon="status" title="Nothing loaded" text="Thought Keeper is not reachable. Start the app and this page reconnects by itself." />
+    <EmptyState icon="status" title={t('status.notLoaded')} text={t('status.notLoadedText')} />
   {:else}
     {@const status = system.status}
     {#if indexOutdated}
       <div class="notice notice--error index-warning">
         <Icon name="warning" size={15} />
-        <span><b>The index has another shape.</b> {indexOutdated}</span>
+        <span><b>{t('status.indexShape')}</b> {indexOutdated}</span>
       </div>
     {/if}
 
     <div class="stat-grid">
-      <div class="stat"><span class="stat-num">{status.index.sources}</span><span class="stat-label">sources</span></div>
-      <div class="stat"><span class="stat-num">{status.index.atoms}</span><span class="stat-label">claims</span></div>
-      <div class="stat"><span class="stat-num">{status.index.clusters}</span><span class="stat-label">clusters</span></div>
-      <div class="stat"><span class="stat-num">{status.index.unclustered}</span><span class="stat-label">unclustered</span></div>
-      <div class="stat"><span class="stat-num">{status.index.runs}</span><span class="stat-label">runs</span></div>
+      <div class="stat"><span class="stat-num">{status.index.sources}</span><span class="stat-label">{t('status.statSources')}</span></div>
+      <div class="stat"><span class="stat-num">{status.index.atoms}</span><span class="stat-label">{t('status.statClaims')}</span></div>
+      <div class="stat"><span class="stat-num">{status.index.clusters}</span><span class="stat-label">{t('status.statClusters')}</span></div>
+      <div class="stat"><span class="stat-num">{status.index.unclustered}</span><span class="stat-label">{t('status.statUnclustered')}</span></div>
+      <div class="stat"><span class="stat-num">{status.index.runs}</span><span class="stat-label">{t('status.statRuns')}</span></div>
     </div>
 
     <div class="caps">
@@ -220,26 +227,26 @@
 
     <section class="section">
       <div class="section-head">
-        <h2>Job queue</h2>
+        <h2>{t('status.jobQueue')}</h2>
         <span class="count">{jobs.length}</span>
       </div>
       {#if jobs.length === 0}
-        <p class="muted small">Nothing is running — no document step, no cluster pass, no ask.</p>
+        <p class="muted small">{t('status.noJobs')}</p>
       {:else}
         <div class="job-list">
           {#each jobRows.rows as job (job.step + job.state + (job.target ?? ''))}
             <div class="job-row">
               <span class="job-step">{jobStepLabel(job.step)}</span>
               <span class="job-state job-state--{job.state}" title={job.why ?? ''}>
-                {job.state === 'pending' ? 'owed' : job.state}
+                {job.state === 'pending' ? t('status.jobOwed') : job.state}
               </span>
               {#if job.target}
                 <button class="job-target" onclick={() => navigate(sourcePath(job.target!))}>
                   <Icon name="sources" size={12} />
-                  {job.title || job.target.slice(0, 12)}
+                  <span class="truncate" title={job.title || job.target}>{job.title || job.target.slice(0, 12)}</span>
                 </button>
               {:else}
-                <span class="muted small">over the whole vault</span>
+                <span class="muted small">{t('status.wholeVault')}</span>
               {/if}
               {#if job.detail}<span class="job-live">{job.detail}</span>{/if}
               {#if liveOf(job.target)}<span class="job-live">{liveOf(job.target)}</span>{/if}
@@ -250,7 +257,7 @@
           {/each}
           {#if jobRows.hidden > 0}
             <div class="job-row job-row--more">
-              <span class="muted small">{jobRows.hidden} more queued — they run as the workers reach them</span>
+              <span class="muted small">{tn('status.moreQueued', jobRows.hidden)}</span>
             </div>
           {/if}
         </div>
@@ -260,30 +267,29 @@
     {#if status.summary}
       <section class="section">
         <div class="section-head">
-          <h2>Summaries</h2>
+          <h2>{t('status.summaries')}</h2>
           {#if status.summary.at}
-            <span class="muted small">checked {relTime(status.summary.at)}</span>
+            <span class="muted small">{t('status.checkedAt', { time: relTime(status.summary.at) })}</span>
           {/if}
         </div>
         <div class="stat-grid stat-grid--three">
-          <div class="stat"><span class="stat-num">{status.summary.missing}</span><span class="stat-label">missing</span></div>
-          <div class="stat"><span class="stat-num">{status.summary.queued}</span><span class="stat-label">queued</span></div>
-          <div class="stat"><span class="stat-num">{status.summary.running}</span><span class="stat-label">running</span></div>
+          <div class="stat"><span class="stat-num">{status.summary.missing}</span><span class="stat-label">{t('status.missing')}</span></div>
+          <div class="stat"><span class="stat-num">{status.summary.queued}</span><span class="stat-label">{t('status.summaryQueued')}</span></div>
+          <div class="stat"><span class="stat-num">{status.summary.running}</span><span class="stat-label">{t('status.summaryRunning')}</span></div>
         </div>
         <p class="muted small section-note">
-          A source's overview is written after a complete distill. The consistency check measures the
-          missing ones; the summary worker fills them in a few at a time, so this drains in the background.
+          {t('status.summaryNote')}
         </p>
       </section>
     {/if}
 
     <section class="section">
-      <div class="section-head"><h2>Clusters</h2></div>
+      <div class="section-head"><h2>{t('status.clusters')}</h2></div>
       <div class="action-list">
         {#each clusterActions as action (action.label)}
           <div class="action-row">
             <button class="btn btn--secondary" disabled={busy(action.job)} onclick={() => void action.run()}>
-              {action.label}
+              <span class="btn-text">{action.label}</span>
             </button>
             <span class="action-hint">{action.hint}</span>
           </div>
@@ -293,19 +299,17 @@
 
     <section class="section">
       <div class="section-head">
-        <h2>Vocabulary</h2>
+        <h2>{t('status.vocabulary')}</h2>
         <span class="grow"></span>
         <button class="btn btn--primary btn--sm" disabled={busy('vocabulary')} onclick={() => void curateVocabulary()}>
-          <Icon name="spark" size={13} /> Curate
+          <Icon name="spark" size={13} /> <span class="btn-text">{t('status.curate')}</span>
         </button>
         <button class="btn btn--secondary btn--sm" disabled={busy('vocabulary')} onclick={() => void retopicClaims()}>
-          <Icon name="distill" size={13} /> Re-topic claims
+          <Icon name="distill" size={13} /> <span class="btn-text">{t('status.retopic')}</span>
         </button>
       </div>
       <p class="muted small section-note">
-        <b>Curate</b> asks the model what the names should become — claim topics, wiki tags and source
-        tags — and applies the answer as a rename. A claim keeps its text, its node and its
-        associations; a page and a source keep their prose. Only the label changes. Topics are flat.
+        <b>{t('status.curate')}</b> {t('status.vocabNote')}
       </p>
       {#if system.vocabulary && system.vocabulary.length > 0}
         <div class="vocab-list">
@@ -313,30 +317,30 @@
             <div class="vocab-row">
               <span class="vocab-name">{vocab.namespace}</span>
               <span class="vocab-numbers">
-                {vocab.names} names · {vocab.uses} uses · {vocab.singletons} once
-                ({Math.round(vocab.singleton_share * 100)}%) · top {Math.round(vocab.coverage * 100)}%
-                {#if vocab.canonical || vocab.absorbed}· {vocab.canonical} canonical, {vocab.absorbed} absorbed{/if}
-                {#if vocab.new?.length}· <b>{vocab.new.length} new</b>{/if}
+                {tn('status.vocabNames', vocab.names)} · {tn('status.vocabUses', vocab.uses)} · {t('status.vocabSingletons', { count: vocab.singletons })}
+                ({Math.round(vocab.singleton_share * 100)}%) · {t('status.vocabTop', { pct: Math.round(vocab.coverage * 100) })}
+                {#if vocab.canonical || vocab.absorbed}· {t('status.vocabCanonical', { canonical: vocab.canonical, absorbed: vocab.absorbed })}{/if}
+                {#if vocab.new?.length}· <b>{t('status.vocabNew', { count: vocab.new.length })}</b>{/if}
               </span>
               <span class="vocab-flags">
                 {#if vocab.collisions?.length}
-                  <span class="chip chip--warn" title="Two spellings of one name — always a bug">
-                    {vocab.collision_count ?? vocab.collisions.length} collision(s)
+                  <span class="chip chip--warn" title={t('status.collisionsTitle')}>
+                    {tn('status.collisions', vocab.collision_count ?? vocab.collisions.length)}
                   </span>
                 {/if}
                 {#if vocab.near_duplicates?.length}
-                  <span class="chip" title="Names that share their words — a question worth asking">
-                    {vocab.near_duplicate_count ?? vocab.near_duplicates.length} shared-word families
+                  <span class="chip" title={t('status.familiesTitle')}>
+                    {tn('status.families', vocab.near_duplicate_count ?? vocab.near_duplicates.length)}
                   </span>
                 {/if}
                 {#if vocab.broad_tokens}
-                  <span class="chip" title="Learned from this vault: ignored by near-duplicate detection">
-                    {vocab.broad_tokens} broad token(s)
+                  <span class="chip" title={t('status.broadTokensTitle')}>
+                    {tn('status.broadTokens', vocab.broad_tokens)}
                   </span>
                 {/if}
                 {#if vocab.oversized_families}
-                  <span class="chip" title="Too broad to merge: counted, never suggested">
-                    {vocab.oversized_families} broad families ignored
+                  <span class="chip" title={t('status.broadFamiliesTitle')}>
+                    {tn('status.broadFamilies', vocab.oversized_families)}
                   </span>
                 {/if}
               </span>
@@ -344,31 +348,30 @@
           {/each}
         </div>
       {:else}
-        <p class="muted small">No vocabulary report yet.</p>
+        <p class="muted small">{t('status.noVocabulary')}</p>
       {/if}
     </section>
 
     <section class="section">
-      <div class="section-head"><h2>Vault</h2></div>
+      <div class="section-head"><h2>{t('status.vault')}</h2></div>
       {#if system.duplicates && system.duplicates.groups > 0}
         <p class="muted small section-note">
-          {system.duplicates.files} claim file(s) in {plural(system.duplicates.groups, 'group')} exist more than once{#if system.duplicates.example}
-            — e.g. “{system.duplicates.example}”{/if}. The copies are indistinguishable; collapsing keeps one.
+          {tn('status.duplicates', system.duplicates.files, { groups: tn('status.groupCount', system.duplicates.groups) })}{#if system.duplicates.example}{t('status.duplicatesExample', { example: system.duplicates.example })}{/if}. {t('status.duplicatesNote')}
         </p>
       {/if}
       {#if system.layout && (system.layout.folders?.length ?? 0) > 0}
         <p class="muted small section-note">
-          {system.layout.claims} claim(s) are still in the legacy folder layout
-          ({plural(system.layout.folders?.length ?? 0, 'legacy folder')}
+          {tn('status.legacyLayout', system.layout.claims)}
+          ({tn('status.legacyFolders', system.layout.folders?.length ?? 0)}
           {#if system.layout.folders?.length}: {system.layout.folders.slice(0, 6).join(', ')}{#if system.layout.folders.length > 6}, …{/if}{/if}).
-          Claims are addressed by their ID now; moving them changes only the file names.
+          {t('status.legacyLayoutNote')}
         </p>
       {/if}
       <div class="action-list">
         {#each vaultActions as action (action.label)}
           <div class="action-row">
             <button class="btn btn--secondary" disabled={busy(action.job)} onclick={() => void action.run()}>
-              {action.label}
+              <span class="btn-text">{action.label}</span>
             </button>
             <span class="action-hint">{action.hint}</span>
           </div>
@@ -378,47 +381,47 @@
 
     <section class="section">
       <div class="section-head">
-        <h2>Knowledge health</h2>
+        <h2>{t('status.health')}</h2>
         <span class="grow"></span>
         <button class="btn btn--primary btn--sm" disabled={busy('lint')} onclick={() => void runLint()}>
-          <Icon name="search" size={13} /> Run lint
+          <Icon name="search" size={13} /> <span class="btn-text">{t('status.runLint')}</span>
         </button>
         <button class="btn btn--secondary btn--sm" disabled={busy('cleanup')} onclick={() => void cleanupClusters()}>
-          <Icon name="spark" size={13} /> Cleanup
+          <Icon name="spark" size={13} /> <span class="btn-text">{t('status.cleanup')}</span>
         </button>
       </div>
       {#if system.notice}<p class="muted small section-note">{system.notice}</p>{/if}
       {#if actionable.length === 0 && informational.length === 0}
-        <p class="muted small">No findings.</p>
+        <p class="muted small">{t('status.noFindings')}</p>
       {:else}
         <div class="findings">
           {#each actionable as finding (finding.id)}
             <div class="finding">
               <span class="chip {finding.severity === 'error' ? 'chip--danger' : 'chip--warn'}">{finding.severity}</span>
               <div class="finding-main">
-                <div class="finding-kind">{finding.kind}</div>
-                <div class="finding-message">{finding.message}</div>
+                <div class="finding-kind" title={finding.kind}>{finding.kind}</div>
+                <div class="finding-message" title={finding.message}>{finding.message}</div>
               </div>
               {#if finding.subject_id && (finding.subject_kind === 'atom' || finding.subject_kind === 'source')}
                 <button class="btn btn--ghost btn--sm" onclick={() => openFinding(finding)}>
-                  Open the {finding.subject_kind}
+                  <span class="btn-text">{t('status.openSubject', { kind: finding.subject_kind === 'atom' ? t('status.subjectClaim') : t('status.subjectSource') })}</span>
                 </button>
               {/if}
             </div>
           {/each}
           {#if informational.length > 0}
             <details class="info-findings">
-              <summary>{informational.length} informational finding{informational.length === 1 ? '' : 's'}</summary>
+              <summary>{tn('status.infoFindings', informational.length)}</summary>
               {#each informational as finding (finding.id)}
                 <div class="finding">
                   <span class="chip">{finding.severity}</span>
                   <div class="finding-main">
-                    <div class="finding-kind">{finding.kind}</div>
-                    <div class="finding-message">{finding.message}</div>
+                    <div class="finding-kind" title={finding.kind}>{finding.kind}</div>
+                    <div class="finding-message" title={finding.message}>{finding.message}</div>
                   </div>
                   {#if finding.subject_id && (finding.subject_kind === 'atom' || finding.subject_kind === 'source')}
                     <button class="btn btn--ghost btn--sm" onclick={() => openFinding(finding)}>
-                      Open the {finding.subject_kind}
+                      <span class="btn-text">{t('status.openSubject', { kind: finding.subject_kind === 'atom' ? t('status.subjectClaim') : t('status.subjectSource') })}</span>
                     </button>
                   {/if}
                 </div>
@@ -430,25 +433,28 @@
     </section>
 
     <section class="section details-section">
-      <div class="section-head"><h2>Vault details</h2></div>
+      <div class="section-head"><h2>{t('status.vaultDetails')}</h2></div>
       <div class="details-grid">
-        <div class="kv"><span class="k">vault</span><span class="v mono">{status.vault.root}</span></div>
-        <div class="kv"><span class="k">index</span><span class="v mono">{status.index.path}</span></div>
-        <div class="kv"><span class="k">sources</span><span class="v mono">{status.vault.sources}</span></div>
-        <div class="kv"><span class="k">inbox</span><span class="v mono">{status.vault.inbox}</span></div>
-        <div class="kv"><span class="k">started</span><span class="v">{relTime(status.app.started_at)}</span></div>
-        <div class="kv"><span class="k">agent</span><span class="v">{status.agent.model || 'not configured'}</span></div>
+        <div class="kv"><span class="k">{t('status.kvVault')}</span><span class="v mono">{status.vault.root}</span></div>
+        <div class="kv"><span class="k">{t('status.kvIndex')}</span><span class="v mono">{status.index.path}</span></div>
+        <div class="kv"><span class="k">{t('status.kvSources')}</span><span class="v mono">{status.vault.sources}</span></div>
+        <div class="kv"><span class="k">{t('status.kvInbox')}</span><span class="v mono">{status.vault.inbox}</span></div>
+        <div class="kv"><span class="k">{t('status.kvStarted')}</span><span class="v">{relTime(status.app.started_at)}</span></div>
+        <div class="kv"><span class="k">{t('status.kvAgent')}</span><span class="v">{status.agent.model || t('status.notConfigured')}</span></div>
+        <div class="kv"><span class="k">{t('status.kvLanguageUI')}</span><span class="v mono">{status.language.ui}</span></div>
+        <div class="kv"><span class="k">{t('status.kvLanguageClaims')}</span><span class="v mono">{status.language.claims}</span></div>
+        <div class="kv"><span class="k">{t('status.kvLanguageSummary')}</span><span class="v mono">{status.language.summary}</span></div>
         {#if status.memory}
           <div class="kv">
-            <span class="k">memory</span>
+            <span class="k">{t('status.kvMemory')}</span>
             <span class="v">
-              heap {status.memory.heap_mb} MB · peak {status.memory.heap_peak_mb} MB
+              {t('status.memoryLine', { heap: status.memory.heap_mb, peak: status.memory.heap_peak_mb })}
               {#if status.memory.peak_work}<em>{status.memory.peak_work}</em>{/if}
             </span>
           </div>
         {/if}
-        <div class="kv"><span class="k">pdf</span><span class="v">{status.tools.text_tool || '—'}</span></div>
-        <div class="kv"><span class="k">ocr</span><span class="v">{status.tools.tesseract || '—'}</span></div>
+        <div class="kv"><span class="k">{t('status.kvPdf')}</span><span class="v">{status.tools.text_tool || t('common.none')}</span></div>
+        <div class="kv"><span class="k">{t('status.kvOcr')}</span><span class="v">{status.tools.tesseract || t('common.none')}</span></div>
       </div>
     </section>
   {/if}
@@ -551,7 +557,9 @@
     display: flex;
     align-items: center;
     gap: 9px;
+    min-width: 0;
     min-height: 35px;
+    overflow: hidden;
     padding: 6px 10px;
     border-bottom: 1px solid var(--line);
     font-size: 12px;
@@ -568,8 +576,11 @@
   .job-step {
     width: 105px;
     flex: none;
+    overflow: hidden;
     color: var(--ink-2);
     font-weight: 550;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .job-state {
@@ -596,8 +607,10 @@
   .job-target {
     display: inline-flex;
     align-items: center;
+    flex: 0 1 auto;
     gap: 5px;
-    max-width: 260px;
+    min-width: 0;
+    max-width: min(260px, 100%);
     padding: 0;
     border: 0;
     background: transparent;
@@ -613,6 +626,8 @@
   }
 
   .job-live {
+    flex: 0 1 auto;
+    min-width: 0;
     overflow: hidden;
     color: var(--faint);
     font-size: 11px;
@@ -649,8 +664,14 @@
 
   .action-row .btn {
     width: 210px;
+    min-width: 0;
     flex: none;
     justify-content: flex-start;
+  }
+
+  .action-row .btn-text {
+    flex: 1;
+    text-align: left;
   }
 
   .action-hint {
@@ -662,6 +683,11 @@
   .section-note {
     margin: -2px 0 10px;
     line-height: 1.55;
+  }
+
+  .section-head {
+    flex-wrap: wrap;
+    row-gap: 6px;
   }
 
   .vocab-list {
@@ -729,16 +755,21 @@
   }
 
   .finding-kind {
+    overflow: hidden;
     color: var(--faint);
     font-family: var(--font-mono);
     font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .finding-message {
+    overflow: hidden;
     color: var(--ink-2);
     font-size: 12.5px;
     line-height: 1.5;
-    overflow-wrap: anywhere;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .info-findings summary {
@@ -786,6 +817,7 @@
 
     .action-row .btn {
       width: auto;
+      max-width: 100%;
     }
 
     .details-grid {

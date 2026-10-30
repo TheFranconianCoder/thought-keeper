@@ -66,16 +66,11 @@ type AtomLayout struct {
 	Folders []string `json:"folders,omitempty"`
 	Claims  int      `json:"claims"`
 	Indexes int      `json:"indexes,omitempty"`
-	// Usage is how many usage records have no atom beside them — the mark a write at a STALE path leaves
-	// behind, because a record is written next to its atom (a move that did not reach the index).
-	Usage int `json:"usage,omitempty"`
-	// Moved/Removed/IndexesRemoved/UsageRemoved/Skipped are the reorganize's own numbers; Kept names the
-	// folders that still hold something afterwards (an unreadable file is never thrown away).
+	// Moved/Removed/IndexesRemoved/Skipped are the reorganize's own numbers; Kept names the folders
+	// that still hold something afterwards (an unreadable file is never thrown away).
 	Moved          int      `json:"moved"`
 	Removed        int      `json:"folders_removed"`
 	IndexesRemoved int      `json:"indexes_removed,omitempty"`
-	UsageRemoved   int      `json:"usage_removed,omitempty"`
-	DirsRemoved    int      `json:"dirs_removed,omitempty"`
 	Skipped        int      `json:"skipped,omitempty"`
 	Kept           []string `json:"kept,omitempty"`
 }

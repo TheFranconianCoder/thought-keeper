@@ -882,7 +882,11 @@ func (a *App) Run() error {
 	for i := 0; i < a.cfg.Pipeline.ParallelRuns; i++ {
 		go a.runWorker(a.distillQueue)
 	}
-	go a.runWorker(a.queryQueue)
+	// Ask is never gated and a question is independent of the next one: an answer waiting for a slow
+	// model must not hold the question the reader asks meanwhile.
+	for i := 0; i < a.cfg.Pipeline.ParallelQueries; i++ {
+		go a.runWorker(a.queryQueue)
+	}
 	go a.runWorker(a.lintQueue)
 	go a.runWorker(a.tagQueue)
 	go a.runWorker(a.summaryQueue)
@@ -902,6 +906,7 @@ func (a *App) Run() error {
 
 	a.log.Info("run concurrency",
 		"distill_runs", a.cfg.Pipeline.ParallelRuns,
+		"query_runs", a.cfg.Pipeline.ParallelQueries,
 		"parts_per_run", a.cfg.Pipeline.PartsPerRun,
 		"parallel_parts", a.cfg.Pipeline.ParallelParts)
 	a.log.Info("thought-keeper running",
@@ -991,6 +996,11 @@ func (a *App) Status() payloads.Status {
 		},
 		Pipeline: a.PipelineStatus(),
 		Summary:  a.summaryStatus(),
+		Language: payloads.LanguageInfo{
+			UI:      a.cfg.Language.UI,
+			Claims:  a.cfg.Language.Claims,
+			Summary: a.cfg.Language.Summary,
+		},
 		Runs: payloads.RunsInfo{
 			PipelineQueued:  len(a.distillQueue),
 			PipelineRunning: a.runningDistills(),

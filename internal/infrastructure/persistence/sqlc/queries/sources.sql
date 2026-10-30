@@ -302,3 +302,49 @@ JOIN atoms a ON a.id = s.atom_id
 WHERE NOT EXISTS (SELECT 1 FROM cluster_atoms ca WHERE ca.atom_id = a.id)
   AND s.source_id IN (sqlc.slice('ids'))
 GROUP BY s.source_id;
+
+-- name: ListSourcesFiltered :many
+SELECT * FROM sources
+WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
+  AND (sqlc.arg(query) = ''
+       OR instr(lower(title), lower(sqlc.arg(query))) > 0
+       OR instr(lower(original_name), lower(sqlc.arg(query))) > 0
+       OR instr(lower(COALESCE(url, '')), lower(sqlc.arg(query))) > 0
+       OR instr(lower(tags), lower(sqlc.arg(query))) > 0
+       OR instr(lower(auto_tags), lower(sqlc.arg(query))) > 0)
+  AND (sqlc.arg(tag) = ''
+       OR instr(tags, '"' || sqlc.arg(tag) || '"') > 0
+       OR instr(auto_tags, '"' || sqlc.arg(tag) || '"') > 0)
+  AND (sqlc.arg(attached) = 0
+       OR (CASE WHEN json_valid(meta)
+                THEN COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '')
+                ELSE '' END) IN ('true', '1'))
+  AND (sqlc.arg(bookmarks) = 0 OR bookmark = 1)
+  AND (sqlc.arg(failed) = 0 OR instr(steps, '"state":"failed"') > 0)
+ORDER BY imported_at DESC
+LIMIT sqlc.arg(limit) OFFSET sqlc.arg(offset);
+
+-- name: CountSourcesFiltered :one
+SELECT COUNT(*) FROM sources
+WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
+  AND (sqlc.arg(query) = ''
+       OR instr(lower(title), lower(sqlc.arg(query))) > 0
+       OR instr(lower(original_name), lower(sqlc.arg(query))) > 0
+       OR instr(lower(COALESCE(url, '')), lower(sqlc.arg(query))) > 0
+       OR instr(lower(tags), lower(sqlc.arg(query))) > 0
+       OR instr(lower(auto_tags), lower(sqlc.arg(query))) > 0)
+  AND (sqlc.arg(tag) = ''
+       OR instr(tags, '"' || sqlc.arg(tag) || '"') > 0
+       OR instr(auto_tags, '"' || sqlc.arg(tag) || '"') > 0)
+  AND (sqlc.arg(attached) = 0
+       OR (CASE WHEN json_valid(meta)
+                THEN COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '')
+                ELSE '' END) IN ('true', '1'))
+  AND (sqlc.arg(bookmarks) = 0 OR bookmark = 1)
+  AND (sqlc.arg(failed) = 0 OR instr(steps, '"state":"failed"') > 0);
+
+-- name: CountAttachedSources :one
+SELECT COUNT(*) FROM sources
+WHERE (CASE WHEN json_valid(meta)
+           THEN COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '')
+           ELSE '' END) IN ('true', '1');

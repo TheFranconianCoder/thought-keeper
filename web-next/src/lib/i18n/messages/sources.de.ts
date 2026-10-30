@@ -1,0 +1,238 @@
+/** Die Linse „Quellen“: die Liste, ihre Filter und der Ablauf zum Hinzufügen. */
+export const sourcesDe: Record<string, string> = {
+  // Die Linse und ihr Kopf.
+  'sources.sub.one': '{count} unveränderliche Quelle · jede Datei und jeder Link wird einmal gelesen',
+  'sources.sub.many':
+    '{count} unveränderliche Quellen · jede Datei und jeder Link wird einmal gelesen',
+  'sources.loading': 'Quellen werden geladen…',
+  'sources.wordSource': 'Quelle',
+
+  // Die Werkzeugleiste: Suche, Art, Anhang-Filter, Schlagwortwolke.
+  'sources.filterPlaceholder': 'Quellen filtern…',
+  'sources.filterAria': 'Quellen filtern',
+  'sources.kindAria': 'Art der Quelle',
+  'sources.kindAll': 'Alle',
+  'sources.kindMarkdown': 'Markdown',
+  'sources.kindPdf': 'PDF',
+  'sources.kindText': 'Text',
+  'sources.kindUrls': 'URLs',
+  'sources.attachedTitle': 'Nur Quellen zeigen, deren Schnappschuss von Hand angehängt wurde',
+  'sources.attached': 'Angehängt',
+  'sources.tagsAria': 'Schlagwörter der Quellen',
+  'sources.filteredBy': 'Gefiltert nach',
+
+  // Leere Zustände und Fehler.
+  'sources.nothingLoadedTitle': 'Nichts geladen',
+  'sources.nothingLoadedText':
+    'Thought Keeper ist nicht erreichbar; das hier ist nicht die Antwort des Tresors.',
+  'sources.emptyTitle': 'Noch keine Quellen',
+  'sources.emptyText':
+    'Füge eine Markdown-Datei, ein PDF, reinen Text oder eine URL hinzu. Jede Quelle bleibt als lokaler, unveränderlicher Schnappschuss erhalten.',
+  'sources.addFirst': 'Erste Quelle hinzufügen',
+  'sources.noMatchTitle': 'Keine Quelle passt',
+  'sources.noMatchText': 'Leere die Suche oder einen der Filter.',
+  'sources.readTimeout': 'Der lokale Dienst hat nicht rechtzeitig geantwortet.',
+
+  // Eine Zeile: die Etiketten neben einer Quelle.
+  'sources.attachedTag': 'angehängt',
+  'sources.attachedTagTitle': 'Schnappschuss von Hand angehängt',
+  'sources.attachedTagTitleFrom': 'Schnappschuss von Hand angehängt, aus {from}',
+  'sources.tagLink': 'Link',
+  'sources.tagSitemap': 'Sitemap',
+  'sources.tagFeed': 'Feed',
+  'sources.tagSitemapPage': 'Sitemap-Seite',
+  'sources.tagFeedItem': 'Feed-Eintrag',
+  'sources.tagFeedCopy': 'Feed-Kopie',
+  'sources.tagWiki': 'Wiki',
+  'sources.tagWikiUrl': 'Wiki-URL',
+  'sources.actionRefresh': 'Aktualisieren — die Liste erneut abrufen',
+  'sources.actionCapture': 'Erfassen — die Quelle erneut lesen',
+  'sources.actionOutline': 'Gliederung neu aufbauen',
+  'sources.actionDistill': 'Destillieren — die Aussagen dieser Quelle fortsetzen',
+  'sources.actionReset': 'Ableitung zurücksetzen',
+  'sources.actionDelete': 'Quelle löschen',
+
+  // Die Schrittlichter.
+  'sources.stepsAria': 'Zustand der Pipeline',
+  'sources.stepAria': '{step}: {state}',
+  'sources.state.pending': 'ausstehend',
+  'sources.state.running': 'läuft',
+  'sources.state.ok': 'erledigt',
+  'sources.state.failed': 'fehlgeschlagen',
+  'sources.state.stale': 'veraltet',
+  'sources.state.skipped': 'trifft nicht zu',
+  'sources.step.capture': 'erfassen — die Quelle in einen lokalen Schnappschuss lesen',
+  'sources.step.outline': 'gliedern — die Struktur des Dokuments aufbauen',
+  'sources.step.distill': 'destillieren — eine Aussage pro Feststellung',
+  'sources.step.cluster': 'clustern — Aussagen zu titellosen Verknüpfungen gruppieren',
+  'sources.stepTitle.failed': 'fehlgeschlagen: {error}',
+  'sources.stepTitle.pending': 'noch nicht erledigt',
+  'sources.stepTitle.skipped': 'trifft nicht zu',
+  'sources.stepTitle.blocking': 'das blockiert den nächsten Schritt',
+  'sources.stepTitle.running': 'läuft gerade',
+  'sources.stepTitle.stale': 'die Eingabe hat sich geändert; die Ableitung ist veraltet',
+
+  // Der Zustand der Ableitung, in einer ruhigen Zeile.
+  'sources.status.bookmark': 'Lesezeichen',
+  'sources.status.queued': 'in der Warteschlange',
+  'sources.status.queuedAhead': 'in der Warteschlange · {count} davor',
+  'sources.status.orphaned.one': '{count} verwaiste Zeile · neu indizieren',
+  'sources.status.orphaned.many': '{count} verwaiste Zeilen · neu indizieren',
+  'sources.status.blocked': 'blockiert · {reason}',
+  'sources.status.linkFailed': 'Link fehlgeschlagen · {error}',
+  'sources.status.linkFailedShort': 'Link fehlgeschlagen',
+  'sources.status.fetching': 'Link wird abgerufen…',
+  'sources.status.feedList': 'Feed · die Einträge sind Quellen',
+  'sources.status.sitemapList': 'Sitemap · die Seiten sind Quellen',
+  'sources.status.completeNoClaims': 'vollständig · keine Aussagen',
+  'sources.status.ready': 'bereit zum Destillieren',
+  'sources.status.outlineFailed': 'Gliederung fehlgeschlagen',
+  'sources.status.waiting': 'wartet',
+  'sources.status.partial': 'teilweise · {parts}',
+  'sources.status.partsOpen': '{done}/{total} Teile',
+  'sources.status.claimsOpen': '{count} offen',
+  'sources.status.complete': 'vollständig',
+  'sources.wall.loginRequired': 'Anmeldung erforderlich',
+  'sources.wall.paywalled': 'Bezahlschranke',
+  'sources.wall.consentRequired': 'Einwilligung erforderlich',
+
+  // Zählungen, die sich Zeile, Ableitungen und Berichte teilen.
+  'sources.counts.parts.one': '{count} Teil',
+  'sources.counts.parts.many': '{count} Teile',
+  'sources.counts.claims.one': '{count} Aussage',
+  'sources.counts.claims.many': '{count} Aussagen',
+  'sources.counts.nodes.one': '{count} Knoten',
+  'sources.counts.nodes.many': '{count} Knoten',
+  'sources.counts.pages.one': '{count} Seite',
+  'sources.counts.pages.many': '{count} Seiten',
+  'sources.counts.urlSources.one': '{count} URL-Quelle',
+  'sources.counts.urlSources.many': '{count} URL-Quellen',
+  'sources.counts.newPages.one': '{count} neue Seite',
+  'sources.counts.newPages.many': '{count} neue Seiten',
+
+  // Was die Pipeline gerade tut, im Ganzen.
+  'sources.pipeline.documents.one': '{steps} · {count} Quelle',
+  'sources.pipeline.documents.many': '{steps} · {count} Quellen',
+  'sources.pipeline.clustering.one': 'clustern · {count} Durchlauf',
+  'sources.pipeline.clustering.many': 'clustern · {count} Durchläufe',
+  'sources.pipeline.clusterWaiting': 'Cluster-Durchlauf wartet auf die Dokumente',
+  'sources.pipeline.queued': '{count} in der Warteschlange',
+  'sources.pipeline.asking': 'fragt…',
+  'sources.job.capture': 'erfassen',
+  'sources.job.outline': 'gliedern',
+  'sources.job.distill': 'destillieren',
+  'sources.job.cluster': 'Aussagen clustern',
+  'sources.job.query': 'fragen',
+  'sources.job.lint': 'prüfen',
+  'sources.job.vocabulary': 'Namen kuratieren',
+  'sources.job.reindex': 'neu indizieren',
+  'sources.job.reconcile': 'abgleichen',
+  'sources.job.cleanup': 'aufräumen',
+  'sources.job.rebuildTrees': 'Gliederungen neu aufbauen',
+  'sources.job.refreshUrls': 'URLs aktualisieren',
+  'sources.job.refreshSource': 'Quelle aktualisieren',
+  'sources.job.fixUrls': 'URLs reparieren',
+
+  // Eine Quelle hinzufügen: ein Link, viele Links, Dateien, ein angehängter Schnappschuss.
+  'sources.fetchingLink': 'Der Link wird abgerufen…',
+  'sources.addingSource': 'Die Quelle wird hinzugefügt…',
+  'sources.added': '{kind} hinzugefügt · {title}',
+  'sources.addFailed': 'Die Quelle konnte nicht hinzugefügt werden: {error}',
+  'sources.noUrlsFound': 'In der Eingabe wurden keine http(s)-URLs gefunden.',
+  'sources.queuedUrls.one':
+    'Eingereiht: {count} URL — die Quellen erscheinen, während sie abgerufen werden.',
+  'sources.queuedUrls.many':
+    'Eingereiht: {count} URLs — die Quellen erscheinen, während sie abgerufen werden.',
+  'sources.urlImportFailed': 'Der URL-Import ist fehlgeschlagen: {error}',
+  'sources.uploading': '{name} wird hochgeladen…',
+  'sources.uploaded.one': '{count} Datei hochgeladen.',
+  'sources.uploaded.many': '{count} Dateien hochgeladen.',
+  'sources.uploadFailed': 'Der Upload ist fehlgeschlagen: {error}',
+  'sources.attaching': '{name} wird angehängt…',
+  'sources.attachedToast': '{name} angehängt · {title}',
+  'sources.thePage': 'die Seite',
+  'sources.attachFailed': 'Der Schnappschuss konnte nicht angehängt werden: {error}',
+
+  // Eine Quelle löschen.
+  'sources.deleteTitle': '„{label}“ löschen?',
+  'sources.deleteMessagePages':
+    'Ihre Aussagen, deren Herkunft und jede Seite, die sie besitzt, gehen mit. Der Schnappschuss und seine abgeleiteten Dateien wandern in den Papierkorb.',
+  'sources.deleteMessage':
+    'Ihre Aussagen und deren Herkunft gehen mit. Der Schnappschuss und seine abgeleiteten Dateien wandern in den Papierkorb.',
+  'sources.deleteConfirmPages': 'Löschen, samt ihrer Seiten',
+  'sources.deleteConfirm': 'Quelle löschen',
+  'sources.deleting': '{label} wird gelöscht…',
+  'sources.deleted': '{label} gelöscht.',
+  'sources.deletedWithDependents.one': '{label} und {count} abhängige Quelle gelöscht.',
+  'sources.deletedWithDependents.many': '{label} und {count} abhängige Quellen gelöscht.',
+  'sources.deleteFailed': 'Die Quelle konnte nicht gelöscht werden: {error}',
+
+  // Erfassen, aktualisieren, destillieren.
+  'sources.capturing': 'Wird erfasst — die Gliederung folgt.',
+  'sources.nothingToCapture': 'Nichts zu erfassen.',
+  'sources.captureFailed': 'Das Erfassen ist fehlgeschlagen: {error}',
+  'sources.refreshFailed': 'Das Aktualisieren ist fehlgeschlagen: {error}',
+  'sources.siteDidNotAnswer': 'die Seite hat nicht mit der Quelle geantwortet',
+  'sources.attachedNeverFetched':
+    'Diese Quelle hat einen von Hand gelieferten Schnappschuss; sie wird nie abgerufen.',
+  'sources.refreshBlocked': 'Aktualisieren blockiert: {error}',
+  'sources.siteAskedLogin': 'die Seite verlangte eine Anmeldung oder ein Abonnement',
+  'sources.refreshedChanged': 'Aktualisiert — die Quelle hat sich geändert.',
+  'sources.refreshedDiscovered.one': 'Aktualisiert — {count} neue Seite eingereiht.',
+  'sources.refreshedDiscovered.many': 'Aktualisiert — {count} neue Seiten eingereiht.',
+  'sources.refreshedRemoved.one': 'Aktualisiert — {count} Seite entfernt.',
+  'sources.refreshedRemoved.many': 'Aktualisiert — {count} Seiten entfernt.',
+  'sources.refreshedUnchanged': 'Aktualisiert — nichts hat sich geändert.',
+  'sources.nothingLeft': 'Für „{label}“ ist nichts mehr fortzusetzen.',
+  'sources.deriveAgainQuestion':
+    'Alles ist bereits abgeleitet. Die Quelle trotzdem von Grund auf neu ableiten? Ihre Aussagen werden ersetzt.',
+  'sources.deriveAgain': 'Neu ableiten',
+  'sources.deriveAgainTitle': '„{label}“ von Grund auf neu ableiten?',
+  'sources.deriveAgainMessage':
+    'Die Gliederung und die Aussagen dieser Quelle werden ersetzt und neu abgeleitet.',
+  'sources.alreadyRunning': 'Läuft bereits — die Quelle wird gerade abgeleitet.',
+  'sources.distillFailed': 'Das Destillieren ist fehlgeschlagen: {error}',
+
+  // Ein angehängter Schnappschuss und der ausdrückliche neue Abruf seiner URL.
+  'sources.refetchTitle': '„{label}“ erneut versuchen?',
+  'sources.refetchMessage':
+    'Die URL wird einmal abgerufen. Ist die Seite lesbar, ersetzt ihr Schnappschuss die angehängte Datei{from}, und die Aussagen werden neu aufgebaut, wenn sich ihr Text geändert hat. Ist die Seite weiterhin blockiert oder schlägt der Abruf fehl, bleibt der angehängte Schnappschuss genau wie er ist.',
+  'sources.refetchConfirm': 'Die URL erneut versuchen',
+  'sources.refetching': 'Die URL wird erneut abgerufen…',
+  'sources.refetchReplaced': 'Die Seite war lesbar — der angehängte Schnappschuss wurde ersetzt.',
+  'sources.refetchStillBlocked':
+    'Weiterhin blockiert — der angehängte Schnappschuss bleibt unverändert.',
+  'sources.refetchStillBlockedDetail':
+    'Weiterhin blockiert ({error}) — der angehängte Schnappschuss bleibt unverändert.',
+  'sources.refetchFailed':
+    'Der Abruf ist fehlgeschlagen — der angehängte Schnappschuss bleibt unverändert.',
+  'sources.refetchFailedDetail':
+    'Der Abruf ist fehlgeschlagen — der angehängte Schnappschuss bleibt unverändert: {error}.',
+  'sources.refetchNoContent': 'Die URL hat keinen neuen Inhalt geliefert; nichts wurde ersetzt.',
+  'sources.refetchError': 'Der erneute Abruf ist fehlgeschlagen: {error}',
+
+  // Zurücksetzen und neu aufbauen.
+  'sources.resetTitle': '„{label}“ zurücksetzen?',
+  'sources.resetMessage':
+    'Die Gliederung und die Aussagen dieser Quelle werden verworfen und aus der gespeicherten Datei neu aufgebaut. Die Quelle selbst bleibt.',
+  'sources.resetConfirm': 'Ableitung zurücksetzen',
+  'sources.resetDone': 'Zurückgesetzt: {parts} entfernt.',
+  'sources.resetFailed': 'Das Zurücksetzen ist fehlgeschlagen: {error}',
+  'sources.outlineRebuilt': 'Gliederung neu aufgebaut: {parts}.',
+  'sources.outlineFailed': 'Der Neuaufbau der Gliederung ist fehlgeschlagen: {error}',
+
+  // Die URL-Pflegeläufe.
+  'sources.refreshingUrls': 'URL-Quellen werden aktualisiert…',
+  'sources.noteBlocked': '{count} blockiert',
+  'sources.noteAttached': '{count} angehängt, nicht abgerufen',
+  'sources.noteRemoved': '{count} entfernt',
+  'sources.urlsChecked': 'URLs geprüft {checked} · geändert {changed} · fehlgeschlagen {failed}{notes}.',
+  'sources.urlRefreshFailed': 'Das Aktualisieren der URLs ist fehlgeschlagen: {error}',
+  'sources.repaired': '{fixed} von {checked} Quellen repariert — sie sind wieder URL-Quellen.',
+  'sources.nothingToRepair.one': 'Nichts zu reparieren: {count} Markdown-Quelle geprüft.',
+  'sources.nothingToRepair.many': 'Nichts zu reparieren: {count} Markdown-Quellen geprüft.',
+  'sources.urlRepairFailed': 'Die URL-Reparatur ist fehlgeschlagen: {error}',
+  'sources.migrateNothing': 'Jede URL-Quelle hat bereits ihre URL-Adresse.',
+  'sources.migrateDone': '{moved} verschoben · {claims} neu zugeordnet.',
+  'sources.migrateFailed': 'Die Migration der URL-Adressen ist fehlgeschlagen: {error}',
+};

@@ -213,12 +213,13 @@ code: `cache_key[0]`.
 ### Rules
 
 - **One claim per file.**
-- **A claim is written in English**, whatever the source's language. Proper names, titles, code and
-  quoted terms keep their original script.
+- **A claim is written in the configured claim language** (`language.claims`, default English),
+  whatever the source's language. Proper names, titles, code and quoted terms keep their original
+  script.
 - **A claim stands alone.** No "Chapter 11", "this section", "the book", "as we saw". The source
   stays provenance; it is never part of the statement.
-- **The topic comes from the claim and body.** It is the flat, English subject, derivable without any
-  source. `chapter-11`, `book-structure` and `rust-book` are not topics.
+- **The topic comes from the claim and body.** It is the flat subject, in the same language,
+  derivable without any source. `chapter-11`, `book-structure` and `rust-book` are not topics.
 - **A write that cannot be recorded leaves nothing behind.** The FILE is written first and the index
   row second; if the row fails, the file is removed.
 - **A copy is not a claim.** Claims with the same topic, statement, provenance, body, type and

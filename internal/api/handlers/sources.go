@@ -19,12 +19,17 @@ import (
 
 // SourceLister lists indexed sources.
 type SourceLister interface {
-	Execute(ctx context.Context, kind string, limit, offset int) ([]partialentities.PartialSource, error)
+	Execute(ctx context.Context, filter entities.SourceFilter, limit, offset int) ([]partialentities.PartialSource, error)
 }
 
 // SourceCounter is the total behind a page. Nil means the page's length IS the total.
 type SourceCounter interface {
-	Count(ctx context.Context, kind string) (int, error)
+	Count(ctx context.Context, filter entities.SourceFilter) (int, error)
+}
+
+// SourceFacetLister counts the Sources lens's facets: the tag cloud and attached snapshots.
+type SourceFacetLister interface {
+	Execute(ctx context.Context) (usecases.SourceFacetsResult, error)
 }
 
 // SourceGetter returns one source by hash.
@@ -211,6 +216,8 @@ type SourcesHandler struct {
 	Lister SourceLister
 	// Counter is the total behind the page, so the list can say "200 of 465" and load the rest.
 	Counter SourceCounter
+	// Facets is the tag cloud and the attached count (nil = no facets).
+	Facets SourceFacetLister
 	// ChildLister is the Sub-sources tab: the sources this one owns.
 	ChildLister SourceChildLister
 	// TagSetter edits the human tags of a source.
@@ -247,7 +254,15 @@ type SourcesHandler struct {
 // List serves GET /api/v1/sources.
 func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	srcs, err := h.Lister.Execute(r.Context(), q.Get("kind"), atoiDefault(q.Get("limit"), 200), atoiDefault(q.Get("offset"), 0))
+	filter := entities.SourceFilter{
+		Kind:          strings.TrimSpace(q.Get("kind")),
+		Query:         strings.TrimSpace(q.Get("q")),
+		Tag:           strings.TrimSpace(q.Get("tag")),
+		AttachedOnly:  truthy(q.Get("attached")),
+		BookmarksOnly: truthy(q.Get("bookmarks")),
+		FailedOnly:    truthy(q.Get("failed")),
+	}
+	srcs, err := h.Lister.Execute(r.Context(), filter, atoiDefault(q.Get("limit"), 200), atoiDefault(q.Get("offset"), 0))
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -258,15 +273,34 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 			out[i].RunningStep = h.Status.RunningStep(out[i].Hash)
 		}
 	}
-	// Count is the TOTAL, not the page: the reader shows it and the list uses it to know that more
-	// sources exist past the first page.
+	// Count is the TOTAL of the SAME filter, not the page: the reader shows it and the windowed
+	// list uses it as the scroll height.
 	total := len(out)
 	if h.Counter != nil {
-		if n, cErr := h.Counter.Count(r.Context(), q.Get("kind")); cErr == nil {
+		if n, cErr := h.Counter.Count(r.Context(), filter); cErr == nil {
 			total = n
 		}
 	}
 	payloads.WriteJSON(w, http.StatusOK, payloads.SourceList{Sources: out, Count: total, Total: total})
+}
+
+// Facets serves GET /api/v1/sources/facets: the Sources tag cloud and the attached count. It is
+// read once per list view, never per window.
+func (h SourcesHandler) ListFacets(w http.ResponseWriter, r *http.Request) {
+	if h.Facets == nil {
+		payloads.WriteJSON(w, http.StatusOK, payloads.SourceFacets{Tags: []payloads.SourceTagFacet{}})
+		return
+	}
+	res, err := h.Facets.Execute(r.Context())
+	if err != nil {
+		payloads.WriteError(w, err)
+		return
+	}
+	out := payloads.SourceFacets{Tags: make([]payloads.SourceTagFacet, 0, len(res.Tags)), Attached: res.Attached}
+	for _, tag := range res.Tags {
+		out.Tags = append(out.Tags, payloads.SourceTagFacet{Tag: tag.Name, Count: tag.Uses})
+	}
+	payloads.WriteJSON(w, http.StatusOK, out)
 }
 
 // SummaryText serves GET /api/v1/sources/{hash}/summary: the source's overview as Markdown. A
@@ -569,4 +603,10 @@ func atoiDefault(s string, def int) int {
 		return def
 	}
 	return n
+}
+
+// truthy reads the query-string spelling of a boolean filter. Only an explicit yes turns it on;
+// an absent or malformed value leaves the filter out.
+func truthy(s string) bool {
+	return s == "1" || strings.EqualFold(s, "true") || strings.EqualFold(s, "yes")
 }

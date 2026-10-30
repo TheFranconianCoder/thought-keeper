@@ -21,13 +21,14 @@ import (
 )
 
 type pageLister struct {
-	all   []partialentities.PartialSource
-	lastL int
-	lastO int
+	all        []partialentities.PartialSource
+	lastL      int
+	lastO      int
+	lastFilter entities.SourceFilter
 }
 
-func (p *pageLister) Execute(_ context.Context, _ string, limit, offset int) ([]partialentities.PartialSource, error) {
-	p.lastL, p.lastO = limit, offset
+func (p *pageLister) Execute(_ context.Context, filter entities.SourceFilter, limit, offset int) ([]partialentities.PartialSource, error) {
+	p.lastL, p.lastO, p.lastFilter = limit, offset, filter
 	if offset > len(p.all) {
 		return nil, nil
 	}
@@ -37,7 +38,7 @@ func (p *pageLister) Execute(_ context.Context, _ string, limit, offset int) ([]
 
 type totalCounter struct{ n int }
 
-func (c totalCounter) Count(context.Context, string) (int, error) { return c.n, nil }
+func (c totalCounter) Count(context.Context, entities.SourceFilter) (int, error) { return c.n, nil }
 
 // TestSourceListSaysThereIsMore: the list answers a PAGE, and `count` is the TOTAL — not the page's
 // length. The store used to page on len(sources), so the 201st source was invisible; the label said
@@ -73,6 +74,35 @@ func TestSourceListSaysThereIsMore(t *testing.T) {
 	h.List(rec, req)
 	if lister.lastO != 2 || lister.lastL != 2 {
 		t.Errorf("page request = limit %d offset %d, want 2/2", lister.lastL, lister.lastO)
+	}
+}
+
+// TestSourceListParsesTheWindowFilter: every filter the Sources window sends is part of both the
+// page read and the count; a filter that only reached the page would make the scroll height lie.
+func TestSourceListParsesTheWindowFilter(t *testing.T) {
+	lister := &pageLister{}
+	h := SourcesHandler{Lister: lister, Counter: totalCounter{n: 0}}
+
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		"GET",
+		"/api/v1/sources?kind=pdf&q=rust&tag=systems&attached=1&bookmarks=1&failed=1&limit=50&offset=100",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	h.List(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	want := entities.SourceFilter{
+		Kind: "pdf", Query: "rust", Tag: "systems",
+		AttachedOnly: true, BookmarksOnly: true, FailedOnly: true,
+	}
+	if lister.lastFilter != want {
+		t.Errorf("filter = %+v, want %+v", lister.lastFilter, want)
+	}
+	if lister.lastL != 50 || lister.lastO != 100 {
+		t.Errorf("page = limit %d offset %d, want 50/100", lister.lastL, lister.lastO)
 	}
 }
 

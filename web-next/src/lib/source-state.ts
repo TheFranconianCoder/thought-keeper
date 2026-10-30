@@ -1,19 +1,28 @@
-import type { Pipeline, Source, StepName, StepStatus } from './api/types';
+import type { Pipeline, Source, StepName, StepState, StepStatus } from './api/types';
+import { t, tn } from './i18n/index.svelte';
 
 /** The four steps, in order. The first three are document steps (one source); cluster runs over the
  *  whole vault and only while no document step runs. */
 export const PIPELINE_STEPS: readonly StepName[] = ['capture', 'outline', 'distill', 'cluster'];
 
+/** STEP_LABEL maps a step to the catalog key that names it. The sentence is resolved with t() where
+ *  it is shown, so a rendered row follows the interface language. */
 export const STEP_LABEL: Record<StepName, string> = {
-  capture: 'capture — read the source into a local snapshot',
-  outline: 'outline — build the document structure',
-  distill: 'distill — one claim per statement',
-  cluster: 'cluster — group claims into titleless associations',
+  capture: 'sources.step.capture',
+  outline: 'sources.step.outline',
+  distill: 'sources.step.distill',
+  cluster: 'sources.step.cluster',
 };
 
 /** WALL_LABELS are the capture details a blocked URL carries (entities.WallKind.Label). They are
- *  what tells a wall apart from a dead link: the page answered, just not with itself. */
-const WALL_LABELS = new Set(['login required', 'paywalled', 'consent required']);
+ *  what tells a wall apart from a dead link: the page answered, just not with itself. The server's
+ *  detail stays the value that is matched; only the sentence the reader sees is translated. */
+const WALL_KEYS: Record<string, string> = {
+  'login required': 'sources.wall.loginRequired',
+  paywalled: 'sources.wall.paywalled',
+  'consent required': 'sources.wall.consentRequired',
+};
+const WALL_LABELS = new Set(Object.keys(WALL_KEYS));
 
 export interface LiveProgress {
   phase?: string;
@@ -79,6 +88,35 @@ export function stepsOf(source: Source): Record<StepName, StepStatus> {
   return out;
 }
 
+/** overallState collapses the four step lights into ONE state for a narrow list row.
+ *
+ *  A failure outranks a run, a stale input outranks "done", and a bookmark is deliberately skipped
+ *  (it has no derivation). A feed or a sitemap is a complete LIST: capture is ok, the other steps do
+ *  not apply — that is done, not pending.
+ */
+export function overallState(source: Source, live?: LiveProgress): StepState {
+  if (source.bookmark) return 'skipped';
+  if (source.running_step) return 'running';
+  if (source.atom_count === 0 && source.provenance_rows > 0) return 'stale';
+  const steps = stepsOf(source);
+  const states = PIPELINE_STEPS.map((step) => steps[step].state);
+  if (states.includes('failed') || source.tree_state === 'failed') return 'failed';
+  if (states.includes('stale')) return 'stale';
+  if (states.includes('running')) return 'running';
+  if (states.every((state) => state === 'ok' || state === 'skipped')) return 'ok';
+  return 'pending';
+}
+
+/** overallPercent is the one number the narrow lamp's ring shows: the slower of the two dimensions
+ *  (parts distilled, claims associated). A source with nothing left is full; a failed or pending
+ *  source keeps whatever it already reached. */
+export function overallPercent(source: Source, live?: LiveProgress): number {
+  if (source.bookmark) return 0;
+  const progress = progressOf(source, live);
+  if (progress) return Math.min(progress.parts, progress.claims);
+  return overallState(source, live) === 'ok' ? 100 : 0;
+}
+
 /** canAttachSnapshot reports whether a human-supplied page can fill this source: a URL the app could
  *  not read — a wall (capture failed), a bookmark (no readable text: a JavaScript page, a video, an
  *  app), or a source whose snapshot was already attached (the human may replace it). A sitemap or a
@@ -121,62 +159,75 @@ export function matchesSourceFilter(source: Source, filter: SourceFilter): boole
 }
 
 export function stepTitle(step: StepName, status: StepStatus): string {
-  const bits = [STEP_LABEL[step]];
+  const bits = [t(STEP_LABEL[step])];
   if (status.detail) bits.push(status.detail);
-  if (status.error) bits.push(`failed: ${status.error}`);
-  if (status.state === 'pending') bits.push('not done yet');
-  if (status.state === 'skipped') bits.push('does not apply');
-  if (status.state === 'failed') bits.push('this blocks the next step');
-  if (status.state === 'running') bits.push('running now');
-  if (status.state === 'stale') bits.push('the input changed; derivation is stale');
+  if (status.error) bits.push(t('sources.stepTitle.failed', { error: status.error }));
+  if (status.state === 'pending') bits.push(t('sources.stepTitle.pending'));
+  if (status.state === 'skipped') bits.push(t('sources.stepTitle.skipped'));
+  if (status.state === 'failed') bits.push(t('sources.stepTitle.blocking'));
+  if (status.state === 'running') bits.push(t('sources.stepTitle.running'));
+  if (status.state === 'stale') bits.push(t('sources.stepTitle.stale'));
   return bits.join(' · ');
+}
+
+/** stepStateLabel names one step's state; the step lights read it in their aria-label. */
+export function stepStateLabel(state: StepState): string {
+  return t(`sources.state.${state}`);
 }
 
 /** statusLabel names the derivation state in one calm line. */
 export function statusLabel(source: Source, live?: LiveProgress): string {
-  if (source.bookmark) return 'bookmark';
+  if (source.bookmark) return t('sources.status.bookmark');
 
   const running = source.running_step;
   if (running) {
     const counts = countsOf(source, live);
     if (counts.phase === 'queued') {
-      return counts.queuedAhead > 0 ? `queued · ${counts.queuedAhead} ahead` : 'queued';
+      return counts.queuedAhead > 0
+        ? t('sources.status.queuedAhead', { count: counts.queuedAhead })
+        : t('sources.status.queued');
     }
     return `${running}…`;
   }
 
   if (source.atom_count === 0) {
-    if (source.provenance_rows > 0) return `${source.provenance_rows} orphaned row(s) · reindex`;
+    if (source.provenance_rows > 0) return tn('sources.status.orphaned', source.provenance_rows);
     const capture = source.steps?.capture;
     if (capture?.state === 'failed') {
       // A wall is a different report from a dead link: the page answered, just not with itself.
       const detail = (capture.detail || '').trim().split('\n')[0];
-      if (WALL_LABELS.has(detail)) return `blocked · ${detail}`;
+      if (WALL_LABELS.has(detail)) {
+        return t('sources.status.blocked', { reason: t(WALL_KEYS[detail]) });
+      }
       const why = (capture.error || capture.detail || '').split('\n')[0].trim();
       const short = why.length > 64 ? `${why.slice(0, 64)}…` : why;
-      return short ? `link failed · ${short}` : 'link failed';
+      return short
+        ? t('sources.status.linkFailed', { error: short })
+        : t('sources.status.linkFailedShort');
     }
-    if (capture?.state === 'pending' && !source.path) return 'fetching link…';
+    if (capture?.state === 'pending' && !source.path) return t('sources.status.fetching');
     // A feed or a sitemap is a LIST of sources: capture fetched the list, and there is no document
     // to outline, distil or associate. Naming it is what separates a finished list from a source
     // stuck after step 1.
-    if (source.rss) return 'feed · the items are sources';
-    if (source.sitemap) return 'sitemap · the pages are sources';
-    if (source.steps?.distill?.state === 'ok') return 'complete · no claims';
-    if (source.tree_state === 'built') return 'ready to distill';
-    if (source.tree_state === 'failed') return 'outline failed';
-    return source.tree_state || 'waiting';
+    if (source.rss) return t('sources.status.feedList');
+    if (source.sitemap) return t('sources.status.sitemapList');
+    if (source.steps?.distill?.state === 'ok') return t('sources.status.completeNoClaims');
+    if (source.tree_state === 'built') return t('sources.status.ready');
+    if (source.tree_state === 'failed') return t('sources.status.outlineFailed');
+    return source.tree_state || t('sources.status.waiting');
   }
 
   const counts = countsOf(source, live);
   const partsOpen = counts.partsTotal > 0 && counts.partsDone < counts.partsTotal;
   if (partsOpen || counts.open > 0) {
     const bits: string[] = [];
-    if (partsOpen) bits.push(`${counts.partsDone}/${counts.partsTotal} parts`);
-    if (counts.open > 0) bits.push(`${counts.open} open`);
-    return `partial · ${bits.join(' · ')}`;
+    if (partsOpen) {
+      bits.push(t('sources.status.partsOpen', { done: counts.partsDone, total: counts.partsTotal }));
+    }
+    if (counts.open > 0) bits.push(t('sources.status.claimsOpen', { count: counts.open }));
+    return t('sources.status.partial', { parts: bits.join(' · ') });
   }
-  return 'complete';
+  return t('sources.status.complete');
 }
 
 /** progressOf returns the two dimensions of derivation, or null when nothing is left to show.
@@ -207,9 +258,7 @@ export function totalsLabel(source: Source, live?: LiveProgress): string {
   // document that never started. Its count lives in the Sub-sources tab.
   if (source.rss || source.sitemap) return '';
   const counts = countsOf(source, live);
-  return `${counts.partsTotal} ${counts.partsTotal === 1 ? 'part' : 'parts'} · ${counts.claims} ${
-    counts.claims === 1 ? 'claim' : 'claims'
-  }`;
+  return `${tn('sources.counts.parts', counts.partsTotal)} · ${tn('sources.counts.claims', counts.claims)}`;
 }
 
 /** pipelineLabel names what the application is doing right now, globally. */
@@ -222,18 +271,18 @@ export function pipelineLabel(pipeline: Pipeline | null): string {
 
   if ((running.cluster ?? 0) > 0) {
     const count = running.cluster ?? 0;
-    return `clustering · ${count} pass${count === 1 ? '' : 'es'}`;
+    return tn('sources.pipeline.clustering', count);
   }
 
   const documents = sum(running, 'capture', 'outline', 'distill');
   if (documents > 0) {
     const active = PIPELINE_STEPS.filter((step) => step !== 'cluster' && (running[step] ?? 0) > 0);
-    return `${active.join(' + ')} · ${documents} source${documents === 1 ? '' : 's'}`;
+    return tn('sources.pipeline.documents', documents, { steps: active.join(' + ') });
   }
-  if ((queued.cluster ?? 0) > 0) return 'cluster pass waiting for the documents';
+  if ((queued.cluster ?? 0) > 0) return t('sources.pipeline.clusterWaiting');
   const documentQueue = sum(queued, 'capture', 'outline', 'distill');
-  if (documentQueue > 0) return `${documentQueue} queued`;
-  if ((pipeline.asking ?? 0) > 0) return 'asking…';
+  if (documentQueue > 0) return t('sources.pipeline.queued', { count: documentQueue });
+  if ((pipeline.asking ?? 0) > 0) return t('sources.pipeline.asking');
   return '';
 }
 
@@ -241,33 +290,33 @@ export function pipelineLabel(pipeline: Pipeline | null): string {
 export function jobStepLabel(step: string): string {
   switch (step) {
     case 'capture':
-      return 'capture';
+      return t('sources.job.capture');
     case 'outline':
-      return 'outline';
+      return t('sources.job.outline');
     case 'distill':
-      return 'distill';
+      return t('sources.job.distill');
     case 'cluster':
-      return 'cluster claims';
+      return t('sources.job.cluster');
     case 'query':
-      return 'ask';
+      return t('sources.job.query');
     case 'lint':
-      return 'lint';
+      return t('sources.job.lint');
     case 'vocabulary':
-      return 'curate names';
+      return t('sources.job.vocabulary');
     case 'reindex':
-      return 'reindex';
+      return t('sources.job.reindex');
     case 'reconcile':
-      return 'reconcile';
+      return t('sources.job.reconcile');
     case 'cleanup':
-      return 'cleanup';
+      return t('sources.job.cleanup');
     case 'rebuild-trees':
-      return 'rebuild outlines';
+      return t('sources.job.rebuildTrees');
     case 'refresh-urls':
-      return 'refresh URLs';
+      return t('sources.job.refreshUrls');
     case 'refresh-source':
-      return 'refresh source';
+      return t('sources.job.refreshSource');
     case 'fix-urls':
-      return 'fix URLs';
+      return t('sources.job.fixUrls');
     default:
       return step;
   }

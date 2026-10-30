@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"sort"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
@@ -14,15 +15,15 @@ type ListSources struct {
 	Index interfaces.IndexRepository
 }
 
-// Execute returns sources ordered by import time (newest first).
-func (uc ListSources) Execute(ctx context.Context, kind string, limit, offset int) ([]partialentities.PartialSource, error) {
+// Execute returns sources ordered by import time (newest first), narrowed by filter.
+func (uc ListSources) Execute(ctx context.Context, filter entities.SourceFilter, limit, offset int) ([]partialentities.PartialSource, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	srcs, err := uc.Index.ListSources(ctx, kind, limit, offset)
+	srcs, err := uc.Index.ListSources(ctx, filter, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -33,10 +34,46 @@ func (uc ListSources) Execute(ctx context.Context, kind string, limit, offset in
 	return out, nil
 }
 
-// Count is how many sources the list has in total: a page needs it to know whether it is the
-// whole list.
-func (uc ListSources) Count(ctx context.Context, kind string) (int, error) {
-	return uc.Index.CountSources(ctx, kind)
+// Count is how many sources the FILTERED list has in total: a page needs it to know whether it is
+// the whole list, and a windowed scroller needs it for its height.
+func (uc ListSources) Count(ctx context.Context, filter entities.SourceFilter) (int, error) {
+	return uc.Index.CountSources(ctx, filter)
+}
+
+// ListSourceFacets is the tag cloud's data: how often each human or derived source tag occurs, and
+// how many sources have a human-attached snapshot. It is a facet over the vault, not over the window
+// the list happens to have loaded.
+type ListSourceFacets struct {
+	Index interfaces.IndexRepository
+}
+
+// SourceFacetsResult is the facet payload.
+type SourceFacetsResult struct {
+	Tags     []partialentities.NameUses
+	Attached int
+}
+
+// Execute counts the tags and the attached snapshots.
+func (uc ListSourceFacets) Execute(ctx context.Context) (SourceFacetsResult, error) {
+	counts, err := uc.Index.SourceTagCounts(ctx)
+	if err != nil {
+		return SourceFacetsResult{}, err
+	}
+	out := make([]partialentities.NameUses, 0, len(counts))
+	for name, uses := range counts {
+		out = append(out, partialentities.NameUses{Name: name, Uses: uses})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Uses != out[j].Uses {
+			return out[i].Uses > out[j].Uses
+		}
+		return out[i].Name < out[j].Name
+	})
+	attached, err := uc.Index.CountAttachedSources(ctx)
+	if err != nil {
+		return SourceFacetsResult{}, err
+	}
+	return SourceFacetsResult{Tags: out, Attached: attached}, nil
 }
 
 // GetSource returns one source by its content hash.

@@ -1,3 +1,5 @@
+import { t } from './i18n/index.svelte';
+
 /** clearable adds the "clear" (×) button every text field should have.
  *
  *  It wraps the field in a small positioned host and appends the button after it, so the button can be
@@ -38,8 +40,8 @@ export function clearable(node: Field) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'field-clear';
-  button.setAttribute('aria-label', 'Clear');
-  button.title = 'Clear';
+  button.setAttribute('aria-label', t('common.clearField'));
+  button.title = t('common.clearField');
   // The app's own close glyph, so the × matches the icon set instead of being a text character.
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 20 20');

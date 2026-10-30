@@ -476,42 +476,52 @@ func decodeSourceTags(raw string) []string {
 	return tags
 }
 
-// CountSources is how many sources the list has in total, so a page knows whether it is the whole
-// list.
-func (r *SourceRepository) CountSources(ctx context.Context, kind string) (int, error) {
-	var (
-		n   int64
-		err error
-	)
-	if kind == "" {
-		n, err = r.q.CountSources(ctx)
-	} else {
-		n, err = r.q.CountSourcesByKind(ctx, kind)
-	}
+// CountSources is how many sources the FILTERED list has in total, so a page knows whether it is
+// the whole list and a windowed scroller knows its full height.
+func (r *SourceRepository) CountSources(ctx context.Context, filter entities.SourceFilter) (int, error) {
+	n, err := r.q.CountSourcesFiltered(ctx, dal.CountSourcesFilteredParams{
+		Kind:      filter.Kind,
+		Query:     filter.Query,
+		Tag:       filter.Tag,
+		Attached:  boolParam(filter.AttachedOnly),
+		Bookmarks: boolParam(filter.BookmarksOnly),
+		Failed:    boolParam(filter.FailedOnly),
+	})
 	if err != nil {
 		return 0, fmt.Errorf("count sources: %w", err)
 	}
 	return int(n), nil
 }
 
-// ListSources returns sources ordered by import time (newest first).
-func (r *SourceRepository) ListSources(ctx context.Context, kind string, limit, offset int) ([]entities.Source, error) {
-	var (
-		rows []dal.Source
-		err  error
-	)
-	if kind == "" {
-		rows, err = r.q.ListSources(ctx, dal.ListSourcesParams{
-			Limit:  int64(limit),
-			Offset: int64(offset),
-		})
-	} else {
-		rows, err = r.q.ListSourcesByKind(ctx, dal.ListSourcesByKindParams{
-			Kind:   kind,
-			Limit:  int64(limit),
-			Offset: int64(offset),
-		})
+// CountAttachedSources is how many sources carry a human-attached snapshot.
+func (r *SourceRepository) CountAttachedSources(ctx context.Context) (int, error) {
+	n, err := r.q.CountAttachedSources(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count attached sources: %w", err)
 	}
+	return int(n), nil
+}
+
+// boolParam turns the optional filter into the integer sentinel the generated query expects.
+func boolParam(only bool) int64 {
+	if only {
+		return 1
+	}
+	return 0
+}
+
+// ListSources returns sources ordered by import time (newest first), narrowed by filter.
+func (r *SourceRepository) ListSources(ctx context.Context, filter entities.SourceFilter, limit, offset int) ([]entities.Source, error) {
+	rows, err := r.q.ListSourcesFiltered(ctx, dal.ListSourcesFilteredParams{
+		Kind:      filter.Kind,
+		Query:     filter.Query,
+		Tag:       filter.Tag,
+		Attached:  boolParam(filter.AttachedOnly),
+		Bookmarks: boolParam(filter.BookmarksOnly),
+		Failed:    boolParam(filter.FailedOnly),
+		Limit:     int64(limit),
+		Offset:    int64(offset),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list sources: %w", err)
 	}

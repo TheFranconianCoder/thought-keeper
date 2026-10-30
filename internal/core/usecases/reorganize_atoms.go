@@ -53,7 +53,6 @@ func (uc ReorganizeAtoms) Execute(ctx context.Context) (partialentities.PartialA
 			uc.Log.Warn("reorganize: index not updated", "atom", a.ID.String(), "path", a.Path, "err", err)
 		}
 	}
-	dirsLeft, pruneErr := 0, error(nil)
 	// A generated atoms/index.md is not written any more (the branch catalog is SQLite's job): a file
 	// left by an older build goes, and is counted with the branch indexes that go with the folders.
 	if gone, err := uc.Atoms.RemoveStaleIndex(); err == nil && gone {
@@ -61,18 +60,15 @@ func (uc ReorganizeAtoms) Execute(ctx context.Context) (partialentities.PartialA
 	} else if err != nil && uc.Log != nil {
 		uc.Log.Warn("reorganize: stale index not removed", "err", err)
 	}
-	if pruneErr != nil && uc.Log != nil {
-		uc.Log.Warn("reorganize: usage records not pruned", "err", pruneErr)
-	}
 	out := partialentities.PartialAtomLayout{
 		Folders: folders, Claims: claims, Indexes: indexes,
 		Moved: len(moved), Removed: removed, IndexesRemoved: indexesGone,
-		DirsRemoved: dirsLeft, Skipped: skipped, Kept: kept,
+		Skipped: skipped, Kept: kept,
 	}
 	if uc.Log != nil {
 		uc.Log.Info("claims reorganized", "folders", len(folders), "claims", claims,
 			"moved", len(moved), "folders_removed", removed, "indexes_removed", indexesGone,
-			"dirs_removed", dirsLeft, "skipped", skipped, "kept", kept)
+			"skipped", skipped, "kept", kept)
 	}
 	return out, nil
 }

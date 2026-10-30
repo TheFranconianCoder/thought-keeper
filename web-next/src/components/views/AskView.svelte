@@ -1,19 +1,24 @@
 <script lang="ts">
   import { clearable } from '../../lib/clearable';
   import { untrack } from 'svelte';
-  import { deleteSavedAsk } from '../../lib/actions';
+  import { askAgain, deleteSavedAsk } from '../../lib/actions';
   import { relTime } from '../../lib/format';
+  import { t } from '../../lib/i18n/index.svelte';
   import { askPath, navigate, router } from '../../lib/router.svelte';
   import type { AskSummary } from '../../lib/api/types';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
-  import { asks } from '../../lib/stores/asks.svelte';
+  import { asks, type PendingAsk } from '../../lib/stores/asks.svelte';
   import { claims } from '../../lib/stores/claims.svelte';
   import CopyId from '../ui/CopyId.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
   import Markdown from '../ui/Markdown.svelte';
   import VirtualList from '../ui/VirtualList.svelte';
+
+  type AskRow =
+    | { kind: 'run'; key: string; run: PendingAsk }
+    | { kind: 'saved'; key: string; ask: AskSummary };
 
   const route = $derived(router.current);
   const detailOpen = $derived(route.view === 'ask' && !!route.id);
@@ -22,7 +27,6 @@
 
   let question = $state('');
   let tagFilter = $state('');
-  let input: HTMLInputElement | undefined = $state();
 
   const tagCloud = $derived.by(() => {
     const counts = new Map<string, number>();
@@ -38,6 +42,13 @@
     tagFilter ? asks.items.filter((ask) => (ask.tags ?? []).includes(tagFilter)) : asks.items,
   );
 
+  // One list, two row kinds: a question in flight sits where its saved answer will appear. The
+  // reader never has to look at a separate "thinking" box to know what the app is doing.
+  const rows = $derived<AskRow[]>([
+    ...asks.pending.map((run) => ({ kind: 'run' as const, key: `run-${run.key}`, run })),
+    ...visibleAsks.map((ask) => ({ kind: 'saved' as const, key: ask.id, ask })),
+  ]);
+
   $effect(() => {
     const current = router.current;
     if (current.view !== 'ask') return;
@@ -51,13 +62,9 @@
     });
   });
 
-  $effect(() => {
-    if (!detailOpen && !asks.busy) input?.focus();
-  });
-
   function submit(): void {
     const value = question.trim();
-    if (!value || asks.busy) return;
+    if (!value) return;
     question = '';
     tagFilter = '';
     void asks.submit(value);
@@ -71,11 +78,17 @@
     tagFilter = tagFilter === tag ? '' : tag;
     if (detailOpen) navigate('#/ask');
   }
+
+  function act(event: MouseEvent, action: () => void): void {
+    event.stopPropagation();
+    action();
+    if (event.detail > 0) (event.currentTarget as HTMLElement | null)?.blur();
+  }
 </script>
 
-{#snippet savedQueries()}
+{#snippet askRows()}
   {#if tagCloud.length > 0}
-    <div class="tag-cloud" use:scrollFade use:rememberScroll={'ask-tags'} aria-label="Saved query tags">
+    <div class="tag-cloud" use:scrollFade use:rememberScroll={'ask-tags'} aria-label={t('ask.tagsAria')}>
       {#each tagCloud as item (item.tag)}
         <button
           class="chip"
@@ -89,33 +102,90 @@
   {/if}
   {#if tagFilter}
     <div class="tag-filter">
-      <span class="muted">Tag</span>
+      <span class="muted">{t('ask.tag')}</span>
       <button class="chip chip--accent" onclick={() => (tagFilter = '')}>
         {tagFilter}<Icon name="close" size={10} />
       </button>
     </div>
   {/if}
   <div class="saved-asks" use:scrollFade use:rememberScroll={'ask-list'}>
-    {#if asks.error}
+    {#if asks.error && rows.length === 0}
       <p class="notice notice--error">{asks.error}</p>
-    {:else if !asks.loaded}
+    {:else if !asks.loaded && rows.length === 0}
       <div class="stack">
         {#each Array(4) as _, index (index)}<span class="skeleton" style="height:40px"></span>{/each}
       </div>
-    {:else if visibleAsks.length === 0}
-      <p class="empty-note">{tagFilter ? 'No saved query carries this tag.' : 'No saved queries yet.'}</p>
+    {:else if rows.length === 0}
+      <p class="empty-note">{tagFilter ? t('ask.noTagMatch') : t('ask.noSaved')}</p>
     {:else}
-      <VirtualList items={visibleAsks} rowHeight={60} key={(ask) => ask.id}>
-        {#snippet row(ask: AskSummary)}
-          <button class="saved-row" class:active={selected?.id === ask.id} onclick={() => openSaved(ask.id)}>
-            <Icon name="ask" size={15} />
-            <span class="saved-main">
-              <span class="saved-question">{ask.question}</span>
-              <span class="saved-time">
-                {relTime(ask.updated_at)}{#if ask.tags?.length} · {ask.tags.slice(0, 2).join(' / ')}{/if}
+      {#if asks.error}<p class="notice notice--error">{asks.error}</p>{/if}
+      <VirtualList items={rows} rowHeight={62} key={(row) => row.key}>
+        {#snippet row(row: AskRow)}
+          {#if row.kind === 'run'}
+            <div class="saved-row run-row" class:run-row--failed={row.run.status === 'failed'}>
+              <span class="run-mark"><Icon name="ask" size={15} /></span>
+              <span class="saved-main">
+                <span class="saved-question">{row.run.question}</span>
+                {#if row.run.status === 'failed'}
+                  <span class="run-status run-status--failed" title={row.run.error ?? ''}>
+                    <Icon name="error" size={11} />
+                    <span class="truncate">{row.run.error}</span>
+                  </span>
+                {:else}
+                  <span class="run-status">
+                    <span class="spinner spinner--sm"></span>
+                    <span>{row.run.status === 'starting' ? t('ask.starting') : t('ask.searching')}</span>
+                  </span>
+                {/if}
               </span>
-            </span>
-          </button>
+              {#if row.run.status === 'failed'}
+                <div class="saved-actions saved-actions--shown">
+                  <button
+                    class="icon-btn"
+                    title={t('ask.askAgain')}
+                    onclick={(event) => act(event, () => asks.retry(row.run.key))}
+                  >
+                    <Icon name="refresh" size={14} />
+                  </button>
+                  <button
+                    class="icon-btn"
+                    title={t('ask.dismissRun')}
+                    onclick={(event) => act(event, () => asks.dismiss(row.run.key))}
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <div class="saved-row" class:active={selected?.id === row.ask.id}>
+              <button class="saved-open" onclick={() => openSaved(row.ask.id)}>
+                <Icon name="ask" size={15} />
+                <span class="saved-main">
+                  <span class="saved-question">{row.ask.question}</span>
+                  <span class="saved-time">
+                    {relTime(row.ask.updated_at)}{#if row.ask.tags?.length} · {row.ask.tags.slice(0, 2).join(' / ')}{/if}
+                  </span>
+                </span>
+              </button>
+              <div class="saved-actions">
+                <button
+                  class="icon-btn"
+                  title={t('ask.askAgain')}
+                  onclick={(event) => act(event, () => askAgain(row.ask.question))}
+                >
+                  <Icon name="refresh" size={14} />
+                </button>
+                <button
+                  class="icon-btn icon-btn--danger"
+                  title={t('common.delete')}
+                  onclick={(event) => act(event, () => void deleteSavedAsk(row.ask.id))}
+                >
+                  <Icon name="trash" size={14} />
+                </button>
+              </div>
+            </div>
+          {/if}
         {/snippet}
       </VirtualList>
     {/if}
@@ -124,61 +194,49 @@
 
 <div class="page ask-page" class:split={detailOpen}>
   {#if detailOpen}
-    <section class="ask-list-pane" aria-label="Saved queries">
+    <section class="ask-list-pane" aria-label={t('ask.savedQueries')}>
       <div class="list-head">
         <div class="list-title">
-          <h1>Saved queries</h1>
+          <h1>{t('ask.savedQueries')}</h1>
           {#if asks.count}<span class="count">{asks.count}</span>{/if}
         </div>
-        <p class="list-sub">Every answer is saved automatically.</p>
+        <p class="list-sub">{t('ask.savedSub')}</p>
       </div>
-      {@render savedQueries()}
+      {@render askRows()}
     </section>
   {/if}
 
   <section class="ask-main" class:split={detailOpen}>
     {#if detailOpen}
-      <a class="back-link" href="#/ask">← Saved queries</a>
+      <a class="back-link" href="#/ask">{t('ask.back')}</a>
     {:else}
       <div class="page-head ask-head">
         <div>
-          <h1>Ask</h1>
-          <p class="sub">Ask the claims; every answer is saved with its citations.</p>
+          <h1>{t('ask.title')}</h1>
+          <p class="sub">{t('ask.sub')}</p>
         </div>
       </div>
     {/if}
 
     <form class="composer" onsubmit={(event) => { event.preventDefault(); submit(); }}>
-      <div class="composer-label">{detailOpen ? 'Ask another question' : 'Your question'}</div>
+      <div class="composer-label">{detailOpen ? t('ask.another') : t('ask.yourQuestion')}</div>
       <div class="composer-row">
         <input
           use:clearable
-          bind:this={input}
           class="input composer-input"
           bind:value={question}
-          placeholder="What do the claims say about…"
+          placeholder={t('ask.placeholder')}
           autocomplete="off"
-          disabled={asks.busy}
-          aria-label="Ask a question"
+          aria-label={t('ask.ariaQuestion')}
         />
-        <button class="btn btn--primary" type="submit" disabled={asks.busy || !question.trim()}>
-          {#if asks.busy}<span class="spinner"></span>{/if}
-          Ask
+        <button class="btn btn--primary" type="submit" disabled={!question.trim()}>
+          {t('ask.submit')}
         </button>
       </div>
     </form>
 
-    <div class="ask-reading" class:detail-frame={detailOpen}>
-      {#if asks.busy}
-        <div class="thinking">
-          <span class="spinner"></span>
-          <div>
-            <div class="thinking-title">Searching the claims…</div>
-            {#if asks.question}<div class="thinking-question">{asks.question}</div>{/if}
-            <div class="thinking-note">The answer is saved when the run completes.</div>
-          </div>
-        </div>
-      {:else if detailOpen}
+    {#if detailOpen}
+      <div class="ask-reading detail-frame">
         {#if asks.detailError}
           <p class="notice notice--error">{asks.detailError}</p>
         {:else if asks.detailLoading && !selected}
@@ -189,7 +247,7 @@
         {:else if selected}
           <article class="answer">
             <header class="answer-head">
-              <div class="kicker">Saved query</div>
+              <div class="kicker">{t('ask.kicker')}</div>
               <h2>{selected.question}</h2>
               {#if selected.tags?.length}
                 <div class="answer-tags">
@@ -201,35 +259,44 @@
               <div class="answer-meta">
                 <span class="chip">{relTime(selected.updated_at)}</span>
                 <span class="grow"></span>
-                <CopyId text={selected.id} label="Ask ID" display={selected.id.slice(0, 10)} />
-                <button class="btn btn--danger btn--sm" onclick={() => deleteSavedAsk(selected!.id)}>
-                  <Icon name="trash" size={13} /> Delete
+                <CopyId text={selected.id} label={t('ask.idLabel')} display={selected.id.slice(0, 10)} />
+                <button
+                  class="btn btn--secondary btn--sm btn--action"
+                  title={t('ask.askAgain')}
+                  onclick={() => askAgain(selected!.question)}
+                >
+                  <Icon name="refresh" size={13} /> <span class="btn-label">{t('ask.againShort')}</span>
+                </button>
+                <button
+                  class="btn btn--danger btn--sm btn--action"
+                  title={t('common.delete')}
+                  onclick={() => deleteSavedAsk(selected!.id)}
+                >
+                  <Icon name="trash" size={13} /> <span class="btn-label">{t('common.delete')}</span>
                 </button>
               </div>
             </header>
             <Markdown text={selected.answer} {topics} footnotes />
           </article>
         {/if}
-      {:else if asks.notice}
-        <p class="notice">{asks.notice}</p>
-      {:else if asks.error}
-        <p class="notice notice--error">{asks.error}</p>
-      {:else if asks.loaded && asks.items.length === 0}
-        <EmptyState
-          icon="ask"
-          title="Ask a question"
-          text="Thought Keeper searches the claims, follows their associations and cites what it used. Every answer is saved."
-        />
-      {/if}
-    </div>
+      </div>
+    {:else if asks.loaded && rows.length === 0}
+      <div class="ask-reading">
+        {#if asks.error}
+          <p class="notice notice--error">{asks.error}</p>
+        {:else}
+          <EmptyState icon="ask" title={t('ask.emptyTitle')} text={t('ask.emptyText')} />
+        {/if}
+      </div>
+    {/if}
 
-    {#if !detailOpen && asks.items.length > 0}
+    {#if !detailOpen && rows.length > 0}
       <section class="saved-section">
         <div class="section-head">
-          <h2>Saved queries</h2>
-          <span class="count">{asks.count}</span>
+          <h2>{t('ask.savedQueries')}</h2>
+          {#if asks.count}<span class="count">{asks.count}</span>{/if}
         </div>
-        {@render savedQueries()}
+        {@render askRows()}
       </section>
     {/if}
   </section>
@@ -321,7 +388,6 @@
     gap: 9px;
     width: 100%;
     padding: 10px 9px;
-    border: 0;
     border-bottom: 1px solid var(--line);
     background: transparent;
     color: inherit;
@@ -337,8 +403,30 @@
     background: var(--accent-soft);
   }
 
+  .saved-open {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-items: center;
+    gap: 9px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+  }
+
   .saved-row :global(.ico) {
     color: var(--muted);
+  }
+
+  .run-mark {
+    display: flex;
+    color: var(--muted);
+  }
+
+  .run-row--failed .run-mark :global(.ico) {
+    color: var(--danger);
   }
 
   .saved-main {
@@ -367,6 +455,45 @@
     white-space: nowrap;
   }
 
+  .run-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
+
+  .run-status--failed {
+    color: var(--danger);
+  }
+
+  .run-status .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .saved-actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 1px;
+    opacity: 0;
+    transition: opacity 0.12s var(--ease);
+  }
+
+  .saved-row:hover .saved-actions,
+  .saved-row:focus-within .saved-actions,
+  .saved-actions--shown {
+    opacity: 1;
+  }
+
+  .saved-actions .icon-btn {
+    width: 26px;
+    height: 26px;
+  }
+
   .empty-note {
     margin: 0;
     padding: 14px 8px;
@@ -385,12 +512,6 @@
 
   .ask-reading.detail-frame {
     margin: 0 0 40px;
-  }
-
-  .ask-reading.detail-frame .thinking {
-    padding: 0;
-    border: 0;
-    background: transparent;
   }
 
   .ask-reading.detail-frame .answer {
@@ -435,41 +556,6 @@
   .composer-input {
     height: 38px;
     font-size: 14px;
-  }
-
-  .thinking {
-    display: flex;
-    align-items: flex-start;
-    gap: 11px;
-    padding: 16px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-    background: var(--bg-elevated);
-    color: var(--muted);
-  }
-
-  .thinking .spinner {
-    margin-top: 2px;
-    color: var(--accent);
-  }
-
-  .thinking-title {
-    color: var(--ink);
-    font-size: 13.5px;
-    font-weight: 550;
-  }
-
-  .thinking-question {
-    margin-top: 3px;
-    color: var(--ink-2);
-    font-family: var(--font-sans);
-    font-size: 15px;
-  }
-
-  .thinking-note {
-    margin-top: 5px;
-    color: var(--faint);
-    font-size: 11.5px;
   }
 
   .answer {
@@ -553,6 +639,14 @@
 
     .ask-reading.detail-frame {
       margin: 0;
+    }
+
+    .saved-actions {
+      display: none;
+    }
+
+    .saved-actions--shown {
+      display: flex;
     }
   }
 </style>

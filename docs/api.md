@@ -12,14 +12,15 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/status` | Doctor report: vault, index (`index.outdated`, `index.bookmarks`, `index.failed`, `index.findings`), agent, pdf/ocr, inbox, search, memory (`heap_mb`, `heap_peak_mb`, `sys_mb`, `num_gc`, `peak_work`, `peak_at`), and the summary backfill (`summary.missing`, `summary.queued`, `summary.running`, `summary.at`) |
+| `GET` | `/api/v1/status` | Doctor report: vault, index (`index.outdated`, `index.bookmarks`, `index.failed`, `index.findings`), agent, pdf/ocr, inbox, search, memory (`heap_mb`, `heap_peak_mb`, `sys_mb`, `num_gc`, `peak_work`, `peak_at`), the summary backfill (`summary.missing`, `summary.queued`, `summary.running`, `summary.at`), and the configured output languages (`language.ui`, `language.claims`, `language.summary`) |
 | `GET` | `/api/v1/pipeline` | Global step status: documents or clusters, queued counts, `jobs` |
 | `POST` | `/api/v1/cluster` | Queue the cluster step by hand (waits for the gate) |
 | `POST` | `/api/v1/reconcile` | Run the consistency job by hand |
 | `POST` | `/api/v1/reindex` | Rebuild index + clusters from the vault |
 | `POST` | `/api/v1/rebuild-trees` | Rebuild every outline from captured sources |
 | `GET` | `/api/v1/events` | Server-sent events (see below) |
-| `GET` | `/api/v1/sources` | List sources: `kind, limit, offset` |
+| `GET` | `/api/v1/sources` | List sources: `kind, q, tag, attached, bookmarks, failed, limit, offset`. The filters are applied in SQL; `count`/`total` is the **filtered** total (the windowed list's scroll height), not the page length |
+| `GET` | `/api/v1/sources/facets` | The Sources tag cloud (`{tags:[{tag,count}], attached}`); vault-wide, not a fact about the loaded window |
 | `GET` | `/api/v1/sources/{hash}` | A source, its step lights, counts, `tags`/`auto_tags` and `sidecars` |
 | `GET` | `/api/v1/sources/{hash}/tree` | The tree outline (`has_text` marks parts) |
 | `GET` | `/api/v1/sources/{hash}/nodes/{node}` | A node's text |

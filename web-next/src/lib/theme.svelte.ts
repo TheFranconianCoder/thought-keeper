@@ -1,3 +1,5 @@
+import { t } from './i18n/index.svelte';
+
 export type ThemeMode = 'auto' | 'light' | 'dark';
 
 const STORAGE_KEY = 'tk-theme';
@@ -39,8 +41,8 @@ export function cycleTheme(): void {
 }
 
 export function themeLabel(mode: ThemeMode = theme.mode): string {
-  if (mode === 'auto') return 'Theme: follow the system';
-  return `Theme: ${mode}`;
+  if (mode === 'auto') return t('theme.titleAuto');
+  return t(mode === 'light' ? 'theme.titleLight' : 'theme.titleDark');
 }
 
 export function themeIcon(mode: ThemeMode = theme.mode): string {

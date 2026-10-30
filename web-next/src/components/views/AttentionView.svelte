@@ -1,31 +1,47 @@
 <script lang="ts">
   import { navigate, claimPath, router, sourcePath } from '../../lib/router.svelte';
   import { connection } from '../../lib/stores/connection.svelte';
+  import { failedWindow } from '../../lib/stores/source-window.svelte';
   import { sources } from '../../lib/stores/sources.svelte';
   import { system } from '../../lib/stores/system.svelte';
-  import type { Finding } from '../../lib/api/types';
+  import type { Finding, Source } from '../../lib/api/types';
+  import { t, tn } from '../../lib/i18n/index.svelte';
   import { statusLabel } from '../../lib/source-state';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
+  import SourceWindowList from '../sources/SourceWindowList.svelte';
 
-  const failedSources = $derived(
-    sources.items.filter((source) =>
-      Object.values(source.steps ?? {}).some((step) => step.state === 'failed'),
-    ),
-  );
+  // The source half is a WINDOW over the failed steps: the server filters, the count is the whole
+  // failed list. Findings are a separate, small list from the lint pass.
+  const failedCount = $derived(failedWindow.count);
   const actionable = $derived(system.findings.filter((finding) => finding.severity !== 'info'));
   const informational = $derived(system.findings.filter((finding) => finding.severity === 'info'));
-  const total = $derived(failedSources.length + actionable.length);
+  const total = $derived(failedWindow.count + actionable.length);
   // Both halves have to be here before the page may say "nothing needs attention": an empty list
   // while the sources are still loading is not a finding.
-  const ready = $derived(sources.loaded && system.findingsLoaded);
+  const ready = $derived(failedWindow.loaded && system.findingsLoaded);
+
+  failedWindow.setFilter({ failedOnly: true });
 
   $effect(() => {
     if (router.current.view !== 'attention') return;
-    void sources.loadList();
     void system.loadFindings();
   });
+
+  $effect(() => {
+    // A reset discards the pages. With a count, the list asks for the visible range itself; only an
+    // empty/not-yet-known list needs the first page here.
+    void failedWindow.epoch;
+    if (!failedWindow.loaded || failedWindow.count === 0) {
+      void failedWindow.ensure(0, 30);
+    }
+  });
+
+  function retry(): void {
+    failedWindow.reset();
+    void system.loadFindings();
+  }
 
   function openFinding(finding: Finding): void {
     if (finding.subject_kind === 'atom' && finding.subject_id) navigate(claimPath(finding.subject_id));
@@ -36,57 +52,71 @@
 <div class="page attention-page">
   <div class="page-head">
     <div>
-      <h1>Attention</h1>
+      <h1>{t('view.attention')}</h1>
       <p class="sub">
         {#if !ready}
-          Loading what needs attention…
+          {t('attention.loading')}
         {:else if total === 0}
-          Nothing needs a decision or a repair.
+          {t('attention.none')}
         {:else}
-          {total} thing{total === 1 ? '' : 's'} need a decision or a repair.
+          {tn('attention.count', total)}
         {/if}
       </p>
     </div>
     <span class="spacer"></span>
     <button class="btn btn--secondary" onclick={() => navigate('#/status')}>
-      <Icon name="status" size={14} /> Vault status
+      <Icon name="status" size={14} /> {t('attention.vaultStatus')}
     </button>
   </div>
 
   {#if !ready}
     {#if connection.state !== 'live'}
-      <EmptyState icon="attention" title="Nothing loaded" text="Thought Keeper is not reachable, so this is not a statement about the vault." />
+      <EmptyState icon="attention" title={t('attention.unreachableTitle')} text={t('attention.unreachableText')} />
     {:else}
       <div class="stack">
         {#each Array(3) as _, index (index)}<span class="skeleton" style="height:52px"></span>{/each}
       </div>
     {/if}
   {:else}
-    {#if sources.error}
+    {#if failedWindow.error}
       <p class="notice notice--error">
-        {sources.error}
-        <button class="btn btn--ghost btn--sm" onclick={() => void sources.loadList()}>Try again</button>
+        {t('attention.sourcesFailed', { error: failedWindow.error })}
+        <button class="btn btn--ghost btn--sm" onclick={retry}>{t('common.retry')}</button>
       </p>
     {/if}
-    {#if failedSources.length > 0}
+    {#if failedCount > 0}
       <section class="section">
         <div class="section-head">
-          <h2>Failed source steps</h2>
-          <span class="count">{failedSources.length}</span>
+          <h2>{t('attention.failedSteps')}</h2>
+          <span class="count">{failedCount}</span>
         </div>
         <div class="attention-list">
-          {#each failedSources as source (source.hash)}
-            {@const live = sources.progress[source.hash]}
-            <button class="attention-row" onclick={() => navigate(sourcePath(source.hash))}>
-              <SourceIcon kind={source.kind} hash={source.hash} size={16} />
-              <span class="attention-main">
-                <span class="attention-title">{source.title || source.hash.slice(0, 12)}</span>
-                <span class="attention-sub">{statusLabel(source, live)}</span>
-              </span>
-              <span class="chip chip--danger">failed</span>
-              <Icon name="chevronRight" size={14} />
-            </button>
-          {/each}
+          <SourceWindowList
+            count={failedWindow.count}
+            rowHeight={48}
+            itemAt={(index) => failedWindow.itemAt(index)}
+            ensure={(start, end) => void failedWindow.ensure(start, end)}
+            epoch={failedWindow.epoch}
+          >
+            {#snippet row(source: Source | undefined)}
+              {#if source}
+                {@const live = sources.progress[source.hash]}
+                <button class="attention-row" onclick={() => navigate(sourcePath(source.hash))}>
+                  <SourceIcon kind={source.kind} hash={source.hash} size={16} />
+                  <span class="attention-main">
+                    <span class="attention-title">{source.title || source.hash.slice(0, 12)}</span>
+                    <span class="attention-sub">{statusLabel(source, live)}</span>
+                  </span>
+                  <span class="chip chip--danger">{t('attention.failedChip')}</span>
+                  <Icon name="chevronRight" size={14} />
+                </button>
+              {:else}
+                <div class="attention-row attention-row--skeleton" aria-hidden="true">
+                  <span class="skeleton attention-skeleton"></span>
+                </div>
+              {/if}
+            {/snippet}
+          </SourceWindowList>
         </div>
       </section>
     {/if}
@@ -94,7 +124,7 @@
     {#if actionable.length > 0}
       <section class="section">
         <div class="section-head">
-          <h2>Lint findings</h2>
+          <h2>{t('attention.lintFindings')}</h2>
           <span class="count">{actionable.length}</span>
         </div>
         <div class="attention-list">
@@ -105,11 +135,11 @@
               </span>
               <div class="finding-main">
                 <div class="finding-kind">{finding.kind}</div>
-                <div class="finding-message">{finding.message}</div>
+                <div class="finding-message" title={finding.message}>{finding.message}</div>
               </div>
               {#if finding.subject_id && (finding.subject_kind === 'atom' || finding.subject_kind === 'source')}
                 <button class="btn btn--secondary btn--sm" onclick={() => openFinding(finding)}>
-                  Open the {finding.subject_kind}
+                  {t('attention.open', { kind: finding.subject_kind })}
                 </button>
             {/if}
           </div>
@@ -120,18 +150,18 @@
 
     {#if informational.length > 0}
       <details class="info-findings">
-        <summary>{informational.length} informational finding{informational.length === 1 ? '' : 's'}</summary>
+        <summary>{tn('attention.infoCount', informational.length)}</summary>
         <div class="attention-list">
           {#each informational as finding (finding.id)}
             <div class="finding-row">
               <span class="chip">{finding.severity}</span>
               <div class="finding-main">
                 <div class="finding-kind">{finding.kind}</div>
-                <div class="finding-message">{finding.message}</div>
+                <div class="finding-message" title={finding.message}>{finding.message}</div>
               </div>
               {#if finding.subject_id && (finding.subject_kind === 'atom' || finding.subject_kind === 'source')}
                 <button class="btn btn--ghost btn--sm" onclick={() => openFinding(finding)}>
-                  Open the {finding.subject_kind}
+                  {t('attention.open', { kind: finding.subject_kind })}
                 </button>
               {/if}
             </div>
@@ -141,12 +171,12 @@
     {/if}
 
     {#if system.findingsError}
-      <p class="notice notice--error">{system.findingsError}</p>
+      <p class="notice notice--error">{t('attention.findingsFailed', { error: system.findingsError })}</p>
     {:else if total === 0}
       <EmptyState
         icon="check"
-        title="Nothing needs attention"
-        text="Source derivations and lint findings are in order."
+        title={t('attention.emptyTitle')}
+        text={t('attention.emptyText')}
       />
     {/if}
   {/if}
@@ -184,6 +214,19 @@
 
   .attention-row:hover {
     background: var(--bg-hover);
+  }
+
+  .attention-row--skeleton {
+    padding: 0 11px;
+  }
+
+  .attention-row--skeleton:hover {
+    background: transparent;
+  }
+
+  .attention-skeleton {
+    width: 100%;
+    height: 28px;
   }
 
   .attention-main {
@@ -228,16 +271,21 @@
   }
 
   .finding-kind {
+    overflow: hidden;
     color: var(--faint);
     font-family: var(--font-mono);
     font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .finding-message {
+    overflow: hidden;
     color: var(--ink-2);
     font-size: 12.5px;
     line-height: 1.5;
-    overflow-wrap: anywhere;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .info-findings {

@@ -93,6 +93,9 @@ func New(deps Deps, web http.Handler) http.Handler {
 		// it is a vault write: exclusive, never beside a document step.
 		r.With(deps.Gate.Exclusive).Post("/reconcile", deps.Reconcile.Post)
 		r.Get("/sources", deps.Sources.List)
+		// The Sources lens's facets: the tag cloud and the attached count. Static, before the
+		// {hash} route, so a hash can never shadow it.
+		r.Get("/sources/facets", deps.Sources.ListFacets)
 		r.Get("/sources/{hash}", deps.Sources.Get)
 		r.Get("/sources/{hash}/tree", deps.Tree.Get)
 		// The Sub-sources tab: sitemap pages or a wiki page's linked URLs.

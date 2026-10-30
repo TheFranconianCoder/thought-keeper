@@ -4,6 +4,8 @@ import {
   canAttachSnapshot,
   countsOf,
   matchesSourceFilter,
+  overallPercent,
+  overallState,
   pipelineLabel,
   progressOf,
   statusLabel,
@@ -195,5 +197,80 @@ describe('pipelineLabel', () => {
 
   it('reports queries that run beside everything else', () => {
     expect(pipelineLabel({ ...base, asking: 1 })).toBe('asking…');
+  });
+});
+
+describe('overall lamp', () => {
+  it('is full and green when every step is done', () => {
+    const done = source();
+    expect(overallState(done)).toBe('ok');
+    expect(overallPercent(done)).toBe(100);
+  });
+
+  it('lets a failure outrank the done steps', () => {
+    const failed = source({
+      steps: {
+        capture: { state: 'ok' },
+        outline: { state: 'ok' },
+        distill: { state: 'failed', error: 'endpoint timeout' },
+        cluster: { state: 'pending' },
+      },
+    });
+    expect(overallState(failed)).toBe('failed');
+  });
+
+  it('reports a run, an orphaned index row and a stale input', () => {
+    expect(overallState(source({ running_step: 'distill' }))).toBe('running');
+    expect(overallState(source({ atom_count: 0, provenance_rows: 2 }))).toBe('stale');
+    expect(
+      overallState(
+        source({
+          steps: {
+            capture: { state: 'ok' },
+            outline: { state: 'ok' },
+            distill: { state: 'stale' },
+            cluster: { state: 'pending' },
+          },
+        }),
+      ),
+    ).toBe('stale');
+  });
+
+  it('shows the slower of parts and claims while the source is partial', () => {
+    const partial = source({
+      parts_total: 10,
+      parts_done: 4,
+      atom_count: 5,
+      atoms_left: 2,
+      steps: {
+        capture: { state: 'ok' },
+        outline: { state: 'ok' },
+        distill: { state: 'pending' },
+        cluster: { state: 'pending' },
+      },
+    });
+    expect(overallState(partial)).toBe('pending');
+    expect(overallPercent(partial)).toBe(40);
+  });
+
+  it('treats a bookmark as skipped and a feed as a complete list', () => {
+    expect(overallState(source({ bookmark: true }))).toBe('skipped');
+    expect(overallPercent(source({ bookmark: true }))).toBe(0);
+
+    const feed = source({
+      rss: true,
+      atom_count: 0,
+      provenance_rows: 0,
+      parts_total: 0,
+      parts_done: 0,
+      steps: {
+        capture: { state: 'ok' },
+        outline: { state: 'skipped' },
+        distill: { state: 'skipped' },
+        cluster: { state: 'skipped' },
+      },
+    });
+    expect(overallState(feed)).toBe('ok');
+    expect(overallPercent(feed)).toBe(100);
   });
 });

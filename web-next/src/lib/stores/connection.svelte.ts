@@ -1,4 +1,5 @@
 import type { ConnectionState } from '../events/event-stream';
+import { t } from '../i18n/index.svelte';
 
 export const connection = $state<{
   state: ConnectionState;
@@ -22,12 +23,12 @@ export function noteFrame(): void {
 export function connectionLabel(): string {
   switch (connection.state) {
     case 'live':
-      return 'Live';
+      return t('connection.live');
     case 'offline':
-      return 'Offline';
+      return t('connection.offline');
     case 'reconnecting':
-      return 'Reconnecting';
+      return t('connection.reconnecting');
     default:
-      return 'Connecting';
+      return t('connection.connecting');
   }
 }

@@ -4,7 +4,7 @@
   import { api } from '../../lib/api';
   import { humanError } from '../../lib/api/errors';
   import type { Atom, SearchHit } from '../../lib/api/types';
-  import { plural } from '../../lib/format';
+  import { t, tn } from '../../lib/i18n/index.svelte';
   import { claimPath, claimTopicPath, navigate, router, sourcePath } from '../../lib/router.svelte';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
@@ -41,16 +41,18 @@
   const caption = $derived.by(() => {
     if (searchMode) {
       return searching
-        ? 'Searching…'
-        : `${results.length} result${results.length === 1 ? '' : 's'} for “${query.trim()}”`;
+        ? t('claims.searching')
+        : tn('claims.resultCount', results.length, { query: query.trim() });
     }
     const all = total <= CLAIM_PAGE_SIZE;
     if (topic) {
       return all
-        ? `All ${plural(total, 'claim')} in this topic`
-        : `Newest ${CLAIM_PAGE_SIZE} of ${plural(total, 'claim')} in this topic`;
+        ? tn('claims.captionTopicAll', total)
+        : tn('claims.captionNewestTopic', total, { pageSize: CLAIM_PAGE_SIZE });
     }
-    return all ? plural(total, 'claim') : `Newest ${CLAIM_PAGE_SIZE} of ${plural(total, 'claim')}`;
+    return all
+      ? tn('claims.captionAll', total)
+      : tn('claims.captionNewest', total, { pageSize: CLAIM_PAGE_SIZE });
   });
 
   $effect(() => {
@@ -126,10 +128,10 @@
 </script>
 
 <div class="page claims-page" class:split={detailOpen}>
-  <section class="claims-list-pane" aria-label="Claims">
+  <section class="claims-list-pane" aria-label={t('view.claims')}>
     <div class="list-head">
       <div class="list-title">
-        <h1>Claims</h1>
+        <h1>{t('view.claims')}</h1>
         <span class="count">{total}</span>
       </div>
       <div class="search-wrap">
@@ -137,16 +139,21 @@
         <input
           use:clearable
           class="input input--search"
-          placeholder="Find a claim…"
+          placeholder={t('claims.searchPlaceholder')}
           value={query}
           oninput={(event) => onSearchInput(event.currentTarget.value)}
           autocomplete="off"
           spellcheck="false"
-          aria-label="Find a claim"
+          aria-label={t('claims.searchAria')}
         />
       </div>
       {#if !searchMode && claims.topics.length > 0}
-        <div class="topic-cloud" use:scrollFade use:rememberScroll={'claims-topics'} aria-label="Claim topics">
+        <div
+          class="topic-cloud"
+          use:scrollFade
+          use:rememberScroll={'claims-topics'}
+          aria-label={t('claims.topicsAria')}
+        >
           {#each claims.topics as item (item.topic)}
             <a
               class="chip"
@@ -160,7 +167,7 @@
       {/if}
       {#if topic && !searchMode}
         <div class="filter-line">
-          <span class="muted">Filtered by</span>
+          <span class="muted">{t('claims.filteredBy')}</span>
           <a class="chip chip--accent" href="#/claims">{topic}<Icon name="close" size={10} /></a>
         </div>
       {/if}
@@ -172,7 +179,11 @@
         {#if searchError}
           <p class="notice notice--error">{searchError}</p>
         {:else if !searching && results.length === 0}
-          <EmptyState icon="search" title="No claim matches" text={`Nothing in the claims index matches “${query.trim()}”.`} />
+          <EmptyState
+            icon="search"
+            title={t('claims.noMatchesTitle')}
+            text={t('claims.noMatchesText', { query: query.trim() })}
+          />
         {:else}
           {#each results as hit (hit.id)}
             <button class="claim-item" onclick={() => openClaim(hit.id)}>
@@ -185,7 +196,11 @@
         <p class="notice notice--error">{claims.error}</p>
       {:else if !claims.loaded}
         {#if connection.state !== 'live'}
-          <EmptyState icon="claims" title="Nothing loaded" text="Thought Keeper is not reachable, so this is not the vault's answer." />
+          <EmptyState
+            icon="claims"
+            title={t('claims.notLoadedTitle')}
+            text={t('claims.notLoadedText')}
+          />
         {:else}
           <div class="stack">
             {#each Array(4) as _, index (index)}<span class="skeleton" style="height:42px"></span>{/each}
@@ -194,10 +209,8 @@
       {:else if claims.items.length === 0}
         <EmptyState
           icon="claims"
-          title={topic ? 'No claims in this topic' : 'No claims yet'}
-          text={topic
-            ? 'This topic has no claims right now. Clear the filter to see the newest claims.'
-            : 'Claims appear here after a source has been distilled.'}
+          title={topic ? t('claims.emptyTopicTitle') : t('claims.emptyTitle')}
+          text={topic ? t('claims.emptyTopicText') : t('claims.emptyText')}
         />
       {:else}
         <VirtualList items={claims.items} rowHeight={58} key={(claim) => claim.id}>
@@ -210,7 +223,7 @@
               <span class="claim-text">{claim.claim}</span>
               <span class="claim-sub">
                 {claim.topic}{claim.type ? ` · ${claim.type}` : ''}{claim.cluster_count
-                  ? ` · ${claim.cluster_count} cluster${claim.cluster_count === 1 ? '' : 's'}`
+                  ? ` · ${tn('claims.clusterCount', claim.cluster_count)}`
                   : ''}
               </span>
             </button>
@@ -221,8 +234,8 @@
   </section>
 
   {#if detailOpen}
-    <article class="claim-detail detail-frame" aria-label="Claim detail">
-      <a class="back-link" href={topic ? claimTopicPath(topic) : '#/claims'}>← Back to claims</a>
+    <article class="claim-detail detail-frame" aria-label={t('claims.detailAria')}>
+      <a class="back-link" href={topic ? claimTopicPath(topic) : '#/claims'}>{t('claims.back')}</a>
 
       {#if claims.detailError}
         <p class="notice notice--error">{claims.detailError}</p>
@@ -234,7 +247,7 @@
         </div>
       {:else if claims.selected}
         {@const claim = claims.selected}
-        <div class="kicker">Claim</div>
+        <div class="kicker">{t('claims.kicker')}</div>
         <h2 class="statement">{claim.claim}</h2>
 
         <div class="claim-meta">
@@ -244,10 +257,10 @@
           {#if claim.type}<span class="chip">{claim.type}</span>{/if}
           {#if claim.status}<span class="chip">{claim.status}</span>{/if}
           {#if claim.cluster_count}
-            <span class="chip">{claim.cluster_count} cluster{claim.cluster_count === 1 ? '' : 's'}</span>
+            <span class="chip">{tn('claims.clusterCount', claim.cluster_count)}</span>
           {/if}
           <span class="spacer"></span>
-          <CopyId text={claim.id} label="Claim ID" display={claim.id.slice(0, 10)} />
+          <CopyId text={claim.id} label={t('claims.idLabel')} display={claim.id.slice(0, 10)} />
         </div>
 
         {#if claim.body}
@@ -259,7 +272,7 @@
         {#if claim.sources?.length}
           <section class="detail-section">
             <div class="section-head">
-              <h3>Provenance</h3>
+              <h3>{t('claims.provenance')}</h3>
               <span class="count">{claim.sources.length}</span>
             </div>
             <div class="provenance">
@@ -269,7 +282,9 @@
                   <span class="provenance-main">
                     <span class="provenance-title">{source.title || source.hash.slice(0, 16)}</span>
                     <span class="provenance-sub">
-                      node {source.node || '—'}{source.ocr ? ' · OCR' : ''}
+                      {t('claims.node', { node: source.node || t('common.none') })}{source.ocr
+                        ? ` · ${t('claims.ocr')}`
+                        : ''}
                     </span>
                   </span>
                   <Icon name="arrowUpRight" size={13} />
@@ -281,7 +296,7 @@
 
         <section class="detail-section">
           <div class="section-head">
-            <h3>Cluster peers</h3>
+            <h3>{t('claims.peers')}</h3>
             <span class="count">{claims.relatedPeers.length}</span>
           </div>
           {#if claims.relatedPeers.length > 0}
@@ -297,15 +312,13 @@
               {/each}
             </div>
           {:else}
-            <p class="section-note">
-              The association step has not grouped this claim with another one yet.
-            </p>
+            <p class="section-note">{t('claims.noPeers')}</p>
           {/if}
         </section>
 
         <section class="detail-section">
           <div class="section-head">
-            <h3>Same topic</h3>
+            <h3>{t('claims.sameTopic')}</h3>
             <span class="count">{claims.relatedSameTopic.length}</span>
           </div>
           {#if claims.relatedSameTopic.length > 0}
@@ -322,7 +335,9 @@
             </div>
           {:else}
             <p class="section-note">
-              No other claim is filed under{claim.topic ? ` “${claim.topic}”` : ' this topic'} yet.
+              {claim.topic
+                ? t('claims.noSameTopicTopic', { topic: claim.topic })
+                : t('claims.noSameTopic')}
             </p>
           {/if}
         </section>
@@ -598,8 +613,11 @@
 
   .provenance-sub,
   .related-sub {
+    overflow: hidden;
     color: var(--faint);
     font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   @media (max-width: 1000px) {

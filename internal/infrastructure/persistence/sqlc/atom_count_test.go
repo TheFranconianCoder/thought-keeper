@@ -60,7 +60,7 @@ func TestManyAtomsResolveAndCount(t *testing.T) {
 	}
 
 	// The list counter (it joins the atoms, so it can never count a claim that cannot be shown).
-	rows, err := index.ListSources(ctx, "", 10, 0)
+	rows, err := index.ListSources(ctx, entities.SourceFilter{}, 10, 0)
 	if err != nil {
 		t.Fatalf("list sources: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestAClaimCountsOnceEvenWhenItCitesSeveralNodes(t *testing.T) {
 	if len(listed) != 1 {
 		t.Errorf("the detail view lists %d entries for one claim, want 1", len(listed))
 	}
-	rows, err := index.ListSources(ctx, "", 10, 0)
+	rows, err := index.ListSources(ctx, entities.SourceFilter{}, 10, 0)
 	if err != nil {
 		t.Fatalf("sources: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestTheDetailViewReportsTheSameDerivedStateAsTheList(t *testing.T) {
 		t.Fatalf("metadata part state: %v", err)
 	}
 
-	rows, err := index.ListSources(ctx, "", 10, 0)
+	rows, err := index.ListSources(ctx, entities.SourceFilter{}, 10, 0)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("list sources: %v (%d rows)", err, len(rows))
 	}

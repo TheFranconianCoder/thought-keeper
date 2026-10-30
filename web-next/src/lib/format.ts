@@ -1,4 +1,5 @@
 /** Formatting helpers shared by every view. No domain logic lives here. */
+import { i18n, t, tn } from './i18n/index.svelte';
 
 export function fmtBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return '—';
@@ -13,11 +14,11 @@ export function relTime(iso?: string, now = Date.now()): string {
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return iso;
   const seconds = Math.max(0, Math.round((now - then) / 1000));
-  if (seconds < 45) return 'just now';
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
-  if (seconds < 86_400) return `${Math.round(seconds / 3600)}h ago`;
-  if (seconds < 2_592_000) return `${Math.round(seconds / 86_400)}d ago`;
-  return new Date(then).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  if (seconds < 45) return t('format.justNow');
+  if (seconds < 3600) return t('format.minutesAgo', { count: Math.round(seconds / 60) });
+  if (seconds < 86_400) return t('format.hoursAgo', { count: Math.round(seconds / 3600) });
+  if (seconds < 2_592_000) return tn('format.daysAgo', Math.round(seconds / 86_400));
+  return new Date(then).toLocaleDateString(i18n.locale, { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export function elapsed(iso: string | undefined, now = Date.now()): string {
@@ -36,14 +37,14 @@ export function shortDate(iso?: string): string {
   if (!iso) return '';
   const parsed = Date.parse(iso);
   if (Number.isNaN(parsed)) return iso;
-  return new Date(parsed).toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+  return new Date(parsed).toLocaleDateString(i18n.locale, { day: '2-digit', month: 'short' });
 }
 
 export function clockTime(iso?: string): string {
   if (!iso) return '';
   const parsed = Date.parse(iso);
   if (Number.isNaN(parsed)) return iso;
-  return new Date(parsed).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return new Date(parsed).toLocaleTimeString(i18n.locale, { hour: '2-digit', minute: '2-digit' });
 }
 
 export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {

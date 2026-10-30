@@ -57,12 +57,14 @@ For each part the agent:
 
 Rules the prompt enforces (and the wire shape):
 
-- **One claim per atom**, a single self-contained sentence, **always in English**; proper names,
-  titles, code and quoted terms keep their original script.
+- **One claim per atom**, a single self-contained sentence, **always in the configured claim
+  language** (`language.claims`, default English); proper names, titles, code and quoted terms keep
+  their original script.
 - **A claim stands alone.** No "Chapter 11", "this section", "the book", "as we saw". The source is
   provenance, never part of the statement.
-- **A flat, English topic** derived from the claim and body alone (`caching`, `llm-agents`). Existing
-  names are offered by `list_topics`; a topic is never a chapter, a document or a hierarchy.
+- **A flat topic in the same language** derived from the claim and body alone (`caching`,
+  `llm-agents`). Existing names are offered by `list_topics`; a topic is never a chapter, a document
+  or a hierarchy.
 - **Provenance cites source node ids** from the outline; unknown ids are rejected.
 - **No links, and code is code.** A claim body carries no links; syntax quoted from the source is
   inline code (a backtick span), and the claim sentence names it in prose.
@@ -88,8 +90,9 @@ never deletes a cluster record: the next cluster pass prunes dead members.
 The summary is written **after** a source's distill step is `ok`, from the claims (capped at 250
 claims / 36 KiB) and the outline's titles — never from the raw document, so it cannot say more than
 the vault holds. One bounded completion, `reasoning_effort=minimal`, no tools. The answer is
-Markdown prose (3–6 short paragraphs or two paragraphs plus bullets, **always in English**, whatever
-the source's language) and is written to `<hash>.summary.md`. An answer cut off by the output limit is
+Markdown prose (3–6 short paragraphs or two paragraphs plus bullets, **always in the configured
+summary language** (`language.summary`, default English), whatever the source's language) and is
+written to `<hash>.summary.md`. An answer cut off by the output limit is
 a failure: the file is not written, and the run retries later. A source with zero claims gets the
 honest one-line file without a model call. The consistency job queues summaries that are missing; it
 never writes one inside the check itself.
@@ -97,6 +100,10 @@ never writes one inside the check itself.
 ## 4. Query: question → cited answer
 
 The question is classified first, and the two branches do not mix.
+
+Queries are independent and **never gated**: up to `pipeline.parallel_queries` runs answer questions
+at the same time, and the reader may ask again while an answer is still being written. A query reads
+the vault as it is; a half-associated vault is still worth asking.
 
 - **A subject question** ("what do the claims say about caching?"): one search with the question's
   key words. The top hits carry the claim and its body. If needed, read at most three claims
@@ -129,8 +136,8 @@ citations.
   bibliography entry, like a footnote.
 - The answer is written in complete, grammatical sentences. A citation is a trailing reference after
   the statement it supports — never a word, phrase or missing object of the sentence.
-- A source's overview is written in English; the answer translates its meaning and never copies its
-  English sentences into another language.
+- A source's overview may be written in another language; the answer translates its meaning and never
+  copies its sentences into another language.
 - If the claims and the source overviews do not contain the answer, the answer says so plainly.
 - The answer is written **entirely in the language of the question's prose**; the vault's language
   set is only a search hint. A source title or proper noun in another script stays in that script and

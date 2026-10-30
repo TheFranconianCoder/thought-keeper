@@ -1,6 +1,7 @@
 import { api } from '../api';
 import { humanError } from '../api/errors';
 import type { AtomDuplicates, AtomLayout, Finding, Pipeline, Status, VocabularyHealth } from '../api/types';
+import { t } from '../i18n/index.svelte';
 import { toast } from '../toast.svelte';
 
 /** A local action that started before the server's first SSE run frame arrived. The top bar shows
@@ -104,7 +105,13 @@ class SystemStore {
     this.banner = null;
     if (status === 'failed') {
       const reason = (error ?? '').split('\n')[0].trim();
-      toast(`${op || 'run'} failed${reason ? `: ${reason}` : ''}`, 'error');
+      toast(
+        t('status.runFailed', {
+          op: op || t('status.run'),
+          reason: reason ? `: ${reason}` : '',
+        }),
+        'error',
+      );
     }
   }
 

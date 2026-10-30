@@ -1,139 +1,150 @@
 <script lang="ts">
   import { clearable } from '../../lib/clearable';
   import { hostOf, relTime } from '../../lib/format';
+  import { t, tn } from '../../lib/i18n/index.svelte';
   import { openAdd } from '../../lib/overlays';
-  import { navigate, router, sourcePath } from '../../lib/router.svelte';
+  import { navigate, sourcePath } from '../../lib/router.svelte';
   import { connection } from '../../lib/stores/connection.svelte';
-  import { sources } from '../../lib/stores/sources.svelte';
+  import { bookmarkWindow } from '../../lib/stores/source-window.svelte';
   import type { Source } from '../../lib/api/types';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
-  import VirtualList from '../ui/VirtualList.svelte';
+  import SourceWindowList from '../sources/SourceWindowList.svelte';
 
   let query = $state('');
+  const hasQuery = $derived(query.trim().length > 0);
 
-  const bookmarks = $derived(sources.items.filter((source) => source.bookmark));
-  const grouped = $derived.by(() => {
-    const term = query.trim().toLowerCase();
-    const map = new Map<string, Source[]>();
-    for (const source of bookmarks) {
-      if (
-        term &&
-        !source.title.toLowerCase().includes(term) &&
-        !(source.url ?? '').toLowerCase().includes(term) &&
-        !(source.tags ?? []).some((tag) => tag.includes(term)) &&
-        !(source.auto_tags ?? []).some((tag) => tag.includes(term))
-      ) {
-        continue;
-      }
-      const host = hostOf(source.url) || 'other';
-      const list = map.get(host) ?? [];
-      list.push(source);
-      map.set(host, list);
-    }
-    return [...map.entries()]
-      .map(([host, items]) => ({ host, items }))
-      .sort((a, b) => a.host.localeCompare(b.host));
+  // The list is a WINDOW over the bookmark filter: the server counts the whole bookmark list, the
+  // view reads the rows around the viewport. A host is a row label now, not a group heading that
+  // would break at a page boundary.
+  bookmarkWindow.setFilter({ bookmarksOnly: true });
+
+  let filterTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const term = query.trim();
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(() => {
+      bookmarkWindow.setFilter({ bookmarksOnly: true, query: term });
+    }, 100);
+    return () => clearTimeout(filterTimer);
   });
 
   $effect(() => {
-    if (router.current.view === 'bookmarks') void sources.loadList();
+    // A reset discards the pages. With a count, the list asks for the visible range itself; only an
+    // empty/not-yet-known list needs the first page here.
+    void bookmarkWindow.epoch;
+    if (!bookmarkWindow.loaded || bookmarkWindow.count === 0) {
+      void bookmarkWindow.ensure(0, 30);
+    }
   });
+
+  function retry(): void {
+    bookmarkWindow.reset();
+  }
 
   function open(source: Source): void {
     navigate(sourcePath(source.hash));
+  }
+
+  function host(source: Source): string {
+    return hostOf(source.url) || t('bookmarks.otherHost');
   }
 </script>
 
 <div class="page bookmarks-page">
   <div class="page-head">
     <div>
-      <h1>Bookmarks</h1>
-      <p class="sub">Collected links that exist as metadata only — not indexed, still yours.</p>
+      <h1>{t('view.bookmarks')}</h1>
+      <p class="sub">{t('bookmarks.sub')}</p>
     </div>
     <span class="spacer"></span>
     <button class="btn btn--primary" onclick={openAdd}>
-      <Icon name="plus" size={14} /> Add link
+      <Icon name="plus" size={14} /> {t('bookmarks.add')}
     </button>
   </div>
 
-  {#if bookmarks.length > 0}
+  {#if bookmarkWindow.count > 0 || hasQuery}
     <div class="toolbar">
       <div class="search-wrap bookmark-search">
         <Icon name="search" size={14} />
-        <input use:clearable class="input input--search" placeholder="Filter bookmarks…" bind:value={query} aria-label="Filter bookmarks" />
+        <input use:clearable class="input input--search" placeholder={t('bookmarks.filterPlaceholder')} bind:value={query} aria-label={t('bookmarks.filterAria')} />
       </div>
-      <span class="muted small">{bookmarks.length} bookmark{bookmarks.length === 1 ? '' : 's'}</span>
+      <span class="muted small">{tn('bookmarks.count', bookmarkWindow.count)}</span>
     </div>
   {/if}
 
-  {#if sources.error}
+  {#if bookmarkWindow.error}
     <p class="notice notice--error">
-      {sources.error}
-      <button class="btn btn--ghost btn--sm" onclick={() => void sources.loadList()}>Try again</button>
+      {t('bookmarks.loadFailed', { error: bookmarkWindow.error })}
+      <button class="btn btn--ghost btn--sm" onclick={retry}>{t('common.retry')}</button>
     </p>
   {/if}
-  {#if !sources.loaded}
+  {#if !bookmarkWindow.loaded || (bookmarkWindow.loading && bookmarkWindow.count === 0)}
     {#if connection.state !== 'live'}
-      <EmptyState icon="bookmarks" title="Nothing loaded" text="Thought Keeper is not reachable, so this is not the vault's answer." />
+      <EmptyState icon="bookmarks" title={t('bookmarks.unreachableTitle')} text={t('bookmarks.unreachableText')} />
     {:else}
       <div class="stack">
         {#each Array(4) as _, index (index)}<span class="skeleton" style="height:48px"></span>{/each}
       </div>
     {/if}
-  {:else if bookmarks.length === 0}
-    {#if !sources.error}
-      <EmptyState
-        icon="bookmarks"
-        title="No bookmarks yet"
-        text="Paste any link. Pages that cannot be read — video, paywall, app — are collected here instead of being silently dropped."
-      >
-        <button class="btn btn--primary btn--sm" onclick={openAdd}>
-          <Icon name="plus" size={13} /> Add a link
-        </button>
-      </EmptyState>
+  {:else if bookmarkWindow.count === 0}
+    {#if !bookmarkWindow.error}
+      {#if hasQuery}
+        <EmptyState icon="filter" title={t('bookmarks.noMatch')} text={t('bookmarks.noMatchText')} />
+      {:else}
+        <EmptyState
+          icon="bookmarks"
+          title={t('bookmarks.emptyTitle')}
+          text={t('bookmarks.emptyText')}
+        >
+          <button class="btn btn--primary btn--sm" onclick={openAdd}>
+            <Icon name="plus" size={13} /> {t('bookmarks.addEmpty')}
+          </button>
+        </EmptyState>
+      {/if}
     {/if}
-  {:else if grouped.length === 0}
-    <EmptyState icon="filter" title="No bookmark matches" text="Clear the filter to see every collected link." />
   {:else}
-    {#each grouped as group (group.host)}
-      <section class="host-group">
-        <div class="host-head">
-          <Icon name="link" size={13} />
-          <h2>{group.host}</h2>
-          <span class="count">{group.items.length}</span>
-        </div>
-        <div class="bookmark-list">
-          <VirtualList items={group.items} rowHeight={52} key={(source) => source.hash}>
-            {#snippet row(source: Source)}
-              <div class="bookmark-row">
-                <button class="bookmark-open" onclick={() => open(source)}>
-                  <span class="bookmark-icon"><SourceIcon kind={source.kind} hash={source.hash} size={16} /></span>
-                  <span class="bookmark-main">
-                    <span class="bookmark-title">{source.title || source.url}</span>
-                    <span class="bookmark-url">{source.url}</span>
-                  </span>
-                  <span class="bookmark-meta">
-                    {#if source.url_status}{source.url_status} · {/if}
-                    {source.url_checked_at ? `checked ${relTime(source.url_checked_at)}` : relTime(source.imported_at)}
-                  </span>
-                </button>
-                <button
-                  class="icon-btn"
-                  title="Open the link in the browser"
-                  onclick={() => {
-                    if (source.url) window.open(source.url, '_blank', 'noopener');
-                  }}
-                >
-                  <Icon name="external" size={14} />
-                </button>
-              </div>
-            {/snippet}
-          </VirtualList>
-        </div>
-      </section>
-    {/each}
+    <div class="bookmark-list">
+      <SourceWindowList
+        count={bookmarkWindow.count}
+        rowHeight={52}
+        itemAt={(index) => bookmarkWindow.itemAt(index)}
+        ensure={(start, end) => void bookmarkWindow.ensure(start, end)}
+        epoch={bookmarkWindow.epoch}
+      >
+        {#snippet row(source: Source | undefined)}
+          {#if source}
+            <div class="bookmark-row">
+              <button class="bookmark-open" onclick={() => open(source)}>
+                <span class="bookmark-icon"><SourceIcon kind={source.kind} hash={source.hash} size={16} /></span>
+                <span class="bookmark-main">
+                  <span class="bookmark-title">{source.title || source.url}</span>
+                  <span class="bookmark-url"><span class="bookmark-host">{host(source)}</span> · {source.url}</span>
+                </span>
+                <span class="bookmark-meta">
+                  {#if source.url_status}{source.url_status} · {/if}
+                  {source.url_checked_at ? t('bookmarks.checked', { time: relTime(source.url_checked_at) }) : relTime(source.imported_at)}
+                </span>
+              </button>
+              <button
+                class="icon-btn bookmark-external"
+                title={t('bookmarks.openExternal')}
+                onclick={() => {
+                  if (source.url) window.open(source.url, '_blank', 'noopener');
+                }}
+              >
+                <Icon name="external" size={14} />
+              </button>
+            </div>
+          {:else}
+            <div class="bookmark-row bookmark-row--skeleton" aria-hidden="true">
+              <span class="skeleton bookmark-skeleton"></span>
+            </div>
+          {/if}
+        {/snippet}
+      </SourceWindowList>
+    </div>
   {/if}
 </div>
 
@@ -144,31 +155,6 @@
 
   .bookmark-search {
     width: min(340px, 100%);
-  }
-
-  .host-group {
-    margin-bottom: 22px;
-  }
-
-  .host-head {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    margin-bottom: 7px;
-    color: var(--faint);
-  }
-
-  .host-head h2 {
-    margin: 0;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 650;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-
-  .host-head .count {
-    font-size: 10.5px;
   }
 
   .bookmark-list {
@@ -187,6 +173,24 @@
 
   .bookmark-row:hover {
     background: var(--bg-hover);
+  }
+
+  .bookmark-row--skeleton {
+    padding: 10px 9px;
+  }
+
+  .bookmark-row--skeleton:hover {
+    background: transparent;
+  }
+
+  .bookmark-skeleton {
+    width: 100%;
+    height: 30px;
+  }
+
+  .bookmark-host {
+    color: var(--muted);
+    font-weight: 550;
   }
 
   .bookmark-open {
@@ -249,8 +253,18 @@
 
   .bookmark-meta {
     flex: none;
+    max-width: 45%;
+    overflow: hidden;
     color: var(--faint);
     font-size: 11.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 860px) {
+    .bookmark-external {
+      display: none;
+    }
   }
 
   @media (max-width: 640px) {

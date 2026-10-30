@@ -1,85 +1,99 @@
 import { api } from '../api';
 import { humanError } from '../api/errors';
 import { confirm } from '../confirm.svelte';
-import { firstLine, plural } from '../format';
+import { firstLine } from '../format';
+import { t, tn } from '../i18n/index.svelte';
 import { claims } from '../stores/claims.svelte';
-import { sources } from '../stores/sources.svelte';
+import { bookmarkWindow, failedWindow, sourceWindow } from '../stores/source-window.svelte';
 import { system } from '../stores/system.svelte';
 import { toast } from '../toast.svelte';
 import { waitForRun } from './runs';
 
+/** A vault-wide repair changed the sources: every window is thrown away, and the mounted lens reads
+ *  its visible range again. */
+function refreshSourceData(): Promise<void> {
+  sourceWindow.invalidate();
+  bookmarkWindow.invalidate();
+  failedWindow.invalidate();
+  return Promise.resolve();
+}
+
 export async function clusterClaims(): Promise<void> {
   try {
     const result = await api.cluster();
-    toast(
-      result.queued
-        ? 'Cluster pass queued — it waits until no document step is running.'
-        : 'Nothing to cluster — every claim is associated.',
-      'success',
-    );
-    await Promise.all([sources.loadList(), claims.refresh(), system.loadStatus()]);
+    toast(result.queued ? t('status.clusterQueued') : t('status.clusterNothing'), 'success');
+    await Promise.all([refreshSourceData(), claims.refresh(), system.loadStatus()]);
   } catch (error) {
-    toast(`Cluster failed: ${firstLine(humanError(error))}`, 'error');
+    toast(t('status.clusterFailed', { error: firstLine(humanError(error)) }), 'error');
   }
 }
 
 export async function reconcileVault(): Promise<void> {
-  system.notice = 'Checking the vault…';
+  system.notice = t('status.reconcileNotice');
   try {
     const result = await api.reconcile();
-    const bits = [`checked ${result.checked}`];
-    if (result.invalidated?.length) bits.push(`${result.invalidated.length} invalidated`);
-    if (result.broken?.length) bits.push(`${result.broken.length} broken`);
-    if (result.languages) bits.push(`${plural(result.languages, 'language')} detected`);
-    if (result.identities) bits.push(`${plural(result.identities, 'identity')} restored`);
-    if (result.ownerships) bits.push(`${plural(result.ownerships, 'owner')} restored`);
-    toast(`Consistency: ${bits.join(' · ')}.`, result.broken?.length ? 'warning' : 'success');
-    await Promise.all([sources.loadList(), system.loadFindings(), system.loadStatus()]);
+    const bits = [t('status.checked', { count: result.checked })];
+    if (result.invalidated?.length) {
+      bits.push(t('status.invalidated', { count: result.invalidated.length }));
+    }
+    if (result.broken?.length) bits.push(t('status.broken', { count: result.broken.length }));
+    if (result.languages) bits.push(tn('status.languagesDetected', result.languages));
+    if (result.identities) bits.push(tn('status.identities', result.identities));
+    if (result.ownerships) bits.push(tn('status.owners', result.ownerships));
+    toast(
+      t('status.consistency', { bits: bits.join(' · ') }),
+      result.broken?.length ? 'warning' : 'success',
+    );
+    await Promise.all([refreshSourceData(), system.loadFindings(), system.loadStatus()]);
   } catch (error) {
-    toast(`Consistency check failed: ${firstLine(humanError(error))}`, 'error');
+    toast(t('status.reconcileFailed', { error: firstLine(humanError(error)) }), 'error');
   } finally {
     system.notice = '';
   }
 }
 
 export async function reindexVault(): Promise<void> {
-  system.notice = 'Rebuilding the index from the vault…';
+  system.notice = t('status.reindexNotice');
   try {
     const result = await api.reindex();
-    const bits = [`${plural(result.atoms, 'claim')}`, `${plural(result.clusters, 'cluster')}`];
-    if (result.skipped) bits.push(`${result.skipped} skipped`);
-    if (result.orphans) bits.push(`${plural(result.orphans, 'orphan row')} removed`);
-    if (result.atoms_orphaned) bits.push(`${plural(result.atoms_orphaned, 'claim')} trashed`);
-    if (result.provenance_pruned) bits.push(`${plural(result.provenance_pruned, 'claim')} lost a dead source`);
-    if (result.clusters_removed) bits.push(`${plural(result.clusters_removed, 'empty cluster')} removed`);
-    toast(`Reindex complete: ${bits.join(' · ')}.`, 'success');
-    await Promise.all([sources.loadList(), system.loadFindings(), system.loadStatus()]);
+    const bits = [tn('status.claims', result.atoms), tn('status.clusterCount', result.clusters)];
+    if (result.skipped) bits.push(t('status.skipped', { count: result.skipped }));
+    if (result.orphans) bits.push(tn('status.orphanRows', result.orphans));
+    if (result.atoms_orphaned) bits.push(tn('status.trashed', result.atoms_orphaned));
+    if (result.provenance_pruned) bits.push(tn('status.deadSource', result.provenance_pruned));
+    if (result.clusters_removed) bits.push(tn('status.emptyClusters', result.clusters_removed));
+    toast(t('status.reindexDone', { bits: bits.join(' · ') }), 'success');
+    await Promise.all([refreshSourceData(), system.loadFindings(), system.loadStatus()]);
     if (system.vaultLoaded) await system.loadVault();
   } catch (error) {
-    toast(`Reindex failed: ${firstLine(humanError(error))}`, 'error');
+    toast(t('status.reindexFailed', { error: firstLine(humanError(error)) }), 'error');
   } finally {
     system.notice = '';
   }
 }
 
 export async function rebuildAllTrees(): Promise<void> {
-  system.notice = 'Rebuilding every outline…';
+  system.notice = t('status.outlinesNotice');
   try {
     const result = await api.rebuildTrees();
     toast(
-      `Outlines rebuilt: ${result.built}/${result.sources}${result.failed ? ` · ${result.failed} failed` : ''}.`,
+      t('status.outlinesRebuilt', {
+        built: result.built,
+        sources: result.sources,
+        failed: result.failed ? t('status.failedCount', { count: result.failed }) : '',
+      }),
       result.failed ? 'warning' : 'success',
     );
-    await Promise.all([sources.loadList(), system.loadStatus()]);
+    await Promise.all([refreshSourceData(), system.loadStatus()]);
   } catch (error) {
-    toast(`Outline rebuild failed: ${firstLine(humanError(error))}`, 'error');
+    toast(t('status.outlinesFailed', { error: firstLine(humanError(error)) }), 'error');
   } finally {
     system.notice = '';
   }
 }
 
 export async function runLint(): Promise<void> {
-  system.notice = 'Running the health checks…';
+  system.notice = t('status.lintNotice');
   system.markBanner('lint');
   try {
     const { run_id } = await api.lint();
@@ -87,28 +101,35 @@ export async function runLint(): Promise<void> {
     await system.loadFindings();
     system.notice =
       run?.status === 'succeeded'
-        ? run.answer || `${plural(system.findings.length, 'finding')}`
+        ? run.answer || tn('status.findings', system.findings.length)
         : run
-          ? `Lint ${run.status}${run.error ? `: ${firstLine(run.error)}` : ''}`
-          : 'Lint did not finish in time.';
+          ? t('status.lintStatus', {
+              status: run.status,
+              error: run.error ? `: ${firstLine(run.error)}` : '',
+            })
+          : t('status.lintTimeout');
   } catch (error) {
-    system.notice = `Lint failed: ${firstLine(humanError(error))}`;
+    system.notice = t('status.lintFailed', { error: firstLine(humanError(error)) });
   } finally {
     system.clearBanner();
   }
 }
 
 export async function cleanupClusters(): Promise<void> {
-  system.notice = 'Cleaning up the association layer…';
+  system.notice = t('status.cleanupNotice');
   try {
     const result = await api.cleanup();
     toast(
-      `Cleanup: ${plural(result.clusters_pruned, 'cluster')} pruned · ${plural(result.clusters_removed, 'cluster')} removed · ${plural(result.findings, 'finding')}.`,
+      t('status.cleanupDone', {
+        pruned: tn('status.clustersPruned', result.clusters_pruned),
+        removed: tn('status.clustersRemoved', result.clusters_removed),
+        findings: tn('status.findings', result.findings),
+      }),
       'success',
     );
-    await Promise.all([system.loadFindings(), sources.loadList(), system.loadStatus()]);
+    await Promise.all([system.loadFindings(), refreshSourceData(), system.loadStatus()]);
   } catch (error) {
-    toast(`Cleanup failed: ${firstLine(humanError(error))}`, 'error');
+    toast(t('status.cleanupFailed', { error: firstLine(humanError(error)) }), 'error');
   } finally {
     system.notice = '';
   }
@@ -117,18 +138,18 @@ export async function cleanupClusters(): Promise<void> {
 export async function curateVocabulary(): Promise<void> {
   try {
     await api.curateVocabulary();
-    toast('Curating the claim-topic vocabulary…', 'info');
+    toast(t('status.curateStarted'), 'info');
   } catch (error) {
-    toast(`Vocabulary curation failed: ${firstLine(humanError(error))}`, 'error');
+    toast(t('status.curateFailed', { error: firstLine(humanError(error)) }), 'error');
   }
 }
 
 export async function retopicClaims(): Promise<void> {
   try {
     await api.retopicClaims();
-    toast('Re-deriving claim topics from the claim texts…', 'info');
+    toast(t('status.retopicStarted'), 'info');
   } catch (error) {
-    toast(`Topic re-derivation failed: ${firstLine(humanError(error))}`, 'error');
+    toast(t('status.retopicFailed', { error: firstLine(humanError(error)) }), 'error');
   }
 }
 
@@ -137,30 +158,39 @@ export async function reorganizeClaims(): Promise<void> {
     const result = await api.reorganizeAtoms();
     toast(
       result.moved === 0
-        ? 'Nothing to move — no claim is in the legacy folder layout.'
-        : `Moved ${plural(result.moved, 'claim')} out of ${plural(result.folders_removed ?? 0, 'folder')}.`,
+        ? t('status.reorganizeNothing')
+        : t('status.reorganizeMoved', {
+            claims: tn('status.claims', result.moved),
+            folders: tn('status.folders', result.folders_removed ?? 0),
+          }),
       'success',
     );
     await system.loadVault();
   } catch (error) {
-    toast(`Reorganize failed: ${firstLine(humanError(error))}`, 'error');
+    toast(t('status.reorganizeFailed', { error: firstLine(humanError(error)) }), 'error');
   }
 }
 
 export async function quoteClaimCode(): Promise<void> {
-  system.notice = 'Quoting bracket syntax in claim bodies…';
+  system.notice = t('status.quoteNotice');
   try {
     const result = await api.quoteClaimCode();
     toast(
       result.repaired === 0
-        ? 'Nothing to quote — no claim body carries a bare bracket pair.'
-        : `Quoted ${plural(result.fragments, 'bracket span')} in ${plural(result.repaired, 'claim')}${result.skipped ? ` · ${result.skipped} skipped` : ''}.`,
+        ? t('status.quoteNothing')
+        : t('status.quoted', {
+            spans: tn('status.bracketSpans', result.fragments),
+            claims: tn('status.claims', result.repaired),
+            skipped: result.skipped
+              ? ` · ${t('status.skipped', { count: result.skipped })}`
+              : '',
+          }),
       result.skipped ? 'warning' : 'success',
     );
     await Promise.all([claims.refresh(), system.loadFindings(), system.loadStatus()]);
     if (system.vaultLoaded) await system.loadVault();
   } catch (error) {
-    toast(`Quote claim code failed: ${firstLine(humanError(error))}`, 'error');
+    toast(t('status.quoteFailed', { error: firstLine(humanError(error)) }), 'error');
   } finally {
     system.notice = '';
   }
@@ -170,10 +200,9 @@ export async function collapseDuplicateClaims(): Promise<void> {
   const duplicates = system.duplicates;
   if (duplicates && duplicates.groups > 0) {
     const confirmed = await confirm({
-      title: `Collapse ${plural(duplicates.groups, 'duplicate group')}?`,
-      message:
-        'One copy of every duplicate claim is kept; the indistinguishable copies move to .trash/atoms/. Nothing is rewritten.',
-      confirmLabel: 'Collapse duplicates',
+      title: tn('status.collapseTitle', duplicates.groups),
+      message: t('status.collapseMessage'),
+      confirmLabel: t('status.collapseConfirm'),
     });
     if (!confirmed) return;
   }
@@ -181,12 +210,15 @@ export async function collapseDuplicateClaims(): Promise<void> {
     const result = await api.collapseAtoms();
     toast(
       result.collapsed === 0
-        ? 'Nothing to collapse — every claim exists once.'
-        : `Kept one copy in ${plural(result.groups, 'group')}, moved ${plural(result.collapsed, 'file')} to the trash.`,
+        ? t('status.collapseNothing')
+        : t('status.collapseKept', {
+            groups: tn('status.groupCount', result.groups),
+            files: tn('status.files', result.collapsed),
+          }),
       'success',
     );
     await system.loadVault();
   } catch (error) {
-    toast(`Collapse failed: ${firstLine(humanError(error))}`, 'error');
+    toast(t('status.collapseFailed', { error: firstLine(humanError(error)) }), 'error');
   }
 }

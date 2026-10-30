@@ -101,10 +101,12 @@ flowchart LR
    peers.
 
 The first three are **document steps** (one source, in order). The cluster step runs over the whole
-vault and may only run while no document step runs — in both directions. **Ask is never gated.**
+vault and may only run while no document step runs — in both directions. **Ask is never gated** and
+answers questions in parallel (`pipeline.parallel_queries`).
 
 **After a complete distillation** a source earns a **summary** (`<hash>.summary.md`): a short
-overview written from its claims in English, shown on its own tab. The consistency job fills in summaries that
+overview written from its claims in the configured summary language (`language.summary`, default
+English), shown on its own tab. The consistency job fills in summaries that
 are missing, a few at a time, so a vault from before the feature catches up in the background.
 
 Every source carries the state of its steps (capture, outline, distill) and of its parts, so a long
@@ -120,8 +122,8 @@ of features.
 
 ### Claims
 
-- One claim per atom file with a flat English topic, type, status, a 1–3 sentence body and
-  **node-level provenance**. Claims are always written in English; names, code and quoted terms keep
+- One claim per atom file with a flat topic (in the configured claim language, default English),
+  type, status, a 1–3 sentence body and **node-level provenance**. Names, code and quoted terms keep
   their original script.
 - A detail view that shows where the claim came from, and two **disjoint** relation lists: its
   **cluster peers** (what it travels with) and the claims under the **same topic**.
@@ -199,7 +201,11 @@ of features.
 
 ### Ask
 
-- Ask a question; the agent searches claims, reads at most a few, and answers with **inline citations**
+- Ask a question; it appears **directly in the saved-query list with its status** while the answer is
+  written — there is no separate “thinking” box — and questions run **in parallel**, so the next one
+  can be asked immediately. A saved row opens, asks the same question again or deletes it, like a
+  source row.
+- The agent searches claims, reads at most a few, and answers with **inline citations**
   to the claims it used. Cite a claim, open it, come back: the scroll position survives the detour.
 - The answer is written **entirely in the language of the question's prose**; proper names and source
   titles keep their original script and never switch the answer's language.

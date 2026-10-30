@@ -68,6 +68,40 @@ func TestPartialConfigKeepsDefaults(t *testing.T) {
 	}
 }
 
+func TestLanguageDefaultsAndOverrides(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(p, []byte("server:\n    addr: '127.0.0.1:9333'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Language.UI != "en" || cfg.Language.Claims != "en" || cfg.Language.Summary != "en" {
+		t.Errorf("language defaults = %+v, want every value en", cfg.Language)
+	}
+
+	if err := os.WriteFile(p, []byte(`
+language:
+    ui: ' DE '
+    claims: 'de'
+    summary: 'fr'
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Language.UI != "de" || cfg.Language.Claims != "de" || cfg.Language.Summary != "fr" {
+		t.Errorf("language = %+v, want de/de/fr (codes are trimmed and lower-cased)", cfg.Language)
+	}
+
+	if cfg.Pipeline.ParallelQueries <= 0 {
+		t.Errorf("parallel queries = %d, want a positive default", cfg.Pipeline.ParallelQueries)
+	}
+}
+
 func TestOpenAIKeyFromEnvWhenConfigOmitsIt(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "from-env")
 	t.Setenv("OPENAI_BASE_URL", "https://example.test/v1")

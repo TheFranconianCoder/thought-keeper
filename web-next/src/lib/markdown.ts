@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
+import { t } from './i18n/index.svelte';
 
 /** Links in the vault use a small, stable notation:
  *
@@ -139,7 +140,7 @@ function annotateFootnotes(document: Document): void {
     const number = (link.getAttribute('href') ?? '').slice('#cite-'.length);
     if (!number) continue;
     link.classList.add('cite-ref');
-    link.setAttribute('aria-label', `Reference ${number}`);
+    link.setAttribute('aria-label', t('markdown.reference', { number }));
   }
 
   const heading = [...document.querySelectorAll('p')].find((paragraph) =>
@@ -156,7 +157,7 @@ function annotateFootnotes(document: Document): void {
     reference.id = `cite-ref-${number}`;
     const back = document.createElement('a');
     back.setAttribute('href', `#cite-ref-${number}`);
-    back.setAttribute('aria-label', `Back to reference ${number}`);
+    back.setAttribute('aria-label', t('markdown.backToReference', { number }));
     back.className = 'cite-back';
     back.textContent = '↩';
     item.append(' ', back);

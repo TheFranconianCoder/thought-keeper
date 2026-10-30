@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/config"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/objects"
@@ -73,7 +74,7 @@ func TestPolledInboxStillTakesADroppedFile(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	sources, err := index.ListSources(context.Background(), "", 10, 0)
+	sources, err := index.ListSources(context.Background(), entities.SourceFilter{}, 10, 0)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

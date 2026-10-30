@@ -55,6 +55,8 @@ export interface Status {
     tesseract: string;
   };
   agent: { configured: boolean; model: string; base_url?: string };
+  /** The language of what the app writes: the UI default, the claims and the source overviews. */
+  language: { ui: string; claims: string; summary: string };
   memory?: {
     heap_mb: number;
     heap_peak_mb: number;
@@ -159,6 +161,27 @@ export interface SourceList {
   /** The TOTAL the list holds, not the page length: more exist past this page. */
   count: number;
   total: number;
+}
+
+/** SourceListFilter is the server-side narrowing of the Sources window. Empty fields mean "all". */
+export interface SourceListFilter {
+  kind?: string;
+  query?: string;
+  tag?: string;
+  attachedOnly?: boolean;
+  bookmarksOnly?: boolean;
+  failedOnly?: boolean;
+}
+
+export interface SourceTagFacet {
+  tag: string;
+  count: number;
+}
+
+/** SourceFacets is the vault-wide tag cloud and the attached-snapshot count, not window facts. */
+export interface SourceFacets {
+  tags: SourceTagFacet[];
+  attached: number;
 }
 
 export interface SourceNode {
@@ -372,13 +395,10 @@ export interface AtomLayout {
   folders?: string[];
   claims: number;
   indexes?: number;
-  usage?: number;
   moved: number;
   removed: number;
   folders_removed?: number;
   indexes_removed?: number;
-  usage_removed?: number;
-  dirs_removed?: number;
   skipped?: number;
   kept?: string[];
 }

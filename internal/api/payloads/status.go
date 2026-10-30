@@ -19,7 +19,17 @@ type Status struct {
 	// Summary is the source-overview backfill: how many summaries the last consistency walk found
 	// missing, and how many are queued or running. Nil when there is nothing to do.
 	Summary *SummaryStatus `json:"summary,omitempty"`
-	Message string         `json:"message,omitempty"`
+	// Language is the language of what the app writes. The UI uses it as the DEFAULT interface
+	// language (a reader's own choice wins), and the Status lens shows the two content languages.
+	Language LanguageInfo `json:"language"`
+	Message  string       `json:"message,omitempty"`
+}
+
+// LanguageInfo is the configured output language: the interface, the claims and the overviews.
+type LanguageInfo struct {
+	UI      string `json:"ui"`
+	Claims  string `json:"claims"`
+	Summary string `json:"summary"`
 }
 
 // SummaryStatus is the source-overview backfill as the reader sees it while it runs. "Missing" is the

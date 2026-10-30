@@ -184,6 +184,7 @@ func Build(
 	steps := sourcemeta.NewTracker(meta, index, log)
 	intake := usecases.IntakeSource{Store: store, Index: index, SourceLog: sourceLog, Clock: clock, Steps: steps, Languages: languages}
 	list := usecases.ListSources{Index: index}
+	facets := usecases.ListSourceFacets{Index: index}
 	sourceChildren := usecases.SourceChildren{Index: index}
 	setSourceTags := usecases.SetSourceTags{Index: index, Tags: steps, SourceLog: sourceLog, Clock: clock}
 	get := usecases.GetSource{Index: index}
@@ -236,8 +237,8 @@ func Build(
 	}
 	sourceSummary := usecases.SourceSummary{
 		Index: index, Atoms: atomRepo, Trees: trees, Store: store,
-		Gateway: gw, Model: cfg.OpenAI.ModelCompile, Runs: runRepo, SourceLog: sourceLog,
-		Clock: clock, Log: log,
+		Gateway: gw, Model: cfg.OpenAI.ModelCompile, Language: cfg.Language.Summary,
+		Runs: runRepo, SourceLog: sourceLog, Clock: clock, Log: log,
 	}
 	tagSource := usecases.TagSource{
 		Index: index, Atoms: atomRepo, Tags: steps,
@@ -283,7 +284,8 @@ func Build(
 		Index: index, Trees: trees, Store: store, Atoms: atomStore, AtomRepo: atomRepo,
 		PartRepo: partRepo, SourceLog: sourceLog, Steps: steps, Vocab: vocabStore,
 		PartsPerRun: cfg.Pipeline.PartsPerRun, Parallel: cfg.Pipeline.ParallelParts,
-		Model: cfg.OpenAI.ModelCompile, MaxIterations: cfg.OpenAI.MaxIterations,
+		Model: cfg.OpenAI.ModelCompile, Language: cfg.Language.Claims,
+		MaxIterations:   cfg.OpenAI.MaxIterations,
 		ReasoningEffort: cfg.OpenAI.ReasoningEffortDistill, Clock: clock, Log: log,
 	}
 	resetSource := usecases.ResetSource{
@@ -377,7 +379,7 @@ func Build(
 		Cluster:   handlers.ClusterHandler{Runs: clusterQueue},
 		Reconcile: handlers.ReconcileHandler{Runs: reconciler},
 		Sources: handlers.SourcesHandler{
-			Lister: list, Counter: list, ChildLister: sourceChildren, TagSetter: setSourceTags,
+			Lister: list, Counter: list, Facets: facets, ChildLister: sourceChildren, TagSetter: setSourceTags,
 			Getter: get, Distill: scheduler, Summary: scheduler, Status: scheduler, Delete: deleteSource,
 			Capturer: scheduler, Sidecars: sourceSidecars, FixURLs2: fixURLs, Attacher: attachURL,
 			Content: sourceContent, Favicon: sourceFavicon, Log: sourceLog, Reset: scheduler, OnRemoved: onRemoved,

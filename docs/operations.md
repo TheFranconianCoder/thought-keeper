@@ -36,13 +36,22 @@ sync when a knob changes. Sections:
 | `vault` | root, sources, inbox, atoms, wiki, clusters, asks, vocabulary, trash, `git.ignore_derived` |
 | `index` | `path` (vault-root-relative), `favicons` |
 | `openai` | base URL, key, `model_compile`, `model_reason`, reasoning efforts, retries, timeout, headers |
-| `pipeline` | auto, auto_distill, debounce, run/cluster timeouts, parts per run, parallel parts/runs, auto_continue, reconcile interval/batch |
+| `pipeline` | auto, auto_distill, debounce, run/cluster timeouts, parts per run, parallel parts/runs/queries, auto_continue, reconcile interval/batch |
 | `cluster` | the quality gates of the claim graph (no model) |
 | `capture` | URL dedupe, refresh interval (default `168h` — weekly for pages/sitemaps), feed interval (default `24h` — daily), `min_text_chars` |
 | `fetch` | timeout, max bytes, user agent, `allow_private` (SSRF guard) |
 | `pdf` | text tool, max bytes, max pages |
 | `ocr` | enabled, rasterizer, tesseract, languages, dpi, per-page threshold, max pages, timeout |
 | `lint` | `programmatic_on_compile` |
+| `language` | `ui` (the PWA's default language), `claims` and `summary` (the language the agent writes in); every one defaults to `en` |
+
+The UI language is only a default: a reader who switches it in the top bar keeps that choice in the
+browser. The PWA ships **English and German**; another `language.ui` value falls back to English.
+The content languages are the vault's: a claim is written in `language.claims` and an
+overview in `language.summary`, whatever language each source arrived in. A value is an ISO 639-1
+code (ISO 639-3 when no 639-1 exists). Changing a content language affects **new** runs: existing
+claims and overviews are records written in the old language and are never rewritten behind the
+reader's back; a reset / rewrite is the explicit way to derive them again.
 
 Models resolve **env → yaml → default**: `OPENAI_MODEL` sets both, `OPENAI_MODEL_COMPILE` /
 `OPENAI_MODEL_REASON` override one; the same holds for the patience knobs

@@ -30,7 +30,8 @@ A cluster is visible only as a claim's **peers** (Claims detail view). There is 
 `capture → outline → distill` are the **document steps**: they run for ONE source, one after the
 other, and they never touch the association layer. `cluster` is the **vault-level step**: it is the
 one place where claims from different sources meet, and it may only run while **no document step
-runs** — in both directions. **Ask** (a query) is never gated.
+runs** — in both directions. **Ask** (a query) is never gated and runs in parallel: up to
+`pipeline.parallel_queries` questions are answered at the same time.
 
 ### 2.1 capture (per source)
 
@@ -130,8 +131,8 @@ runs** — in both directions. **Ask** (a query) is never gated.
 - The tool contract and prompt rules are in `agent.md`.
 
 **After a complete distill** the source earns a **summary**: a run of its own (`op=summary`) writes
-`<hash>.summary.md` from the claims (and the outline's shape), always in English, and the Summary tab
-shows it. It is
+`<hash>.summary.md` from the claims (and the outline's shape), in the configured summary language
+(`language.summary`, default English), and the Summary tab shows it. It is
 not a step: it never gates the pipeline, and a slow model only delays the overview. A source whose
 distill is not `ok` is refused — a summary of a half-derived source would describe a moving target —
 and a RESET is not a completion either: it removes the old summary and schedules no new run. A
@@ -265,7 +266,8 @@ numbers is amber.
   `POST /api/v1/sources/{hash}/reset`, and `POST /api/v1/sources/{hash}/refresh` for a URL (a feed
   or a sitemap re-expands its list, a page is re-fetched; the cadence is ignored).
 - **Globally:** `POST /api/v1/cluster` (queued by hand; it waits for the gate),
-  `POST /api/v1/lint` and `POST /api/v1/query` (read-only, never gated).
+  `POST /api/v1/lint` and `POST /api/v1/query` (read-only, never gated, answered by a pool of
+  `pipeline.parallel_queries` workers).
 - **Vault housekeeping (Status → Vault):** the repairs listed in `operations.md`. Every one is a
   BUTTON that says what it will do before it is pressed.
 - Every run names its step (`runs.step`).
@@ -274,7 +276,7 @@ numbers is amber.
 
 - **One gate.** Document steps take the shared side of one `sync.RWMutex`; the cluster step, a
   vocabulary curation, a reset, a delete and every synchronous vault writer take it exclusively. Ask
-  is never gated.
+  is never gated: a question runs on its own worker, beside anything.
 - **A wait is per STEP, not per source.** "Queued for the outline" and "queued for the distill" are
   different waits; one flag per source let the outline worker erase the distill's and made the
   watchdog release live claims.

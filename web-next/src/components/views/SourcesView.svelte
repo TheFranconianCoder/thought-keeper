@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { clearable } from '../../lib/clearable';
   import { captureSource, deleteSource, distillSource, openSourceFromHash, rebuildSourceTree, refreshSource, resetSource } from '../../lib/actions';
-  import type { Source } from '../../lib/api/types';
+  import type { Source, SourceListFilter } from '../../lib/api/types';
   import { fmtBytes, relTime } from '../../lib/format';
+  import { t, tn } from '../../lib/i18n/index.svelte';
   import { openAdd } from '../../lib/overlays';
   import { router } from '../../lib/router.svelte';
   import { connection } from '../../lib/stores/connection.svelte';
+  import { sourceWindow } from '../../lib/stores/source-window.svelte';
   import { sources, type SourceKindFilter } from '../../lib/stores/sources.svelte';
   import { system } from '../../lib/stores/system.svelte';
   import { rememberScroll } from '../../lib/scroll-memory';
@@ -14,52 +16,81 @@
   import { rememberSourcesTop } from '../../lib/sources-scroll';
   import { sourcePath } from '../../lib/router.svelte';
   import { navigate } from '../../lib/router.svelte';
-  import { matchesSourceFilter, statusLabel } from '../../lib/source-state';
+  import { statusLabel } from '../../lib/source-state';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
+  import SourceLamp from '../sources/SourceLamp.svelte';
   import SourceSteps from '../sources/SourceSteps.svelte';
-  import VirtualList from '../ui/VirtualList.svelte';
+  import SourceWindowList from '../sources/SourceWindowList.svelte';
 
   // The vault total comes from the status report, so the header is right from the first paint; the
-  // list itself appears complete, never page by page.
-  const totalSources = $derived(system.status?.index.sources ?? sources.count);
+  // list itself reads only the window around the viewport.
+  const totalSources = $derived(system.status?.index.sources ?? sourceWindow.count);
 
-  // The tag cloud counts what the sources carry: human labels and the agent's auto tags, once per
-  // source (the same rule the source-tags vocabulary uses).
-  const tagCloud = $derived.by(() => {
-    const counts = new Map<string, number>();
-    for (const source of sources.items) {
-      for (const tag of new Set([...(source.tags ?? []), ...(source.auto_tags ?? [])])) {
-        counts.set(tag, (counts.get(tag) ?? 0) + 1);
-      }
-    }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([tag, count]) => ({ tag, count }));
+  // The tag cloud is a FACET over the vault (human and derived labels, once per source), not a
+  // count over the loaded rows.
+  const tagCloud = $derived(sourceWindow.facets.tags);
+  const attachedCount = $derived(sourceWindow.facets.attached);
+
+  // The filter is server-side: a page must be the page of the FILTERED list, or its count would lie
+  // about the scroll height.
+  const activeFilter = $derived<SourceListFilter>({
+    kind: sources.kind === 'all' ? '' : sources.kind,
+    query: sources.query,
+    tag: sources.filter,
+    attachedOnly: sources.attachedOnly,
   });
-
-  const filtered = $derived(
-    sources.items.filter((source) =>
-      matchesSourceFilter(source, {
-        query: sources.query,
-        kind: sources.kind,
-        tag: sources.filter,
-        attachedOnly: sources.attachedOnly,
-      }),
-    ),
+  const hasFilter = $derived(
+    !!sources.query.trim() || sources.kind !== 'all' || !!sources.filter || sources.attachedOnly,
   );
 
-  // The filter is only useful when there is something to find; an ACTIVE filter stays visible so it
-  // can always be cleared, even after the last attached source was regularized.
-  const attachedCount = $derived(sources.items.filter((source) => source.attached === true).length);
+  // Seed the window with the filter that survived a trip into a source; the effect below only has
+  // to react to later changes.
+  untrack(() =>
+    sourceWindow.setFilter({
+      kind: sources.kind === 'all' ? '' : sources.kind,
+      query: sources.query,
+      tag: sources.filter,
+      attachedOnly: sources.attachedOnly,
+    }),
+  );
+  // The first page must be read even before the total is known: the list cannot ask for a range
+  // while it does not know how tall it is. The epoch effect below does that on mount and after a
+  // reset; the list handles the visible range once a count exists.
+
+  let filterTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const filter = activeFilter;
+    clearTimeout(filterTimer);
+    // Typing a search should not fire one window read per keystroke.
+    filterTimer = setTimeout(() => {
+      sourceWindow.setFilter(filter);
+    }, 100);
+    return () => clearTimeout(filterTimer);
+  });
 
   $effect(() => {
-    if (router.current.view === 'sources') void sources.loadList();
+    // A reset (filter, source event) discards the pages. When the list has a count, its own window
+    // asks for the visible range; only an empty/not-yet-known list needs the first page here.
+    void sourceWindow.epoch;
+    if (!sourceWindow.loaded || sourceWindow.count === 0) {
+      untrack(() => void sourceWindow.ensure(0, 30));
+    }
+  });
+
+  $effect(() => {
+    if (router.current.view !== 'sources') return;
+    if (!sourceWindow.facetsLoaded) untrack(() => void sourceWindow.loadFacets());
   });
 
   function setKind(next: SourceKindFilter): void {
     sources.kind = next;
+  }
+
+  function retry(): void {
+    sourceWindow.reset();
+    void sourceWindow.loadFacets();
   }
 
   // The list lives in the shell's page scroller. Keep its last offset so the detail's back button can
@@ -106,18 +137,18 @@
 <div class="page sources-page">
   <div class="page-head">
     <div>
-      <h1>Sources</h1>
+      <h1>{t('view.sources')}</h1>
       <p class="sub">
-        {#if sources.loaded || totalSources > 0}
-          {totalSources} immutable source{totalSources === 1 ? '' : 's'} · each file or link is read once
+        {#if sourceWindow.loaded || totalSources > 0}
+          {tn('sources.sub', totalSources)}
         {:else}
-          Loading sources…
+          {t('sources.loading')}
         {/if}
       </p>
     </div>
     <span class="spacer"></span>
     <button class="btn btn--primary" onclick={openAdd}>
-      <Icon name="plus" size={14} /> Add source
+      <Icon name="plus" size={14} /> {t('nav.addSource')}
     </button>
   </div>
 
@@ -127,33 +158,33 @@
       <input
         use:clearable
         class="input input--search"
-        placeholder="Filter sources…"
+        placeholder={t('sources.filterPlaceholder')}
         bind:value={sources.query}
-        aria-label="Filter sources"
+        aria-label={t('sources.filterAria')}
       />
     </div>
-    <div class="seg" role="tablist" aria-label="Source kind">
-      <button class:on={sources.kind === 'all'} onclick={() => setKind('all')}>All</button>
-      <button class:on={sources.kind === 'md'} onclick={() => setKind('md')}>Markdown</button>
-      <button class:on={sources.kind === 'pdf'} onclick={() => setKind('pdf')}>PDF</button>
-      <button class:on={sources.kind === 'txt'} onclick={() => setKind('txt')}>Text</button>
-      <button class:on={sources.kind === 'url'} onclick={() => setKind('url')}>URLs</button>
+    <div class="seg" role="tablist" aria-label={t('sources.kindAria')}>
+      <button class:on={sources.kind === 'all'} onclick={() => setKind('all')}>{t('sources.kindAll')}</button>
+      <button class:on={sources.kind === 'md'} onclick={() => setKind('md')}>{t('sources.kindMarkdown')}</button>
+      <button class:on={sources.kind === 'pdf'} onclick={() => setKind('pdf')}>{t('sources.kindPdf')}</button>
+      <button class:on={sources.kind === 'txt'} onclick={() => setKind('txt')}>{t('sources.kindText')}</button>
+      <button class:on={sources.kind === 'url'} onclick={() => setKind('url')}>{t('sources.kindUrls')}</button>
     </div>
     {#if attachedCount > 0 || sources.attachedOnly}
       <button
         class="chip attached-filter"
         class:chip--warn={sources.attachedOnly}
         aria-pressed={sources.attachedOnly}
-        title="Show only sources whose snapshot was attached by hand"
+        title={t('sources.attachedTitle')}
         onclick={() => (sources.attachedOnly = !sources.attachedOnly)}
       >
-        <Icon name="paperclip" size={12} /> Attached<span class="chip-count">{attachedCount}</span>
+        <Icon name="paperclip" size={12} /> {t('sources.attached')}<span class="chip-count">{attachedCount}</span>
       </button>
     {/if}
   </div>
 
   {#if tagCloud.length > 0}
-    <div class="tag-cloud" use:scrollFade use:rememberScroll={'source-tags'} aria-label="Source tags">
+    <div class="tag-cloud" use:scrollFade use:rememberScroll={'source-tags'} aria-label={t('sources.tagsAria')}>
       {#each tagCloud as tag (tag.tag)}
         <button
           class="chip"
@@ -167,147 +198,164 @@
   {/if}
   {#if sources.filter}
     <div class="tag-filter">
-      Filtered by <b>{sources.filter}</b>
-      <button class="link-button" onclick={() => (sources.filter = '')}>clear</button>
+      {t('sources.filteredBy')} <b>{sources.filter}</b>
+      <button class="link-button" onclick={() => (sources.filter = '')}>{t('common.clear')}</button>
     </div>
   {/if}
 
-  {#if sources.error}
+  {#if sourceWindow.error}
     <p class="notice notice--error">
-      {sources.error}
-      <button class="btn btn--ghost btn--sm" onclick={() => void sources.loadList()}>Try again</button>
+      {sourceWindow.error}
+      <button class="btn btn--ghost btn--sm" onclick={retry}>{t('common.retry')}</button>
     </p>
   {/if}
-  {#if !sources.loaded}
+  {#if !sourceWindow.loaded || (sourceWindow.loading && sourceWindow.count === 0)}
     {#if connection.state !== 'live'}
-      <EmptyState icon="sources" title="Nothing loaded" text="Thought Keeper is not reachable, so this is not the vault's answer." />
+      <EmptyState icon="sources" title={t('sources.nothingLoadedTitle')} text={t('sources.nothingLoadedText')} />
     {:else}
       <div class="stack">
         {#each Array(5) as _, index (index)}<span class="skeleton" style="height:52px"></span>{/each}
       </div>
     {/if}
-  {:else if sources.items.length === 0}
-    {#if !sources.error}
-      <EmptyState
-        icon="sources"
-        title="No sources yet"
-        text="Add a Markdown file, a PDF, plain text or a URL. Every source stays as a local, immutable snapshot."
-      >
-        <button class="btn btn--primary btn--sm" onclick={openAdd}>
-          <Icon name="plus" size={13} /> Add the first source
-        </button>
-      </EmptyState>
+  {:else if sourceWindow.count === 0}
+    {#if !sourceWindow.error}
+      {#if hasFilter}
+        <EmptyState icon="filter" title={t('sources.noMatchTitle')} text={t('sources.noMatchText')} />
+      {:else}
+        <EmptyState
+          icon="sources"
+          title={t('sources.emptyTitle')}
+          text={t('sources.emptyText')}
+        >
+          <button class="btn btn--primary btn--sm" onclick={openAdd}>
+            <Icon name="plus" size={13} /> {t('sources.addFirst')}
+          </button>
+        </EmptyState>
+      {/if}
     {/if}
-  {:else if filtered.length === 0}
-    <EmptyState icon="filter" title="No source matches" text="Clear the search or one of the filters." />
   {:else}
     <div class="source-list">
-      <VirtualList items={filtered} rowHeight={78} key={(source) => source.hash}>
-        {#snippet row(source: Source)}
-          {@const live = sources.progress[source.hash]}
-          {@const rowTagInfo = rowTags(source)}
-          <div class="source-row">
-            <button
-              class="source-open"
-              title={`${statusLabel(source, live)}`}
-              onclick={() => open(source)}
-            >
-              <span class="source-icon"><SourceIcon kind={source.kind} hash={source.hash} size={17} /></span>
+      <SourceWindowList
+        count={sourceWindow.count}
+        rowHeight={78}
+        itemAt={(index) => sourceWindow.itemAt(index)}
+        ensure={(start, end) => void sourceWindow.ensure(start, end)}
+        epoch={sourceWindow.epoch}
+      >
+        {#snippet row(source: Source | undefined)}
+          {#if source}
+            {@const live = sources.progress[source.hash]}
+            {@const rowTagInfo = rowTags(source)}
+            <div class="source-row">
+              <button
+                class="source-open"
+                title={statusLabel(source, live)}
+                onclick={() => open(source)}
+              >
+                <span class="source-icon"><SourceIcon kind={source.kind} hash={source.hash} size={17} /></span>
 
-              <div class="source-main">
-                <div class="source-title">
-                  {#if source.attached}
-                    <span
-                      class="tag tag--attached"
-                      title={`Snapshot attached by hand${source.attached_from ? ` from ${source.attached_from}` : ''}`}
-                    >
-                      <Icon name="paperclip" size={10} /> attached
-                    </span>
-                  {/if}
-                  {source.title || source.hash.slice(0, 12)}
-                  {#if source.bookmark}<span class="tag">link</span>{/if}
-                  {#if source.sitemap}<span class="tag">sitemap</span>{/if}
-                  {#if source.rss}<span class="tag">feed</span>{/if}
-                  {#if source.origin === 'sitemap'}<span class="tag">sitemap page</span>{/if}
-                  {#if source.origin === 'rss'}<span class="tag">feed item</span>{/if}
-                  {#if source.from_feed}<span class="tag">feed copy</span>{/if}
-                  {#if source.original_name?.startsWith('wiki:')}<span class="tag">wiki</span>{/if}
-                  {#if source.origin === 'wiki'}<span class="tag">wiki URL</span>{/if}
-                </div>
-                <div class="source-sub">
-                  <span>{source.kind} · {fmtBytes(source.bytes)} · {relTime(source.imported_at)}</span>
-                  <span class="source-origin">{subLine(source)}</span>
-                </div>
-                {#if rowTagInfo.shown.length > 0}
-                  <div class="source-tags">
-                    {#each rowTagInfo.shown as item (item.tag)}
-                      <span class="tag" class:tag--auto={item.auto}>{item.tag}</span>
-                    {/each}
-                    {#if rowTagInfo.more > 0}<span class="tag">+{rowTagInfo.more}</span>{/if}
+                <div class="source-main">
+                  <div class="source-title">
+                    {#if source.attached}
+                      <span
+                        class="tag tag--attached"
+                        title={source.attached_from
+                          ? t('sources.attachedTagTitleFrom', { from: source.attached_from })
+                          : t('sources.attachedTagTitle')}
+                      >
+                        <Icon name="paperclip" size={10} /> {t('sources.attachedTag')}
+                      </span>
+                    {/if}
+                    <span class="source-name truncate" title={source.title || source.hash.slice(0, 12)}>{source.title || source.hash.slice(0, 12)}</span>
+                    {#if source.bookmark}<span class="tag">{t('sources.tagLink')}</span>{/if}
+                    {#if source.sitemap}<span class="tag">{t('sources.tagSitemap')}</span>{/if}
+                    {#if source.rss}<span class="tag">{t('sources.tagFeed')}</span>{/if}
+                    {#if source.origin === 'sitemap'}<span class="tag">{t('sources.tagSitemapPage')}</span>{/if}
+                    {#if source.origin === 'rss'}<span class="tag">{t('sources.tagFeedItem')}</span>{/if}
+                    {#if source.from_feed}<span class="tag">{t('sources.tagFeedCopy')}</span>{/if}
+                    {#if source.original_name?.startsWith('wiki:')}<span class="tag">{t('sources.tagWiki')}</span>{/if}
+                    {#if source.origin === 'wiki'}<span class="tag">{t('sources.tagWikiUrl')}</span>{/if}
                   </div>
+                  <div class="source-sub">
+                    <span>{source.kind} · {fmtBytes(source.bytes)} · {relTime(source.imported_at)}</span>
+                    <span class="source-origin">{subLine(source)}</span>
+                  </div>
+                  {#if rowTagInfo.shown.length > 0}
+                    <div class="source-tags">
+                      {#each rowTagInfo.shown as item (item.tag)}
+                        <span class="tag" class:tag--auto={item.auto}>{item.tag}</span>
+                      {/each}
+                      {#if rowTagInfo.more > 0}<span class="tag">+{rowTagInfo.more}</span>{/if}
+                    </div>
+                  {/if}
+                </div>
+
+                <div class="source-status">
+                  <span class="source-label" class:working={!!source.running_step}>{statusLabel(source, live)}</span>
+                  {#if !source.bookmark}
+                    <SourceSteps {source} {live} />
+                  {/if}
+                </div>
+                <span class="source-lamp"><SourceLamp {source} {live} /></span>
+              </button>
+
+              <div class="source-actions">
+                {#if source.rss || source.sitemap}
+                  <button
+                    class="icon-btn"
+                    title={t('sources.actionRefresh')}
+                    onclick={(event) => act(event, () => void refreshSource(source.hash))}
+                  >
+                    <Icon name="refresh" size={14} />
+                  </button>
+                {:else}
+                  <button
+                    class="icon-btn"
+                    title={t('sources.actionCapture')}
+                    onclick={(event) => act(event, () => void captureSource(source.hash))}
+                  >
+                    <Icon name="capture" size={14} />
+                  </button>
+                  <button
+                    class="icon-btn"
+                    title={t('sources.actionOutline')}
+                    onclick={(event) => act(event, () => void rebuildSourceTree(source.hash))}
+                  >
+                    <Icon name="tree" size={14} />
+                  </button>
+                  <button
+                    class="icon-btn"
+                    title={t('sources.actionDistill')}
+                    onclick={(event) => act(event, () => void distillSource(source.hash))}
+                  >
+                    <Icon name="distill" size={14} />
+                  </button>
+                  <button
+                    class="icon-btn"
+                    title={t('sources.actionReset')}
+                    onclick={(event) => act(event, () => void resetSource(source.hash))}
+                  >
+                    <Icon name="reset" size={14} />
+                  </button>
+                {/if}
+                {#if !source.origin && !source.original_name?.startsWith('wiki:')}
+                  <button
+                    class="icon-btn icon-btn--danger"
+                    title={t('sources.actionDelete')}
+                    onclick={(event) => act(event, () => void deleteSource(source.hash))}
+                  >
+                    <Icon name="trash" size={14} />
+                  </button>
                 {/if}
               </div>
-
-              <div class="source-status">
-                <span class="source-label" class:working={!!source.running_step}>{statusLabel(source, live)}</span>
-                {#if !source.bookmark}
-                  <SourceSteps {source} {live} />
-                {/if}
-              </div>
-            </button>
-
-            <div class="source-actions">
-              {#if source.rss || source.sitemap}
-                <button
-                  class="icon-btn"
-                  title="Refresh — fetch the list again"
-                  onclick={(event) => act(event, () => void refreshSource(source.hash))}
-                >
-                  <Icon name="refresh" size={14} />
-                </button>
-              {:else}
-                <button
-                  class="icon-btn"
-                  title="Capture — read the source again"
-                  onclick={(event) => act(event, () => void captureSource(source.hash))}
-                >
-                  <Icon name="capture" size={14} />
-                </button>
-                <button
-                  class="icon-btn"
-                  title="Rebuild the outline"
-                  onclick={(event) => act(event, () => void rebuildSourceTree(source.hash))}
-                >
-                  <Icon name="tree" size={14} />
-                </button>
-                <button
-                  class="icon-btn"
-                  title="Distill — continue the claims of this source"
-                  onclick={(event) => act(event, () => void distillSource(source.hash))}
-                >
-                  <Icon name="distill" size={14} />
-                </button>
-                <button
-                  class="icon-btn"
-                  title="Reset the derivation"
-                  onclick={(event) => act(event, () => void resetSource(source.hash))}
-                >
-                  <Icon name="reset" size={14} />
-                </button>
-              {/if}
-              {#if !source.origin && !source.original_name?.startsWith('wiki:')}
-                <button
-                  class="icon-btn icon-btn--danger"
-                  title="Delete the source"
-                  onclick={(event) => act(event, () => void deleteSource(source.hash))}
-                >
-                  <Icon name="trash" size={14} />
-                </button>
-              {/if}
             </div>
-          </div>
+          {:else}
+            <div class="source-row source-row--skeleton" aria-hidden="true">
+              <span class="skeleton skeleton-row"></span>
+            </div>
+          {/if}
         {/snippet}
-      </VirtualList>
+      </SourceWindowList>
     </div>
   {/if}
 
@@ -343,6 +391,19 @@
   .source-row:hover,
   .source-row:focus-within {
     background: var(--bg-hover);
+  }
+
+  .source-row--skeleton {
+    padding: 0 9px;
+  }
+
+  .source-row--skeleton:hover {
+    background: transparent;
+  }
+
+  .skeleton-row {
+    width: 100%;
+    height: 56px;
   }
 
   .source-open {
@@ -394,8 +455,16 @@
     color: var(--ink);
     font-size: 13.5px;
     font-weight: 500;
-    text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .source-title > .tag {
+    flex: none;
+  }
+
+  .source-name {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .source-sub {
@@ -406,6 +475,16 @@
     color: var(--faint);
     font-size: 11.5px;
     white-space: nowrap;
+  }
+
+  .source-sub > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .source-sub > span:first-child {
+    flex: none;
   }
 
   .source-tags {
@@ -532,28 +611,31 @@
     margin-top: 14px;
   }
 
+  .source-lamp {
+    display: none;
+    flex: none;
+  }
+
   @media (max-width: 860px) {
+    /* Narrow list: the four step lights, the status line and the row actions are the wrong
+       information density. One lamp shows the whole derivation; the detail page carries the
+       actions, icon-only. */
     .source-status {
       display: none;
     }
 
     .source-actions {
-      position: static;
-      opacity: 1;
-      pointer-events: auto;
-      padding-left: 0;
-      background: transparent;
-      transform: none;
+      display: none;
+    }
+
+    .source-lamp {
+      display: inline-flex;
+      margin-right: 2px;
     }
   }
 
   @media (max-width: 640px) {
     .source-origin {
-      display: none;
-    }
-
-    .source-actions .icon-btn:nth-child(2),
-    .source-actions .icon-btn:nth-child(4) {
       display: none;
     }
   }

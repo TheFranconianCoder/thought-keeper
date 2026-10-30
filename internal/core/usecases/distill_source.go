@@ -46,6 +46,9 @@ type DistillSource struct {
 	Vocab   interfaces.VocabularyStore
 	Gateway interfaces.AgentGateway
 	Model   string
+	// Language is the language the claims are written in (ISO 639-1, empty = English). A source's
+	// own language never decides it; the claim must read the same whatever the document used.
+	Language string
 	// ReasoningEffort is passed to the model (see interfaces.AgentRequest).
 	ReasoningEffort string
 	MaxIterations   int
@@ -906,7 +909,7 @@ func (uc DistillSource) runPart(
 	loop := agents.Loop{
 		Gateway:         uc.Gateway,
 		Model:           uc.Model,
-		System:          agents.DistillSystem,
+		System:          agents.DistillSystemFor(uc.Language),
 		Tools:           tools,
 		ReasoningEffort: uc.ReasoningEffort,
 		MaxIterations:   unitBudget(uc.MaxIterations),

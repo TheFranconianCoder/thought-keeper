@@ -1,5 +1,6 @@
 <script lang="ts">
   import { confirmDialog, settleConfirm } from '../../lib/confirm.svelte';
+  import { t } from '../../lib/i18n/index.svelte';
   import Modal from './Modal.svelte';
 
   const request = $derived(confirmDialog.request);
@@ -26,13 +27,13 @@
 >
   <div class="dialog-actions">
     <button class="btn btn--secondary" onclick={() => settleConfirm(false)}>
-      {request?.cancelLabel ?? 'Cancel'}
+      {request?.cancelLabel ?? t('common.cancel')}
     </button>
     <button
       class="btn {request?.danger ? 'btn--danger' : 'btn--primary'}"
       onclick={() => settleConfirm(true)}
     >
-      {request?.confirmLabel ?? 'Confirm'}
+      {request?.confirmLabel ?? t('common.confirm')}
     </button>
   </div>
 </Modal>

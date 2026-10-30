@@ -13,6 +13,20 @@ import (
 	ulid "github.com/oklog/ulid/v2"
 )
 
+const countAttachedSources = `-- name: CountAttachedSources :one
+SELECT COUNT(*) FROM sources
+WHERE (CASE WHEN json_valid(meta)
+           THEN COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '')
+           ELSE '' END) IN ('true', '1')
+`
+
+func (q *Queries) CountAttachedSources(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAttachedSources)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRecentContentSources = `-- name: CountRecentContentSources :one
 SELECT count(*) FROM sources
 WHERE imported_at >= ?
@@ -131,6 +145,49 @@ SELECT count(*) FROM sources WHERE json_valid(meta) AND json_extract(meta, '$.wi
 
 func (q *Queries) CountSourcesByWikiPage(ctx context.Context, meta string) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countSourcesByWikiPage, meta)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSourcesFiltered = `-- name: CountSourcesFiltered :one
+SELECT COUNT(*) FROM sources
+WHERE (?1 = '' OR kind = ?1)
+  AND (?2 = ''
+       OR instr(lower(title), lower(?2)) > 0
+       OR instr(lower(original_name), lower(?2)) > 0
+       OR instr(lower(COALESCE(url, '')), lower(?2)) > 0
+       OR instr(lower(tags), lower(?2)) > 0
+       OR instr(lower(auto_tags), lower(?2)) > 0)
+  AND (?3 = ''
+       OR instr(tags, '"' || ?3 || '"') > 0
+       OR instr(auto_tags, '"' || ?3 || '"') > 0)
+  AND (?4 = 0
+       OR (CASE WHEN json_valid(meta)
+                THEN COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '')
+                ELSE '' END) IN ('true', '1'))
+  AND (?5 = 0 OR bookmark = 1)
+  AND (?6 = 0 OR instr(steps, '"state":"failed"') > 0)
+`
+
+type CountSourcesFilteredParams struct {
+	Kind      interface{} `json:"kind"`
+	Query     interface{} `json:"query"`
+	Tag       interface{} `json:"tag"`
+	Attached  interface{} `json:"attached"`
+	Bookmarks interface{} `json:"bookmarks"`
+	Failed    interface{} `json:"failed"`
+}
+
+func (q *Queries) CountSourcesFiltered(ctx context.Context, arg CountSourcesFilteredParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSourcesFiltered,
+		arg.Kind,
+		arg.Query,
+		arg.Tag,
+		arg.Attached,
+		arg.Bookmarks,
+		arg.Failed,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -579,6 +636,92 @@ ORDER BY title COLLATE NOCASE, hash
 // owns nothing itself; the page id is the owner it was recorded under.
 func (q *Queries) ListSourcesByWikiPage(ctx context.Context, wikiPage string) ([]Source, error) {
 	rows, err := q.db.QueryContext(ctx, listSourcesByWikiPage, wikiPage)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Source
+	for rows.Next() {
+		var i Source
+		if err := rows.Scan(
+			&i.ID,
+			&i.Hash,
+			&i.Kind,
+			&i.Ext,
+			&i.Path,
+			&i.Url,
+			&i.Title,
+			&i.OriginalName,
+			&i.Bytes,
+			&i.Pages,
+			&i.TreeState,
+			&i.Steps,
+			&i.UrlStatus,
+			&i.UrlCheckedAt,
+			&i.Bookmark,
+			&i.ImportedAt,
+			&i.Meta,
+			&i.Tags,
+			&i.AutoTags,
+			&i.AutoTagsAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSourcesFiltered = `-- name: ListSourcesFiltered :many
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at FROM sources
+WHERE (?1 = '' OR kind = ?1)
+  AND (?2 = ''
+       OR instr(lower(title), lower(?2)) > 0
+       OR instr(lower(original_name), lower(?2)) > 0
+       OR instr(lower(COALESCE(url, '')), lower(?2)) > 0
+       OR instr(lower(tags), lower(?2)) > 0
+       OR instr(lower(auto_tags), lower(?2)) > 0)
+  AND (?3 = ''
+       OR instr(tags, '"' || ?3 || '"') > 0
+       OR instr(auto_tags, '"' || ?3 || '"') > 0)
+  AND (?4 = 0
+       OR (CASE WHEN json_valid(meta)
+                THEN COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '')
+                ELSE '' END) IN ('true', '1'))
+  AND (?5 = 0 OR bookmark = 1)
+  AND (?6 = 0 OR instr(steps, '"state":"failed"') > 0)
+ORDER BY imported_at DESC
+LIMIT ?8 OFFSET ?7
+`
+
+type ListSourcesFilteredParams struct {
+	Kind      interface{} `json:"kind"`
+	Query     interface{} `json:"query"`
+	Tag       interface{} `json:"tag"`
+	Attached  interface{} `json:"attached"`
+	Bookmarks interface{} `json:"bookmarks"`
+	Failed    interface{} `json:"failed"`
+	Offset    int64       `json:"offset"`
+	Limit     int64       `json:"limit"`
+}
+
+func (q *Queries) ListSourcesFiltered(ctx context.Context, arg ListSourcesFilteredParams) ([]Source, error) {
+	rows, err := q.db.QueryContext(ctx, listSourcesFiltered,
+		arg.Kind,
+		arg.Query,
+		arg.Tag,
+		arg.Attached,
+		arg.Bookmarks,
+		arg.Failed,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}

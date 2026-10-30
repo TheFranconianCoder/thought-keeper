@@ -1,0 +1,53 @@
+/** Die Linse „Wiki“: die Seitenliste, der Editor und seine Aktionen. */
+export const wikiDe: Record<string, string> = {
+  'wiki.newPage': 'Neue Seite',
+  'wiki.listAria': 'Wiki-Seiten',
+  'wiki.filterPlaceholder': 'Seiten filtern…',
+  'wiki.filterAria': 'Wiki-Seiten filtern',
+  'wiki.tagsAria': 'Wiki-Schlagwörter',
+  'wiki.filteredBy': 'Gefiltert nach',
+  'wiki.pageCount.one': '{count} Seite',
+  'wiki.pageCount.many': '{count} Seiten',
+  'wiki.noMatch': 'Keine Seite passt',
+  'wiki.noMatchText': 'Entferne den Filter, um alle Seiten zu sehen.',
+  'wiki.emptyTitle': 'Noch keine Wiki-Seiten',
+  'wiki.emptyText':
+    'Eine Wiki-Seite ist Markdown, das du selbst schreibst. Beim Speichern fließt sie auch in die Aussagen-Pipeline ein.',
+  'wiki.writeFirst': 'Erste Seite schreiben',
+  'wiki.untitled': 'Ohne Titel',
+
+  'wiki.detailAria': 'Wiki-Seite',
+  'wiki.backAll': '← Alle Seiten',
+  'wiki.kicker': 'Wiki-Seite',
+  'wiki.copyLabel': 'Wiki-ID',
+  'wiki.updatedAt': '· aktualisiert {date}',
+  'wiki.openSource': 'Quelle',
+  'wiki.edit': 'Bearbeiten',
+  'wiki.autoTagTitle': 'Von der App aus der Seite abgeleitet; du kannst weiterhin danach filtern.',
+  'wiki.autoTag': 'automatisch',
+
+  'wiki.editPage': 'Seite bearbeiten',
+  'wiki.editorMode': 'Editor-Modus',
+  'wiki.write': 'Schreiben',
+  'wiki.preview': 'Vorschau',
+  'wiki.nothingToPreview': 'Noch nichts zum Anzeigen.',
+  'wiki.fieldTitle': 'Titel',
+  'wiki.titlePlaceholder': 'Seitentitel',
+  'wiki.fieldTags': 'Schlagwörter',
+  'wiki.commaSeparated': '— durch Kommas getrennt',
+  'wiki.bodyPlaceholder':
+    '# Eine Seite\n\nSchreibe hier Markdown. Verweise auf eine Wiki-Seite mit [[wiki:<id>]], eine Quelle mit [[source:<hash>]].',
+  'wiki.saving': 'Wird gespeichert…',
+  'wiki.savePage': 'Seite speichern',
+  'wiki.saveHint': 'Speichern schreibt die Seite und verarbeitet ihre Quelle ab dem Einlesen neu.',
+
+  'wiki.saved': 'Wiki-Seite gespeichert — ihre Quelle wird neu verarbeitet.',
+  'wiki.saveFailed': 'Die Seite konnte nicht gespeichert werden: {error}',
+  'wiki.deleteTitle': '„{page}“ löschen?',
+  'wiki.thisPage': 'diese Seite',
+  'wiki.deleteMessage':
+    'Die Seite und ihre Quellrepräsentation werden entfernt. Die Quellbytes wandern in den Papierkorb; die Seitendatei wird gelöscht.',
+  'wiki.deleteConfirm': 'Seite löschen',
+  'wiki.deleted': 'Wiki-Seite gelöscht.',
+  'wiki.deleteFailed': 'Die Seite konnte nicht gelöscht werden: {error}',
+};

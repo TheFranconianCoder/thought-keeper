@@ -179,8 +179,8 @@ Rules:
 - A bare [[<title>]] is a claim finder query, never a citation. Every citation starts with
   the prefix claim: or source:.
 - Do NOT cite a cluster, a page or a chapter.
-- A source's overview is written in English; translate its meaning into the answer's language. Never
-  copy an overview's English sentences into an answer in another language.
+- A source's overview may be written in another language than the answer; translate its meaning,
+  never copy its sentences into an answer in another language.
 - If the sources or claims do not contain the answer, say so plainly.
 - Answer ENTIRELY in the language of the QUESTION's prose. Every sentence, heading and list item uses
   it; never switch to the language of a claim, a source or a proper noun in the question.
@@ -356,12 +356,14 @@ Rules:
 - If the claims are few, write a short summary. Never pad.`
 
 // SourceSummaryUser hands over the material a summary may use: the title, the outline's structure,
-// and the claims themselves.
-func SourceSummaryUser(title, language, outline, claims string) string {
+// and the claims themselves. outputLanguage is the configured summary language; the source's own
+// language is context only and never decides what the summary is written in.
+func SourceSummaryUser(title, language, outputLanguage, outline, claims string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Source title: %s\n", title)
 	if language != "" {
-		fmt.Fprintf(&b, "Source language (for context only; write the summary in English): %s\n", language)
+		fmt.Fprintf(&b, "Source language (for context only; write the summary in %s): %s\n",
+			LanguageName(outputLanguage), language)
 	}
 	if outline != "" {
 		b.WriteString("\nOutline (structure only — not knowledge of its own):\n")

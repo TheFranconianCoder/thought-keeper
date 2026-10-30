@@ -25,6 +25,53 @@ func TestDistillClaimsAreEnglish(t *testing.T) {
 	}
 }
 
+// TestDistillSystemForKeepsTheRulesAndSwitchesTheLanguage: a configured claim language changes the
+// language clauses only. The atom rules — standalone-ness, provenance, flat topics — stay.
+func TestDistillSystemForKeepsTheRulesAndSwitchesTheLanguage(t *testing.T) {
+	german := agents.DistillSystemFor("de")
+	for _, want := range []string{
+		"in GERMAN, regardless of the source's language",
+		"short, flat, GERMAN topic",
+		"THE ATOM MUST STAND ALONE",
+	} {
+		if !strings.Contains(german, want) {
+			t.Errorf("German DistillSystem lacks %q", want)
+		}
+	}
+	if strings.Contains(german, "ENGLISH") {
+		t.Error("German DistillSystem still names English")
+	}
+	if agents.DistillSystemFor("") != agents.DistillSystem {
+		t.Error("an empty language must keep the English prompt")
+	}
+}
+
+// TestSummarySystemForSwitchesTheLanguage: the overview follows the configured language too.
+func TestSummarySystemForSwitchesTheLanguage(t *testing.T) {
+	german := agents.SummarySystemFor("de")
+	if !strings.Contains(german, "Write in GERMAN, regardless of the source's language.") {
+		t.Errorf("German SummarySystem lacks the language clause:\n%s", german)
+	}
+	user := agents.SourceSummaryUser("Titel", "de", "fr", "", "eine Aussage")
+	if !strings.Contains(user, "write the summary in French") {
+		t.Errorf("SourceSummaryUser lacks the output language: %q", user)
+	}
+	if agents.SummarySystemFor("") != agents.SummarySystem {
+		t.Error("an empty language must keep the English prompt")
+	}
+}
+
+// TestNoClaimsSummaryFollowsTheSummaryLanguage: the honest one-line overview is written in the
+// configured language too, because it is stored in the vault and displayed as the overview.
+func TestNoClaimsSummaryFollowsTheSummaryLanguage(t *testing.T) {
+	if got := agents.NoClaimsSummary("de"); !strings.Contains(got, "keine Aussagen") {
+		t.Errorf("German no-claims summary = %q", got)
+	}
+	if got := agents.NoClaimsSummary(""); !strings.Contains(got, "no claims") {
+		t.Errorf("default no-claims summary = %q", got)
+	}
+}
+
 // TestQueryPromptKeepsTheAnswerInTheQuestionLanguage: the answer language is the question's prose,
 // not the language of the claims, the vault or a proper noun inside the question. A German question
 // that names a Chinese source is answered in German.

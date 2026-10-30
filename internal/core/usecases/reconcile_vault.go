@@ -97,7 +97,7 @@ func (uc ReconcileVault) Execute(ctx context.Context) (ReconcileResult, error) {
 	if limit <= 0 {
 		limit = 500
 	}
-	srcs, err := uc.Index.ListSources(ctx, "", limit, uc.Offset)
+	srcs, err := uc.Index.ListSources(ctx, entities.SourceFilter{}, limit, uc.Offset)
 	if err != nil {
 		return ReconcileResult{}, err
 	}

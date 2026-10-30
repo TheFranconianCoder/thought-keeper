@@ -28,6 +28,19 @@ type Config struct {
 	PDF      PDFConfig      `yaml:"pdf"`
 	OCR      OCRConfig      `yaml:"ocr"`
 	Lint     LintConfig     `yaml:"lint"`
+	// Language holds the language of what the app WRITES: the interface's default, the claims the
+	// distill step derives and the overviews the summary step writes. A source's own language is
+	// detected per source and only tunes search; it never decides the output language.
+	Language LanguageConfig `yaml:"language"`
+}
+
+// LanguageConfig is the content and interface language. Every value is an ISO 639-1 code (an ISO
+// 639-3 code when no 639-1 exists); an empty value falls back to English. The UI language is only a
+// DEFAULT: the PWA remembers the reader's own choice.
+type LanguageConfig struct {
+	UI      string `yaml:"ui"`
+	Claims  string `yaml:"claims"`
+	Summary string `yaml:"summary"`
 }
 
 type AppConfig struct {
@@ -140,6 +153,10 @@ type PipelineConfig struct {
 	// derived twice at once). A source stuck against a slow endpoint must not hold up every other
 	// document behind it.
 	ParallelRuns int `yaml:"parallel_runs"`
+	// ParallelQueries is how many Ask runs run at the same time. Ask is never gated, and one question
+	// waiting for a slow model must not hold the next one: the reader can ask again while an answer
+	// is still being written.
+	ParallelQueries int `yaml:"parallel_queries"`
 	// ParallelParts distills that many parts of a document at the same time. Parts are independent
 	// (they only need the tree), so this divides a long document's wall-clock.
 	ParallelParts int `yaml:"parallel_parts"`
@@ -250,7 +267,7 @@ func Defaults() Config {
 		},
 		Pipeline: PipelineConfig{
 			Auto: true, AutoDistill: true, Debounce: "3s", RunTimeout: "10m", ClusterTimeout: "30m",
-			PartsPerRun: 12, AutoContinue: true, ParallelParts: 4, ParallelRuns: 4,
+			PartsPerRun: 12, AutoContinue: true, ParallelParts: 4, ParallelRuns: 4, ParallelQueries: 3,
 			ReconcileInterval: "1m", ReconcileBatch: 500,
 		},
 		Cluster: ClusterConfig{
@@ -275,7 +292,8 @@ func Defaults() Config {
 			MaxPages:            500,
 			Timeout:             "5m",
 		},
-		Lint: LintConfig{ProgrammaticOnCompile: true},
+		Lint:     LintConfig{ProgrammaticOnCompile: true},
+		Language: LanguageConfig{UI: "en", Claims: "en", Summary: "en"},
 	}
 }
 
@@ -363,6 +381,9 @@ func applyDefaults(c *Config) {
 	if c.Pipeline.ParallelRuns <= 0 {
 		c.Pipeline.ParallelRuns = d.Pipeline.ParallelRuns
 	}
+	if c.Pipeline.ParallelQueries <= 0 {
+		c.Pipeline.ParallelQueries = d.Pipeline.ParallelQueries
+	}
 	if c.Pipeline.ParallelParts <= 0 {
 		c.Pipeline.ParallelParts = d.Pipeline.ParallelParts
 	}
@@ -417,6 +438,9 @@ func applyDefaults(c *Config) {
 	if len(c.OCR.Languages) == 0 {
 		c.OCR.Languages = d.OCR.Languages
 	}
+	c.Language.UI = normalizeLanguage(c.Language.UI, d.Language.UI)
+	c.Language.Claims = normalizeLanguage(c.Language.Claims, d.Language.Claims)
+	c.Language.Summary = normalizeLanguage(c.Language.Summary, d.Language.Summary)
 	// The OpenAI key/base URL are read from the environment even when the config
 	// file has no `openai:` block, so OPENAI_API_KEY just works.
 	if c.OpenAI.APIKey == "" {
@@ -462,6 +486,17 @@ func applyDefaults(c *Config) {
 	if v := os.Getenv("OPENAI_RETRY_BACKOFF"); v != "" {
 		c.OpenAI.RetryBackoff = v
 	}
+}
+
+// normalizeLanguage trims and lower-cases one language code, falling back to the default when the
+// value is empty. A code the app does not know is still accepted: it is handed to the model as a
+// language name hint, and a wrong guess is corrected in the config rather than silently ignored.
+func normalizeLanguage(value, fallback string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 // VaultRoot returns the absolute vault root.

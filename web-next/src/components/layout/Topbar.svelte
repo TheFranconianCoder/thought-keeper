@@ -4,54 +4,45 @@
   import { sources } from '../../lib/stores/sources.svelte';
   import { wiki } from '../../lib/stores/wiki.svelte';
   import { asks } from '../../lib/stores/asks.svelte';
+  import { cycleLocale, localeLabel, t } from '../../lib/i18n/index.svelte';
   import { router, navigate } from '../../lib/router.svelte';
   import { pipelineLabel } from '../../lib/source-state';
   import { cycleTheme, themeIcon, themeLabel } from '../../lib/theme.svelte';
-  import { toggleSidebar } from '../../lib/ui.svelte';
   import Icon from '../ui/Icon.svelte';
 
-  const VIEW_LABEL: Record<string, string> = {
-    claims: 'Claims',
-    wiki: 'Wiki',
-    sources: 'Sources',
-    source: 'Sources',
-    attention: 'Attention',
-    bookmarks: 'Bookmarks',
-    ask: 'Ask',
-    status: 'Status',
+  const viewLabel = (view: string): string => {
+    const key = `view.${view}`;
+    const label = t(key);
+    return label === key ? view : label;
   };
 
   const crumb = $derived.by(() => {
     const route = router.current;
     if (route.view === 'claims' && claims.selected) {
-      return { parent: 'Claims', current: claims.selected.topic || claims.selected.claim };
+      return { parent: t('view.claims'), current: claims.selected.topic || claims.selected.claim };
     }
     if (route.view === 'source') {
-      return { parent: 'Sources', current: sources.selected?.title || route.id.slice(0, 12) };
+      return { parent: t('view.sources'), current: sources.selected?.title || route.id.slice(0, 12) };
     }
     if (route.view === 'wiki') {
-      if (route.id === 'new') return { parent: 'Wiki', current: 'New page' };
-      if (wiki.selected) return { parent: 'Wiki', current: wiki.selected.title };
-      return { parent: '', current: 'Wiki' };
+      if (route.id === 'new') return { parent: t('view.wiki'), current: t('wiki.newPage') };
+      if (wiki.selected) return { parent: t('view.wiki'), current: wiki.selected.title };
+      return { parent: '', current: t('view.wiki') };
     }
     if (route.view === 'ask' && asks.selected) {
-      return { parent: 'Ask', current: asks.selected.question };
+      return { parent: t('view.ask'), current: asks.selected.question };
     }
-    return { parent: '', current: VIEW_LABEL[route.view] ?? 'Claims' };
+    return { parent: '', current: viewLabel(route.view) };
   });
 
   const activity = $derived(
     pipelineLabel(system.pipeline) ||
-      (system.banner ? `${system.banner.op || 'working'}…` : ''),
+      (system.banner ? `${system.banner.op || t('shell.activity.working')}…` : ''),
   );
 </script>
 
 <header class="topbar">
-  <button class="icon-btn menu-button" title="Menu" onclick={toggleSidebar}>
-    <Icon name="menu" size={18} />
-  </button>
-
-  <div class="crumbs" aria-label="Breadcrumb">
+  <div class="crumbs" aria-label={t('nav.breadcrumb')}>
     {#if crumb.parent}
       <span class="crumb-parent">{crumb.parent}</span>
       <span class="sep">/</span>
@@ -65,13 +56,16 @@
     {#if activity}
       <button
         class="activity-chip"
-        title="Open the job queue"
+        title={t('shell.activity.title')}
         onclick={() => navigate('#/status')}
       >
         <span class="spinner"></span>
         <span class="truncate">{activity}</span>
       </button>
     {/if}
+    <button class="icon-btn" title={t('language.title', { language: localeLabel() })} onclick={cycleLocale}>
+      <Icon name="language" size={17} />
+    </button>
     <button class="icon-btn" title={themeLabel()} onclick={cycleTheme}>
       <Icon name={themeIcon()} size={17} />
     </button>

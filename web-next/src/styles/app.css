@@ -352,6 +352,10 @@ img {
   margin-top: 10px;
 }
 
+.nav-section--home {
+  margin-top: 0;
+}
+
 .nav-label {
   padding: 0 9px 5px;
   color: var(--faint);
@@ -452,10 +456,6 @@ img {
   box-shadow: 0 0 0 3px var(--danger-soft);
 }
 
-.sidebar-backdrop {
-  display: none;
-}
-
 /* ── Top bar ───────────────────────────────────────────────────────────── */
 
 .topbar {
@@ -522,10 +522,6 @@ img {
   width: 10px;
   height: 10px;
   border-width: 1.5px;
-}
-
-.icon-btn.menu-button {
-  display: none;
 }
 
 .offline-banner {
@@ -623,6 +619,8 @@ img {
   justify-content: center;
   gap: 6px;
   height: 32px;
+  min-width: 0;
+  max-width: 100%;
   padding: 0 12px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -632,6 +630,14 @@ img {
   font-weight: 520;
   white-space: nowrap;
   transition: background 0.14s var(--ease), border-color 0.14s var(--ease), color 0.14s var(--ease);
+}
+
+/* A button label that may be longer than the button. The icon stays; the text ends in an ellipsis. */
+.btn-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .btn:hover {
@@ -689,6 +695,25 @@ img {
   height: 38px;
   padding: 0 16px;
   font-size: 13.5px;
+}
+
+/* A detail view's action bar keeps the icon and drops the label when the window is narrow. The
+   label is wrapped so it can disappear without touching the icon; the title/aria-label carries the
+   word instead. */
+@media (max-width: 860px) {
+  .btn-label {
+    display: none;
+  }
+
+  .btn--action {
+    width: 32px;
+    gap: 0;
+    padding: 0;
+  }
+
+  .btn--sm.btn--action {
+    width: 27px;
+  }
 }
 
 .icon-btn {
@@ -1189,6 +1214,12 @@ button.chip:hover {
   animation: spin 0.7s linear infinite;
 }
 
+.spinner--sm {
+  width: 11px;
+  height: 11px;
+  border-width: 1.5px;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -1244,6 +1275,7 @@ button.chip:hover {
 }
 
 .truncate {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1534,32 +1566,9 @@ html[data-wco="1"] .brand a {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* Narrow layout: one navigation surface, and it is the footer. No drawer, nothing to dismiss. */
   .sidebar {
-    position: fixed;
-    inset: 0 auto 0 0;
-    z-index: 40;
-    width: min(84vw, var(--sidebar-w));
-    transform: translateX(-102%);
-    transition: transform 0.22s var(--ease);
-    box-shadow: var(--shadow-pop);
-  }
-
-  .sidebar.open {
-    transform: translateX(0);
-  }
-
-  .sidebar-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 39;
-    display: block;
-    border: 0;
-    background: rgb(0 0 0 / 35%);
-    backdrop-filter: blur(2px);
-  }
-
-  .icon-btn.menu-button {
-    display: inline-flex;
+    display: none;
   }
 
   .topbar {
@@ -1575,14 +1584,30 @@ html[data-wco="1"] .brand a {
   }
 }
 
+@media (max-width: 900px) {
+  /* The page head is a column in the narrow layout: the title/subtitle take the full width and the
+     actions sit on their own row underneath. A wrap driven by the text length put the same button
+     in a different place in every language. */
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .page-head .spacer {
+    display: none;
+  }
+
+  .page-head > .btn,
+  .page-head .head-actions,
+  .page-head > .chip {
+    align-self: flex-start;
+  }
+}
+
 @media (max-width: 640px) {
   .page {
     padding: 18px 15px 48px;
-  }
-
-  .page-head {
-    align-items: flex-start;
-    flex-wrap: wrap;
   }
 
   .page-head h1 {

@@ -1,0 +1,38 @@
+/** The application shell: navigation, topbar, search palette and the small dialogs. */
+export const shellEn: Record<string, string> = {
+  'shell.activity.title': 'Open the job queue',
+  'shell.activity.working': 'working…',
+
+  'search.close': 'Close search',
+  'search.aria': 'Search',
+  'search.layerAria': 'Search layer',
+  'search.claims': 'Claims',
+  'search.sources': 'Sources',
+  'search.placeholderClaims': 'Search claims…',
+  'search.placeholderSources': 'Search sources…',
+  'search.searching': 'Searching…',
+  'search.typeTwo': 'Type at least two characters.',
+  'search.noClaimMatch': 'No claim matches “{query}”.',
+  'search.noSourceMatch': 'No source matches “{query}”.',
+  'search.hitClaim': 'claim',
+  'search.hitSource': 'source',
+  'search.navigate': 'navigate',
+  'search.open': 'open',
+  'search.closeHint': 'close',
+
+  'add.title': 'Add source',
+  'add.description':
+    'A Markdown file, a PDF, plain text, a URL, an RSS/Atom feed — or many URLs, one per line.',
+  'add.pathLabel': 'File path or URL',
+  'add.placeholder': '/path/to/file.pdf\nhttps://example.com/article\nhttps://another.example.org/post',
+  'add.bookmarkTitle': 'Keep as a bookmark',
+  'add.bookmarkHint': 'Collect the link without indexing its text.',
+  'add.dropPrefix': 'Drop files here, or ',
+  'add.browse': 'browse',
+  'add.dropSuffix': '.',
+  'add.batchPrefix': 'A ',
+  'add.batchMiddle': ' or ',
+  'add.batchSuffix': ' file of URLs becomes a batch.',
+  'add.oneAtATime': 'Add one file path at a time, or one URL per line for a batch.',
+  'add.submit': 'Add source',
+};

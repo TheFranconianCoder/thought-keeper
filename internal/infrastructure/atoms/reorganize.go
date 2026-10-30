@@ -68,18 +68,17 @@ func (s *Store) DetectLegacyFolders() (folders []string, claims, indexes int, er
 	return folders, claims, indexes, nil
 }
 
-// Reorganize moves every atom out of those folders to its canonical path (`<ab>/<cd>/<id>.md`), takes
-// its usage record along, and removes the folder once nothing is left in it. It reports what it did:
-// the claims it moved, the folders it removed, the generated topic indexes it deleted, the files it
-// could not read (an atom is never thrown away because it could not be parsed — such a file stays
-// where it is and the folder stays with it), and the folders that still hold something.
+// Reorganize moves every atom out of those folders to its canonical path (`<ab>/<cd>/<id>.md`) and
+// removes the folder once nothing is left in it. It reports what it did: the claims it moved, the
+// folders it removed, the generated topic indexes it deleted, the files it could not read (an atom is
+// never thrown away because it could not be parsed — such a file stays where it is and the folder
+// stays with it), and the folders that still hold something.
 //
-// The indexes go because they cannot be kept: they catalog a FOLDER, and there are no topic folders
-// any more. `atoms/index.md` — the topic catalog — stays and is rewritten from the index, so the
-// vault keeps the one index that still describes something.
-// The atoms it moved are RETURNED, not only counted: the index has to learn their new paths before
-// anything writes an atom's usage record — a record is written beside its atom, so a stale path in the
-// index recreates the very folder this move just removed.
+// The branch indexes go because they cannot be kept: they catalog a FOLDER, and there are no topic
+// folders any more. A stale atoms/index.md is removed by the use case after the move; the topic
+// catalog is the SQLite index's job.
+// The atoms it moved are RETURNED, not only counted: the index must learn their new paths before
+// anything reads or writes them again, or a stale path keeps pointing at the folder this move removed.
 func (s *Store) Reorganize(ctx context.Context) (moved []entities.Atom, folders, indexes, skipped int, kept []string, err error) {
 	legacy, _, _, err := s.DetectLegacyFolders()
 	if err != nil {
@@ -128,8 +127,8 @@ func (s *Store) Reorganize(ctx context.Context) (moved []entities.Atom, folders,
 				continue
 			}
 			// The generated index of the old layout has no home in the new one: the topic is a field
-			// now, and atoms/index.md carries the topic list. Its claims are the files beside it, so
-			// nothing is lost by removing it — and it is COUNTED, never silently dropped.
+			// now, and the topic catalog is the SQLite index's job. Its claims are the files beside
+			// it, so nothing is lost by removing it — and it is COUNTED, never silently dropped.
 			if e.Name() == "index.md" {
 				if removeErr := os.Remove(src); removeErr != nil {
 					return moved, folders, indexes, skipped, kept, fmt.Errorf("atoms: remove index: %w", removeErr)

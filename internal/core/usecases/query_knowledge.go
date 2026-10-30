@@ -237,10 +237,7 @@ func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question 
 				if limit > recentSourceLimit {
 					limit = recentSourceLimit
 				}
-				offset := in.Offset
-				if offset < 0 {
-					offset = 0
-				}
+				offset := max(in.Offset, 0)
 				recent, err := uc.Index.ListRecentSources(ctx, since, limit, offset)
 				if err != nil {
 					return "", err

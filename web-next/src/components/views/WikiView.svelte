@@ -2,6 +2,7 @@
   import { clearable } from '../../lib/clearable';
   import { untrack } from 'svelte';
   import { deleteWikiPage, saveWikiPage } from '../../lib/actions';
+  import { t, tn } from '../../lib/i18n/index.svelte';
   import { navigate, router, sourcePath, wikiPath } from '../../lib/router.svelte';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
@@ -126,10 +127,10 @@
 </script>
 
 <div class="page wiki-page" class:split={detailOpen}>
-  <section class="wiki-list-pane" aria-label="Wiki pages">
+  <section class="wiki-list-pane" aria-label={t('wiki.listAria')}>
     <div class="list-head">
       <div class="list-title">
-        <h1>Wiki</h1>
+        <h1>{t('view.wiki')}</h1>
         <span class="count">{wiki.count}</span>
       </div>
       <div class="row-inline">
@@ -138,17 +139,22 @@
           <input
             use:clearable
             class="input input--search"
-            placeholder="Filter pages…"
+            placeholder={t('wiki.filterPlaceholder')}
             bind:value={query}
-            aria-label="Filter wiki pages"
+            aria-label={t('wiki.filterAria')}
           />
         </div>
-        <button class="icon-btn icon-btn--bordered" title="New page" onclick={startNew}>
+        <button class="icon-btn icon-btn--bordered" title={t('wiki.newPage')} onclick={startNew}>
           <Icon name="plus" />
         </button>
       </div>
       {#if wiki.tags.length > 0}
-        <div class="tag-cloud" use:scrollFade use:rememberScroll={'wiki-tags'} aria-label="Wiki tags">
+        <div
+          class="tag-cloud"
+          use:scrollFade
+          use:rememberScroll={'wiki-tags'}
+          aria-label={t('wiki.tagsAria')}
+        >
           {#each wiki.tags as tag (tag.tag)}
             <button
               class="chip"
@@ -162,10 +168,10 @@
       {/if}
       <div class="list-caption">
         {#if wiki.filter}
-          Filtered by <b>{wiki.filter}</b>
-          <button class="link-button" onclick={() => (wiki.filter = '')}>clear</button>
+          {t('wiki.filteredBy')} <b>{wiki.filter}</b>
+          <button class="link-button" onclick={() => (wiki.filter = '')}>{t('common.clear')}</button>
         {:else}
-          {pages.length} page{pages.length === 1 ? '' : 's'}
+          {tn('wiki.pageCount', pages.length)}
         {/if}
       </div>
     </div>
@@ -180,13 +186,11 @@
       {:else if pages.length === 0}
         <EmptyState
           icon="wiki"
-          title={wiki.filter || query ? 'No page matches' : 'No wiki pages yet'}
-          text={wiki.filter || query
-            ? 'Clear the filter to see every page.'
-            : 'A wiki page is Markdown you author yourself. Saving it also feeds the claim pipeline.'}
+          title={wiki.filter || query ? t('wiki.noMatch') : t('wiki.emptyTitle')}
+          text={wiki.filter || query ? t('wiki.noMatchText') : t('wiki.emptyText')}
         >
           <button class="btn btn--primary btn--sm" onclick={startNew}>
-            <Icon name="plus" size={13} /> Write the first page
+            <Icon name="plus" size={13} /> {t('wiki.writeFirst')}
           </button>
         </EmptyState>
       {:else}
@@ -197,7 +201,7 @@
               class:active={selected?.id === page.id}
               onclick={() => navigate(wikiPath(page.id))}
             >
-              <span class="page-title">{page.title || 'Untitled'}</span>
+              <span class="page-title">{page.title || t('wiki.untitled')}</span>
               {#if (page.tags?.length ?? 0) + (page.auto_tags?.length ?? 0) > 0}
                 <span class="page-tags">
                   {#each page.tags ?? [] as tag (tag)}<span class="tag">{tag}</span>{/each}
@@ -213,8 +217,8 @@
   </section>
 
   {#if detailOpen}
-    <section class="wiki-detail detail-frame" aria-label="Wiki page">
-      <a class="back-link" href="#/wiki">← All pages</a>
+    <section class="wiki-detail detail-frame" aria-label={t('wiki.detailAria')}>
+      <a class="back-link" href="#/wiki">{t('wiki.backAll')}</a>
 
       {#if editing}
         <form
@@ -226,12 +230,12 @@
         >
           <div class="editor-head">
             <div>
-              <div class="kicker">{isNew ? 'New page' : 'Edit page'}</div>
-              <h2>{title.trim() || 'Untitled'}</h2>
+              <div class="kicker">{isNew ? t('wiki.newPage') : t('wiki.editPage')}</div>
+              <h2>{title.trim() || t('wiki.untitled')}</h2>
             </div>
-            <div class="seg" role="tablist" aria-label="Editor mode">
-              <button type="button" class:on={!preview} onclick={() => (preview = false)}>Write</button>
-              <button type="button" class:on={preview} onclick={() => (preview = true)}>Preview</button>
+            <div class="seg" role="tablist" aria-label={t('wiki.editorMode')}>
+              <button type="button" class:on={!preview} onclick={() => (preview = false)}>{t('wiki.write')}</button>
+              <button type="button" class:on={preview} onclick={() => (preview = true)}>{t('wiki.preview')}</button>
             </div>
           </div>
 
@@ -247,16 +251,22 @@
               {#if body.trim()}
                 <Markdown text={body} />
               {:else}
-                <p class="muted">Nothing to preview yet.</p>
+                <p class="muted">{t('wiki.nothingToPreview')}</p>
               {/if}
             </div>
           {:else}
             <label class="field">
-              <span>Title</span>
-              <input use:clearable class="input" bind:value={title} placeholder="Page title" autocomplete="off" />
+              <span>{t('wiki.fieldTitle')}</span>
+              <input
+                use:clearable
+                class="input"
+                bind:value={title}
+                placeholder={t('wiki.titlePlaceholder')}
+                autocomplete="off"
+              />
             </label>
             <label class="field">
-              <span>Tags <span class="hint">— comma-separated</span></span>
+              <span>{t('wiki.fieldTags')} <span class="hint">{t('wiki.commaSeparated')}</span></span>
               <input use:clearable class="input" bind:value={tags} placeholder="go, concurrency, notes" autocomplete="off" />
             </label>
             <label class="field">
@@ -266,18 +276,30 @@
                 class="textarea editor-body"
                 bind:value={body}
                 spellcheck="true"
-                placeholder={'# A page\n\nWrite Markdown here. Reference a wiki page with [[wiki:<id>]], a source with [[source:<hash>]].'}
+                placeholder={t('wiki.bodyPlaceholder')}
               ></textarea>
             </label>
           {/if}
 
           <div class="editor-foot">
-            <button class="btn btn--primary" type="submit" disabled={saving}>
-              {#if saving}<span class="spinner"></span>{/if}
-              {saving ? 'Saving…' : 'Save page'}
+            <button
+              class="btn btn--primary btn--action"
+              type="submit"
+              disabled={saving}
+              title={saving ? t('wiki.saving') : t('wiki.savePage')}
+            >
+              {#if saving}<span class="spinner"></span>{:else}<Icon name="check" size={14} />{/if}
+              <span class="btn-label">{saving ? t('wiki.saving') : t('wiki.savePage')}</span>
             </button>
-            <button class="btn btn--ghost" type="button" onclick={cancel}>Cancel</button>
-            <span class="muted small">Saving writes the page and reprocesses its source from capture.</span>
+            <button
+              class="btn btn--ghost btn--action"
+              type="button"
+              title={t('common.cancel')}
+              onclick={cancel}
+            >
+              <Icon name="close" size={14} /> <span class="btn-label">{t('common.cancel')}</span>
+            </button>
+            <span class="muted small">{t('wiki.saveHint')}</span>
           </div>
         </form>
       {:else if wiki.detailError}
@@ -292,27 +314,39 @@
         <article class="page-detail">
           <header class="page-detail-head">
             <div class="page-detail-title">
-              <div class="kicker">Wiki page</div>
-              <h2>{selected.title || 'Untitled'}</h2>
+              <div class="kicker">{t('wiki.kicker')}</div>
+              <h2>{selected.title || t('wiki.untitled')}</h2>
               <div class="page-id">
                 <span class="muted small">ID</span>
-                <CopyId text={selected.id} label="Wiki ID" display={selected.id.slice(0, 10)} />
+                <CopyId text={selected.id} label={t('wiki.copyLabel')} display={selected.id.slice(0, 10)} />
                 {#if selected.updated_at}
-                  <span class="muted small">· updated {selected.updated_at.slice(0, 10)}</span>
+                  <span class="muted small">{t('wiki.updatedAt', { date: selected.updated_at.slice(0, 10) })}</span>
                 {/if}
               </div>
             </div>
             <div class="page-actions">
               {#if selected.source_hash}
-                <button class="btn btn--secondary btn--sm" onclick={() => openSource(selected!.source_hash!)}>
-                  <Icon name="sources" size={13} /> Source
+                <button
+                  class="btn btn--secondary btn--sm btn--action"
+                  title={t('wiki.openSource')}
+                  onclick={() => openSource(selected!.source_hash!)}
+                >
+                  <Icon name="sources" size={13} /> <span class="btn-label">{t('wiki.openSource')}</span>
                 </button>
               {/if}
-              <button class="btn btn--secondary btn--sm" onclick={startEdit}>
-                <Icon name="edit" size={13} /> Edit
+              <button
+                class="btn btn--secondary btn--sm btn--action"
+                title={t('wiki.edit')}
+                onclick={startEdit}
+              >
+                <Icon name="edit" size={13} /> <span class="btn-label">{t('wiki.edit')}</span>
               </button>
-              <button class="btn btn--danger btn--sm" onclick={() => deleteWikiPage(selected!.id)}>
-                <Icon name="trash" size={13} /> Delete
+              <button
+                class="btn btn--danger btn--sm btn--action"
+                title={t('common.delete')}
+                onclick={() => deleteWikiPage(selected!.id)}
+              >
+                <Icon name="trash" size={13} /> <span class="btn-label">{t('common.delete')}</span>
               </button>
             </div>
           </header>
@@ -325,8 +359,8 @@
               {#each selected.auto_tags ?? [] as tag (tag)}
                 <button
                   class="chip"
-                  title="Derived from the page by the app; you can still filter by it."
-                  onclick={() => chooseTag(tag)}>{tag}<span class="auto-mark">auto</span></button
+                  title={t('wiki.autoTagTitle')}
+                  onclick={() => chooseTag(tag)}>{tag}<span class="auto-mark">{t('wiki.autoTag')}</span></button
                 >
               {/each}
             </div>

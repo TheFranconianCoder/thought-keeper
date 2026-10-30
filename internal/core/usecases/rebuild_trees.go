@@ -22,7 +22,7 @@ type RebuildTreesResult struct {
 
 // Execute rebuilds all trees.
 func (uc RebuildTrees) Execute(ctx context.Context) (RebuildTreesResult, error) {
-	srcs, err := uc.Index.ListSources(ctx, "", 1_000_000, 0)
+	srcs, err := uc.Index.ListSources(ctx, entities.SourceFilter{}, 1_000_000, 0)
 	if err != nil {
 		return RebuildTreesResult{}, err
 	}

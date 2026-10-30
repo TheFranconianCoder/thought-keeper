@@ -71,7 +71,7 @@ func TestSourceTagsMirrorAndCount(t *testing.T) {
 	if counts["go"] != 2 || counts["caching"] != 1 || counts["reference"] != 1 || len(counts) != 3 {
 		t.Fatalf("counts = %v, want go=2 caching=1 reference=1", counts)
 	}
-	list, err := repo.ListSources(ctx, "", 10, 0)
+	list, err := repo.ListSources(ctx, entities.SourceFilter{}, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

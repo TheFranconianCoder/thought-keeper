@@ -2,6 +2,7 @@
   import { clearable } from '../../lib/clearable';
   import { addManyURLs, addPathOrURL, uploadFiles } from '../../lib/actions';
   import { isURL } from '../../lib/format';
+  import { t } from '../../lib/i18n/index.svelte';
   import { addOpen, closeAdd } from '../../lib/overlays';
   import { system } from '../../lib/stores/system.svelte';
   import Modal from '../ui/Modal.svelte';
@@ -37,7 +38,7 @@
       } else if (lines.every(isURL)) {
         await addManyURLs(lines);
       } else {
-        system.notice = 'Add one file path at a time, or one URL per line for a batch.';
+        system.notice = t('add.oneAtATime');
         return;
       }
       closeAdd();
@@ -87,20 +88,20 @@
 
 <Modal
   {open}
-  title="Add source"
-  description="A Markdown file, a PDF, plain text, a URL, an RSS/Atom feed — or many URLs, one per line."
+  title={t('add.title')}
+  description={t('add.description')}
   width="540px"
   onClose={close}
 >
   <form onsubmit={(event) => { event.preventDefault(); void submit(); }}>
     <label class="field">
-      <span>File path or URL</span>
+      <span>{t('add.pathLabel')}</span>
       <textarea
         class="textarea add-input"
         use:clearable
         bind:value
         onkeydown={onKey}
-        placeholder={'/path/to/file.pdf\nhttps://example.com/article\nhttps://another.example.org/post'}
+        placeholder={t('add.placeholder')}
         spellcheck="false"
       ></textarea>
     </label>
@@ -109,8 +110,8 @@
       <label class="bookmark-option">
         <input type="checkbox" bind:checked={bookmark} />
         <span>
-          <b>Keep as a bookmark</b>
-          <small>Collect the link without indexing its text.</small>
+          <b>{t('add.bookmarkTitle')}</b>
+          <small>{t('add.bookmarkHint')}</small>
         </span>
       </label>
     {/if}
@@ -130,8 +131,8 @@
       ondrop={onDrop}
     >
       <Icon name="upload" size={18} />
-      <span>Drop files here, or <u>browse</u>.</span>
-      <small>A <code>.txt</code> or <code>.md</code> file of URLs becomes a batch.</small>
+      <span>{t('add.dropPrefix')}<u>{t('add.browse')}</u>{t('add.dropSuffix')}</span>
+      <small>{t('add.batchPrefix')}<code>.txt</code>{t('add.batchMiddle')}<code>.md</code>{t('add.batchSuffix')}</small>
     </div>
     <input
       type="file"
@@ -146,10 +147,10 @@
     {/if}
 
     <div class="dialog-actions">
-      <button class="btn btn--ghost" type="button" onclick={close}>Cancel</button>
+      <button class="btn btn--ghost" type="button" onclick={close}>{t('common.cancel')}</button>
       <button class="btn btn--primary" type="submit" disabled={busy || !value.trim()}>
         {#if busy}<span class="spinner"></span>{/if}
-        Add source
+        {t('add.submit')}
       </button>
     </div>
   </form>

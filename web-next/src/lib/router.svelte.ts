@@ -1,6 +1,7 @@
 /** Hash routing. The URL is the truth about what the reader is looking at.
  *
  *  Routes:
+ *    #/home                   the Start lens (the default)
  *    #/claims                 the claim catalogue
  *    #/claims/<id>            one claim
  *    #/claims?topic=<topic>   the catalogue filtered by topic
@@ -15,6 +16,7 @@
 import { beginRouteChange } from './scroll-memory';
 
 export type View =
+  | 'home'
   | 'claims'
   | 'wiki'
   | 'sources'
@@ -25,6 +27,7 @@ export type View =
   | 'status';
 
 const VIEWS = new Set<string>([
+  'home',
   'claims',
   'wiki',
   'sources',
@@ -44,17 +47,17 @@ export interface Route {
 }
 
 export function parseHash(hash: string): Route {
-  const raw = (hash || '#/claims').replace(/^#\/?/, '');
+  const raw = (hash || '#/home').replace(/^#\/?/, '');
   const queryAt = raw.indexOf('?');
   const path = queryAt >= 0 ? raw.slice(0, queryAt) : raw;
   const query = queryAt >= 0 ? raw.slice(queryAt + 1) : '';
   const segments = path.split('/').filter(Boolean);
-  let view = segments[0] ?? 'claims';
+  let view = segments[0] ?? 'home';
   let id = segments[1] ?? '';
 
   if (view === 'sources' && id) view = 'source';
   if (!VIEWS.has(view) && view !== 'source') {
-    view = 'claims';
+    view = 'home';
     id = '';
   }
 
@@ -68,7 +71,7 @@ export function parseHash(hash: string): Route {
   };
 }
 
-const initialHash = typeof location === 'undefined' ? '#/claims' : location.hash;
+const initialHash = typeof location === 'undefined' ? '#/home' : location.hash;
 export const router = $state<{ current: Route }>({ current: parseHash(initialHash) });
 
 /** previousKey is the route the current one was entered from, within this session. It lets a detail

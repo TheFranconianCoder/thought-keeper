@@ -4,6 +4,7 @@ import { EventStream } from './event-stream';
 import { noteFrame, setConnectionState, connection } from '../stores/connection.svelte';
 import { system } from '../stores/system.svelte';
 import { sources } from '../stores/sources.svelte';
+import { bookmarkWindow, failedWindow, sourceWindow } from '../stores/source-window.svelte';
 import { claims } from '../stores/claims.svelte';
 import { wiki } from '../stores/wiki.svelte';
 import { asks } from '../stores/asks.svelte';
@@ -57,7 +58,6 @@ const logBuffer = new Map<string, string>();
 const viewIs = (...views: string[]): boolean => views.includes(router.current.view);
 const claimsVisible = (): boolean => viewIs('claims');
 const topicsVisible = (): boolean => viewIs('claims', 'ask');
-const sourceListVisible = (): boolean => viewIs('sources', 'bookmarks', 'attention');
 const sourceDetailVisible = (): boolean => viewIs('source');
 const findingsVisible = (): boolean => viewIs('attention', 'status');
 const vaultVisible = (): boolean => viewIs('status');
@@ -96,7 +96,11 @@ async function flushScopes(): Promise<void> {
 async function loadScope(scope: Scope): Promise<void> {
   switch (scope) {
     case 'sources':
-      if (sourceListVisible()) await sources.loadList();
+      // Every source list is a window. A source write can change any of them (a tag, a step, a
+      // delete), so all three caches are dropped; only a visible lens actually reads again.
+      sourceWindow.invalidate();
+      bookmarkWindow.invalidate();
+      failedWindow.invalidate();
       return;
     case 'source':
       if (sourceDetailVisible() && sources.selectedHash) await sources.refresh();
@@ -244,6 +248,9 @@ function handleRun(data: Record<string, unknown>): void {
   if (status !== 'succeeded' && hash && sources.selectedHash === hash) schedule('source');
 
   if (op === 'query') {
+    // The answer may come from another window, or after this one lost the poller. Re-reading the
+    // list is what turns a finished run into its saved row.
+    schedule('asks');
     asks.observeRun(runID);
     return;
   }
@@ -348,11 +355,13 @@ export async function resyncAll(force = false): Promise<void> {
 
   if (!claimsVisible()) claims.markStale();
   if (!topicsVisible()) claims.markTopicsStale();
+  sourceWindow.invalidate();
+  bookmarkWindow.invalidate();
+  failedWindow.invalidate();
 
   await Promise.all([
     system.loadStatus(),
     system.loadPipeline(),
-    sourceListVisible() ? sources.loadList() : Promise.resolve(),
     findingsVisible() ? system.loadFindings() : Promise.resolve(),
     wiki.load(),
     claimsVisible() ? claims.load(claims.topic) : Promise.resolve(),

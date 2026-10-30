@@ -34,7 +34,7 @@ type FixURLsResult struct {
 // Execute walks every source, reads the ones that could be URL snapshots, and repairs them.
 func (uc FixURLKinds) Execute(ctx context.Context) (FixURLsResult, error) {
 	var res FixURLsResult
-	sources, err := uc.Index.ListSources(ctx, "", 1_000_000, 0)
+	sources, err := uc.Index.ListSources(ctx, entities.SourceFilter{}, 1_000_000, 0)
 	if err != nil {
 		return res, err
 	}

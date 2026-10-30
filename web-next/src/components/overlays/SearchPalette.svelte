@@ -1,6 +1,7 @@
 <script lang="ts">
   import { clearable } from '../../lib/clearable';
   import { tick } from 'svelte';
+  import { t } from '../../lib/i18n/index.svelte';
   import { search } from '../../lib/stores/search.svelte';
   import { closeSearch } from '../../lib/overlays';
   import { claimPath, navigate, sourcePath } from '../../lib/router.svelte';
@@ -54,29 +55,29 @@
 
 {#if open}
   <div class="palette-overlay">
-    <button class="palette-bg" aria-label="Close search" onclick={close}></button>
-    <div class="palette" role="dialog" aria-modal="true" aria-label="Search">
+    <button class="palette-bg" aria-label={t('search.close')} onclick={close}></button>
+    <div class="palette" role="dialog" aria-modal="true" aria-label={t('search.aria')}>
       <div class="palette-input">
         <Icon name="search" size={17} />
         <input
           use:clearable
           bind:this={input}
           value={search.query}
-          placeholder={search.layer === 'atoms' ? 'Search claims…' : 'Search sources…'}
+          placeholder={search.layer === 'atoms' ? t('search.placeholderClaims') : t('search.placeholderSources')}
           autocomplete="off"
           spellcheck="false"
-          aria-label="Search"
+          aria-label={t('search.aria')}
           oninput={(event) => search.setQuery(event.currentTarget.value)}
           onkeydown={onKey}
         />
-        <div class="seg" role="tablist" aria-label="Search layer">
+        <div class="seg" role="tablist" aria-label={t('search.layerAria')}>
           <button
             type="button"
             class:on={search.layer === 'atoms'}
             onclick={() => {
               search.setLayer('atoms');
               input?.focus();
-            }}>Claims</button
+            }}>{t('search.claims')}</button
           >
           <button
             type="button"
@@ -84,21 +85,23 @@
             onclick={() => {
               search.setLayer('sources');
               input?.focus();
-            }}>Sources</button
+            }}>{t('search.sources')}</button
           >
         </div>
       </div>
 
       <div class="palette-results" use:scrollFade>
         {#if search.busy}
-          <p class="palette-note"><span class="spinner"></span> Searching…</p>
+          <p class="palette-note"><span class="spinner"></span> {t('search.searching')}</p>
         {:else if search.error}
           <p class="palette-note palette-note--error">{search.error}</p>
         {:else if search.query.trim().length < 2}
-          <p class="palette-note">Type at least two characters.</p>
+          <p class="palette-note">{t('search.typeTwo')}</p>
         {:else if search.hits.length === 0}
           <p class="palette-note">
-            No {search.layer === 'atoms' ? 'claim' : 'source'} matches “{search.query.trim()}”.
+            {search.layer === 'atoms'
+              ? t('search.noClaimMatch', { query: search.query.trim() })
+              : t('search.noSourceMatch', { query: search.query.trim() })}
           </p>
         {:else}
           {#each search.hits as hit, index (hit.id)}
@@ -113,16 +116,16 @@
                 <span class="hit-title">{hit.title}</span>
                 <span class="hit-snippet">{hit.snippet}</span>
               </span>
-              <span class="hit-kind">{search.layer === 'atoms' ? 'claim' : 'source'}</span>
+              <span class="hit-kind">{search.layer === 'atoms' ? t('search.hitClaim') : t('search.hitSource')}</span>
             </button>
           {/each}
         {/if}
       </div>
 
       <div class="palette-hint">
-        <span><span class="kbd">↑</span><span class="kbd">↓</span> navigate</span>
-        <span><span class="kbd">↵</span> open</span>
-        <span><span class="kbd">esc</span> close</span>
+        <span><span class="kbd">↑</span><span class="kbd">↓</span> {t('search.navigate')}</span>
+        <span><span class="kbd">↵</span> {t('search.open')}</span>
+        <span><span class="kbd">esc</span> {t('search.closeHint')}</span>
       </div>
     </div>
   </div>

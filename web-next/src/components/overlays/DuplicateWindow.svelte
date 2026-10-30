@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import { focusPrimaryWindow } from '../../lib/single-window';
   import { ui } from '../../lib/ui.svelte';
   import Modal from '../ui/Modal.svelte';
@@ -10,19 +11,19 @@
 
 <Modal
   open={ui.duplicateWindow}
-  title="Thought Keeper is already open"
-  description="Only one window of the app is supported. Another window already holds the primary view."
+  title={t('duplicate.title')}
+  description={t('duplicate.description')}
   width="420px"
   onClose={close}
 >
   <div class="dialog-actions">
-    <button class="btn btn--ghost" onclick={close}>Use this window</button>
+    <button class="btn btn--ghost" onclick={close}>{t('duplicate.useThis')}</button>
     <button
       class="btn btn--primary"
       onclick={() => {
         focusPrimaryWindow();
         window.close();
-      }}>Focus the other window</button
+      }}>{t('duplicate.focusOther')}</button
     >
   </div>
 </Modal>

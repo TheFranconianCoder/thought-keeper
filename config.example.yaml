@@ -83,6 +83,8 @@ pipeline:                                  # the four steps: capture → outline
     parts_per_run: 12                      # parts (one text-bearing node each) one distill run covers
     parallel_parts: 4                      # parts distilled at the same time (they are independent)
     parallel_runs: 4                       # document runs at the same time — one per source
+    parallel_queries: 3                    # Ask runs at the same time; Ask is never gated, and one
+                                           # slow answer must not hold the next question
     auto_continue: true                    # queue the next run while a derivation is unfinished
     reconcile_interval: '1m'               # consistency job: verify that what the step records claim is
                                            # on disk (a deleted outline invalidates its derivation and
@@ -136,4 +138,14 @@ ocr:
 
 lint:
     programmatic_on_compile: true          # cheap checks after each cluster pass
+
+language:                                  # the language of what the app WRITES. A source's own
+                                           # language is detected per source and only tunes search;
+                                           # it never decides the output language. ISO 639-1 (or
+                                           # ISO 639-3 when no 639-1 exists); every value defaults
+                                           # to English.
+    ui: 'en'                               # the PWA's default language; the reader's own choice in
+                                           # the top bar wins and is remembered per browser
+    claims: 'en'                           # the language of claims and their flat topics
+    summary: 'en'                          # the language of a source's overview
 

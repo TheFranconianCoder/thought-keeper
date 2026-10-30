@@ -1,0 +1,53 @@
+/** The Wiki lens: the page list, the editor and its actions. */
+export const wikiEn: Record<string, string> = {
+  'wiki.newPage': 'New page',
+  'wiki.listAria': 'Wiki pages',
+  'wiki.filterPlaceholder': 'Filter pages…',
+  'wiki.filterAria': 'Filter wiki pages',
+  'wiki.tagsAria': 'Wiki tags',
+  'wiki.filteredBy': 'Filtered by',
+  'wiki.pageCount.one': '{count} page',
+  'wiki.pageCount.many': '{count} pages',
+  'wiki.noMatch': 'No page matches',
+  'wiki.noMatchText': 'Clear the filter to see every page.',
+  'wiki.emptyTitle': 'No wiki pages yet',
+  'wiki.emptyText':
+    'A wiki page is Markdown you author yourself. Saving it also feeds the claim pipeline.',
+  'wiki.writeFirst': 'Write the first page',
+  'wiki.untitled': 'Untitled',
+
+  'wiki.detailAria': 'Wiki page',
+  'wiki.backAll': '← All pages',
+  'wiki.kicker': 'Wiki page',
+  'wiki.copyLabel': 'Wiki ID',
+  'wiki.updatedAt': '· updated {date}',
+  'wiki.openSource': 'Source',
+  'wiki.edit': 'Edit',
+  'wiki.autoTagTitle': 'Derived from the page by the app; you can still filter by it.',
+  'wiki.autoTag': 'auto',
+
+  'wiki.editPage': 'Edit page',
+  'wiki.editorMode': 'Editor mode',
+  'wiki.write': 'Write',
+  'wiki.preview': 'Preview',
+  'wiki.nothingToPreview': 'Nothing to preview yet.',
+  'wiki.fieldTitle': 'Title',
+  'wiki.titlePlaceholder': 'Page title',
+  'wiki.fieldTags': 'Tags',
+  'wiki.commaSeparated': '— comma-separated',
+  'wiki.bodyPlaceholder':
+    '# A page\n\nWrite Markdown here. Reference a wiki page with [[wiki:<id>]], a source with [[source:<hash>]].',
+  'wiki.saving': 'Saving…',
+  'wiki.savePage': 'Save page',
+  'wiki.saveHint': 'Saving writes the page and reprocesses its source from capture.',
+
+  'wiki.saved': 'Wiki page saved — its source is being reprocessed.',
+  'wiki.saveFailed': 'Could not save the page: {error}',
+  'wiki.deleteTitle': 'Delete “{page}”?',
+  'wiki.thisPage': 'this page',
+  'wiki.deleteMessage':
+    'The page and its source representation are removed. The source bytes go to the trash; the page file is deleted.',
+  'wiki.deleteConfirm': 'Delete page',
+  'wiki.deleted': 'Wiki page deleted.',
+  'wiki.deleteFailed': 'Could not delete the page: {error}',
+};

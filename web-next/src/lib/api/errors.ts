@@ -11,10 +11,12 @@ export class ApiError extends Error {
   }
 }
 
+import { t } from '../i18n/index.svelte';
+
 /** humanError turns anything thrown into one short sentence for a toast or an inline notice. */
 export function humanError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
-  if (error instanceof DOMException && error.name === 'AbortError') return 'The request was cancelled.';
+  if (error instanceof DOMException && error.name === 'AbortError') return t('errors.cancelled');
   if (error instanceof Error) return error.message;
   return String(error);
 }

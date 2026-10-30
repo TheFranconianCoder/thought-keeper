@@ -6,16 +6,26 @@ never edit it there.
 
 ## 1. The lenses
 
-The sidebar is a small, finite set of lenses:
+The navigation is a small, finite set of lenses. In the **wide layout** it is the sidebar; in the
+**narrow layout** the sidebar gives way to a **footer navigation**: the same lenses, one tap away,
+with an Attention badge and a **connection mark on Status** — green online, orange reconnecting,
+grey while connecting, red offline; the Status tab's label/tooltip names the state too. There is no
+drawer and no menu button — nothing covers the page, and the reader never has to dismiss a panel.
+**Page headers stack** in the narrow layout: the title and subtitle take the full width, the page
+action (Add source, Vault Status) sits on its own row beneath — the same place in every language.
+Narrow list rows also drop their action buttons (the detail carries them, **icon-only**), and the
+Sources list trades the four step lights and the status line for **one lamp**: its ring is the slower
+progress dimension, its colour the aggregate state.
 
 | Lens | What it shows |
 | --- | --- |
-| **Claims** | newest claims and the busiest claim topics; a local FTS5 finder and the search palette; one claim opens its detail with provenance and cluster peers. The topic cloud stays while a topic is selected: the active chip is highlighted, clicking it again (or the “Filtered by” chip) clears the filter. Opening a claim keeps the filter in the URL (`#/claims/<id>?topic=…`), so the list beside the detail stays filtered |
-| **Wiki** | user-authored pages, their tag cloud and tag filter; create, edit, delete |
+| **Start** | the front door, not a data dump: an **Ask** box with the three latest questions, **Continue** (the last sources, claims, wiki pages and questions opened; local memory, not a vault record), **Needs you** (failed sources, findings, unclustered claims — quiet when there is nothing), the five newest sources with their live step state, and one calm vault-pulse line; a new vault gets “add the first source” here |
 | **Sources** | list with a persistent search/type/tag filter — tags appear as chips in every row and as a tag cloud above the list (human and derived, counted once per source) — add (path/upload/URL/RSS feed), one source page with content/PDF/live/log/files, summary, sub-sources and a **Tags** editor in the rail; a URL whose capture is blocked (a login, a paywall) **or that became a bookmark** (a page that only renders with JavaScript) offers **Attach snapshot…** there — save it in the browser, print it to PDF for a JS page, and attach it; an attached snapshot offers **Replace snapshot…** and **Try the URL again** (a readable page replaces it, a wall keeps it) and carries a paperclip **attached** tag in the list, where the **Attached** chip filters exactly those sources; a page whose snapshot came from a feed's copy shows a **feed copy** tag and the copy's origin in the rail; a sitemap or feed and its pages show their relation — a child links back to its parent in the rail — and an owned page has no Delete action. A **feed or a sitemap is a list**: its page shows capture green and the other three lights grey ("does not apply"), offers **Refresh** instead of Capture/Outline/Distill/Reset, and names itself `feed · the items are sources` / `sitemap · the pages are sources`. **Deleting returns to the list at once**: the row leaves optimistically while the server finishes (a delete waits for running document/cluster work), and a failure reloads the list |
+| **Wiki** | user-authored pages, their tag cloud and tag filter; create, edit, delete |
+| **Bookmarks** | collected links: URL sources that exist as metadata only; newest first, each row names its host (the list is a window, not a host-grouped dump) |
+| **Claims** | newest claims and the busiest claim topics; a local FTS5 finder and the search palette; one claim opens its detail with provenance and cluster peers. The topic cloud stays while a topic is selected: the active chip is highlighted, clicking it again (or the “Filtered by” chip) clears the filter. Opening a claim keeps the filter in the URL (`#/claims/<id>?topic=…`), so the list beside the detail stays filtered |
+| **Ask** | saved queries with their automatic tags and row actions (open, ask again, delete); a question **appears in the list at once with its status** while it is answered — no separate “thinking” box — and questions run in parallel, so the reader can ask the next one without waiting; an answer appears on its own detail with its **Ask ID** (copy button), and its scroll position survives a visit to a cited claim or source; the answer is written in the question's language and may cite claims and source overviews |
 | **Attention** | failed source steps and non-info lint findings — a lens over existing state, not a second health model |
-| **Bookmarks** | collected links: URL sources that exist as metadata only |
-| **Ask** | saved queries with their automatic tags; an answer appears only on its own detail with its **Ask ID** (copy button), and its scroll position survives a visit to a cited claim or source; the answer is written in the question's language and may cite claims and source overviews |
 | **Status** | counts, job queue, summary backfill (missing/queued/running), maintenance actions, vocabulary health, memory (live heap and peak) |
 
 A cluster is **never** a lens and never listed. The Claims detail shows the claim's cluster peers and
@@ -23,15 +33,28 @@ the claims under the same topic **as two separate sections**;
 that is the only place the association becomes visible. The bundled status views are calm and
 Notion-flavored: the data is dense, the chrome is quiet.
 
+**The source lists are windowed.** Sources, Bookmarks and Attention read only the rows around the
+viewport (± overscan); every filter (`q`, `kind`, `tag`, `attached`, `bookmarks`, `failed`) is part
+of the server query, and the filtered **count** comes with the page, so the scroller spans the whole
+list without loading the rows in between. Rows that have not arrived render as placeholders at the
+right height. The Sources tag cloud is a **facet** over the vault (`/sources/facets`), never a count
+over the loaded window. Home reads only the five newest sources.
+
+The top bar carries the **interface language** switch beside the theme switch. The language is the
+reader's choice and is remembered per browser; the server's `language.ui` is only the default for a
+reader who has not chosen one (the app ships English and German). The claims and overviews follow
+`language.claims` / `language.summary` instead — a vault can be read in one language and written in
+another.
+
 Saved queries carry **automatic tags** — the topics of the claims their answer cites, the tags of
 the sources it cites when no claim is cited, or the meaningful words of the question — and the Ask
 list shows them as a tag cloud.
 
 ## 2. Routes and state
 
-- **Hash routing; the URL is the truth about UI state.** `#/claims`, `#/claims/<atomId>`, `#/wiki`,
-  `#/wiki/<id>`, `#/sources`, `#/sources/<hash>`, `#/ask`, `#/status`, plus `#/attention` and
-  `#/bookmarks`.
+- **Hash routing; the URL is the truth about UI state.** `#/home` is the default (and the Start lens),
+  followed by `#/claims`, `#/claims/<atomId>`, `#/wiki`, `#/wiki/<id>`, `#/sources`,
+  `#/sources/<hash>`, `#/ask`, `#/status`, plus `#/attention` and `#/bookmarks`.
 - **The back button on a source page returns to the Sources list at the offset the reader left it**
   (the list is one page scroller; the new list entry is seeded with that offset).
 - **A source page is addressable per tab and part:** `?tab=snapshot|pdf|live|log|files|summary|children`

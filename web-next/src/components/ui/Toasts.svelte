@@ -1,5 +1,6 @@
 <script lang="ts">
   import { dismissToast, toasts } from '../../lib/toast.svelte';
+  import { t } from '../../lib/i18n/index.svelte';
   import Icon from './Icon.svelte';
 
   const iconOf = (tone: string): string =>
@@ -8,7 +9,7 @@
 
 <div class="toasts" aria-live="polite" aria-atomic="false">
   {#each toasts.items as item (item.id)}
-    <button class="toast toast--{item.tone}" onclick={() => dismissToast(item.id)} title="Dismiss">
+    <button class="toast toast--{item.tone}" onclick={() => dismissToast(item.id)} title={t('common.dismiss')}>
       <Icon name={iconOf(item.tone)} size={15} />
       <span>{item.message}</span>
       <Icon name="close" size={12} class="toast-close" />

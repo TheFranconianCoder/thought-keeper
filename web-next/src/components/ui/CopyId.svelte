@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import { toast } from '../../lib/toast.svelte';
   import Icon from './Icon.svelte';
 
@@ -11,14 +12,14 @@
   async function copy(): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
-      toast(`${label} copied.`, 'success');
+      toast(t('copy.copied', { label }), 'success');
     } catch {
-      toast(`Could not copy the ${label.toLowerCase()}.`, 'error');
+      toast(t('copy.failed', { label: label.toLowerCase() }), 'error');
     }
   }
 </script>
 
-<button class="copy-id" title={`Copy ${label}`} onclick={() => void copy()}>
+<button class="copy-id" title={t('copy.title', { label })} onclick={() => void copy()}>
   <code>{display ?? text}</code>
   <Icon name="copy" size={11} />
 </button>

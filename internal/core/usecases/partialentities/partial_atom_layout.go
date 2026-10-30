@@ -19,12 +19,6 @@ type PartialAtomLayout struct {
 	Removed        int
 	IndexesRemoved int
 	Skipped        int
-	// Usage is how many usage records have no atom beside them — the mark a write at a STALE path
-	// leaves behind, because a record is written next to its atom. UsageRemoved is how many of them the
-	// reorganize trashed, and DirsRemoved how many directories ended up empty and went with them.
-	Usage        int
-	UsageRemoved int
-	DirsRemoved  int
 	// Kept names the folders that still hold something after the move (an unreadable file, a
 	// subdirectory): they are left alone, and said out loud.
 	Kept []string

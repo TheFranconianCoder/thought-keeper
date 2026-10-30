@@ -32,8 +32,10 @@ type SourceSummary struct {
 	Store interfaces.SourceStore
 	// Gateway is the model; a source with claims needs it. A source that produced NO claims still
 	// gets a one-line summary, without a model call: that is a fact, not an overview to invent.
-	Gateway     interfaces.AgentGateway
-	Model       string
+	Gateway interfaces.AgentGateway
+	Model   string
+	// Language is the language the overview is written in (ISO 639-1, empty = English).
+	Language    string
 	Runs        interfaces.RunRepository
 	SourceLog   interfaces.SourceLog
 	Clock       interfaces.Clock
@@ -80,7 +82,7 @@ func (uc SourceSummary) Execute(ctx context.Context, runID ulid.ULID, hash strin
 	if len(atoms) == 0 {
 		// A document of metadata (a cover, a table of contents) correctly derives no claim. Saying so
 		// is the honest summary — and it stops the consistency job from asking forever.
-		body = "_This source produced no claims, so there is nothing to summarise._"
+		body = agents.NoClaimsSummary(uc.Language)
 	} else {
 		if uc.Gateway == nil || uc.Model == "" {
 			return res, uc.fail(ctx, run, "no model is configured")
@@ -103,9 +105,9 @@ func (uc SourceSummary) Execute(ctx context.Context, runID ulid.ULID, hash strin
 			Model:           uc.Model,
 			ReasoningEffort: "minimal",
 			Messages: []interfaces.AgentMessage{
-				{Role: "system", Content: agents.SummarySystem},
+				{Role: "system", Content: agents.SummarySystemFor(uc.Language)},
 				{Role: "user", Content: agents.SourceSummaryUser(
-					src.Title, src.Language, summaryOutline(nodes), uc.claimLines(atoms),
+					src.Title, src.Language, uc.Language, summaryOutline(nodes), uc.claimLines(atoms),
 				)},
 			},
 			OnRetry: retryNotice(ctx, uc.SourceLog, uc.Clock, hash, "summary", runID.String()),

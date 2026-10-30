@@ -73,6 +73,11 @@ are.
     uses it any more — deletes answer from the index — so it is a repair-time cost, not a save-time
     one. Streaming it through a small worker pool, or reading only each file's frontmatter, would
     turn a reindex from a hang into a repair.
+13. **Source search and tag facets are still scans.** The three source lists (Sources, Bookmarks,
+    Attention) are windowed and server-filtered, but `q` uses `instr` over the metadata columns
+    (ASCII case folding only) and the tag cloud counts tags by reading two JSON columns. An FTS
+    index for source metadata and a cached tag-count table would make both independent of vault
+    size.
 
 ## Open design questions
 
@@ -114,3 +119,9 @@ are.
   that page; a later sitemap refresh that no longer lists it will not delete it, but the sitemap's
   other pages stay owned. A "this site is mine, never own its URLs" rule is not implemented.
 
+## Ideas
+
+- Bookmarks / Favorites / Read Later
+- Wiki / Notes Overlay / Flyover to scribble with links
+- Wiki Pages as basis for LLM suggestions (mixed document)
+- Wiki Folders (with Hierarchy); or with labels (original GMail-style)

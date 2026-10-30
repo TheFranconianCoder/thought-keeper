@@ -1,42 +1,42 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import AddSourceDialog from './components/overlays/AddSourceDialog.svelte';
   import DuplicateWindow from './components/overlays/DuplicateWindow.svelte';
   import SearchPalette from './components/overlays/SearchPalette.svelte';
   import ConfirmDialog from './components/ui/ConfirmDialog.svelte';
   import Toasts from './components/ui/Toasts.svelte';
+  import FooterNav from './components/layout/FooterNav.svelte';
   import Sidebar from './components/layout/Sidebar.svelte';
   import Topbar from './components/layout/Topbar.svelte';
   import AskView from './components/views/AskView.svelte';
   import AttentionView from './components/views/AttentionView.svelte';
   import BookmarksView from './components/views/BookmarksView.svelte';
   import ClaimsView from './components/views/ClaimsView.svelte';
+  import HomeView from './components/views/HomeView.svelte';
   import SourcesView from './components/views/SourcesView.svelte';
   import SourceView from './components/views/SourceView.svelte';
   import StatusView from './components/views/StatusView.svelte';
   import WikiView from './components/views/WikiView.svelte';
   import { startSync, resyncAll } from './lib/events/sync';
+  import { adoptServerDefault, initLocale, t } from './lib/i18n/index.svelte';
   import { openSearch } from './lib/overlays';
   import { navigate, router, startRouter } from './lib/router.svelte';
   import { rememberScroll, restoreScroll } from './lib/scroll-memory';
   import { claimWindow } from './lib/single-window';
+  import { recent } from './lib/recent.svelte';
   import { connection } from './lib/stores/connection.svelte';
   import { claims } from './lib/stores/claims.svelte';
   import { sources } from './lib/stores/sources.svelte';
+  import { system } from './lib/stores/system.svelte';
   import { wiki } from './lib/stores/wiki.svelte';
   import { asks } from './lib/stores/asks.svelte';
   import { initTheme } from './lib/theme.svelte';
-  import { closeSidebar, ui } from './lib/ui.svelte';
+  import { ui } from './lib/ui.svelte';
 
-  const VIEW_LABEL: Record<string, string> = {
-    claims: 'Claims',
-    wiki: 'Wiki',
-    sources: 'Sources',
-    source: 'Sources',
-    attention: 'Attention',
-    bookmarks: 'Bookmarks',
-    ask: 'Ask',
-    status: 'Status',
+  const viewLabel = (view: string): string => {
+    const key = `view.${view}`;
+    const label = t(key);
+    return label === key ? view : label;
   };
 
   let scroller: HTMLDivElement | undefined = $state();
@@ -50,11 +50,35 @@
     if (route.view === 'source' && sources.selected) return sources.selected.title;
     if (route.view === 'wiki' && wiki.selected) return wiki.selected.title;
     if (route.view === 'ask' && asks.selected) return asks.selected.question;
-    return VIEW_LABEL[route.view] ?? 'Claims';
+    return viewLabel(route.view);
   });
 
   $effect(() => {
-    document.title = title ? `${title} · Thought Keeper` : 'Thought Keeper';
+    document.title = title ? t('app.documentTitle', { title }) : t('app.brand');
+  });
+
+  $effect(() => {
+    const configured = system.status?.language?.ui;
+    if (configured) adoptServerDefault(configured);
+  });
+
+  $effect(() => {
+    // The detail that is actually open is the one this route names — never a stale selection from
+    // the lens behind it. The visit itself is untracked: it writes the list this effect would
+    // otherwise depend on.
+    const route = router.current;
+    const source = route.view === 'source' ? sources.selected : null;
+    const claim = route.view === 'claims' && route.id ? claims.selected : null;
+    const page = route.view === 'wiki' && route.id && route.id !== 'new' ? wiki.selected : null;
+    const ask = route.view === 'ask' && route.id ? asks.selected : null;
+    untrack(() => {
+      if (source && source.hash === route.id) {
+        recent.visit('source', source.hash, source.title || source.hash.slice(0, 12));
+      }
+      if (claim && claim.id === route.id) recent.visit('claim', claim.id, claim.claim);
+      if (page && page.id === route.id) recent.visit('wiki', page.id, page.title);
+      if (ask && ask.id === route.id) recent.visit('ask', ask.id, ask.question);
+    });
   });
 
   $effect(() => {
@@ -62,10 +86,10 @@
     // to the history entry that is now current.
     void router.current.key;
     void tick().then(() => restoreScroll());
-    closeSidebar();
   });
 
   onMount(() => {
+    initLocale();
     initTheme();
     stopRouter = startRouter();
     stopSync = startSync();
@@ -100,10 +124,6 @@
 <div class="app-shell">
   <Sidebar />
 
-  {#if ui.sidebarOpen}
-    <button class="sidebar-backdrop" aria-label="Close menu" onclick={closeSidebar}></button>
-  {/if}
-
   <div class="main">
     <Topbar />
 
@@ -111,15 +131,16 @@
       <div class="offline-banner" role="status">
         <span class="dot {connection.state === 'offline' ? 'dot--off' : 'dot--warn'}"></span>
         <span>
-          <b>{connection.state === 'offline' ? 'This device is offline.' : 'Not connected to Thought Keeper.'}</b>
-          The app may be stopped, or the connection dropped. What you see may be out of date; the
-          page reconnects by itself.
+          <b>{connection.state === 'offline' ? t('app.offlineTitle') : t('app.notConnectedTitle')}</b>
+          {t('app.offlineBody')}
         </span>
       </div>
     {/if}
 
     <div class="content-scroll" bind:this={scroller}>
-      {#if router.current.view === 'claims'}
+      {#if router.current.view === 'home'}
+        <HomeView />
+      {:else if router.current.view === 'claims'}
         <ClaimsView />
       {:else if router.current.view === 'wiki'}
         <WikiView />
@@ -136,9 +157,11 @@
       {:else if router.current.view === 'status'}
         <StatusView />
       {:else}
-        <ClaimsView />
+        <HomeView />
       {/if}
     </div>
+
+    <FooterNav />
   </div>
 </div>
 

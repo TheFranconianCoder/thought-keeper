@@ -3,6 +3,8 @@ import { ApiError, humanError } from '../api/errors';
 import type { Atom, Source, SourceNode, SourceTopic } from '../api/types';
 import type { LiveProgress } from '../source-state';
 import { firstLine } from '../format';
+import { t } from '../i18n/index.svelte';
+import { readError, readSignal } from '../read';
 
 const LOG_CAP = 128 * 1024;
 
@@ -19,20 +21,6 @@ const DETAIL_READ_TIMEOUT = 45_000;
  *  Joining forever is exactly the state that needed a full PWA reload to escape. */
 const LIST_ABANDON_MS = 30_000;
 const DETAIL_ABANDON_MS = 10_000;
-
-function readSignal(ms: number): AbortSignal | undefined {
-  return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-    ? AbortSignal.timeout(ms)
-    : undefined;
-}
-
-/** readError names a timeout for what it is instead of showing the browser's abort text. */
-function readError(error: unknown): string {
-  if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
-    return 'The local service did not answer in time.';
-  }
-  return humanError(error);
-}
 
 /** SourceKindFilter is the source-list type selector. It lives in the store, not the view, so a
  *  filter survives a trip into a source and back (and a detour through another lens). */
@@ -166,7 +154,7 @@ class SourcesStore {
       const seen = new Set<string>();
       let total = 0;
       for (;;) {
-        const page = await api.sources('', PAGE, rows.length, readSignal(LOCAL_READ_TIMEOUT));
+        const page = await api.sources({}, PAGE, rows.length, readSignal(LOCAL_READ_TIMEOUT));
         if (seq !== this.listSeq) return;
         const batch = page.sources ?? [];
         let fresh = 0;

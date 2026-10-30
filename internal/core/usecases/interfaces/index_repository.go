@@ -27,9 +27,13 @@ type IndexRepository interface {
 	// first, and the fetch writes its title, snapshot metadata and bookmark decision into it.
 	FillURLSource(ctx context.Context, s entities.Source) error
 	GetSourceByHash(ctx context.Context, hash string) (entities.Source, error)
-	ListSources(ctx context.Context, kind string, limit, offset int) ([]entities.Source, error)
-	// CountSources is the total behind a page, so the list knows whether there is more.
-	CountSources(ctx context.Context, kind string) (int, error)
+	ListSources(ctx context.Context, filter entities.SourceFilter, limit, offset int) ([]entities.Source, error)
+	// CountSources is the total behind the SAME filter, so the list's scroll height is the whole
+	// filtered list and never only the rows that are loaded.
+	CountSources(ctx context.Context, filter entities.SourceFilter) (int, error)
+	// CountAttachedSources is how many sources carry a human-attached snapshot: the "Attached"
+	// chip exists when this is non-zero.
+	CountAttachedSources(ctx context.Context) (int, error)
 	// ListRecentSources is the recency window the query agent reads: the newest CONTENT sources
 	// that entered the vault at or after `since` (zero means the whole vault), newest first.
 	// Bookmarks and sitemap/feed containers are counted, never listed: they have no derivation to

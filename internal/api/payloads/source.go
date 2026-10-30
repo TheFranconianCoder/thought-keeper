@@ -97,6 +97,19 @@ type SourceList struct {
 	Total int `json:"total"`
 }
 
+// SourceTagFacet is one tag of the Sources cloud and how many sources carry it.
+type SourceTagFacet struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}
+
+// SourceFacets is the Sources lens's facet payload: the tag cloud and the number of attached
+// snapshots. Both are vault facts, not facts about the window the list has loaded.
+type SourceFacets struct {
+	Tags     []SourceTagFacet `json:"tags"`
+	Attached int              `json:"attached"`
+}
+
 // SourceTagsRequest is the body of PUT /api/v1/sources/{hash}/tags.
 type SourceTagsRequest struct {
 	Tags []string `json:"tags"`

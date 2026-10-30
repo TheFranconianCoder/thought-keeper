@@ -107,7 +107,7 @@ func TestSourceListAggregates(t *testing.T) {
 		}
 		return out
 	}
-	list, err := sources.ListSources(ctx, "", 50, 0)
+	list, err := sources.ListSources(ctx, entities.SourceFilter{}, 50, 0)
 	if err != nil {
 		t.Fatalf("list sources: %v", err)
 	}
@@ -132,16 +132,16 @@ func TestSourceListAggregates(t *testing.T) {
 	}
 
 	// The total behind the page: the list shows it and pages on it.
-	if n, err := sources.CountSources(ctx, ""); err != nil || n != 2 {
+	if n, err := sources.CountSources(ctx, entities.SourceFilter{}); err != nil || n != 2 {
 		t.Fatalf("count = %d (%v), want 2", n, err)
 	}
-	if n, err := sources.CountSources(ctx, string(entities.SourceKindMD)); err != nil || n != 2 {
+	if n, err := sources.CountSources(ctx, entities.SourceFilter{Kind: string(entities.SourceKindMD)}); err != nil || n != 2 {
 		t.Fatalf("count by kind = %d (%v), want 2", n, err)
 	}
 
 	// The page scoping: B is newest, so limit 1 must return B — and B's aggregates must be its own
 	// (never A's, which a missing filter would leak).
-	page, err := sources.ListSources(ctx, "", 1, 0)
+	page, err := sources.ListSources(ctx, entities.SourceFilter{}, 1, 0)
 	if err != nil || len(page) != 1 || page[0].Hash != hashB {
 		t.Fatalf("first page = %v (%v), want the newest source", page, err)
 	}

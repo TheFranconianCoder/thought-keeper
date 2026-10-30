@@ -13,6 +13,7 @@
   } from '../../lib/actions';
   import { api } from '../../lib/api';
   import { fmtBytes, hostOf, prettyJson, relTime, splitFrontmatter } from '../../lib/format';
+  import { t, tn } from '../../lib/i18n/index.svelte';
   import { navigate, previousView, router, sourcePath, wikiPath } from '../../lib/router.svelte';
   import { setPagePosition } from '../../lib/scroll-memory';
   import { sourcesTop } from '../../lib/sources-scroll';
@@ -188,7 +189,7 @@
     const sidecar = sidecars.find((entry) => entry.name === name);
     if (!sidecar) {
       fileText = null;
-      fileError = 'This file is no longer listed for the source.';
+      fileError = t('source.fileNotListed');
       return;
     }
     if (sidecar.object && isPDF) {
@@ -307,15 +308,28 @@
   <div class="page page--wide source-page">
     {#if sources.detailError}
       <p class="notice notice--error">{sources.detailError}</p>
-      <button class="btn btn--primary" onclick={() => void sources.refresh(hash)}>
-        <Icon name="refresh" size={14} /> Try again
+      <button
+        class="btn btn--primary btn--action"
+        title={t('common.retry')}
+        onclick={() => void sources.refresh(hash)}
+      >
+        <Icon name="refresh" size={14} /> <span class="btn-label">{t('common.retry')}</span>
       </button>
-      <button class="btn btn--secondary" onclick={backToSources}>
-        <Icon name="arrowLeft" size={14} /> Back to sources
+      <button
+        class="btn btn--secondary btn--action"
+        title={t('source.backToSources')}
+        onclick={backToSources}
+      >
+        <Icon name="arrowLeft" size={14} /> <span class="btn-label">{t('source.backToSources')}</span>
       </button>
     {:else if selected}
       <header class="source-head">
-        <button class="icon-btn" title="Back to sources" aria-label="Back to sources" onclick={backToSources}>
+        <button
+          class="icon-btn"
+          title={t('source.backToSources')}
+          aria-label={t('source.backToSources')}
+          onclick={backToSources}
+        >
           <Icon name="arrowLeft" size={17} />
         </button>
         <span class="source-head-icon"><SourceIcon kind={selected.kind} hash={selected.hash} size={19} /></span>
@@ -323,48 +337,72 @@
           <h1>{selected.title || selected.hash.slice(0, 12)}</h1>
           <div class="source-head-sub">
             <span class="chip chip--mono">{selected.kind}</span>
-            {#if selected.sitemap}<span class="chip">sitemap</span>{/if}
-            {#if selected.rss}<span class="chip">feed</span>{/if}
+            {#if selected.sitemap}<span class="chip">{t('source.sitemap')}</span>{/if}
+            {#if selected.rss}<span class="chip">{t('source.feed')}</span>{/if}
             <span>{fmtBytes(selected.bytes)}</span>
             <span>·</span>
             <span>{relTime(selected.imported_at)}</span>
             {#if selected.language}<span>·</span><span>{selected.language}</span>{/if}
-            {#if selected.pages}<span>·</span><span>{selected.pages} pages</span>{/if}
+            {#if selected.pages}<span>·</span><span>{tn('source.pages', selected.pages)}</span>{/if}
           </div>
         </div>
         <div class="source-head-actions">
           {#if isURLSource && selected.url}
             <a
-              class="btn btn--secondary btn--sm"
+              class="btn btn--secondary btn--sm btn--action"
               href={selected.url}
               target="_blank"
               rel="noopener noreferrer"
-              title={selected.url}
+              title={t('source.openUrl')}
             >
-              <Icon name="external" size={13} /> Open URL
+              <Icon name="external" size={13} /> <span class="btn-label">{t('source.openUrl')}</span>
             </a>
           {/if}
           {#if selected.rss || selected.sitemap}
-            <button class="btn btn--secondary btn--sm" onclick={() => void refreshSource(selected!.hash)}>
-              <Icon name="refresh" size={13} /> Refresh
+            <button
+              class="btn btn--secondary btn--sm btn--action"
+              title={t('source.refresh')}
+              onclick={() => void refreshSource(selected!.hash)}
+            >
+              <Icon name="refresh" size={13} /> <span class="btn-label">{t('source.refresh')}</span>
             </button>
           {:else}
-            <button class="btn btn--secondary btn--sm" onclick={() => void captureSource(selected!.hash)}>
-              <Icon name="capture" size={13} /> Capture
+            <button
+              class="btn btn--secondary btn--sm btn--action"
+              title={t('source.capture')}
+              onclick={() => void captureSource(selected!.hash)}
+            >
+              <Icon name="capture" size={13} /> <span class="btn-label">{t('source.capture')}</span>
             </button>
-            <button class="btn btn--secondary btn--sm" onclick={() => void rebuildSourceTree(selected!.hash)}>
-              <Icon name="tree" size={13} /> Outline
+            <button
+              class="btn btn--secondary btn--sm btn--action"
+              title={t('source.outline')}
+              onclick={() => void rebuildSourceTree(selected!.hash)}
+            >
+              <Icon name="tree" size={13} /> <span class="btn-label">{t('source.outline')}</span>
             </button>
-            <button class="btn btn--primary btn--sm" onclick={() => void distillSource(selected!.hash)}>
-              <Icon name="distill" size={13} /> Distill
+            <button
+              class="btn btn--primary btn--sm btn--action"
+              title={t('source.distill')}
+              onclick={() => void distillSource(selected!.hash)}
+            >
+              <Icon name="distill" size={13} /> <span class="btn-label">{t('source.distill')}</span>
             </button>
-            <button class="btn btn--secondary btn--sm" onclick={() => void resetSource(selected!.hash)}>
-              <Icon name="reset" size={13} /> Reset
+            <button
+              class="btn btn--secondary btn--sm btn--action"
+              title={t('source.reset')}
+              onclick={() => void resetSource(selected!.hash)}
+            >
+              <Icon name="reset" size={13} /> <span class="btn-label">{t('source.reset')}</span>
             </button>
           {/if}
           {#if !selected.origin && !selected.original_name?.startsWith('wiki:')}
-            <button class="btn btn--danger btn--sm" onclick={() => void deleteSource(selected!.hash)}>
-              <Icon name="trash" size={13} /> Delete
+            <button
+              class="btn btn--danger btn--sm btn--action"
+              title={t('common.delete')}
+              onclick={() => void deleteSource(selected!.hash)}
+            >
+              <Icon name="trash" size={13} /> <span class="btn-label">{t('common.delete')}</span>
             </button>
           {/if}
         </div>
@@ -372,26 +410,26 @@
 
       <div class="source-layout">
         <section class="source-content">
-          <div class="tabs" role="tablist" aria-label="Source view">
+          <div class="tabs" role="tablist" aria-label={t('source.viewAria')}>
             {#if isURLSource}
-              <button class="tab" class:on={tab === 'snapshot'} onclick={() => setTab('snapshot')}>Snapshot</button>
-              <button class="tab" class:on={tab === 'live'} onclick={() => setTab('live')}>Live</button>
+              <button class="tab" class:on={tab === 'snapshot'} onclick={() => setTab('snapshot')}>{t('source.tabSnapshot')}</button>
+              <button class="tab" class:on={tab === 'live'} onclick={() => setTab('live')}>{t('source.tabLive')}</button>
             {:else}
               <button class="tab" class:on={tab === 'snapshot'} onclick={() => setTab('snapshot')}>
-                {isPDF ? 'Text' : 'Content'}
+                {isPDF ? t('source.tabText') : t('source.tabContent')}
               </button>
               {#if isPDF}
                 <button class="tab" class:on={tab === 'pdf'} onclick={() => setTab('pdf')}>PDF</button>
               {/if}
             {/if}
             {#if !selected.bookmark && selected.steps?.distill?.state !== 'skipped'}
-              <button class="tab" class:on={tab === 'summary'} onclick={() => setTab('summary')}>Summary</button>
+              <button class="tab" class:on={tab === 'summary'} onclick={() => setTab('summary')}>{t('source.tabSummary')}</button>
             {/if}
-            <button class="tab" class:on={tab === 'log'} onclick={() => setTab('log')}>Log</button>
-            <button class="tab" class:on={tab === 'files'} onclick={() => setTab('files')}>Files</button>
+            <button class="tab" class:on={tab === 'log'} onclick={() => setTab('log')}>{t('source.tabLog')}</button>
+            <button class="tab" class:on={tab === 'files'} onclick={() => setTab('files')}>{t('source.tabFiles')}</button>
             {#if hasChildrenTab}
               <button class="tab" class:on={tab === 'children'} onclick={() => setTab('children')}>
-                Sub-sources{selected.children ? ` ${selected.children}` : ''}
+                {t('source.tabChildren')}{selected.children ? ` ${selected.children}` : ''}
               </button>
             {/if}
           </div>
@@ -400,18 +438,17 @@
             {#if tab === 'summary'}
               {#if sources.summary && !sources.summaryMissing}
                 <div class="summary-head">
-                  <p class="file-intro muted">
-                    A standalone overview of this source, written from its claims, always in English.
-                    It is not a claim itself: the claims below stay the source of truth.
-                  </p>
+                  <p class="file-intro muted">{t('source.summaryIntro')}</p>
                   <button
-                    class="btn btn--ghost btn--sm"
+                    class="btn btn--ghost btn--sm btn--action"
                     disabled={sources.summaryGenerating}
-                    title="Write the overview again from the current claims (in English)"
+                    title={t('source.rewriteTitle')}
                     onclick={() => void sources.generateSummary(selected!.hash)}
                   >
                     <Icon name="refresh" size={13} />
-                    {sources.summaryGenerating ? 'Rewriting…' : 'Rewrite summary'}
+                    <span class="btn-label"
+                      >{sources.summaryGenerating ? t('source.rewriting') : t('source.rewrite')}</span
+                    >
                   </button>
                 </div>
                 {#if sources.summaryError}
@@ -419,27 +456,26 @@
                 {/if}
                 <Markdown text={sources.summary} wikilinks={false} />
               {:else if sources.summaryLoading}
-                <p class="file-notice muted">Loading the summary…</p>
+                <p class="file-notice muted">{t('source.loadingSummary')}</p>
               {:else}
                 <div class="summary-empty">
-                  <p class="muted">
-                    This source has no summary yet. The summary is written right after the distill
-                    step; the consistency job fills in the ones that are missing.
-                  </p>
+                  <p class="muted">{t('source.summaryEmpty')}</p>
                   {#if selected.steps?.distill?.state === 'ok'}
                     <button
-                      class="btn btn--primary btn--sm"
+                      class="btn btn--primary btn--sm btn--action"
                       disabled={sources.summaryGenerating}
+                      title={t('source.generateSummary')}
                       onclick={() => void sources.generateSummary(selected!.hash)}
                     >
                       <Icon name="spark" size={13} />
-                      {sources.summaryGenerating ? 'Generating…' : 'Generate summary'}
+                      <span class="btn-label"
+                        >{sources.summaryGenerating
+                          ? t('source.generating')
+                          : t('source.generateSummary')}</span
+                      >
                     </button>
                   {:else}
-                    <p class="section-note">
-                      Finish the derivation first: a summary of a source whose claims are still being
-                      written would describe a moving target.
-                    </p>
+                    <p class="section-note">{t('source.summaryNeedsDistill')}</p>
                   {/if}
                   {#if sources.summaryError}
                     <p class="notice notice--error">{sources.summaryError}</p>
@@ -450,14 +486,11 @@
               {#if sources.childrenError}
                 <p class="notice notice--error file-notice">{sources.childrenError}</p>
               {:else if !sources.childrenLoaded}
-                <p class="file-notice muted">Loading…</p>
+                <p class="file-notice muted">{t('common.loading')}</p>
               {:else if sources.children.length === 0}
-                <p class="file-notice muted">This source owns no sub-sources yet.</p>
+                <p class="file-notice muted">{t('source.childrenEmpty')}</p>
               {:else}
-                <p class="file-intro muted">
-                  The sources this one brought into the vault. They are owned by it: removing it
-                  removes them too.
-                </p>
+                <p class="file-intro muted">{t('source.childrenIntro')}</p>
                 <div class="file-list">
                   {#each sources.children as child (child.hash)}
                     <div class="file-row">
@@ -475,34 +508,44 @@
             {:else if tab === 'files'}
               {#if openFile}
                 <div class="file-head">
-                  <button class="icon-btn" title="Back to files" onclick={() => go({ tab: 'files' })}>
+                  <button class="icon-btn" title={t('source.backToFiles')} onclick={() => go({ tab: 'files' })}>
                     <Icon name="chevronLeft" size={16} />
                   </button>
                   <code>{openFile.name}</code>
                   {#if openFile.object}<span class="chip">object</span>{/if}
                   <span class="spacer"></span>
                   {#if isPDF && openFile.object}
-                    <button class="btn btn--secondary btn--sm" onclick={() => setTab('pdf')}>Open the PDF</button>
+                    <button
+                      class="btn btn--secondary btn--sm btn--action"
+                      title={t('source.openPdf')}
+                      onclick={() => setTab('pdf')}
+                    >
+                      <Icon name="filePdf" size={13} /> <span class="btn-label">{t('source.openPdf')}</span>
+                    </button>
                   {/if}
                 </div>
                 {#if fileError}
                   <p class="notice notice--error file-notice">{fileError}</p>
                 {:else if isPDF && openFile.object}
-                  <p class="file-notice muted">A PDF is not text — open it in its own tab.</p>
+                  <p class="file-notice muted">{t('source.pdfNotText')}</p>
                 {:else if fileText === null}
-                  <p class="file-notice muted">Loading…</p>
+                  <p class="file-notice muted">{t('common.loading')}</p>
                 {:else}
                   {#if fileText.length > FILE_CAP}
                     <p class="file-notice muted">
-                      Showing the first {fmtBytes(FILE_CAP)} of {fmtBytes(fileText.length)}.
+                      {t('source.fileShowingFirst', {
+                        size: fmtBytes(FILE_CAP),
+                        total: fmtBytes(fileText.length),
+                      })}
                     </p>
                   {/if}
                   <pre class="raw-file">{fileText.slice(0, FILE_CAP)}</pre>
                 {/if}
               {:else}
                 <p class="file-intro muted">
-                  The object and every derived file of this source. Pick one to read it. A size of
-                  <b>—</b> means the file is missing; the consistency job notices that.
+                  {t('source.filesIntroStart')}
+                  <b>—</b>
+                  {t('source.filesIntroEnd')}
                 </p>
                 <div class="file-list">
                   {#each sidecars as sidecar (sidecar.name)}
@@ -511,7 +554,7 @@
                         <Icon name="file" size={14} />
                         <code>{sidecar.name}</code>
                         <span class="grow"></span>
-                        <span class="muted">missing</span>
+                        <span class="muted">{t('source.missing')}</span>
                       {:else}
                         <button class="file-open" onclick={() => viewFile(sidecar.name)}>
                           <Icon name="file" size={14} />
@@ -528,21 +571,24 @@
             {:else if tab === 'log'}
               {#if sources.log.length > LOG_CAP}
                 <p class="file-notice muted">
-                  Showing the last {fmtBytes(LOG_CAP)} of {fmtBytes(sources.log.length)}.
+                  {t('source.logShowingLast', {
+                    size: fmtBytes(LOG_CAP),
+                    total: fmtBytes(sources.log.length),
+                  })}
                 </p>
               {/if}
-              <pre class="raw-file log-file">{logTail || sources.logError || 'No log entries.'}</pre>
+              <pre class="raw-file log-file">{logTail || sources.logError || t('source.noLog')}</pre>
             {:else if tab === 'live' && selected.url}
-              <iframe class="frame" title="Live page" src={selected.url}></iframe>
+              <iframe class="frame" title={t('source.liveTitle')} src={selected.url}></iframe>
             {:else if tab === 'pdf' && isPDF}
               {#if pdfReady}
                 <iframe class="frame" title={selected.title || 'PDF'} src={api.rawURL(selected.hash)}></iframe>
               {:else}
-                <p class="file-notice muted">Loading the PDF…</p>
+                <p class="file-notice muted">{t('source.loadingPdf')}</p>
               {/if}
             {:else if partID}
               <div class="part-head">
-                <button class="icon-btn" title="Back to the outline" onclick={() => go({ tab: 'snapshot' })}>
+                <button class="icon-btn" title={t('source.backToOutline')} onclick={() => go({ tab: 'snapshot' })}>
                   <Icon name="chevronLeft" size={16} />
                 </button>
                 <code>{partID}</code>
@@ -550,16 +596,25 @@
               </div>
               {#if partError}
                 <p class="file-notice muted">
-                  This part is no longer in the source's outline: {partError}
-                  <button class="btn btn--secondary btn--sm" onclick={() => go({ tab: 'snapshot' })}>Show the whole source</button>
+                  {t('source.partGone', { error: partError })}
+                  <button
+                    class="btn btn--secondary btn--sm btn--action"
+                    title={t('source.showWhole')}
+                    onclick={() => go({ tab: 'snapshot' })}
+                  >
+                    <Icon name="eye" size={13} /> <span class="btn-label">{t('source.showWhole')}</span>
+                  </button>
                 </p>
               {:else if partText === null}
-                <p class="file-notice muted">Loading…</p>
+                <p class="file-notice muted">{t('common.loading')}</p>
               {:else}
                 {@const partDoc = splitFrontmatter(partText.slice(0, RENDER_CAP))}
                 {#if partText.length > RENDER_CAP}
                   <p class="file-notice muted">
-                    This part alone is {fmtBytes(partText.length)} — showing the first {fmtBytes(RENDER_CAP)}.
+                    {t('source.partTooBig', {
+                      size: fmtBytes(partText.length),
+                      shown: fmtBytes(RENDER_CAP),
+                    })}
                   </p>
                 {/if}
                 {#if partDoc.front}<Frontmatter text={partDoc.front} />{/if}
@@ -573,13 +628,13 @@
               {#if sources.contentError}
                 <p class="notice notice--error file-notice">{sources.contentError}</p>
               {:else}
-                <p class="file-notice muted">Loading…</p>
+                <p class="file-notice muted">{t('common.loading')}</p>
               {/if}
             {:else if big && readable.length > 0}
               <div class="outline-intro">
                 <p class="muted">
-                  {fmtBytes(sources.content?.length ?? 0)} — too much for one page. Its outline has
-                  {readable.length} readable part{readable.length === 1 ? '' : 's'}; pick one.
+                  {t('source.tooBig', { size: fmtBytes(sources.content?.length ?? 0) })}
+                  {tn('source.readableParts', readable.length)}
                 </p>
               </div>
               <div class="outline">
@@ -587,27 +642,35 @@
                   {#if node.has_text}
                     <button class="outline-row" style="padding-left:{10 + Math.max(0, node.depth - 1) * 14}px" onclick={() => openPart(node)}>
                       <span class="outline-id">{node.node_id}</span>
-                      <span class="outline-title">{node.title || '(untitled)'}</span>
+                      <span class="outline-title">{node.title || t('source.untitled')}</span>
                       {#if node.ocr}<span class="chip">ocr</span>{/if}
                     </button>
                   {:else}
                     <div class="outline-row outline-row--group" style="padding-left:{10 + Math.max(0, node.depth - 1) * 14}px">
                       <span class="outline-id">{node.node_id}</span>
-                      <span class="outline-title">{node.title || '(untitled)'}</span>
+                      <span class="outline-title">{node.title || t('source.untitled')}</span>
                     </div>
                   {/if}
                 {/each}
               </div>
             {:else if sources.content === '' && isPDF}
               <p class="file-notice muted">
-                No readable text yet — this source has not been captured, or extraction produced nothing.
-                <button class="btn btn--secondary btn--sm" onclick={() => setTab('pdf')}>Open the PDF</button>
+                {t('source.noTextYet')}
+                <button
+                  class="btn btn--secondary btn--sm btn--action"
+                  title={t('source.openPdf')}
+                  onclick={() => setTab('pdf')}
+                >
+                  <Icon name="filePdf" size={13} /> <span class="btn-label">{t('source.openPdf')}</span>
+                </button>
               </p>
             {:else}
               {#if truncated}
                 <p class="file-notice muted">
-                  Showing the first {fmtBytes(RENDER_CAP)} of {fmtBytes(sources.content?.length ?? 0)} — this source has no
-                  outline yet. Build the outline and it becomes readable part by part.
+                  {t('source.noOutlineYet', {
+                    size: fmtBytes(RENDER_CAP),
+                    total: fmtBytes(sources.content?.length ?? 0),
+                  })}
                 </p>
               {/if}
               {#if doc.front}<Frontmatter text={doc.front} />{/if}
@@ -620,9 +683,9 @@
           </div>
         </section>
 
-        <aside class="source-rail" aria-label="Source details">
+        <aside class="source-rail" aria-label={t('source.detailsAria')}>
           <section class="rail-block">
-            <div class="rail-label">Steps</div>
+            <div class="rail-label">{t('source.steps')}</div>
             {#if !selected.bookmark}
               <SourceSteps source={selected} {live} wide />
             {/if}
@@ -630,42 +693,49 @@
 
           {#if attachable}
             <section class="rail-block attach-block">
-              <div class="rail-label">Snapshot</div>
+              <div class="rail-label">{t('source.snapshot')}</div>
               <p class="attach-text">
                 {#if attached}
-                  This snapshot was attached by hand{attachedFrom ? ` from ${attachedFrom}` : ''}. The
-                  weekly refresh leaves it alone. Replace it with another file, or ask the site again —
-                  the page replaces it only when it is readable; a wall keeps it.
+                  {attachedFrom
+                    ? t('source.attachedFrom', { from: attachedFrom })
+                    : t('source.attachedHere')}
                 {:else if selected.bookmark}
-                  This page gave no readable text (a JavaScript page, a video or an app). Open it in your
-                  browser, <b>print it to PDF</b> (or copy the text), and attach it here. The URL stays the
-                  address of this source.
+                  {t('source.bookmarkTextStart')}
+                  <b>{t('source.bookmarkPrint')}</b>
+                  {t('source.bookmarkTextEnd')}
                 {:else}
-                  This page could not be read{selected.steps?.capture?.detail
-                    ? ` — ${selected.steps.capture.detail}`
-                    : ''}. Open it in your browser, save it as HTML or PDF (or copy the text), and attach
-                  it here. The URL stays the address of this source.
+                  {selected.steps?.capture?.detail
+                    ? t('source.blockedWithDetail', { detail: selected.steps.capture.detail })
+                    : t('source.blocked')}
                 {/if}
               </p>
               <div class="attach-actions">
                 <button
-                  class="btn btn--secondary btn--sm"
+                  class="btn btn--secondary btn--sm btn--action"
                   disabled={attaching}
+                  title={attached ? t('source.replaceSnapshot') : t('source.attachSnapshot')}
                   onclick={() => attachInput?.click()}
                 >
-                  <Icon name="upload" size={13} /> {attaching
-                    ? 'Attaching…'
-                    : attached
-                      ? 'Replace snapshot…'
-                      : 'Attach snapshot…'}
+                  <Icon name="upload" size={13} />
+                  <span class="btn-label">
+                    {attaching
+                      ? t('source.attaching')
+                      : attached
+                        ? t('source.replaceSnapshot')
+                        : t('source.attachSnapshot')}
+                  </span>
                 </button>
                 {#if attached}
                   <button
-                    class="btn btn--secondary btn--sm"
+                    class="btn btn--secondary btn--sm btn--action"
                     disabled={refetching}
+                    title={t('source.tryUrlAgain')}
                     onclick={() => void onRefetch()}
                   >
-                    <Icon name="refresh" size={13} /> {refetching ? 'Fetching…' : 'Try the URL again'}
+                    <Icon name="refresh" size={13} />
+                    <span class="btn-label"
+                      >{refetching ? t('source.fetching') : t('source.tryUrlAgain')}</span
+                    >
                   </button>
                 {/if}
               </div>
@@ -680,29 +750,30 @@
           {/if}
 
           <section class="rail-block">
-            <div class="rail-label">Details</div>
-            <div class="kv"><span class="k">kind</span><span class="v">{selected.kind}</span></div>
-            <div class="kv"><span class="k">size</span><span class="v">{fmtBytes(selected.bytes)}</span></div>
+            <div class="rail-label">{t('source.details')}</div>
+            <div class="kv"><span class="k">{t('source.kindLabel')}</span><span class="v">{selected.kind}</span></div>
+            <div class="kv"><span class="k">{t('source.sizeLabel')}</span><span class="v">{fmtBytes(selected.bytes)}</span></div>
             <div class="kv">
-              <span class="k">language</span>
+              <span class="k">{t('source.languageLabel')}</span>
               <span
                 class="v"
                 class:language-unknown={!selected.language}
                 title={selected.language
-                  ? 'Detected language hint'
+                  ? t('source.languageHint')
                   : selected.bookmark
-                    ? 'A bookmark has no readable text, so no language is detected.'
-                    : 'No language hint has been detected for this source. Capture it again, or run Check consistency in Status.'}
-              >{selected.language || (selected.bookmark ? 'not indexed' : 'unknown')}</span>
+                    ? t('source.languageBookmarkHint')
+                    : t('source.languageUnknownHint')}
+              >{selected.language ||
+                (selected.bookmark ? t('source.notIndexed') : t('source.unknown'))}</span>
             </div>
-            {#if selected.pages}<div class="kv"><span class="k">pages</span><span class="v">{selected.pages}</span></div>{/if}
+            {#if selected.pages}<div class="kv"><span class="k">{t('source.pagesLabel')}</span><span class="v">{selected.pages}</span></div>{/if}
             {#if !selected.rss && !selected.sitemap}
-              <div class="kv"><span class="k">outline</span><span class="v">{selected.tree_state}</span></div>
+              <div class="kv"><span class="k">{t('source.outlineLabel')}</span><span class="v">{selected.tree_state}</span></div>
             {/if}
-            <div class="kv"><span class="k">added</span><span class="v">{relTime(selected.imported_at)}</span></div>
+            <div class="kv"><span class="k">{t('source.addedLabel')}</span><span class="v">{relTime(selected.imported_at)}</span></div>
             {#if selected.url}
               <div class="kv">
-                <span class="k">url</span>
+                <span class="k">{t('source.urlLabel')}</span>
                 <span class="v">
                   <a class="rail-link" href={selected.url} target="_blank" rel="noopener noreferrer" title={selected.url}>
                     {hostOf(selected.url) || selected.url}
@@ -711,64 +782,74 @@
               </div>
             {/if}
             {#if selected.url_status}
-              <div class="kv"><span class="k">http</span><span class="v">{selected.url_status} · {relTime(selected.url_checked_at)}</span></div>
+              <div class="kv"><span class="k">{t('source.httpLabel')}</span><span class="v">{selected.url_status} · {relTime(selected.url_checked_at)}</span></div>
             {/if}
-            <div class="kv"><span class="k">ID</span><span class="v"><CopyId text={selected.hash} label="Source ID" display={selected.hash.slice(0, 12)} /></span></div>
+            <div class="kv"><span class="k">ID</span><span class="v"><CopyId text={selected.hash} label={t('source.idLabel')} display={selected.hash.slice(0, 12)} /></span></div>
             {#if (selected.origin === 'sitemap' || selected.origin === 'rss') && selected.parent_hash}
               <div class="kv">
-                <span class="k">{selected.origin === 'rss' ? 'feed' : 'sitemap'}</span>
+                <span class="k">{selected.origin === 'rss' ? t('source.feed') : t('source.sitemap')}</span>
                 <span class="v">
                   <a class="rail-link" href={sourcePath(selected.parent_hash)}>
-                    part of {selected.origin === 'rss' ? 'a feed' : 'a sitemap'}
+                    {selected.origin === 'rss' ? t('source.partOfFeed') : t('source.partOfSitemap')}
                   </a>
                 </span>
               </div>
             {/if}
             {#if selected.sitemap}
               <div class="kv">
-                <span class="k">sitemap</span>
-                <span class="v">owns the pages it lists</span>
+                <span class="k">{t('source.sitemap')}</span>
+                <span class="v">{t('source.sitemapOwns')}</span>
               </div>
             {/if}
             {#if selected.rss}
               <div class="kv">
-                <span class="k">feed</span>
-                <span class="v">owns the pages its items point at</span>
+                <span class="k">{t('source.feed')}</span>
+                <span class="v">{t('source.feedOwns')}</span>
               </div>
             {/if}
             {#if selected.from_feed}
               <div class="kv">
-                <span class="k">copy</span>
-                <span class="v">taken from its feed — the page itself does not read</span>
+                <span class="k">{t('source.copyLabel')}</span>
+                <span class="v">{t('source.copyFromFeed')}</span>
               </div>
             {/if}
             {#if selected.original_name?.startsWith('wiki:')}
               <div class="kv">
                 <span class="k">wiki</span>
-                <span class="v"><a class="rail-link" href={wikiPath(selected.original_name.slice('wiki:'.length))}>open the page</a></span>
+                <span class="v"><a class="rail-link" href={wikiPath(selected.original_name.slice('wiki:'.length))}>{t('source.openPage')}</a></span>
               </div>
             {:else if selected.origin === 'wiki' && selected.wiki_page}
               <div class="kv">
                 <span class="k">wiki</span>
-                <span class="v"><a class="rail-link" href={wikiPath(selected.wiki_page)}>linked from a page</a></span>
+                <span class="v"><a class="rail-link" href={wikiPath(selected.wiki_page)}>{t('source.linkedFromPage')}</a></span>
               </div>
             {/if}
             {#if selected.origin || selected.original_name?.startsWith('wiki:')}
               <p class="rail-note">
-                Owned by {selected.origin === 'sitemap'
-                  ? 'its sitemap'
-                  : selected.origin === 'rss'
-                    ? 'its feed'
-                    : 'its wiki page'} — remove the owner to remove this source.
+                {t('source.ownedBy', {
+                  owner:
+                    selected.origin === 'sitemap'
+                      ? t('source.ownerSitemap')
+                      : selected.origin === 'rss'
+                        ? t('source.ownerFeed')
+                        : t('source.ownerWiki'),
+                })}
               </p>
             {/if}
           </section>
 
           <section class="rail-block">
             <div class="rail-label">
-              Tags
+              {t('source.tags')}
               {#if !tagsEditing}
-                <button class="rail-edit" onclick={beginTags}>edit</button>
+                <button
+                  class="rail-edit"
+                  title={t('source.edit')}
+                  aria-label={t('source.edit')}
+                  onclick={beginTags}
+                >
+                  <Icon name="edit" size={11} /> <span class="btn-label">{t('source.edit')}</span>
+                </button>
               {/if}
             </div>
             {#if tagsEditing}
@@ -777,13 +858,25 @@
                 class="input tag-input"
                 bind:value={tagsDraft}
                 placeholder="caching, reading, go"
-                aria-label="Source tags"
+                aria-label={t('source.tagsAria')}
               />
               <div class="tag-actions">
-                <button class="btn btn--primary btn--sm" disabled={tagsSaving} onclick={() => void saveTags()}>
-                  {tagsSaving ? 'Saving…' : 'Save'}
+                <button
+                  class="btn btn--primary btn--sm btn--action"
+                  disabled={tagsSaving}
+                  title={tagsSaving ? t('source.saving') : t('source.save')}
+                  onclick={() => void saveTags()}
+                >
+                  {#if tagsSaving}<span class="spinner"></span>{:else}<Icon name="check" size={13} />{/if}
+                  <span class="btn-label">{tagsSaving ? t('source.saving') : t('source.save')}</span>
                 </button>
-                <button class="btn btn--secondary btn--sm" onclick={() => (tagsEditing = false)}>Cancel</button>
+                <button
+                  class="btn btn--secondary btn--sm btn--action"
+                  title={t('common.cancel')}
+                  onclick={() => (tagsEditing = false)}
+                >
+                  <Icon name="close" size={13} /> <span class="btn-label">{t('common.cancel')}</span>
+                </button>
               </div>
               {#if tagsError}<p class="rail-note tag-error">{tagsError}</p>{/if}
             {:else if selected.tags?.length}
@@ -793,55 +886,55 @@
                 {/each}
               </div>
             {:else}
-              <p class="rail-note">No tags yet — file this source under a few coarse labels.</p>
+              <p class="rail-note">{t('source.noTags')}</p>
             {/if}
           </section>
 
           {#if selected.auto_tags?.length}
             <section class="rail-block">
-              <div class="rail-label">Auto tags</div>
+              <div class="rail-label">{t('source.autoTags')}</div>
               <div class="rail-chips">
                 {#each selected.auto_tags as tag (tag)}
-                  <span class="chip chip--auto" title="Derived from this source's claims">{tag}</span>
+                  <span class="chip chip--auto" title={t('source.autoTagsTitle')}>{tag}</span>
                 {/each}
               </div>
-              <p class="rail-note">Derived from the claims after a complete distill; the agent writes them, you don't.</p>
+              <p class="rail-note">{t('source.autoTagsNote')}</p>
             </section>
           {/if}
 
           {#if topics.length > 0}
             <section class="rail-block">
-              <div class="rail-label">Topics <span class="rail-count">{topics.length}</span></div>
+              <div class="rail-label">{t('source.topics')} <span class="rail-count">{topics.length}</span></div>
               <div class="rail-chips">
                 {#each topics.slice(0, 5) as topic (topic.name)}
-                  <a class="chip" href={`#/claims?topic=${encodeURIComponent(topic.name)}`} title={`${topic.count} claim(s)`}>
+                  <a class="chip" href={`#/claims?topic=${encodeURIComponent(topic.name)}`} title={tn('source.topicClaims', topic.count)}>
                     {topic.name}<span class="chip-count">{topic.count}</span>
                   </a>
                 {/each}
               </div>
               {#if topics.length > 5}
-                <p class="rail-note">+{topics.length - 5} more topic{topics.length - 5 === 1 ? '' : 's'}</p>
+                <p class="rail-note">{tn('source.moreTopics', topics.length - 5)}</p>
               {/if}
             </section>
           {/if}
 
           {#if counts}
             <section class="rail-block">
-              <div class="rail-label">Progress</div>
+              <div class="rail-label">{t('source.progress')}</div>
               <div class="kv">
-                <span class="k">state</span>
+                <span class="k">{t('source.stateLabel')}</span>
                 <span class="v" class:working={!!selected.running_step}>
                   {#if selected.running_step}<span class="spinner"></span>{/if}
                   {statusLabel(selected, live)}
                 </span>
               </div>
               {#if selected.running_step && counts.msg}
-                <div class="kv"><span class="k">now</span><span class="v">{counts.phase}: {counts.msg}</span></div>
+                <div class="kv"><span class="k">{t('source.nowLabel')}</span><span class="v">{counts.phase}: {counts.msg}</span></div>
               {/if}
               {#if progress}
                 <div class="progress-lines">
-                  <span>parts <b>{progress.partsDone}/{progress.partsTotal}</b></span>
-                  <span>claims <b>{progress.claimsDone}/{progress.claimsTotal}</b></span>
+                  <span>{t('source.partsLabel')} <b>{progress.partsDone}/{progress.partsTotal}</b></span>
+                  <span>{t('source.claimsLabel')} <b>{progress.claimsDone}/{progress.claimsTotal}</b></span>
                 </div>
               {/if}
             </section>
@@ -1148,6 +1241,13 @@
   }
 
   .file-row .file-open {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-row code {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

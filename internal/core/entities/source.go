@@ -60,6 +60,26 @@ type SourceTagSet struct {
 func (k SourceKind) NeedsCapture() bool { return k == SourceKindPDF }
 
 // Source is one immutable raw object in the content-addressed store.
+// SourceFilter narrows a source list. Every field is optional; the zero value means "the whole
+// vault". The repository applies the filter in SQL, so a page's COUNT is the count of the FILTERED
+// list — the number the windowed scroller needs for its height.
+type SourceFilter struct {
+	// Kind is one of md/pdf/txt/url, or empty for every kind.
+	Kind string
+	// Query matches the title, the original name, the URL and the tags (case-insensitive substring).
+	Query string
+	// Tag matches one exact human or derived tag.
+	Tag string
+	// AttachedOnly keeps sources whose snapshot a human supplied (meta.attached).
+	AttachedOnly bool
+	// BookmarksOnly keeps collected links (bookmark = 1).
+	BookmarksOnly bool
+	// FailedOnly keeps sources whose recorded steps include a failure. It is the Attention
+	// lens's source half, served by the index rather than by reading every source and filtering in
+	// the client.
+	FailedOnly bool
+}
+
 type Source struct {
 	ID    ulid.ULID
 	Hash  string // sha256 hex = the content address

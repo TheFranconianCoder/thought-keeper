@@ -101,15 +101,18 @@ func (f *fakeIndex) CountSourceChildren(ctx context.Context, parentHash, wikiPag
 }
 
 // CountSources mirrors the total behind a page.
-func (f *fakeIndex) CountSources(_ context.Context, kind string) (int, error) {
+func (f *fakeIndex) CountSources(_ context.Context, filter entities.SourceFilter) (int, error) {
 	n := 0
 	for _, s := range f.m {
-		if kind == "" || string(s.Kind) == kind {
+		if filter.Kind == "" || string(s.Kind) == filter.Kind {
 			n++
 		}
 	}
 	return n, nil
 }
+
+// CountAttachedSources is not exercised by these use cases.
+func (f *fakeIndex) CountAttachedSources(_ context.Context) (int, error) { return 0, nil }
 
 func (f *fakeIndex) SetSourceTags(_ context.Context, hash string, tags []string) error {
 	if src, ok := f.m[hash]; ok {
@@ -138,7 +141,7 @@ func (f *fakeIndex) SourceTagCounts(_ context.Context) (map[string]int, error) {
 	return out, nil
 }
 
-func (f *fakeIndex) ListSources(_ context.Context, kind string, limit, offset int) ([]entities.Source, error) {
+func (f *fakeIndex) ListSources(_ context.Context, filter entities.SourceFilter, limit, offset int) ([]entities.Source, error) {
 	hashes := make([]string, 0, len(f.m))
 	for h := range f.m {
 		hashes = append(hashes, h)
@@ -146,7 +149,7 @@ func (f *fakeIndex) ListSources(_ context.Context, kind string, limit, offset in
 	sort.Strings(hashes) // a deterministic order, like the repository's ORDER BY
 	var all []entities.Source
 	for _, h := range hashes {
-		if s := f.m[h]; kind == "" || string(s.Kind) == kind {
+		if s := f.m[h]; filter.Kind == "" || string(s.Kind) == filter.Kind {
 			all = append(all, s)
 		}
 	}

@@ -185,9 +185,8 @@ func atomDuplicatesFromPartial(p partialentities.PartialAtomDuplicates) payloads
 
 func atomLayoutFromPartial(p partialentities.PartialAtomLayout) payloads.AtomLayout {
 	return payloads.AtomLayout{
-		Folders: p.Folders, Claims: p.Claims, Indexes: p.Indexes, Usage: p.Usage,
+		Folders: p.Folders, Claims: p.Claims, Indexes: p.Indexes,
 		Moved: p.Moved, Removed: p.Removed, IndexesRemoved: p.IndexesRemoved,
-		UsageRemoved: p.UsageRemoved, DirsRemoved: p.DirsRemoved,
 		Skipped: p.Skipped, Kept: p.Kept,
 	}
 }
