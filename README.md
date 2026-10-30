@@ -7,6 +7,7 @@
   <a href="https://svelte.dev"><img src="https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white" alt="Svelte 5"></a>
   <a href="https://www.sqlite.org/fts5.html"><img src="https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white" alt="SQLite FTS5"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-blue" alt="MPL-2.0"></a>
+  <a href="https://github.com/TheFranconianCoder/thought-keeper/releases"><img src="https://img.shields.io/github/v/release/TheFranconianCoder/thought-keeper?include_prereleases&amp;label=release" alt="Release"></a>
   <a href="#local-first-by-construction"><img src="https://img.shields.io/badge/local--first-loopback%20only-2ea44f" alt="Local-first"></a>
 </p>
 
@@ -51,14 +52,23 @@ makes cross-source connections appear without asking a model for them.
 
 ## A first look
 
+The desktop window is the PWA; the same vault on a phone gets the narrow layout with the footer
+navigation.
+
 | | |
 | --- | --- |
-| ![The Claims lens](docs/screenshots/01-claims.png) | **Claims.** Newest claims and the busiest topics, a local FTS5 finder, and a detail view with provenance, cluster peers and same-topic claims. |
-| ![The Sources lens](docs/screenshots/02-sources.png) | **Sources.** Markdown, PDF, text and URL snapshots in one list, with a persistent search, type and attachment filter; a hand-attached snapshot carries a paperclip badge. |
-| ![A source detail](docs/screenshots/03-source-detail.png) | **One source's whole story.** Content, PDF, live page, log, files, the generated summary and the ownership graph. |
-| ![The Wiki lens](docs/screenshots/05-wiki.png) | **Wiki pages.** User-authored Markdown with tags; saving one runs it through the same pipeline as any source. |
-| ![An Ask answer](docs/screenshots/06-ask.png) | **Ask.** Questions answered from claims, with inline citations, saved as notes with automatic tags. |
-| ![The Status lens](docs/screenshots/08-status.png) | **Status.** Counts, job queue, maintenance actions, vocabulary health, live and peak memory. |
+| ![The Start lens](docs/screenshots/desktop-start.png) | **Start.** The front door: an Ask box with the last questions, Continue, Needs you and the newest sources with their live step state. |
+| ![The Sources lens](docs/screenshots/desktop-sources.png) | **Sources.** Markdown, PDF, text and URL snapshots in one list, with a persistent search, type and attachment filter; a hand-attached snapshot carries a paperclip badge. |
+| ![The assistant](docs/screenshots/desktop-assistant.png) | **The assistant.** One request resolves to a lens, a filter and a set; the result is an ordinary list with a banner that says how it was read. |
+| ![An Ask answer](docs/screenshots/desktop-ask.png) | **Ask.** Questions answered from claims, with inline citations, saved as notes with automatic tags. |
+| ![The Status lens](docs/screenshots/desktop-status.png) | **Status.** Counts, job queue, maintenance actions, vocabulary health, live and peak memory. |
+
+<p align="center">
+  <img src="docs/screenshots/mobile-start.png" alt="Start on a phone" width="240">
+  <img src="docs/screenshots/mobile-claims.png" alt="A claim on a phone" width="240">
+  <img src="docs/screenshots/mobile-ask.png" alt="An answer on a phone" width="240">
+  <img src="docs/screenshots/mobile-assistant.png" alt="The assistant on a phone" width="240">
+</p>
 
 The full list of captures the README expects lives in
 [`docs/screenshots/README.md`](docs/screenshots/README.md).
@@ -120,6 +130,14 @@ with a reason — never a silent green one.
 The PWA is claim-first and deliberately calm: the sidebar is a finite set of **lenses**, not a menu
 of features.
 
+### Start
+
+The front door, not a data dump: an **Ask** box with the three latest questions, **Continue** (the last
+sources, claims, wiki pages and questions you opened — local memory, not a vault record), **Needs you**
+(failed sources, findings and unclustered claims; quiet when there is nothing), the five newest sources
+with their live step state, and one calm vault-pulse line. A new vault starts with "add the first
+source" here.
+
 ### Claims
 
 - One claim per atom file with a flat topic (in the configured claim language, default English),
@@ -174,8 +192,6 @@ of features.
   its list 1:1; a feed only extends. A URL you add yourself wins over any page, sitemap or feed that
   had claimed it.
 
-![A sitemap and its sub-sources](docs/screenshots/04-sub-sources.png)
-
 ### Associations
 
 - Clusters are **titleless** and never listed: there is no cluster page, no cluster title, no cluster
@@ -216,21 +232,18 @@ of features.
 
 ### Search
 
-- **Vectorless and multilingual.** SQLite **FTS5** over claims and source nodes, with a language hint
-  per source that tunes morphology; the hint never filters results.
+- **Vectorless and multilingual.** SQLite **FTS5** over claims, plus a plain field match over the
+  **Sources** list (title, original name, URL, tags). A language hint per source tunes morphology; the
+  hint never filters results.
 - Hierarchical trees for reading a document part by part, and cluster memberships for "what travels
   with this claim".
 - `similarity ≠ relevance`: no cosine similarity over chunks, no nearest-neighbour store, no vector
   database anywhere.
 
-![The command palette](docs/screenshots/07-search.png)
-
 ### Attention
 
 A lens over existing state, not a second health model: **failed source steps** (capture/outline/
 distill) and **non-info lint findings**. Every row opens the thing that needs the decision.
-
-![The Attention lens](docs/screenshots/09-attention.png)
 
 ### Bookmarks
 
@@ -262,6 +275,21 @@ applies the alias table at write time, so a merged name is not reinvented by the
 Every agent operation is a **run** (`pipeline`, `query`, `lint`, `vocabulary`, `tag`, `summary`) with
 model, status, token counts, iterations, answer and error. Every source has its own log with one line
 per event. Runs are append-only; the audit is not rebuilt from anything.
+
+### The assistant
+
+The assistant is a **command line, not a chat**. A permanent button in the top bar (`⌘J`) opens one
+field: say what to show, and the app resolves it into a lens, a filter and a set. The request is read
+once and the result is an ordinary list — one request, one GUI state. It is not a lens and has no page
+of its own.
+
+- **Names come from the vault.** The model only turns your words into terms; the matching runs against
+  the vault's own topics and tags, with the curated alias table, word stems, edit distance and Cologne
+  phonetics. Without a model the request's own words are matched, and the record says so.
+- **Commands are records.** Each request keeps its utterance, the criteria it was read as (e.g.
+  `tag cloud · added ≤ 7 days · not finished`), the count and the materialized set. A result carries a
+  banner with "run again" and "keep as a filter"; the address names the record, so it expires when the
+  record is pruned after `assistant.retention` (a week by default).
 
 ---
 
@@ -414,8 +442,7 @@ internal/app              lifecycle, tray, single instance, schedulers, gate
 internal/registry         the one place that wires adapters to use cases
 internal/api              router, handlers, payloads, SSE
 internal/web              embeds the built PWA
-web-next/                 Svelte 5 PWA sources
-web/                      previous PWA, kept as a reference
+web/                      Svelte 5 PWA sources
 internal/core/entities    domain types (no dependencies)
 internal/core/usecases    use cases; interfaces/ next to them; agents/
 internal/core/tree        pure tree shape, addressing, rendering
@@ -436,7 +463,7 @@ standard library and nothing else. Wiring happens only in `cmd/` and `internal/r
 
 - **Go 1.27** — the repo ships a `mise.toml`; `mise install` is the easy path.
 - **Task** (`taskfile.dev`) for the house commands.
-- **Node.js 20+ and npm** for the PWA build.
+- **Node.js 22.12+ and pnpm** for the PWA build; the repo's `mise.toml` pins Node 26 and pnpm.
 - **poppler** (`pdftotext`, `pdftocairo`) for PDFs; **tesseract** with your language packs for OCR.
   Poppler is required to read a PDF at all. Tesseract is optional: a PDF with a text layer works
   without it, and a scanned page is reported honestly instead of being silently empty.
@@ -476,6 +503,20 @@ task build            # CGO-free; the PWA is embedded
 ./dist/thought-keeper app --config config.yaml
 ```
 
+### Releases
+
+Releases are **source-only**: each release ships GitHub's generated source archives, and the binary is
+built from them. Download an archive or clone the repository, then:
+
+```bash
+task build
+./dist/thought-keeper app --config config.yaml
+```
+
+Versions follow semver and the tag is the version. The released history starts at `v0.1.0`;
+`v1.0.0` is the current release. Notes and archives are on the
+[releases page](https://github.com/TheFranconianCoder/thought-keeper/releases).
+
 ### CLI
 
 The same binary is the CLI; content verbs are **clients of the running instance**.
@@ -514,9 +555,11 @@ Everything lives in one YAML file; `${ENV}` expansion keeps secrets out of it. T
 | `openai` | endpoint, key, cheap/strong models, retries, timeouts, headers |
 | `pipeline` | automation, timeouts, parallel parts/runs, consistency interval/batch |
 | `cluster` | the association quality gates (neighbours, merge/split, attach, overlap, size cap) |
+| `assistant` | command retention and prune interval, materialized-set cap, scan limit |
 | `capture` / `fetch` | URL dedupe (trailing slashes ignored), weekly page/sitemap and daily feed cadence, size limits, SSRF guard |
 | `pdf` / `ocr` | poppler/tesseract paths, page limits, OCR language and DPI |
 | `lint` | programmatic checks after each cluster pass |
+| `language` | UI, claim and summary language (all default to English) |
 
 ---
 
@@ -580,8 +623,9 @@ saved yourself can be attached to a blocked URL.
 
 Current work is about the long tail of a grown vault: memory- and time-conscious reads, cluster-pass
 throughput, the summary backfill, and the small interaction details that make a desktop app feel
-finished. Open work and open questions live in [`TODO.md`](TODO.md) — nothing there describes the
-present.
+finished. The recorded history is published as source-only releases, starting at `v0.1.0`;
+`v1.0.0` is the current release. Open work and open questions live in [`TODO.md`](TODO.md) — nothing
+there describes the present.
 
 ---
 

@@ -109,5 +109,5 @@ const notBuiltPage = `<!doctype html>
 <body style="font-family:system-ui;margin:3rem;color:#111">
 <h1>UI not built</h1>
 <p>The PWA assets are missing from this binary. Build them with <code>task web:build</code>
-(or <code>cd web &amp;&amp; npm install &amp;&amp; npm run build</code>) and rebuild the binary.</p>
+(or <code>cd web &amp;&amp; pnpm install &amp;&amp; pnpm run build</code>) and rebuild the binary.</p>
 </body></html>`

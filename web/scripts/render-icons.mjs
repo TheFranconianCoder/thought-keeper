@@ -13,7 +13,7 @@
  *
  * sharp is not a dependency of this package (the web build does not need it). The script finds
  * it in `web/node_modules`, `../studio-page/node_modules` or `../../studio-page/node_modules`;
- * install it with `npm i -D sharp` if none of them has it.
+ * install it with `pnpm add -D sharp` if none of them has it.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -64,7 +64,7 @@ function loadSharp() {
 		}
 	}
 	throw new Error(
-		'sharp not found. Run `npm i -D sharp` in web/, or render from a checkout with ' +
+		'sharp not found. Run `pnpm add -D sharp` in web/, or render from a checkout with ' +
 			'../studio-page installed (studio-page depends on sharp).'
 	);
 }

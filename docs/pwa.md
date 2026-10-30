@@ -207,16 +207,16 @@ One SSE connection (`GET /api/v1/events`) replaces polling. Event types:
   studio-page repo) is the source of truth.
 - The app icons are the pictogram reframed as a squircle: `web/icons/pictogram.svg` is the artwork
   source, `web/scripts/render-icons.mjs` derives the rest (`task icons`).
-- `web-next/public/sw.js` precaches the shell (document, manifest, icons) and is **network-first** for the
+- `web/public/sw.js` precaches the shell (document, manifest, icons) and is **network-first** for the
   document. The API is deliberately **not cached**: this app *is* a local service, and a cached
   answer about the vault would be a lie exactly when the service is down.
-- Bumping a precached asset means bumping the cache name in `web-next/public/sw.js`; a new build needs no
+- Bumping a precached asset means bumping the cache name in `web/public/sw.js`; a new build needs no
   bump (hashed assets change names).
 
 ## 7. Development
 
 ```bash
-task web:install   # npm install the next PWA toolchain
+task web:install   # pnpm install the PWA toolchain
 task web:dev       # Vite dev server with HMR, proxies /api to the running app
 task web:check     # svelte-check + TypeScript
 task web:test      # unit tests

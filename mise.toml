@@ -1,6 +1,7 @@
 [tools]
 go = "1.27"
 node = "26"                # PWA toolchain (Vite + Svelte); Node >=22.12 required
+pnpm = "12.15.0"          # the PWA package manager
 "golangci-lint" = "2.12"
 gofumpt = "0.11"
 sqlc = "1.31"

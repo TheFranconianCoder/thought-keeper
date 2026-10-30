@@ -1,99 +1,211 @@
-/* Thought Keeper — Notion-flavored UI on the studio design system (v3) palette:
-   graphite + signal orange, Inter/mono, flat and calm. Two schemes: light (derived
-   paper) and dark (studio graphite). The wiki document is the centre of everything. */
+/* Thought Keeper — the next UI.
+ *
+ * One design system, one palette, one scale. The interface is a quiet research desk: warm paper in
+ * light, deep graphite in dark, a single signal-orange accent, and semantic colour only where a state
+ * is being reported. The whole app uses one sans family; long-form text gets size and line-height
+ * instead of a second typeface.
+ */
 
 :root {
-  /* Studio palette anchors */
-  --graphite: #0b0f14;
-  --surface: #111827;
-  --steel: #1f2937;
-  --industrial: #334155;
-  --signal-orange: #f97316;
+  --font-sans: Inter, "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --bg: #f7f5f1;
+  --bg-sidebar: #f2efe9;
+  --bg-elevated: #fffefb;
+  --bg-muted: #efebe4;
+  --bg-hover: #ece7de;
+  --bg-active: #e5dfd4;
 
-  --radius: 4px;
-  --radius-lg: 8px;
-  --sidebar-w: 248px;
-  --doc-max: 720px;
-  --ease: cubic-bezier(0.2, 0, 0.1, 1);
+  --ink: #1b1a17;
+  --ink-2: #494640;
+  --muted: #746f66;
+  --faint: #a29c91;
 
-  /* Light: a calm paper sheet derived from the studio neutrals. */
-  --bg: #ffffff;
-  --bg-alt: #f7f8fa;
-  --bg-hover: #f0f1f4;
-  --bg-active: #e9ebef;
-  --text: #111827;
-  --text-2: #374151;
-  --muted: #6b7280;
-  --faint: #9ca3af;
-  --border: #eceef1;
-  --border-strong: #dfe3e8;
-  --accent: var(--signal-orange);
-  --accent-soft: rgb(249 115 22 / 12%);
-  --accent-ink: #ffffff;
-  --code-bg: #f6f7f9;
-  --shadow-pop: 0 0 0 1px rgb(15 23 42 / 6%), 0 12px 32px rgb(15 23 42 / 14%);
+  --line: #e5dfd5;
+  --line-strong: #d4ccbe;
+
+  --accent: #c2410c;
+  --accent-hover: #a93a0a;
+  --accent-soft: rgb(194 65 12 / 10%);
+  --accent-ink: #fffaf6;
+
+  --success: #2f7d4f;
+  --success-soft: rgb(47 125 79 / 11%);
+  --warning: #a16207;
+  --warning-soft: rgb(161 98 7 / 12%);
+  --danger: #b42318;
+  --danger-soft: rgb(180 35 24 / 10%);
+  --info: #2563eb;
+  --info-soft: rgb(37 99 235 / 10%);
+
+  --shadow-1: 0 1px 2px rgb(31 26 20 / 5%);
+  --shadow-2: 0 0 0 1px rgb(31 26 20 / 5%), 0 12px 30px rgb(31 26 20 / 12%);
+  --shadow-pop: 0 0 0 1px rgb(31 26 20 / 7%), 0 20px 60px rgb(31 26 20 / 20%);
+
+  --radius-sm: 6px;
+  --radius: 9px;
+  --radius-lg: 13px;
+  --radius-pill: 999px;
+
+  --sidebar-w: 264px;
+  --topbar-h: 48px;
+  --content-max: 1020px;
+  --reading-max: 760px;
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --bg: var(--graphite);
-  --bg-alt: #0e131a;
-  --bg-hover: #161d27;
-  --bg-active: #1d2632;
-  --text: #f3f4f6;
-  --text-2: #d1d5db;
-  --muted: #94a3b8;
-  --faint: #64748b;
-  --border: #1d2733;
-  --border-strong: #2a3644;
-  --accent-soft: rgb(249 115 22 / 16%);
-  --code-bg: #111827;
-  --shadow-pop: 0 0 0 1px rgb(0 0 0 / 40%), 0 16px 40px rgb(0 0 0 / 55%);
+  --bg: #0c0f13;
+  --bg-sidebar: #0f1318;
+  --bg-elevated: #141920;
+  --bg-muted: #191f27;
+  --bg-hover: #1d242d;
+  --bg-active: #232c37;
+
+  --ink: #eef1f4;
+  --ink-2: #c9d0d8;
+  --muted: #96a0ab;
+  --faint: #66717d;
+
+  --line: #222a34;
+  --line-strong: #303a46;
+
+  --accent: #fb923c;
+  --accent-hover: #fdba74;
+  --accent-soft: rgb(251 146 60 / 13%);
+  --accent-ink: #1a1207;
+
+  --success: #4ade80;
+  --success-soft: rgb(74 222 128 / 11%);
+  --warning: #fbbf24;
+  --warning-soft: rgb(251 191 36 / 11%);
+  --danger: #f87171;
+  --danger-soft: rgb(248 113 113 / 11%);
+  --info: #60a5fa;
+  --info-soft: rgb(96 165 250 / 11%);
+
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 30%);
+  --shadow-2: 0 0 0 1px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 45%);
+  --shadow-pop: 0 0 0 1px rgb(0 0 0 / 40%), 0 24px 70px rgb(0 0 0 / 60%);
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root[data-theme="auto"] {
-    --bg: var(--graphite);
-    --bg-alt: #0e131a;
-    --bg-hover: #161d27;
-    --bg-active: #1d2632;
-    --text: #f3f4f6;
-    --text-2: #d1d5db;
-    --muted: #94a3b8;
-    --faint: #64748b;
-    --border: #1d2733;
-    --border-strong: #2a3644;
-    --accent-soft: rgb(249 115 22 / 16%);
-    --code-bg: #111827;
-    --shadow-pop: 0 0 0 1px rgb(0 0 0 / 40%), 0 16px 40px rgb(0 0 0 / 55%);
+    --bg: #0c0f13;
+    --bg-sidebar: #0f1318;
+    --bg-elevated: #141920;
+    --bg-muted: #191f27;
+    --bg-hover: #1d242d;
+    --bg-active: #232c37;
+
+    --ink: #eef1f4;
+    --ink-2: #c9d0d8;
+    --muted: #96a0ab;
+    --faint: #66717d;
+
+    --line: #222a34;
+    --line-strong: #303a46;
+
+    --accent: #fb923c;
+    --accent-hover: #fdba74;
+    --accent-soft: rgb(251 146 60 / 13%);
+    --accent-ink: #1a1207;
+
+    --success: #4ade80;
+    --success-soft: rgb(74 222 128 / 11%);
+    --warning: #fbbf24;
+    --warning-soft: rgb(251 191 36 / 11%);
+    --danger: #f87171;
+    --danger-soft: rgb(248 113 113 / 11%);
+    --info: #60a5fa;
+    --info-soft: rgb(96 165 250 / 11%);
+
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 30%);
+    --shadow-2: 0 0 0 1px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 45%);
+    --shadow-pop: 0 0 0 1px rgb(0 0 0 / 40%), 0 24px 70px rgb(0 0 0 / 60%);
     color-scheme: dark;
   }
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
-/* Scrollbars — same treatment as studio-page: a slim, pill-shaped thumb on an
-   invisible track, with a Firefox fallback. */
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  max-width: 100%;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 ::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--industrial);
+  background: var(--line-strong);
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-strong);
+  background: var(--faint);
   border: 3px solid transparent;
   background-clip: content-box;
 }
@@ -104,73 +216,1582 @@
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--industrial) transparent;
+  scrollbar-color: var(--line-strong) transparent;
 }
 
-html,
-body {
-  height: 100%;
-  margin: 0;
-}
+/* ── Shell ─────────────────────────────────────────────────────────────── */
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-a {
-  color: inherit;
-}
-
-::selection {
-  background: var(--accent-soft);
-}
-
-/* ── App shell ──────────────────────────────────────────── */
-/* The shell's own layout: the sidebar beside the content, with the bar as the content column's
- * first row. The bar is the app's chrome in every shell — there is no platform-drawn title bar to
- * build around (see the Window Controls Overlay note in AGENTS.md). */
-.app {
+.app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
-/* ── The platform's window controls (window-controls-overlay) ──────────────
-   The manifest asks for `window-controls-overlay`, so an INSTALLED app has its window controls drawn
-   inside the window, over the app's own bar. The region the app may use is published as
-   env(titlebar-area-*), and the bar steps aside exactly where the controls are — on the RIGHT on
-   Windows and Linux, on the LEFT on macOS. The rest of the layout keeps its full width: no reserved
-   strip and no full-width bar, only the two ends of the top row give way.
-   `html[data-wco='1']` is set by the app while the overlay is really visible
-   (lib/windowControls.ts), so a browser tab — where the variables exist too — never reserves a region
-   nobody draws.
-   env() goes straight into the property that uses it: a custom property holding env() is invalid at
-   computed-value time, and the height it produced was 0. */
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.content-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.page {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 28px 34px 72px;
+}
+
+.page--wide {
+  max-width: 1280px;
+}
+
+.page--reading {
+  max-width: var(--reading-max);
+}
+
+/* The reading surface of a detail page: the same frame as a source's content card. The page itself
+   scrolls at the window edge; this card is the inset surface inside it. */
+.detail-frame {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-1);
+  padding: 26px 28px 32px;
+}
+
+/* Virtual list: the wrapper owns the real scroll height; only the rows in view are mounted. */
+.virtual-list {
+  position: relative;
+  width: 100%;
+}
+
+.virtual-list--windowed .virtual-item {
+  position: absolute;
+  right: 0;
+  left: 0;
+  overflow: hidden;
+}
+
+.virtual-list--windowed .virtual-item > * {
+  box-sizing: border-box;
+  height: 100%;
+}
+
+/* ── Sidebar ───────────────────────────────────────────────────────────── */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 2px;
+  padding: 12px 10px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--line);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 14px;
+  min-width: 0;
+}
+
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  flex: none;
+  box-shadow: var(--shadow-1);
+}
+
+.brand-name {
+  font-weight: 650;
+  font-size: 14.5px;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+}
+
+.nav-section {
+  margin-top: 10px;
+}
+
+.nav-section--home {
+  margin-top: 0;
+}
+
+.nav-label {
+  padding: 0 9px 5px;
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  text-align: left;
+  transition: background 0.14s var(--ease), color 0.14s var(--ease);
+}
+
+.nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
+.nav-item.active {
+  background: var(--bg-active);
+  color: var(--ink);
+  font-weight: 550;
+}
+
+.nav-item.active .ico {
+  color: var(--accent);
+}
+
+.nav-item .count {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-item .dot-alert {
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.sidebar-spacer {
+  flex: 1;
+  min-height: 12px;
+}
+
+.sidebar-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.connection-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 9px 2px;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.dot--live {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
+}
+
+.dot--warn {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px var(--warning-soft);
+}
+
+.dot--off {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+/* ── Top bar ───────────────────────────────────────────────────────────── */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--topbar-h);
+  padding: 0 20px 0 26px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  flex: none;
+}
+
+.topbar-brand {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.topbar-mark {
+  flex: none;
+}
+
+.topbar-brand-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-search {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: 8px;
+  width: min(340px, 38vw);
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: left;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.topbar-search:hover {
+  border-color: var(--line-strong);
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
+.topbar-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* In the installed PWA the bar IS the OS title bar (window-controls-overlay), often only ~32px
+   high. A boxed button would touch its edges and clash with the square window controls, so the
+   same search becomes a full-height rectangular segment, flush with the left edge and closed by a
+   divider. */
+html[data-wco="1"] .topbar-search {
+  align-self: stretch;
+  width: min(400px, 40vw);
+  height: auto;
+  margin-left: -26px;
+  padding: 0 14px 0 26px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--bg-muted) 45%, transparent);
+}
+
+html[data-wco="1"] .topbar-search:hover {
+  background: var(--bg-hover);
+}
+
+html[data-wco="1"] .topbar-search:focus-visible {
+  outline: none;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.topbar-search .ico {
+  color: var(--faint);
+}
+
+.topbar-search:hover .ico {
+  color: var(--accent);
+}
+
+.topbar-search-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-search .kbd {
+  flex: none;
+}
+
+.topbar-search-icon {
+  display: none;
+}
+
+/* The assistant is a FAB, not a bar button.
+ *
+ * It is the app's command line — the one thing that is always reachable and not a lens — and a bar
+ * button made it look like another utility (search, language, theme). A round button, centered,
+ * hanging a little below the bar, says "action" rather than "control", and it is the same button in
+ * the wide and the narrow layout.
+ *
+ * It must overlap the content (that is what makes it float), so the bar needs a stacking order of
+ * its own: the backdrop-filter already creates a context, and z-index only works if the bar is
+ * positioned.
+ */
+.topbar {
+  position: relative;
+  z-index: 30;
+}
+
+.assistant-fab {
+  position: absolute;
+  left: 50%;
+  /* It hangs out of the bar, but keeps its distance from the OS title bar above it. */
+  top: calc(100% - 32px);
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 10%) inset,
+    0 6px 18px rgb(0 0 0 / 28%);
+  /* The spark's mass sits a hair high in its own box; half a pixel of optical correction is the
+     difference between "centred" and "looks off". */
+  transform: translateX(-50%) translateY(-0.5px);
+  transition:
+    background 0.15s var(--ease),
+    transform 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+
+.assistant-fab:hover {
+  background: var(--accent-hover);
+  transform: translateX(-50%) translateY(1px);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 10%) inset,
+    0 8px 22px rgb(0 0 0 / 34%);
+}
+
+.assistant-fab:active {
+  transform: translateX(-50%) translateY(2px) scale(0.97);
+}
+
+.assistant-fab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* The installed PWA's bar IS the OS title bar and is shallower: the button sits higher and a little
+   smaller, so it does not crowd the window controls. */
+html[data-wco="1"] .assistant-fab {
+  top: calc(100% - 28px);
+}
+
+.assistant-fab .ico {
+  display: block;
+  animation: assistant-twinkle 4.5s var(--ease) infinite;
+}
+
+@keyframes assistant-twinkle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.82;
+  }
+}
+
+/* A command is being read: somewhere in this vault, maybe not in this window. The spark breathes
+   and a ring runs out of the button, so "the assistant is working" is visible without a banner. */
+.assistant-fab.is-busy .ico {
+  animation: assistant-pulse 1.1s var(--ease) infinite;
+}
+
+.assistant-fab.is-busy::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: assistant-ring 1.6s var(--ease) infinite;
+}
+
+@keyframes assistant-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+@keyframes assistant-ring {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-soft);
+  }
+  70% {
+    box-shadow: 0 0 0 9px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  gap: 6px;
+}
+
+.activity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 320px;
+  height: 27px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-chip .spinner {
+  width: 10px;
+  height: 10px;
+  border-width: 1.5px;
+}
+
+.offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 26px;
+  border-bottom: 1px solid var(--warning-soft);
+  background: var(--warning-soft);
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+.offline-banner b {
+  color: var(--ink);
+}
+
+/* ── Page furniture ────────────────────────────────────────────────────── */
+
+/* One title row serves every page and every list (see .head-row): the heading never wraps, and an
+   action keeps its place on the right in every language. A subtitle, when a page has one, sits
+   below the row and can wrap without moving the heading or the action. */
+.page-head {
+  margin: 0 0 22px;
+}
+
+.page-head .sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ── Head row ──────────────────────────────────────────────────────────── */
+
+/* The row is shared by page heads and list heads: the title, an optional count and the one action.
+   It does not wrap — the title truncates instead — so the action keeps one place in every language
+   and in the narrow layout. */
+.head-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.page-head .head-row {
+  margin: 0 0 4px;
+}
+
+.head-row h1 {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.head-row .count {
+  flex: none;
+  color: var(--faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.head-row .spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.head-row .btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
+}
+
+.head-row > .chip {
+  flex: none;
+}
+
+/* ── List head ─────────────────────────────────────────────────────────── */
+
+/* Every library list (Sources, Wiki, Bookmarks, Claims, Attention) starts with the same shape: one
+   row with the title, its count and the lens's one action; the full-width search below it; then the
+   lens's extra filters and its chip cloud. */
+.list-head {
+  flex: none;
+  margin: 0 0 12px;
+}
+
+.list-head .head-row {
+  margin: 0 0 12px;
+}
+
+.list-search {
+  margin: 0 0 10px;
+}
+
+.list-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+
+.chip-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 92px;
+  margin: 0 0 10px;
+  overflow-y: auto;
+  padding-bottom: 2px;
+}
+
+.filter-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -2px 0 10px;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+
+.filter-line b {
+  color: var(--ink-2);
+  font-weight: 550;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.section {
+  margin: 0 0 30px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+}
+
+.section-head h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.section-head .spacer {
+  flex: 1;
+}
+
+.section-head .count {
+  color: var(--faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.block-title {
+  margin: 30px 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 520;
+  white-space: nowrap;
+  transition: background 0.14s var(--ease), border-color 0.14s var(--ease), color 0.14s var(--ease);
+}
+
+/* A button label that may be longer than the button. The icon stays; the text ends in an ellipsis. */
+.btn-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+
+.btn--primary:hover {
+  background: var(--accent-hover);
+  color: var(--accent-ink);
+}
+
+.btn--secondary {
+  background: var(--bg-elevated);
+  border-color: var(--line-strong);
+  color: var(--ink-2);
+}
+
+.btn--secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--faint);
+}
+
+.btn--ghost {
+  color: var(--muted);
+}
+
+.btn--danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.btn--danger:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn--sm {
+  height: 27px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.btn--lg {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 13.5px;
+}
+
+/* A detail view's action bar keeps the icon and drops the label when the window is narrow. The
+   label is wrapped so it can disappear without touching the icon; the title/aria-label carries the
+   word instead. */
+@media (max-width: 860px) {
+  .btn-label {
+    display: none;
+  }
+
+  .btn--action {
+    width: 32px;
+    gap: 0;
+    padding: 0;
+  }
+
+  .btn--sm.btn--action {
+    width: 27px;
+  }
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  transition: background 0.14s var(--ease), color 0.14s var(--ease), border-color 0.14s var(--ease);
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
+.icon-btn--bordered {
+  border-color: var(--line);
+  background: var(--bg-elevated);
+}
+
+.icon-btn--danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+}
+
+/* ── Inputs ────────────────────────────────────────────────────────────── */
+
+.input,
+.textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  font-size: 13.5px;
+  transition: border-color 0.14s var(--ease), box-shadow 0.14s var(--ease);
+}
+
+.input {
+  height: 34px;
+  padding: 0 10px;
+}
+
+.textarea {
+  min-height: 120px;
+  padding: 9px 10px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--faint);
+}
+
+.input:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.input--search {
+  padding-left: 32px;
+}
+
+.search-wrap {
+  position: relative;
+}
+
+.search-wrap > .ico {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  /* The clearable action wraps the input in a positioned host that comes AFTER this icon in the
+     DOM; without a stacking order the host (and the input's opaque background) painted over it.
+     The icon is an overlay above the field, not part of its flow. */
+  z-index: 1;
+  transform: translateY(-50%);
+  color: var(--faint);
+  pointer-events: none;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0 0 13px;
+}
+
+.field > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.field .hint {
+  color: var(--faint);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+}
+
+.toolbar .grow {
+  flex: 1;
+}
+
+/* ── Chips, tags, badges ───────────────────────────────────────────────── */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--bg-muted);
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+button.chip {
+  transition: background 0.14s var(--ease), color 0.14s var(--ease), border-color 0.14s var(--ease);
+}
+
+button.chip:hover {
+  border-color: var(--line-strong);
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
+.chip--accent {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.chip--ok {
+  border-color: transparent;
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.chip--warn {
+  border-color: transparent;
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.chip--danger {
+  border-color: transparent;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.chip--mono {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.chip .chip-count {
+  color: var(--faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted);
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Segmented control / tabs ──────────────────────────────────────────── */
+
+.seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted);
+}
+
+.seg button {
+  height: 25px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.seg button:hover {
+  color: var(--ink);
+}
+
+.seg button.on {
+  background: var(--bg-elevated);
+  color: var(--ink);
+  box-shadow: var(--shadow-1);
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  position: relative;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab.on {
+  color: var(--ink);
+  font-weight: 550;
+}
+
+.tab.on::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* ── Cards, panels, rows ───────────────────────────────────────────────── */
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-1);
+}
+
+.panel--flat {
+  box-shadow: none;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-body {
+  padding: 15px;
+}
+
+.list {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.list--plain {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.row--interactive {
+  transition: background 0.12s var(--ease);
+}
+
+.row--interactive:hover {
+  background: var(--bg-hover);
+}
+
+.row__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.row__sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+
+.row__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--faint);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.row__actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 0.12s var(--ease);
+}
+
+.row:hover .row__actions,
+.row:focus-within .row__actions {
+  opacity: 1;
+}
+
+.row__actions .icon-btn {
+  width: 27px;
+  height: 27px;
+}
+
+.kv {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 12.5px;
+}
+
+.kv .k {
+  width: 74px;
+  flex: none;
+  color: var(--faint);
+}
+
+.kv .v {
+  min-width: 0;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.divider {
+  height: 1px;
+  margin: 16px 0;
+  border: 0;
+  background: var(--line);
+}
+
+/* ── Empty / notice / loading ──────────────────────────────────────────── */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 54px 24px;
+  text-align: center;
+}
+
+.empty__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 4px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--bg-muted);
+  color: var(--muted);
+}
+
+.empty__title {
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.empty__text {
+  max-width: 380px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.notice--error {
+  border-color: transparent;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.notice--warn {
+  border-color: transparent;
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  flex: none;
+  border: 2px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.spinner--sm {
+  width: 11px;
+  height: 11px;
+  border-width: 1.5px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.skeleton {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--bg-muted), var(--bg-hover), var(--bg-muted));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* ── Utility ───────────────────────────────────────────────────────────── */
+
+.muted {
+  color: var(--muted);
+}
+
+.faint {
+  color: var(--faint);
+}
+
+.small {
+  font-size: 12px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.grow {
+  flex: 1;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.row-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--bg-muted);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* ── Markdown ──────────────────────────────────────────────────────────── */
+
+.markdown {
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.72;
+  overflow-wrap: break-word;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin: 1.55em 0 0.55em;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.012em;
+}
+
+.markdown h1 {
+  font-size: 1.55em;
+}
+
+.markdown h2 {
+  font-size: 1.28em;
+}
+
+.markdown h3 {
+  font-size: 1.1em;
+}
+
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  font-size: 1em;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown table,
+.markdown pre {
+  margin: 0 0 1em;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 1.35em;
+}
+
+.markdown li + li {
+  margin-top: 0.25em;
+}
+
+.markdown li::marker {
+  color: var(--faint);
+}
+
+.markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.markdown a:hover {
+  color: var(--accent-hover);
+}
+
+.markdown strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.markdown blockquote {
+  padding: 2px 0 2px 16px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--muted);
+}
+
+.markdown code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-muted);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+}
+
+.markdown pre {
+  overflow: auto;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-muted);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.markdown pre code {
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+}
+
+.markdown th,
+.markdown td {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.markdown th {
+  background: var(--bg-muted);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.markdown hr {
+  height: 1px;
+  margin: 1.8em 0;
+  border: 0;
+  background: var(--line);
+}
+
+.markdown img {
+  border-radius: var(--radius);
+}
+
+.markdown input[type="checkbox"] {
+  margin-right: 6px;
+}
+
+.topic-code-link code {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Numbered Ask references behave like footnotes: the prose marker scrolls to its bibliography
+   entry; the entry flashes once so the eye lands on it. */
+.markdown a.cite-ref {
+  color: var(--accent);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  border-radius: 3px;
+  scroll-margin-block: 28px;
+}
+
+.markdown a.cite-ref:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown .cite-entry {
+  border-radius: var(--radius-sm);
+  scroll-margin-block: 28px;
+}
+
+.markdown .cite-flash {
+  animation: cite-flash 1.3s var(--ease);
+}
+
+.markdown a.cite-back {
+  margin-left: 5px;
+  color: var(--faint);
+  text-decoration: none;
+  font-size: 0.82em;
+}
+
+.markdown a.cite-back:hover {
+  color: var(--accent);
+}
+
+@keyframes cite-flash {
+  0%,
+  100% {
+    background: transparent;
+  }
+  20%,
+  60% {
+    background: var(--accent-soft);
+  }
+}
+
+/* ── Window controls overlay ───────────────────────────────────────────── */
+
 html[data-wco="1"] .topbar {
-  /* The controls sit against the window's right edge, and 100vw is the window's width — so what the
-       title bar area does not cover is exactly their width. */
-  padding-right: calc(
-    16px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)
-  );
-  /* And the row must be tall enough to hold them: a taller system title bar must not push the
-       controls down into the content. */
-  min-height: env(titlebar-area-height, 52px);
+  padding-right: calc(20px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+  min-height: env(titlebar-area-height, var(--topbar-h));
 }
 
 html[data-wco="1"] .brand {
   padding-left: calc(8px + env(titlebar-area-x, 0px));
-  min-height: env(titlebar-area-height, 38px);
+  min-height: env(titlebar-area-height, 40px);
 }
 
-/* With the overlay the app's own bar IS the window's title bar: dragging it moves the window and
-   double-clicking it maximises, which is what a title bar does. Controls inside it opt out, or the
-   drag region swallows their clicks. */
 html[data-wco="1"] .topbar,
 html[data-wco="1"] .brand {
   -webkit-app-region: drag;
@@ -186,2479 +1807,132 @@ html[data-wco="1"] .brand a {
   app-region: no-drag;
 }
 
-/* ── Sidebar ────────────────────────────────────────────── */
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: var(--bg-alt);
-  border-right: 1px solid var(--border);
-  padding: 10px 8px;
-  gap: 2px;
-}
+/* ── Responsive ────────────────────────────────────────────────────────── */
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 6px 8px 10px;
-}
-
-.brand-mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  flex: none;
-}
-
-.brand-name {
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: -0.01em;
-}
-
-.side-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 9px;
-  margin: 2px 2px 8px;
-  border-radius: var(--radius);
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.side-search:hover,
-.side-search:focus-within {
-  background: var(--bg-hover);
-  color: var(--text-2);
-}
-
-.side-search input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: text;
-}
-
-.side-search input:focus {
-  outline: none;
-}
-
-.side-search input::placeholder {
-  color: var(--muted);
-}
-
-.side-search .kbd {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--faint);
-  border: 1px solid var(--border-strong);
-  border-radius: 3px;
-  padding: 0 5px;
-}
-
-.nav-group {
-  padding: 10px 8px 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 30px;
-  padding: 0 8px;
-  border-radius: var(--radius);
-  color: var(--text-2);
-  text-decoration: none;
-  font-size: 14px;
-  cursor: pointer;
-  border: none;
-  background: none;
-  font-family: inherit;
-  width: 100%;
-  text-align: left;
-}
-
-.nav-item:hover {
-  background: var(--bg-hover);
-}
-
-.nav-item.active {
-  background: var(--bg-active);
-  color: var(--text);
-  font-weight: 500;
-}
-
-.nav-item .count {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--faint);
-}
-
-.nav-item .ico {
-  flex: none;
-  color: var(--faint);
-}
-
-.nav-item.active .ico {
-  color: var(--accent);
-}
-
-/* Page tree inside the sidebar */
-.tree {
-  flex: 1;
-  min-height: 0;
-  /* A scroller on ONE axis makes the other `auto` too (the spec turns `visible` into `auto` as soon
-       as one axis scrolls), so a row that grew a little too wide made the whole topic list scroll
-       sideways. The list scrolls VERTICALLY; sideways it must never move. */
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-bottom: 8px;
-  margin-top: 2px;
-}
-
-/* The topic list: one row per domain, and the row IS the link to that domain's topic page. The
-   pages themselves belong in the content column — the sidebar says what there is, not what is in
-   it. */
-.tree-topic {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 8px;
-  border-radius: var(--radius);
-  color: var(--text-2);
-  text-decoration: none;
-  font-size: 13.5px;
-}
-
-.tree-topic:hover {
-  background: var(--bg-hover);
-}
-
-.tree-topic.active {
-  background: var(--bg-active);
-  color: var(--text);
-  font-weight: 500;
-}
-
-.tree-topic .count {
-  font-family: var(--font-mono);
-  font-weight: 400;
-  margin-left: auto;
-  color: var(--faint);
-}
-
-/* The counts never wrap and never shrink: the NAME gives way (ellipsised) when a domain carries a
-   page count, a dirty count, an inconsistent count and a query count at once. */
-.tree-topic .count,
-.tree-topic .count.q,
-.tree-topic .count.dirty,
-.tree-topic .count.bad {
-  flex: none;
-  white-space: nowrap;
-}
-
-.tree-topic .tname {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tree-topic .count + .count {
-  margin-left: 6px;
-}
-
-.side-foot {
-  /* The footer is pinned to the bottom no matter how short the navigation above it is. */
-  margin-top: auto;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.side-foot .row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px;
-  font-size: 12px;
-  color: var(--muted);
-  font-family: var(--font-mono);
-}
-
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex: none;
-}
-
-.dot-off {
-  background: var(--faint);
-}
-
-.dot-warn {
-  background: var(--accent);
-  opacity: 0.55;
-}
-
-.run-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 8px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  color: var(--muted);
-  background: var(--bg-hover);
-}
-
-/* The spinner is used by the topbar chip, the list row and the detail overlay — one rule. */
-.spin {
-  display: inline-block;
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 2px solid var(--accent);
-  border-top-color: transparent;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
+@media (max-width: 1180px) {
+  :root {
+    --content-max: 900px;
+  }
+  .page {
+    padding-right: 26px;
+    padding-left: 26px;
   }
 }
 
-/* ── Main + topbar ──────────────────────────────────────── */
-.main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  background: var(--bg);
-}
-
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 52px;
-  padding: 0 16px;
-  flex: none;
-}
-
-/* The bar is an ordinary toolbar — it keeps its place beside the sidebar and reserves no strip — but
- * in an INSTALLED app it is also the window's title bar, so its two ends step aside for the platform's
- * window controls (see the window-controls-overlay block above). */
-.crumb {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--muted);
-  min-width: 0;
-}
-
-.crumb .sep {
-  color: var(--faint);
-}
-
-.crumb .cur {
-  color: var(--text-2);
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.spacer {
-  flex: 1;
-}
-
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 30px;
-  min-width: 30px;
-  padding: 0 8px;
-  border-radius: var(--radius);
-  border: none;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-}
-
-.icon-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-/* The note above a capped preview: a source is raw material, so a long document is shown in part. */
-.viewer-cap {
-  margin: 0;
-  padding: 10px 22px 0;
-  font-size: 12.5px;
-}
-
-.scroll {
-  flex: 1;
-  min-height: 0;
-  /* Always reserve the vertical scrollbar: a view that gains one when its content grows would
-       shift the whole column sideways. */
-  overflow-y: scroll;
-  overflow-x: hidden;
-  scrollbar-gutter: stable;
-}
-
-/* ── Buttons ────────────────────────────────────────────── */
-/* A button that cannot be pressed has to LOOK like it. The `disabled` attribute alone changes nothing
-   on screen, so a reader keeps clicking — and "the button did nothing" is the report that follows. Every
-   button that a running job locks (the Status actions, the source actions) is covered by this. */
-.btn:disabled,
-.icon-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  height: 34px;
-  padding: 0 13px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border-strong);
-  background: var(--bg);
-  color: var(--text-2);
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.btn:hover {
-  background: var(--bg-hover);
-}
-
-.btn-accent {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
-}
-
-.btn-danger {
-  border-color: var(--danger, #b4241f);
-  color: var(--danger, #b4241f);
-}
-
-.btn-danger:hover {
-  background: var(--danger, #b4241f);
-  color: #fff;
-}
-
-.btn-accent:hover {
-  filter: brightness(1.06);
-  background: var(--accent);
-}
-
-.btn-ghost {
-  border-color: transparent;
-  background: none;
-}
-
-.btn-ghost:hover {
-  background: var(--bg-hover);
-}
-
-/* ── Inputs ─────────────────────────────────────────────── */
-.input,
-.textarea {
-  width: 100%;
-  height: 34px;
-  padding: 0 11px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border-strong);
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 14px;
-}
-
-/* A horizontal form row: input + button, vertically centred. */
-.row-inline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.row-inline .input {
-  flex: 1;
-  min-width: 0;
-}
-
-.thinking {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--accent);
-  font-size: 13.5px;
-  font-weight: 500;
-}
-
-/* Thin top progress line. Its 2px are reserved permanently (see App.svelte): an
-   appearing bar must never shift the content. */
-.progress {
-  height: 2px;
-  flex: none;
-  overflow: hidden;
-  background: transparent;
-}
-
-.progress > i {
-  display: block;
-  height: 100%;
-  width: 40%;
-  background: var(--accent);
-  opacity: 0;
-}
-
-.progress.on > i {
-  opacity: 1;
-  animation: prog 1.15s ease-in-out infinite;
-}
-
-@keyframes prog {
-  0% {
-    transform: translateX(-100%);
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  100% {
-    transform: translateX(250%);
-  }
-}
-
-.textarea {
-  height: auto;
-  min-height: 96px;
-  padding: 9px 11px;
-  resize: vertical;
-}
-
-.input::placeholder,
-.textarea::placeholder {
-  color: var(--faint);
-}
-
-.input:focus-visible,
-.textarea:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-/* ── Document ───────────────────────────────────────────── */
-.doc-wrap {
-  padding: 28px 0 96px;
-}
-
-.doc {
-  max-width: var(--doc-max);
-  margin: 0 auto;
-  padding: 0 48px;
-}
-
-.doc-title {
-  margin: 22px 0 8px;
-  font-size: 38px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-}
-
-.doc-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 12.5px;
-  margin-bottom: 22px;
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--bg-hover);
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.chip-accent {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-/* The number beside a topic chip: how many claims of this source carry it. Muted, small, and always
-   the same width, so a list of five reads as a ranking. */
-.chip-n {
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-}
-
-/* ── Markdown ───────────────────────────────────────────── */
-.markdown {
-  color: var(--text-2);
-  font-size: 15.5px;
-  line-height: 1.7;
-}
-
-.markdown > :first-child {
-  margin-top: 0;
-}
-
-.markdown h1,
-.markdown h2,
-.markdown h3,
-.markdown h4 {
-  color: var(--text);
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  line-height: 1.25;
-  margin: 1.7em 0 0.5em;
-}
-
-.markdown h1 {
-  font-size: 1.7em;
-}
-.markdown h2 {
-  font-size: 1.4em;
-}
-.markdown h3 {
-  font-size: 1.18em;
-}
-.markdown h4 {
-  font-size: 1.02em;
-}
-
-.markdown p {
-  margin: 0 0 0.9em;
-}
-
-.markdown a {
-  color: var(--accent);
-  text-decoration: none;
-  border-bottom: 1px solid var(--accent-soft);
-}
-
-.markdown a:hover {
-  border-bottom-color: var(--accent);
-}
-
-.markdown ul,
-.markdown ol {
-  margin: 0 0 0.9em;
-  padding-left: 1.5em;
-}
-
-.markdown li {
-  margin: 0.25em 0;
-}
-
-.markdown li::marker {
-  color: var(--faint);
-}
-
-.markdown blockquote {
-  margin: 0 0 1em;
-  padding: 2px 0 2px 16px;
-  border-left: 3px solid var(--border-strong);
-  color: var(--muted);
-}
-
-.markdown hr {
-  border: 0;
-  border-top: 1px solid var(--border);
-  margin: 2em 0;
-}
-
-.markdown code {
-  font-family: var(--font-mono);
-  font-size: 0.86em;
-  background: var(--code-bg);
-  border-radius: 4px;
-  padding: 1.5px 5px;
-}
-
-.markdown pre.code {
-  background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 14px 16px;
-  overflow: auto;
-  margin: 0 0 1em;
-}
-
-.markdown pre.code code {
-  background: none;
-  padding: 0;
-}
-
-.markdown table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0 0 1em;
-  font-size: 0.94em;
-}
-
-.markdown th,
-.markdown td {
-  text-align: left;
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--border);
-}
-
-.markdown th {
-  color: var(--muted);
-  font-weight: 600;
-}
-
-/* ── Provenance footer of a page (calm, secondary) ──────── */
-.page-foot {
-  max-width: var(--doc-max);
-  margin: 40px auto 0;
-  padding: 22px 48px 0;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.foot-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.foot-summary strong {
-  color: var(--text-2);
-  font-weight: 600;
-}
-
-/* A claim behind the page: the sentence, with where it lives — one line, ellipsised. */
-.foot-claim {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.foot-claim .c {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-2);
-  font-size: 13px;
-}
-
-.foot-claim .s {
-  flex: none;
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-.foot-label {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--faint);
-  margin-bottom: 8px;
-}
-
-/* The count beside a footer label: its own element with its own margin, so it can never stick to
-   the word (a text node inside a flex row is easy to get wrong, and "Claims2" is what that looks
-   like). */
-.foot-count {
-  margin-left: 7px;
-  color: var(--faint);
-  font-weight: 400;
-  letter-spacing: 0;
-}
-
-/* The same count inside a topic heading. */
-.foot-label .muted,
-.topic-block h2 .muted {
-  color: var(--faint);
-  font-weight: 400;
-  letter-spacing: 0;
-}
-
-/* A reason group inside a footer block (e.g. "same source · 3"). */
-.foot-sub {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 12px 0 4px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.foot-sub:first-of-type {
-  margin-top: 0;
-}
-
-.foot-sub .muted {
-  font-family: var(--font-mono);
-  font-weight: 400;
-}
-
-.foot-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 6px 8px;
-  margin: 0 -8px;
-  border-radius: var(--radius);
-  text-decoration: none;
-  color: var(--text-2);
-  font-size: 14px;
-  width: calc(100% + 16px);
-  border: 0;
-  background: none;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.foot-row:hover {
-  background: var(--bg-hover);
-}
-
-.foot-row .t {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.foot-row .s {
-  font-size: 12px;
-  color: var(--faint);
-  font-family: var(--font-mono);
-}
-
-/* ── Home (wiki index) ──────────────────────────────────── */
-.home {
-  max-width: var(--doc-max);
-  margin: 0 auto;
-  padding: 40px 48px 96px;
-}
-
-.home-hero h1 {
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0 0 6px;
-}
-
-.home-hero p {
-  color: var(--muted);
-  margin: 0 0 26px;
-}
-
-.topic-block {
-  margin-bottom: 26px;
-}
-
-.topic-block h2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--faint);
-  margin: 0 0 8px;
-}
-
-.page-link {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  margin: 0 -10px;
-  border-radius: var(--radius);
-  text-decoration: none;
-  color: var(--text);
-}
-
-.page-link:hover {
-  background: var(--bg-hover);
-}
-
-.page-link .ico {
-  color: var(--faint);
-  flex: none;
-}
-
-.page-link .t {
-  flex: 1;
-  min-width: 0;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.page-link .k {
-  font-size: 12px;
-  color: var(--faint);
-  font-family: var(--font-mono);
-}
-
-.empty {
-  text-align: center;
-  padding: 60px 24px;
-  color: var(--muted);
-}
-
-.empty .big {
-  font-size: 17px;
-  color: var(--text-2);
-  font-weight: 550;
-  margin-bottom: 6px;
-}
-
-/* ── Sources (secondary) ────────────────────────────────── */
-/* The centred reading column the secondary views share: one measure, centred in the content area. */
-.sources,
-.status,
-.ask {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 34px 48px 96px;
-}
-
-/* The waiting state of a question: a big spinner, the question as its subject, in the accent colour —
-   a quiet "Thinking…" line is exactly what a reader misses. */
-.ask-thinking {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  width: 100%;
-  max-width: none;
-  margin: 4px 0 0;
-  padding: 18px 20px;
-  border: 1px solid var(--accent-soft);
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-}
-
-.ask-thinking .t {
-  color: var(--accent);
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.ask-thinking .q {
-  margin-top: 3px;
-  color: var(--text-2);
-  font-size: 13.5px;
-}
-
-.spinner {
-  flex: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 2.5px solid var(--accent-soft);
-  border-top-color: var(--accent);
-  animation: spin 0.8s linear infinite;
-}
-
-/* The question above its answer: marked with an accent rule, as the strongest line of the block. */
-.ask-q {
-  max-width: var(--doc-max);
-  margin: 0 0 14px;
-  padding-left: 14px;
-  border-left: 2px solid var(--accent);
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.page-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-
-.page-head h1 {
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0;
-}
-
-.list {
-  display: flex;
-  flex-direction: column;
-}
-
-.row-src {
-  display: flex;
-  /* The two text columns are the SAME two lines (title/sub on the left, state/counts on the right),
-       so they start at the top together and each line lands on its counterpart. Centring them would
-       align nothing but their middles. */
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px 10px;
-  margin: 0 -10px;
-  border-radius: var(--radius);
-  border-bottom: 1px solid var(--border);
-  text-decoration: none;
-  color: var(--text);
-  /* The bookmarks list renders this row as a <button>, whose UA style centres text: a list row is
-       left-aligned like the Sources list it mirrors. */
-  text-align: left;
-  cursor: pointer;
-}
-
-/* The icon and the status are not lines of the two-line text column: they stay centred on the row. */
-.row-src .ico,
-.row-src .favicon,
-.row-src .meta {
-  align-self: center;
-}
-
-.row-src:hover {
-  background: var(--bg-hover);
-}
-
-/* A page a change made stale: a small amber dot, and a chip in the document. Shown, never hidden. */
-/* A LEGACY saved-query page: knowledge you asked for, not a page the wiki wrote. It carries a
-   leading mark — small, in the text flow, before the title. */
-.q-emoji {
-  margin-right: 6px;
-  font-size: 11px;
-  opacity: 0.85;
-}
-
-/* The chip form of the same mark, for the lists that have room for a word. */
-.q-mark {
-  margin-left: 6px;
-  padding: 0 5px;
-  border-radius: 4px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: lowercase;
-  flex: none;
-}
-
-/* The count inside a tab label ("Pages 3"). */
-.seg .tab-count {
-  margin-left: 5px;
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-}
-
-/* A count of pages that still owe a re-derivation: the same amber as the dirty dot. */
-.tree-topic .count.dirty,
-.home .k.dirty {
-  color: #b45309;
-}
-
-/* A count of pages that compile NO claim: they cannot be attributed to a source at all, which lint
-   reports as an ERROR — hence the danger colour, the same one the claimless dot uses. */
-.tree-topic .count.bad,
-.home .k.bad {
-  color: var(--danger, #b4241f);
-}
-
-/* The query count beside a domain's page count. */
-.tree-topic .count.q {
-  margin-left: 6px;
-  color: var(--accent);
-}
-
-/* A page that compiles no claim: it cannot be attributed to a source at all, which lint reports as an
-   ERROR — hence a different mark from the amber "stale" dot. Both belong in a list, because a reader
-   who cannot see that a page is broken reads it as one that works. */
-.claimless-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-left: 6px;
-  border-radius: 50%;
-  background: var(--danger, #b4241f);
-  flex: none;
-}
-
-.dirty-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-left: 6px;
-  border-radius: 50%;
-  background: #b45309;
-  flex: none;
-}
-
-.chip-dirty {
-  border-color: #b45309;
-  color: #b45309;
-}
-
-/* A source whose document steps are running is shown by the two things that mean it: the progress
-   bars (parts and claims) and the coloured step light (blue, pulsing). The ROW is not highlighted —
-   a tinted row and an accent edge made the whole list look busy and said "here" about a row that is
-   merely busy. The bars live in the SourceSteps component, which the row and the overlay share. */
-
-/* The "what is this source doing" chip in the detail overlay's header. */
-.doing {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  color: var(--muted-fg);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  white-space: nowrap;
-}
-
-.doing.on {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 600;
-}
-
-/* The step the run is in right now, from the live progress events. */
-.doing-now {
-  color: var(--muted-fg);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 34ch;
-}
-
-/* A value a running derivation is still writing (only live numbers carry it). */
-.live {
-  margin-left: 6px;
-  padding: 1px 5px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.kv .v.working {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.row-src:last-child {
-  border-bottom: none;
-}
-
-.favicon {
-  width: 16px;
-  height: 16px;
-  flex: none;
-  border-radius: 3px;
-  object-fit: contain;
-}
-
-.row-src .ico {
-  color: var(--faint);
-  flex: none;
-}
-
-.row-src .main-col {
-  flex: 1;
-  min-width: 0;
-}
-
-/* The right end of a source row: the state block — the two progress bars, the four lights and the
-   counts under them — flush right. On hover (or keyboard focus) the block is REPLACED by the row's
-   actions in the same column: the buttons never lie on top of the lights or the counts. */
-.row-src .end-col {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  align-self: stretch;
-  flex: none;
-  margin-left: auto;
-}
-
-/* The right column is the SAME two lines as the left — the state line against the title, the counts
-   line against the file name / URL — so the two sides line up and the lights sit against the title.
-   The line boxes are literally the same ones: the state line takes the title's (`1.6em` at the row's
-   font size), the counts line the sub line's (12px at 1.6), and neither adds a margin. Without this
-   the right block was shorter than the left, centring floated it between the two lines, and the row
-   read as two columns that do not belong together. */
-.row-src .end-col .state {
-  /* One line box of the title: `1lh` says exactly that, `1.6em` is the same number for a browser
-       that does not know the unit yet. */
-  min-height: 1.6em;
-  min-height: 1lh;
-}
-
-.row-src .end-col .totals {
-  margin-top: 0;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.row-src .acts {
-  display: none;
-  align-items: center;
-  gap: 4px;
-  height: 100%;
-  padding: 0;
-}
-
-/* The buttons themselves are buttons: a circular background, not a bare glyph that only looks
-   clickable while the pointer happens to be over it. The group spans both text lines. */
-.row-src .acts .icon-btn {
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--bg);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-  color: var(--text-2);
-}
-
-.row-src .acts .icon-btn:hover {
-  background: var(--bg-active);
-  color: var(--text);
-}
-
-/* The actions appear on hover, and for a KEYBOARD focus — never because a mouse click left the
-   button focused. `:focus-within` alone kept them on screen after a click (the click focuses the
-   button and the focus stays), so the row stayed "open" long after the pointer had left it. Only
-   `:focus-visible` distinguishes a tabbed-to element from a clicked one, and it keeps the keyboard
-   path intact: tab to the row, tab on to its actions, they stay visible.
-   The row is matched by its own `:focus-visible` (a child is not a descendant of itself, so `:has()`
-   alone would miss it), and `:is()` keeps the rule VALID where `:has()` is unknown: a comma list
-   containing one unsupported selector is dropped entirely, which would hide the actions for good. */
-.row-src:is(:hover, :focus-visible, :has(:focus-visible)) .acts {
-  display: flex;
-}
-
-/* The actions take the place of the state, not a layer over it: the lights and the counts are
-   actively hidden while the row is hovered or keyboard-focused. */
-.row-src:is(:hover, :focus-visible, :has(:focus-visible)) .end-col .state,
-.row-src:is(:hover, :focus-visible, :has(:focus-visible)) .end-col .totals {
-  display: none;
-}
-
-.row-src .t {
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.row-src .sub .orig {
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-}
-
-.row-src .sub {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--faint);
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.row-src .sub .meta-line {
-  flex: none;
-}
-
-.row-src .sub .orig {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.row-src .sub a {
-  color: var(--muted);
-}
-
-.row-src .meta {
-  font-size: 12px;
-  color: var(--faint);
-  font-family: var(--font-mono);
-  text-align: right;
-  flex: none;
-}
-
-/* Maintenance actions with their sentence: a button nobody dares to press is a button nobody uses. */
-.actions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 20px;
-}
-
-.action {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.action .btn {
-  flex: none;
-}
-
-.action .muted {
-  font-size: 12.5px;
-}
-
-/* The rail's first view: the state block (bars, lights, counts) and the actions that trigger the
-   steps. The block carries its own spacing; the actions get a little room below it. */
-.rail-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 10px;
-}
-
-.rail-actions .icon-btn {
-  border: 1px solid var(--border);
-}
-
-/* The files a source consists of (the object and its sidecars), with sizes. */
-.sidecar-table {
-  padding: 18px 0;
-}
-
-/* A list of page links inside the source page: the rows carry their own padding (and a negative
-   margin to reach the container's edge), so the list hands them the panel's 22px back and cancels
-   that margin — otherwise every row sticks 10px out of the panel and scrolls it sideways. */
-.page-list {
-  padding: 0 22px;
-}
-
-.page-list .page-link {
-  margin: 0;
-}
-
-.sidecar-table table {
-  width: calc(100% - 44px);
-  margin: 12px 22px 0;
-  border-collapse: collapse;
-  font-size: 12.5px;
-}
-
-.sidecar-table th {
-  text-align: left;
-  color: var(--faint);
-  font-weight: 500;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-.sidecar-table td {
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.sidecar-table td:last-child,
-.sidecar-table th:last-child {
-  text-align: right;
-}
-
-.sidecar-table tr.missing td {
-  color: var(--danger, #b4241f);
-}
-
-/* The outline of a document that is too big to render at once: its own table of contents, one row per
-   part, indented by depth. Reading a book starts here — not with 2 MB of prose. */
-.outline {
-  padding: 12px 0 22px;
-}
-
-.outline-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  width: 100%;
-  padding: 5px 22px;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
-}
-
-.outline-row:hover {
-  background: var(--surface-2, rgb(127 127 127 / 8%));
-}
-
-.outline-row .o-id {
-  flex: none;
-  min-width: 34px;
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-}
-
-/* A node without text: a grouping heading, shown for the structure's sake but not offered to read. */
-.outline-group {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 6px 22px 2px;
-  color: var(--muted);
-  font-size: 12.5px;
-}
-
-.outline-row .o-t {
-  color: var(--text);
-  font-size: 13.5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A file of a source, opened: monospace, because that is what a file is — and the YAML header in its
-   own block, so it reads as what the document declares about itself and not as prose. */
-.file-link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-}
-
-.file-link code {
-  border-bottom: 1px dotted var(--border-strong);
-}
-
-.file-link:hover code {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-
-.file-view {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
-}
-
-.file-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 22px;
-  border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-}
-
-/* The chevron points left for "back": one glyph, turned. */
-.file-head .icon-btn svg,
-.file-head .icon-btn {
-  transform: rotate(90deg);
-}
-
-.file-front {
-  margin: 0;
-  padding: 12px 22px;
-  background: var(--surface-2, rgb(127 127 127 / 8%));
-  border-bottom: 1px solid var(--border);
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.file-body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  margin: 0;
-  padding: 14px 22px 22px;
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* ── Status / health (low-key) ──────────────────────────── */
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 18px 24px;
-  margin: 6px 0 26px;
-}
-
-.stat .num {
-  font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-}
-
-.stat .lbl {
-  font-size: 12px;
-  color: var(--faint);
-}
-
-.kv {
-  display: flex;
-  gap: 10px;
-  font-size: 13px;
-  padding: 3px 0;
-}
-
-.kv .k {
-  width: 96px;
-  flex: none;
-  color: var(--faint);
-}
-
-.kv .v {
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  color: var(--text-2);
-  word-break: break-all;
-}
-
-.block-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--faint);
-  margin: 26px 0 10px;
-}
-
-/* A block title can carry its own action (the vocabulary curation is ONE unit, so it is one
-   button, in the heading — not one per row). The button keeps its own case. */
-.block-title .spacer {
-  flex: 1;
-}
-
-.block-title .btn {
-  text-transform: none;
-  letter-spacing: normal;
-  padding: 3px 10px;
-  font-size: 12px;
-}
-
-.finding {
-  display: flex;
-  gap: 10px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 13.5px;
-}
-
-.finding:last-child {
-  border-bottom: none;
-}
-
-.finding .sev {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--muted);
-  padding-top: 2px;
-  width: 58px;
-}
-
-.finding .fbody {
-  min-width: 0;
-  flex: 1;
-}
-
-.finding .fmsg {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.finding .forigin {
-  display: inline-flex;
-  gap: 6px;
-}
-
-/* The claim a finding is about, shown in place: a finding must point at its origin, and for a claim
-   that origin is the claim itself — atoms are not a place in the app, they are what pages and
-   sources are made of. Both directions are links, so a finding leads on. */
-.finding .fatom {
-  margin: 8px 0 2px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-alt);
-}
-
-.finding .fatom .claim {
-  color: var(--text);
-}
-
-.finding .fmeta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-  font-size: 12px;
-}
-
-/* Not connected: a strip in the content area, above everything the reader could mistake for data. The
-   sidebar's footer dot is the quiet indicator; this is the one that explains an empty or stale view. */
-.offline-strip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: none;
-  padding: 9px 16px;
-  border-bottom: 1px solid #b45309;
-  background: color-mix(in srgb, #b45309 12%, var(--bg));
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.offline-strip b {
-  font-weight: 600;
-  margin-right: 4px;
-}
-
-/* The work in flight on the Status page: one row per job, with the step, its state, WHAT it is about
-   and what the run itself reports. A list of jobs, not a wall of text — the counts say how busy the app
-   is, this says what it is busy with. */
-.jobs {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 8px;
-}
-
-.job {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-alt);
-  font-size: 13px;
-}
-
-.job .jstep {
-  font-weight: 500;
-  min-width: 92px;
-}
-
-.job .jstate {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--muted);
-  flex: none;
-}
-
-.job .jstate.running {
-  border-color: #2563eb;
-  color: #2563eb;
-}
-
-.job .jstate.waiting {
-  border-color: var(--border-strong);
-  color: var(--text-2);
-}
-
-.job .jstate.pending {
-  border-color: #b45309;
-  color: #b45309;
-}
-
-.job .jlive {
-  color: var(--text-2);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.job .spacer {
-  flex: 1;
-}
-
-/* An inline link to where a finding points: a page, a source, a claim. Quiet and icon-led — an
-   offer to look, not a button that does something. */
-.src-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 1px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: none;
-  font: inherit;
-  font-size: 12px;
-  color: var(--text-2);
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.src-link:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-/* ── Overlay: search & dialog ───────────────────────────── */
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgb(11 15 20 / 40%);
-  backdrop-filter: blur(2px);
-  display: flex;
-  justify-content: center;
-  /* Vertically centred: the dialog is the thing on screen, not a banner pinned to the top. */
-  align-items: center;
-  padding: 4vh 0;
-  z-index: 50;
-}
-
-.overlay-bg {
-  position: absolute;
-  inset: 0;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  cursor: default;
-}
-
-.palette,
-.dialog {
-  position: relative;
-}
-
-.palette {
-  width: min(640px, 92vw);
-  background: var(--bg);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop);
-  overflow: hidden;
-}
-
-.palette input {
-  width: 100%;
-  height: 52px;
-  padding: 0 18px;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: 16px;
-}
-
-.palette input:focus {
-  outline: none;
-}
-
-.palette .results {
-  max-height: 52vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 6px;
-}
-
-.hit {
-  display: flex;
-  gap: 10px;
-  padding: 9px 12px;
-  border-radius: var(--radius);
-  text-decoration: none;
-  color: var(--text);
-  cursor: pointer;
-  width: 100%;
-  border: none;
-  background: none;
-  font: inherit;
-  text-align: left;
-  min-width: 0;
-}
-
-.hit.active,
-.hit:hover {
-  background: var(--bg-hover);
-}
-
-.hit .t {
-  font-weight: 500;
-}
-
-.hit .s {
-  display: block;
-  font-size: 12px;
-  color: var(--faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.hit > span {
-  min-width: 0;
-}
-
-.hit .kind {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--faint);
-  font-family: var(--font-mono);
-}
-
-.palette .hint {
-  padding: 8px 14px;
-  border-top: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--faint);
-  font-family: var(--font-mono);
-}
-
-.dialog {
-  width: min(560px, 92vw);
-  background: var(--bg);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop);
-  padding: 20px;
-  align-self: flex-start;
-}
-
-.dialog h2 {
-  margin: 0 0 4px;
-  font-size: 17px;
-  font-weight: 650;
-}
-
-.dialog p.sub {
-  margin: 0 0 16px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.dropzone {
-  margin-top: 12px;
-  padding: 22px;
-  text-align: center;
-  color: var(--muted);
-  font-size: 13.5px;
-  border: 1.5px dashed var(--border-strong);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: var(--ease) 140ms;
-}
-
-.dropzone:hover {
-  color: var(--text-2);
-  border-color: var(--faint);
-}
-
-.dropzone.drop-active {
-  border-color: var(--accent);
-  border-style: solid;
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.dialog .foot {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.dialog-foot {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.dialog .msg {
-  flex: 1;
-  font-size: 12.5px;
-  color: var(--muted);
-}
-
-.toast {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--text);
-  color: var(--bg);
-  padding: 9px 16px;
-  border-radius: 999px;
-  font-size: 13px;
-  box-shadow: var(--shadow-pop);
-  z-index: 60;
-  max-width: 80vw;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ── Source page ────────────────────────────────────────── */
-/* A source is a PAGE now, not an overlay: it fills the content column and keeps its own main/rail
-   scrollers, so the surrounding shell does not scroll the whole document behind it. */
-.source-page {
-  height: 100%;
-  min-height: 0;
-}
-
-.source-page .viewer {
-  width: 100%;
-  height: 100%;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-/* ── Inline source viewer ───────────────────────────────── */
-.viewer {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: min(1080px, 95vw);
-  height: 88vh;
-  background: var(--bg);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop);
-  overflow: hidden;
-}
-
-.viewer-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  flex: none;
-}
-
-.viewer-head .t {
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  flex-shrink: 1;
-}
-
-.seg {
-  display: inline-flex;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.seg button {
-  border: 0;
-  background: none;
-  font: inherit;
-  font-size: 12.5px;
-  color: var(--muted);
-  padding: 3px 10px;
-  cursor: pointer;
-}
-
-.seg button.on {
-  background: var(--bg-active);
-  color: var(--text);
-}
-
-.viewer-cols {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 288px;
-}
-
-.viewer-main {
-  min-width: 0;
-  min-height: 0;
-  overflow-x: auto;
-  overflow-y: scroll;
-  scrollbar-gutter: stable;
-}
-
-.viewer-rail {
-  border-left: 1px solid var(--border);
-  background: var(--bg-alt);
-  overflow-y: scroll;
-  scrollbar-gutter: stable;
-  padding: 14px 16px 28px;
-  min-width: 0;
-}
-
-.rail-block {
-  margin-bottom: 18px;
-}
-
-.rail-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--faint);
-  margin-bottom: 8px;
-}
-
-.rail-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.claim {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--border);
-  color: inherit;
-  text-decoration: none;
-}
-
-.claim:last-child {
-  border-bottom: none;
-}
-
-.claim-t {
-  font-size: 13px;
-  color: var(--text-2);
-  line-height: 1.45;
-}
-
-.claim-m {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--faint);
-}
-
-.viewer-main .pdf {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  display: block;
-  background: var(--inset, #525659);
-}
-
-.viewer-md {
-  max-width: var(--doc-max);
-  margin: 0 auto;
-  padding: 24px 40px 48px;
-}
-
-/* The per-source log: smaller than the body text, so a whole run fits on one screen — but
-   still comfortably readable. */
-.viewer-main .srclog,
-/* The log scrolls with its tab, not inside it: `.viewer-main` is the ONE scroller of every tab
-   (markdown, raw, files, log). An `overflow: auto` here made the pre a second one — and with a note
-   above it, `max-height: 100%` guaranteed the outer bar as well. Two scrollbars for one text is a
-   layout that cannot be right. */
-.srclog {
-  margin: 0;
-  padding: 12px 16px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1.45;
-  color: var(--text-2);
-  white-space: pre-wrap;
-  /* A log line ends in a URL or a path as often as in a word: break ANYWHERE, or the one long token
-       of a line decides the width of the whole view. */
-  overflow-wrap: anywhere;
-}
-
-.raw {
-  margin: 0;
-  padding: 20px 24px;
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--text-2);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* ── Small screens ──────────────────────────────────────── */
-@media (max-width: 760px) {
-  .app {
-    grid-template-columns: 0 1fr;
-  }
-
+  /* Narrow layout: one navigation surface, and it is the footer. No drawer, nothing to dismiss. */
   .sidebar {
     display: none;
   }
 
-  .doc,
-    .page-foot,
-    .home,
-    .sources,
-    .status,
-    /* The question above its answer: a question mark in the margin, and the question itself as the
-   strongest line of the block. */
-.ask-q {
-    max-width: var(--doc-max);
-    margin: 0 0 14px;
-    padding-left: 14px;
-    border-left: 2px solid var(--accent);
-    color: var(--text);
-    font-size: 15px;
-    font-weight: 500;
+  .topbar {
+    padding-left: 12px;
   }
 
-  .ask {
-    padding-left: 22px;
-    padding-right: 22px;
+  .topbar-brand {
+    display: flex;
+  }
+
+  .topbar-search {
+    display: none;
+  }
+
+  .topbar-search-icon {
+    display: inline-flex;
+  }
+
+
+  .activity-chip {
+    max-width: 190px;
+  }
+
+  .page {
+    padding: 22px 20px 56px;
   }
 }
 
-.muted {
-  color: var(--muted);
+@media (max-width: 640px) {
+  .page {
+    padding: 18px 15px 48px;
+  }
+
+  .head-row h1 {
+    font-size: 22px;
+  }
+
+  .topbar {
+    gap: 6px;
+    padding-right: 10px;
+  }
+
+  .activity-chip {
+    max-width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .activity-chip .truncate {
+    display: none;
+  }
+
+  .row__actions {
+    opacity: 1;
+  }
 }
 
-.mono {
-  font-family: var(--font-mono);
-  font-size: 12.5px;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
-/* The vocabulary report: one row per namespace, the numbers left, the findings right. */
-.vocab {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 20px;
-}
+/* ── Clearable fields ──────────────────────────────────────────────────── */
 
-.vocab-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  font-size: 12.5px;
-}
-
-.vocab-ns {
-  min-width: 74px;
-  font-family: var(--font-mono);
-  font-weight: 600;
-}
-
-.vocab-nums {
-  color: var(--muted);
-  font-family: var(--font-mono);
-}
-
-.vocab-find {
-  color: #b45309;
-  font-family: var(--font-mono);
-}
-
-/* The vocabulary rows sit under a heading that carries the ONE action (the curation is a closed
-   unit): the numbers, then the findings. */
-.vocab-row {
-  gap: 12px;
-}
-
-
-/* Informational findings are a vocabulary observation, not a repair: collapsed by default. */
-.info-findings {
-  margin-top: 10px;
-}
-
-.info-findings summary {
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 12.5px;
-  padding: 6px 0;
-}
-
-/* ── Wiki ───────────────────────────────────────────────── */
-.copy-id {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  padding: 1px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text-2);
-  cursor: pointer;
-  font: inherit;
-}
-
-.copy-id:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-strong);
-}
-
-.copy-id code {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.wiki {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 34px 48px 96px;
-}
-
-.wiki-layout {
+/* The × every text field carries (see lib/clearable.ts). The button is created by the action, so it
+   cannot live in a component's scoped style. It hides itself while the field is empty — including
+   when the value is cleared from code, because `:placeholder-shown` is a property of the field, not of
+   the last keystroke. */
+.field-clear {
+  position: absolute;
+  top: 50%;
+  right: 5px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 270px;
-  gap: 0;
-  align-items: start;
-}
-
-.wiki-main {
-  min-width: 0;
-  padding: 0 26px 80px 0;
-}
-
-.wiki-aside {
-  position: sticky;
-  top: 0;
-  min-width: 0;
-  padding: 0 0 40px 20px;
-  border-left: 1px solid var(--border);
-}
-
-.wiki-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-width: 900px;
-}
-
-.wiki-editor-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-2);
-}
-
-.field > span > .muted {
-  font-weight: 400;
-}
-
-.wiki-body {
-  height: auto;
-  min-height: 420px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.55;
-  resize: vertical;
-}
-
-.wiki-editor-foot {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.wiki-preview {
-  max-width: 900px;
-  min-height: 420px;
-}
-
-.wiki-preview h2 {
-  margin: 0 0 10px;
-  font-size: 24px;
-  line-height: 1.25;
-}
-
-.wiki-page {
-  max-width: 900px;
-}
-
-.wiki-page-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
-}
-
-.wiki-page-head h2 {
-  margin: 0 0 6px;
-  font-size: 24px;
-  line-height: 1.25;
-}
-
-.wiki-page-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.wiki-page-actions .btn {
-  text-decoration: none;
-}
-
-.wiki-id {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-}
-
-.wiki-page-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 18px;
-}
-
-.wiki-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.wiki-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 11px 4px;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
   border: 0;
-  border-bottom: 1px solid var(--border);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.wiki-row:hover {
-  background: var(--bg-hover);
-}
-
-.wiki-row-title {
-  font-weight: 600;
-  color: var(--text);
-  min-width: 0;
-}
-
-.wiki-row-tags {
-  display: inline-flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-/* The small inline tag on a row: a wiki page's tag, a source's "link"/"wiki" marker. Not clickable —
-   the clickable ones are .tag-chip. */
-.tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 7px;
-  border: 1px solid var(--border);
   border-radius: 999px;
-  background: var(--bg-hover);
-  color: var(--muted);
-  font-size: 11.5px;
-  line-height: 1.6;
-}
-
-.wiki-empty {
-  padding: 48px 0;
-  color: var(--muted);
-}
-
-.wiki-empty p {
-  margin: 0 0 12px;
-}
-
-.tag-cloud {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tag-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg);
-  color: var(--text-2);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.tag-chip span {
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-}
-
-.tag-chip:hover,
-.tag-chip.on {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-/* A DERIVED tag (the app tagged the page) is the same chip, dashed: it is as usable as a written one —
-   a filter never asks who wrote it — but the reader can tell the two apart at a glance. */
-.tag-chip.auto,
-.tag.auto {
-  border-style: dashed;
-  color: var(--faint);
-}
-
-.chip.auto {
-  border: 1px dashed var(--border);
   background: transparent;
+  color: var(--faint);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: background 0.14s var(--ease), color 0.14s var(--ease);
 }
 
-.wiki-row-tags .tag.auto {
-  border-style: dashed;
+.field-clear:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
 }
 
-.wiki-hint {
-  margin-top: 22px;
-  font-size: 12px;
-  line-height: 1.55;
+.field-clearable:placeholder-shown + .field-clear,
+.field-clearable:disabled + .field-clear,
+.field-clearable[readonly] + .field-clear {
+  display: none;
 }
 
-.wiki-hint code {
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-.wiki-markdown {
-  padding-bottom: 40px;
-}
-
-@media (max-width: 820px) {
-  .wiki {
-    padding: 24px 20px 80px;
-  }
-
-  .wiki-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .wiki-aside {
-    position: static;
-    border-left: 0;
-    border-top: 1px solid var(--border);
-    padding: 18px 0 40px;
-  }
-
-  .wiki-main {
-    padding-right: 0;
-  }
+.field-clear--area {
+  top: 7px;
+  transform: none;
 }

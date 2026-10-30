@@ -12,7 +12,7 @@
 // cache-first, so a new icon would otherwise only appear after the cache is cleared. A new BUILD needs no
 // bump — the document is network-first and its hashed assets are cached under names that change with the
 // build.
-const CACHE = 'thought-keeper-v3';
+const CACHE = 'thought-keeper-v2';
 
 // SHELL is the part of the app that must be there before anything is asked of the network: the document
 // itself, the manifest, and the icons the platform and the tab use. The hashed /assets/* files are NOT

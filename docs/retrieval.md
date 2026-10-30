@@ -10,7 +10,7 @@ The agent picks the substrate that fits the question:
 | Substrate | What it is | Tool / endpoint |
 | --- | --- | --- |
 | Claim topics | every FLAT claim topic with its claim count | `list_topics` |
-| Lexical search | FTS5 over claims and source outlines, answerable in any vault language | `search`, `GET /search` |
+| Lexical search | FTS5 over claims; the Sources layer matches the list fields (title, original name, URL, tags), answerable in any vault language | `search`, `GET /search` |
 | Claim proximity | the same cluster, and separately the same topic | `GET /atoms/{id}/related` |
 | Source recency | the newest sources by vault arrival, paged, with a short overview excerpt | `list_sources`, `read_source_summary` |
 | Tree index (PageIndex) | per-source hierarchical tree | `read_source_node` (distill), `GET /sources/{hash}/tree` |

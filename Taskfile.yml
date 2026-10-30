@@ -23,34 +23,32 @@ tasks:
     cmd: CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dist/thought-keeper-linux-arm64 ./cmd/thought-keeper
 
   web:install:
-    desc: Install the next PWA toolchain (npm)
-    dir: web-next
-    cmd: npm ci
-    sources: [web-next/package.json, web-next/package-lock.json]
+    desc: Install the PWA toolchain (pnpm)
+    dir: web
+    cmd: pnpm install --frozen-lockfile
+    sources: [web/package.json, web/pnpm-lock.yaml]
 
   web:build:
-    desc: Build the next PWA into internal/web/dist (embedded by go:embed)
-    dir: web-next
+    desc: Build the PWA into internal/web/dist (embedded by go:embed)
+    dir: web
     cmds:
-      - npm ci --no-audit --no-fund
-      - npm run build
+      - pnpm install --frozen-lockfile
+      - pnpm run build
     sources:
-      - web-next/src/**/*
-      - web-next/index.html
-      - web-next/vite.config.ts
-      - web-next/svelte.config.js
-      - web-next/tsconfig.json
-      - web-next/public/**/*
-      - web-next/package.json
-      - web-next/package-lock.json
+      - web/src/**/*
+      - web/index.html
+      - web/vite.config.ts
+      - web/svelte.config.js
+      - web/tsconfig.json
+      - web/public/**/*
+      - web/package.json
+      - web/pnpm-lock.yaml
     generates: [internal/web/dist/index.html]
 
   icons:
     desc: Render the app icons (squircle) from web/icons/pictogram.svg
     dir: web
-    cmds:
-      - node scripts/render-icons.mjs
-      - cp public/icon.svg public/icon-192.png public/icon-512.png public/icon-maskable-512.png public/apple-touch-icon.png ../web-next/public/
+    cmd: node scripts/render-icons.mjs
     sources: [web/icons/pictogram.svg, web/scripts/render-icons.mjs]
     generates:
       - web/public/icon.svg
@@ -58,27 +56,22 @@ tasks:
       - web/public/icon-512.png
       - web/public/icon-maskable-512.png
       - web/public/apple-touch-icon.png
-      - web-next/public/icon.svg
-      - web-next/public/icon-192.png
-      - web-next/public/icon-512.png
-      - web-next/public/icon-maskable-512.png
-      - web-next/public/apple-touch-icon.png
       - internal/app/icon.png
 
   web:dev:
-    desc: Run the next PWA's Vite dev server (proxies /api to the running app)
-    dir: web-next
-    cmd: npm run dev
+    desc: Run the PWA's Vite dev server (proxies /api to the running app)
+    dir: web
+    cmd: pnpm run dev
 
   web:check:
-    desc: Type-check and lint the next PWA
-    dir: web-next
-    cmd: npm run check
+    desc: Type-check and lint the PWA
+    dir: web
+    cmd: pnpm run check
 
   web:test:
-    desc: Run the next PWA's unit tests
-    dir: web-next
-    cmd: npm run test
+    desc: Run the PWA's unit tests
+    dir: web
+    cmd: pnpm run test
 
   run:
     desc: Run the desktop app (tray + service; no browser is opened — see run:open)

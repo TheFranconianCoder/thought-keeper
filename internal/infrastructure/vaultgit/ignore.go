@@ -104,7 +104,8 @@ func EnsureIgnore(root string, patterns []string) (int, error) {
 		b.WriteString(Header + "\n")
 	}
 	for _, p := range missing {
-		b.WriteString(p + "\n")
+		b.WriteString(p)
+		b.WriteString("\n")
 	}
 
 	tmp := path + ".tmp"

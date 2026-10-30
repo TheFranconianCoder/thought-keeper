@@ -235,8 +235,7 @@ internal/app              lifecycle, pipeline schedulers, gate, tray, single ins
 internal/registry         the one place that wires concrete adapters
 internal/api              router/, handlers/, payloads/
 internal/web              embeds the built PWA
-web-next/                 Svelte PWA sources (task web:build → internal/web/dist)
-web/                      previous PWA sources, kept as a reference
+web/                      Svelte PWA sources (task web:build → internal/web/dist)
 internal/core/entities    domain types
 internal/core/markdown    pure: titles, slugs, code quoting, topic/tag normalization
 internal/core/tree        pure: tree shape, node addressing, matter filter, rendering
@@ -246,6 +245,7 @@ internal/infrastructure   config, objects, atoms, wiki, clusters, markdown, extr
                           vocabulary, sourcemeta, sourcelog, favicons, vaultgit, idpath, ...
 internal/types            sentinel errors
 internal/version, internal/logging
+.opencode/skills/release  the release skill: preflight, notes, source releases, tag + gh
 ```
 
 ## Application model
@@ -296,9 +296,9 @@ records are specified in **`docs/storage.md`**.
 - **All repository artifacts are written in English** — code comments, docs, commit messages.
 - **Do not commit on your own initiative.** Commits are made by the user; a requested commit message
   follows Conventional Commits, present tense, no Markdown.
-- **Releases are cut from `main` with the `release` skill** (`.opencode/skills/release/`). It
-  preflights the branch, cross-builds the three binaries with the tag stamped into `internal/version`,
-  and creates the tag and GitHub release. It never commits and never moves a tag.
+- **Releases are cut from `main` with the `release` skill** (`.opencode/skills/release/`). Releases
+  are source-only for now: `release-commit.sh` tags an existing commit and publishes the notes,
+  `release.sh` builds the three binaries once they ship. It never commits and never moves a tag.
 - **Errors are sentinel types** from `internal/types/errors.go`, mapped to the wire once.
 - **No silent writes and no invented records.** A failed step is recorded; a dead link is listed;
   an unavailable OCR path is flagged, never silently empty.
@@ -320,6 +320,6 @@ records are specified in **`docs/storage.md`**.
   artwork source, `web/scripts/render-icons.mjs` derives everything. `internal/web/dist/*` is a
   build output — never edit it there.
 - Bumping a cached asset (an icon) means bumping the service worker's cache name in
-  `web-next/public/sw.js`.
+  `web/public/sw.js`.
 - The studio-page description and this document must stay consistent. The studio-page update is the
   separate final step after a code refactor.

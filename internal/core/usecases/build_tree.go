@@ -419,7 +419,9 @@ func outlineOfSourceNodes(parts []entities.Part) string {
 	var b strings.Builder
 	for _, s := range parts {
 		if t := strings.TrimSpace(s.Title); t != "" && !isPageTitle(t) {
-			b.WriteString("- " + t + "\n")
+			b.WriteString("- ")
+			b.WriteString(t)
+			b.WriteString("\n")
 		}
 	}
 	return b.String()

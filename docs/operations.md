@@ -38,6 +38,7 @@ sync when a knob changes. Sections:
 | `openai` | base URL, key, `model_compile`, `model_reason`, reasoning efforts, retries, timeout, headers |
 | `pipeline` | auto, auto_distill, debounce, run/cluster timeouts, parts per run, parallel parts/runs/queries, auto_continue, reconcile interval/batch |
 | `cluster` | the quality gates of the claim graph (no model) |
+| `assistant` | command `retention` (`168h`), `prune_interval` (`24h`), `max_items` per materialized set, `scan_limit` per resolution |
 | `capture` | URL dedupe, refresh interval (default `168h` — weekly for pages/sitemaps), feed interval (default `24h` — daily), `min_text_chars` |
 | `fetch` | timeout, max bytes, user agent, `allow_private` (SSRF guard) |
 | `pdf` | text tool, max bytes, max pages |
@@ -99,8 +100,9 @@ server, agent). The message on stderr names the cause.
 
 ```bash
 task build             # CGO-free static binary incl. PWA
-task web:install       # install the next PWA toolchain (npm)
-task web:build         # build the next Svelte PWA into internal/web/dist
+task build:linux-arm64 # the same for linux/arm64 (homelab)
+task web:install       # install the PWA toolchain (pnpm)
+task web:build         # build the Svelte PWA into internal/web/dist
 task web:dev           # Vite dev server with HMR; proxies /api
 task web:check         # svelte-check + TypeScript
 task web:test          # unit tests (SSE parser, source state)
@@ -125,20 +127,25 @@ task hooks             # lefthook install
 
 ### Releases
 
-A release is cut from a clean `main` that is level with `origin/main` with the `release` skill in
-`.opencode/skills/release/`:
+Releases are cut from `main` with the `release` skill in `.opencode/skills/release/`. They are
+**source-only** for now: GitHub's generated source archives are the artifact. `v0.1.0` through
+`v0.5.0` are pre-releases; `v1.0.0` is the current release.
 
 ```bash
-.opencode/skills/release/scripts/preflight.sh       # branch, tree, auth, last tag
-.opencode/skills/release/scripts/changes.sh         # commits since the last tag
-.opencode/skills/release/scripts/release.sh 1.2.3   # build + tag + gh release create
+.opencode/skills/release/scripts/preflight.sh                    # branch, tree, auth, last tag
+.opencode/skills/release/scripts/changes.sh                      # commits since the last tag
+.opencode/skills/release/scripts/release-commit.sh X.Y.Z <commit> [--prerelease]
 ```
 
-The skill writes `.release/title.txt` and `.release/notes.md` (git-ignored) from the commit log;
-`release.sh` stamps `v1.2.3`, the commit and the build time into `internal/version` via `-ldflags`,
-builds `dist/thought-keeper-linux-amd64`, `dist/thought-keeper-linux-arm64`,
-`dist/thought-keeper-windows-amd64.exe` and `dist/SHA256SUMS`, and publishes them. It does **not**
-commit: the tag points at the commit already on `origin/main`. Requires `gh auth login`.
+The skill writes `.release/title-<version>.txt` and `.release/notes-<version>.md` (git-ignored) from
+the commit log. `release-commit.sh` refuses a tag that exists, creates the tag at the given commit
+through `gh release create --target` and mirrors that tag locally. It does **not** commit: the tag
+points at a commit already on `origin/main`. Requires `gh auth login`.
+
+`release.sh X.Y.Z` is the binary path, kept for the first binary release: it stamps the version, the
+commit and the build time into `internal/version` via `-ldflags`, builds
+`dist/thought-keeper-linux-amd64`, `dist/thought-keeper-linux-arm64`,
+`dist/thought-keeper-windows-amd64.exe` and `dist/SHA256SUMS`, and uploads them.
 
 ## 5. Debugging
 

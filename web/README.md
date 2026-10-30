@@ -1,34 +1,28 @@
-# Thought Keeper — the next PWA
+# Thought Keeper — the PWA
 
-This is the **next-generation PWA of Thought Keeper**, built beside the previous source in `../web/`.
-The old source is deliberately untouched; the build pipeline now embeds this UI instead.
-
-The goal was not a reskin. The old UI had accumulated several visual languages, a very large central
-store, and a reactive/SSE path that was hard to reason about. This version starts from one design system
-and one event model, while keeping every product rule of the app: the lenses, the pipeline lights, the
-source page, wiki authoring, the claim detail with provenance and peers, Ask, Attention, Bookmarks and
-Status.
+The web client of Thought Keeper: Svelte 5 + Vite + TypeScript, served by the Go binary from
+`../internal/web/dist`, which is embedded with `//go:embed all:dist`.
 
 ## Run it
 
 ```bash
-cd web-next
-npm ci
-npm run dev        # http://localhost:5174, proxies /api to http://127.0.0.1:9210
+cd web
+pnpm install
+pnpm run dev        # http://localhost:5174, proxies /api to http://127.0.0.1:9210
 ```
 
 The app itself is unchanged; start it as usual (or run it headless). The Vite dev server proxies the API
 to the default loopback port. To use another port, change `apiTarget` in `vite.config.ts`.
 
 ```bash
-npm run check      # svelte-check + TypeScript
-npm test           # parser and source-state unit tests
-npm run build      # build into ../internal/web/dist (embedded by go:embed)
+pnpm run check     # svelte-check + TypeScript
+pnpm run test      # parser and source-state unit tests
+pnpm run build     # build into ../internal/web/dist (embedded by go:embed)
 ```
 
-`npm run build` writes directly to `../internal/web/dist`, which is the directory `internal/web`
-embeds. `task web:build` does the same and is a dependency of `task build`, `task run` and
-`task run:open`.
+`pnpm run build` writes directly to `../internal/web/dist`, which is the directory `internal/web`
+embeds. `task web:build` does the same and is a dependency of `task build`, `task run`,
+`task run:open` and `task run:headless`.
 
 ## The design
 
@@ -129,30 +123,13 @@ reader's place, and back/forward walks tabs and open files.
 state says **Nothing loaded** instead. A local action that is still in flight is shown as a banner until
 the server's pipeline or run event supersedes it.
 
-## Differences from the current UI
-
-- A single design system and one icon set (20×20 stroke) instead of mixed styles.
-- Two-pane list/reading layouts for Claims, Wiki and Ask; responsive drawer navigation.
-- Command palette searches both claims and sources, with a layer switch and keyboard navigation.
-- `EventSource` replaced by a fetch stream with a parser, heartbeat watchdog, backoff+jitter and
-  visibility/online catch-up.
-- Event handling split into a coalesced live lane and a coalesced state lane; each store has generation
-  guards.
-- Source page tabs, files, logs, outline parts, PDF and live views preserved; the open tab/file/part is
-  in the URL.
-- Theme is applied before first paint; three states (auto/light/dark) persisted under `tk-theme`.
-- The add dialog supports bookmarks (the API already did), batches of URLs, drag/drop and file upload.
-- Scroll memory per history entry, single-window election and a PWA shell are preserved.
-
 ## Embedding into the Go binary
 
-The build is already wired into the Go binary:
+The build is wired into the Go binary:
 
-- `web-next/vite.config.ts` writes to `../internal/web/dist`.
+- `web/vite.config.ts` writes to `../internal/web/dist`.
 - `internal/web/embed.go` embeds `dist` with `//go:embed all:dist`.
 - `Taskfile.yml` points `web:install`, `web:build`, `web:dev`, `web:check` and `web:test` at
-  `web-next/`, and `run`, `run:open` and `run:headless` depend on `web:build`.
+  `web/`, and `run`, `run:open` and `run:headless` depend on `web:build`.
 
-The previous UI source remains in `../web/` as a reference and can still be built manually with its own
-toolchain. The service worker cache name is distinct (`thought-keeper-next-v1`), so a browser with the
-old shell cached installs this one cleanly.
+The service worker cache name is `thought-keeper-v2`; bump it when a precached asset changes.

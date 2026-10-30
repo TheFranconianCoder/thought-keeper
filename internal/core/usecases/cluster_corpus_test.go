@@ -82,7 +82,7 @@ func BenchmarkClaimCorpus(b *testing.B) {
 func BenchmarkClaimGraph(b *testing.B) {
 	atoms := syntheticCorpus(10_000)
 	b.ReportAllocs()
-	for range b.N {
+	for b.Loop() {
 		g := buildClaimGraph(atoms, ClusterSettings{})
 		_ = g.candidates()
 	}
