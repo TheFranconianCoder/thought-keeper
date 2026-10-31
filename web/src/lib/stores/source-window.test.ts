@@ -58,6 +58,23 @@ describe('source window', () => {
     expect(sourceWindow.itemAt(0)).toBeUndefined();
   });
 
+  it('keeps the loaded rows on screen while an invalidation re-reads them', async () => {
+    stubSourcePages(500);
+    sourceWindow.setFilter({ query: 'window-test-c' });
+    await sourceWindow.ensure(0, 50);
+    const before = sourceWindow.itemAt(0)?.hash;
+    expect(before).toBe('h0');
+
+    sourceWindow.invalidate();
+    // The event must not blank the window: the old page is still there until the fresh one arrives.
+    expect(sourceWindow.itemAt(0)?.hash).toBe(before);
+    expect(sourceWindow.loaded).toBe(true);
+    expect(sourceWindow.loading).toBe(false);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sourceWindow.itemAt(0)?.hash).toBe(before);
+  });
+
   it('reads the facets separately from the rows', async () => {
     stubSourcePages(10);
     sourceWindow.invalidate();

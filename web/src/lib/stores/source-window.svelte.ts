@@ -50,6 +50,10 @@ class SourceWindowStore {
   private pages = new Map<number, Source[]>();
   private runs = new Map<number, Promise<void>>();
   private seq = 0;
+  /** The background revalidation of the loaded pages and a trailing request for one that was
+   *  already in flight when a source event arrived. */
+  private revalidating = false;
+  private revalidateAgain = false;
   private facetsRun: Promise<void> | null = null;
   private facetsRunSeq = -1;
   private facetsSeq = 0;
@@ -84,6 +88,8 @@ class SourceWindowStore {
     this.seq++;
     this.pages.clear();
     this.runs.clear();
+    this.revalidating = false;
+    this.revalidateAgain = false;
     this.loading = true;
     this.error = '';
     this.commandRef = null;
@@ -91,12 +97,61 @@ class SourceWindowStore {
     this.version++;
   }
 
-  /** invalidate is a reset plus "the tag cloud may be stale too". */
+  /** invalidate marks the loaded window stale. The rows stay on screen while their pages are
+   *  re-read; only a window with nothing to keep (first load, after a reset) clears and shows the
+   *  placeholders. A source event must not make a list of real rows flash skeletons. */
   invalidate(): void {
-    this.reset();
     this.facetsSeq++;
     this.facetsLoaded = false;
     this.facetsError = '';
+    if (!this.loaded || this.pages.size === 0) {
+      // Nothing to keep: the normal first read fills the window.
+      this.reset();
+      return;
+    }
+    // Tell the views that the answer may have changed (the Start page re-reads its newest rows),
+    // but do NOT discard the pages: revalidate them in place.
+    this.epoch++;
+    this.version++;
+    this.revalidate();
+  }
+
+  /** revalidate re-reads every page that is currently loaded, replacing it only when the answer
+   *  arrives. A burst of source events coalesces into one pass (and one trailing pass for a fetch
+   *  that was already in flight when the event arrived). */
+  private revalidate(): void {
+    if (this.revalidating) {
+      this.revalidateAgain = true;
+      return;
+    }
+    const pages = [...this.pages.keys()];
+    if (pages.length === 0) {
+      this.reset();
+      return;
+    }
+    this.revalidating = true;
+    void (async () => {
+      const jobs: Promise<void>[] = [];
+      let staleRun = false;
+      for (const page of pages) {
+        const run = this.runs.get(page);
+        if (run) {
+          // A read that started before the event may still return the pre-event page. Wait for it,
+          // then run one trailing pass that replaces it.
+          jobs.push(run);
+          staleRun = true;
+          continue;
+        }
+        jobs.push(this.fetchPage(page));
+      }
+      await Promise.all(jobs);
+      this.revalidating = false;
+      if (staleRun) this.revalidateAgain = true;
+      if (this.revalidateAgain) {
+        this.revalidateAgain = false;
+        this.revalidate();
+      }
+    })();
   }
 
   /** itemAt is undefined until the page that holds the row has arrived, and while a delete of that
