@@ -43,6 +43,21 @@ type SourceTagSetter interface {
 	Execute(ctx context.Context, hash string, tags []string) (partialentities.PartialSource, error)
 }
 
+// SourceFavoriteSetter writes the reader's star.
+type SourceFavoriteSetter interface {
+	Execute(ctx context.Context, hash string, on bool) (partialentities.PartialSource, error)
+}
+
+// ReadLaterSetter queues, finishes or re-opens a source in the read-later queue.
+type ReadLaterSetter interface {
+	Execute(ctx context.Context, hash string, queued bool) (partialentities.PartialSource, error)
+}
+
+// SourceInterestLister computes which of the reader's interests this source fits, with evidence.
+type SourceInterestLister interface {
+	Execute(ctx context.Context, hash string) ([]usecases.IntersectionMatch, error)
+}
+
 // SourceChildLister lists the sources one source owns (a sitemap's pages, a wiki page's URLs).
 type SourceChildLister interface {
 	Execute(ctx context.Context, hash string) (usecases.SourceChildrenResult, error)
@@ -228,6 +243,11 @@ type SourcesHandler struct {
 	ChildLister SourceChildLister
 	// TagSetter edits the human tags of a source.
 	TagSetter SourceTagSetter
+	// Favorite and ReadLater are the reader's own marks (the star and the queue).
+	Favorite  SourceFavoriteSetter
+	ReadLater ReadLaterSetter
+	// Interests is the source page's rail: which rules this source fits, with evidence.
+	Interests SourceInterestLister
 	// Summary schedules the Summary tab's run (nil = the feature is not wired).
 	Summary SummaryScheduler
 	Getter  SourceGetter
@@ -281,6 +301,9 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 		AttachedOnly:  truthy(q.Get("attached")),
 		BookmarksOnly: truthy(q.Get("bookmarks")),
 		FailedOnly:    truthy(q.Get("failed")),
+		FavoriteOnly:  truthy(q.Get("favorite")),
+		ReadLaterOnly: truthy(q.Get("readlater")),
+		Interest:      strings.TrimSpace(q.Get("interest")),
 	}
 	srcs, err := h.Lister.Execute(r.Context(), filter, limit, offset)
 	if err != nil {
@@ -352,11 +375,87 @@ func (h SourcesHandler) ListFacets(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, err)
 		return
 	}
-	out := payloads.SourceFacets{Tags: make([]payloads.SourceTagFacet, 0, len(res.Tags)), Attached: res.Attached}
+	out := payloads.SourceFacets{
+		Tags:     make([]payloads.SourceTagFacet, 0, len(res.Tags)),
+		Attached: res.Attached, Favorites: res.Favorites,
+		ReadLater: res.ReadLater, ReadLaterInterests: res.ReadLaterInterests,
+	}
 	for _, tag := range res.Tags {
 		out.Tags = append(out.Tags, payloads.SourceTagFacet{Tag: tag.Name, Count: tag.Uses})
 	}
 	payloads.WriteJSON(w, http.StatusOK, out)
+}
+
+// PutFavorite serves PUT /api/v1/sources/{hash}/favorite.
+func (h SourcesHandler) PutFavorite(w http.ResponseWriter, r *http.Request) { h.shelf(w, r, true) }
+
+// DeleteFavorite serves DELETE /api/v1/sources/{hash}/favorite.
+func (h SourcesHandler) DeleteFavorite(w http.ResponseWriter, r *http.Request) { h.shelf(w, r, false) }
+
+// PutReadLater serves PUT /api/v1/sources/{hash}/read-later: put it in the queue (or re-open a
+// finished entry at the END of it).
+func (h SourcesHandler) PutReadLater(w http.ResponseWriter, r *http.Request) { h.readLater(w, r, true) }
+
+// DeleteReadLater serves DELETE /api/v1/sources/{hash}/read-later: "done", the entry leaves the
+// queue. The source is untouched; only the reader's intent closes.
+func (h SourcesHandler) DeleteReadLater(w http.ResponseWriter, r *http.Request) {
+	h.readLater(w, r, false)
+}
+
+func (h SourcesHandler) shelf(w http.ResponseWriter, r *http.Request, on bool) {
+	hash := chi.URLParam(r, "hash")
+	if !entities.IsSHA256Hex(hash) {
+		payloads.WriteError(w, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash))
+		return
+	}
+	if h.Favorite == nil {
+		payloads.WriteError(w, types.New("not_implemented", "the favorite is not available", types.ErrNotImplemented))
+		return
+	}
+	src, err := h.Favorite.Execute(r.Context(), hash, on)
+	if err != nil {
+		payloads.WriteError(w, err)
+		return
+	}
+	payloads.WriteJSON(w, http.StatusOK, payloads.SourceFromPartial(src))
+}
+
+func (h SourcesHandler) readLater(w http.ResponseWriter, r *http.Request, queued bool) {
+	hash := chi.URLParam(r, "hash")
+	if !entities.IsSHA256Hex(hash) {
+		payloads.WriteError(w, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash))
+		return
+	}
+	if h.ReadLater == nil {
+		payloads.WriteError(w, types.New("not_implemented", "the read-later queue is not available", types.ErrNotImplemented))
+		return
+	}
+	src, err := h.ReadLater.Execute(r.Context(), hash, queued)
+	if err != nil {
+		payloads.WriteError(w, err)
+		return
+	}
+	payloads.WriteJSON(w, http.StatusOK, payloads.SourceFromPartial(src))
+}
+
+// ListInterests serves GET /api/v1/sources/{hash}/interests: the evidence behind the source page's
+// interest block. It is computed on demand, so it is never a stale cache after an edit.
+func (h SourcesHandler) ListInterests(w http.ResponseWriter, r *http.Request) {
+	hash := chi.URLParam(r, "hash")
+	if !entities.IsSHA256Hex(hash) {
+		payloads.WriteError(w, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash))
+		return
+	}
+	if h.Interests == nil {
+		payloads.WriteJSON(w, http.StatusOK, payloads.SourceInterests{Interests: []payloads.InterestMatch{}})
+		return
+	}
+	matches, err := h.Interests.Execute(r.Context(), hash)
+	if err != nil {
+		payloads.WriteError(w, err)
+		return
+	}
+	payloads.WriteJSON(w, http.StatusOK, payloads.SourceInterests{Interests: payloads.InterestMatchesFromUseCase(matches)})
 }
 
 // SummaryText serves GET /api/v1/sources/{hash}/summary: the source's overview as Markdown. A

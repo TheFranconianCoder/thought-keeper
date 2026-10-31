@@ -1,20 +1,23 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { clearable } from '../../lib/clearable';
-  import { captureSource, deleteSource, distillSource, openSourceFromHash, rebuildSourceTree, refreshSource, resetSource } from '../../lib/actions';
+  import { deleteSource, toggleFavorite, toggleReadLater } from '../../lib/actions';
   import type { Source, SourceListFilter } from '../../lib/api/types';
   import { fmtBytes, relTime } from '../../lib/format';
   import { n, t } from '../../lib/i18n/index.svelte';
-  import { openAdd } from '../../lib/overlays';
-  import { navigate, router, sourcePath, withoutQuery } from '../../lib/router.svelte';
+  import { openAdd, openInterests } from '../../lib/overlays';
+  import { navigate, router, sourcePath, withQuery, withoutQuery } from '../../lib/router.svelte';
   import { connection } from '../../lib/stores/connection.svelte';
   import { sourceWindow } from '../../lib/stores/source-window.svelte';
   import { sources, type SourceKindFilter } from '../../lib/stores/sources.svelte';
   import { system } from '../../lib/stores/system.svelte';
+  import { interests } from '../../lib/stores/interests.svelte';
+  import { visibleCloud } from '../../lib/cloud';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
   import { rememberSourcesTop } from '../../lib/sources-scroll';
   import { statusLabel } from '../../lib/source-state';
+  import CloudMore from '../ui/CloudMore.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
@@ -31,12 +34,33 @@
   // The tag cloud is a FACET over the vault (human and derived labels, once per source), not a
   // count over the loaded rows.
   const tagCloud = $derived(sourceWindow.facets.tags);
+  let tagsExpanded = $state(false);
+  const tagView = $derived(
+    visibleCloud(tagCloud, {
+      expanded: tagsExpanded,
+      active: sources.filter,
+      key: (item) => item.tag,
+      count: (item) => item.count,
+    }),
+  );
   const attachedCount = $derived(sourceWindow.facets.attached);
 
   // The filter is server-side: a page must be the page of the FILTERED list, or its count would lie
   // about the scroll height.
   const commandId = $derived(
     router.current.view === 'sources' ? (router.current.params.get('command') ?? '') : '',
+  );
+  // The reader's marks are NAMED filters, so they live in the address: the Start card's queue link,
+  // a reload and another window all show the same list. The tag/kind/search filters stay in the
+  // store, as they always have.
+  const readLaterOnly = $derived(
+    router.current.view === 'sources' && router.current.params.get('readlater') === '1',
+  );
+  const favoritesOnly = $derived(
+    router.current.view === 'sources' && router.current.params.get('favorite') === '1',
+  );
+  const interestSlug = $derived(
+    router.current.view === 'sources' ? (router.current.params.get('interest') ?? '') : '',
   );
   const activeFilter = $derived<SourceListFilter>({
     kind: sources.kind === 'all' ? '' : sources.kind,
@@ -46,9 +70,17 @@
     // An assistant result is ONE filter dimension beside the named ones — the server reads the set
     // from the record, and the window keeps its count, pages and scroll height.
     command: commandId,
+    favoriteOnly: favoritesOnly,
+    readLaterOnly,
+    interest: interestSlug,
   });
   const hasFilter = $derived(
-    !!sources.query.trim() || sources.kind !== 'all' || !!sources.filter || sources.attachedOnly,
+    !!sources.query.trim() ||
+      sources.kind !== 'all' ||
+      !!sources.filter ||
+      sources.attachedOnly ||
+      favoritesOnly ||
+      readLaterOnly,
   );
 
   // An assistant result arrives as an address, and the address is the truth about what is shown: the
@@ -76,6 +108,9 @@
       tag: sources.filter,
       attachedOnly: sources.attachedOnly,
       command: router.current.params.get('command') ?? '',
+      favoriteOnly: router.current.params.get('favorite') === '1',
+      readLaterOnly: router.current.params.get('readlater') === '1',
+      interest: router.current.params.get('interest') ?? '',
     }),
   );
   // The first page must be read even before the total is known: the list cannot ask for a range
@@ -105,7 +140,28 @@
   $effect(() => {
     if (router.current.view !== 'sources') return;
     if (!sourceWindow.facetsLoaded) untrack(() => void sourceWindow.loadFacets());
+    if (!interests.loaded) untrack(() => void interests.load());
   });
+
+  function toggleParam(key: string): void {
+    if (router.current.params.get(key) === '1') {
+      // Leaving the queue also drops its per-interest slice: a queue filter without a queue is a
+      // different list that happens to be ordered the same way.
+      navigate(key === 'readlater' ? withoutQuery('readlater', 'interest') : withoutQuery(key));
+      return;
+    }
+    navigate(withQuery(key, '1'));
+  }
+
+  function interestSlugs(source: Source): string[] {
+    // A rule the reader deleted leaves a dangling slug in the record; it is not rendered. The queue
+    // entry itself is theirs and stays.
+    return (source.read_later_via ?? []).filter((slug) => !!interests.bySlug(slug));
+  }
+
+  function interestNames(source: Source): string[] {
+    return interestSlugs(source).map((slug) => interests.nameOf(slug));
+  }
 
   function setKind(next: SourceKindFilter): void {
     sources.kind = next;
@@ -178,6 +234,46 @@
       />
     {/if}
 
+    {#if readLaterOnly}
+      <section class="queue-banner" aria-label={t('sources.queueTitle')}>
+        <div class="queue-head">
+          <Icon name="clock" size={15} />
+          <strong>{t('sources.queueTitle')}</strong>
+          <span class="queue-count">{n(sourceWindow.count)}</span>
+          {#if !interestSlug}
+            <span class="queue-split">
+              {t('sources.queueSplit', {
+                from: n(sourceWindow.facets.read_later_interests),
+                self: n(Math.max(0, sourceWindow.facets.read_later - sourceWindow.facets.read_later_interests)),
+              })}
+            </span>
+          {/if}
+          <button class="btn btn--ghost btn--sm queue-manage" onclick={() => openInterests()}>
+            <Icon name="target" size={13} /> <span class="btn-text">{t('interests.manage')}</span>
+          </button>
+        </div>
+        <div class="queue-chips">
+          <button
+            class="chip"
+            class:chip--accent={!interestSlug}
+            onclick={() => navigate(withoutQuery('interest'))}
+          >
+            {t('sources.queueAll')}<span class="chip-count">{n(sourceWindow.facets.read_later)}</span>
+          </button>
+          {#each interests.items.filter((rule) => rule.open > 0) as rule (rule.slug)}
+            <button
+              class="chip"
+              class:chip--accent={interestSlug === rule.slug}
+              title={rule.terms.join(', ')}
+              onclick={() => navigate(withQuery('interest', rule.slug))}
+            >
+              <Icon name="target" size={11} /> {rule.name}<span class="chip-count">{n(rule.open)}</span>
+            </button>
+          {/each}
+        </div>
+      </section>
+    {/if}
+
     <div class="search-wrap list-search">
       <Icon name="search" size={14} />
       <input
@@ -203,6 +299,31 @@
         <button class:on={sources.kind === 'txt'} onclick={() => setKind('txt')}>{t('sources.kindText')}</button>
         <button class:on={sources.kind === 'url'} onclick={() => setKind('url')}>{t('sources.kindUrls')}</button>
       </div>
+      {#if readLaterOnly || sourceWindow.facets.read_later > 0}
+        <button
+          class="chip attached-filter"
+          class:chip--accent={readLaterOnly}
+          aria-pressed={readLaterOnly}
+          title={t('sources.readLaterTitle')}
+          onclick={() => toggleParam('readlater')}
+        >
+          <Icon name="clock" size={12} /> {t('sources.readLater')}<span class="chip-count">{n(sourceWindow.facets.read_later)}</span>
+        </button>
+      {/if}
+      {#if favoritesOnly || sourceWindow.facets.favorites > 0}
+        <button
+          class="chip attached-filter"
+          class:chip--accent={favoritesOnly}
+          aria-pressed={favoritesOnly}
+          title={t('sources.favoritesTitle')}
+          onclick={() => toggleParam('favorite')}
+        >
+          <Icon name="star" size={12} /> {t('sources.favorites')}<span class="chip-count">{n(sourceWindow.facets.favorites)}</span>
+        </button>
+      {/if}
+      <button class="chip attached-filter" title={t('interests.manageTitle')} onclick={() => openInterests()}>
+        <Icon name="target" size={12} /> {t('interests.manage')}
+      </button>
       {#if attachedCount > 0 || sources.attachedOnly}
         <button
           class="chip attached-filter"
@@ -223,7 +344,7 @@
         use:rememberScroll={'source-tags'}
         aria-label={t('sources.tagsAria')}
       >
-        {#each tagCloud as tag (tag.tag)}
+        {#each tagView.visible as tag (tag.tag)}
           <button
             class="chip"
             class:chip--accent={sources.filter === tag.tag}
@@ -233,6 +354,12 @@
           </button>
         {/each}
       </div>
+      <CloudMore
+        hidden={tagView.hidden}
+        expanded={tagsExpanded}
+        truncated={tagView.truncated}
+        ontoggle={() => (tagsExpanded = !tagsExpanded)}
+      />
     {/if}
     {#if sources.filter}
       <div class="filter-line">
@@ -258,7 +385,13 @@
     {/if}
   {:else if sourceWindow.count === 0}
     {#if !sourceWindow.error}
-      {#if hasFilter}
+      {#if readLaterOnly && !interestSlug}
+        <EmptyState icon="clock" title={t('sources.queueEmptyTitle')} text={t('sources.queueEmptyText')}>
+          <button class="btn btn--secondary btn--sm" onclick={() => openInterests()}>
+            <Icon name="target" size={13} /> {t('home.readLaterEmptyAction')}
+          </button>
+        </EmptyState>
+      {:else if hasFilter}
         <EmptyState icon="filter" title={t('sources.noMatchTitle')} text={t('sources.noMatchText')} />
       {:else}
         <EmptyState
@@ -305,6 +438,16 @@
                         <Icon name="paperclip" size={10} /> {t('sources.attachedTag')}
                       </span>
                     {/if}
+                    {#if source.favorite_at || source.read_later}
+                      <span class="source-marks">
+                        {#if source.favorite_at}
+                          <span class="source-mark" title={t('sources.favorite')}><Icon name="star" size={12} /></span>
+                        {/if}
+                        {#if source.read_later}
+                          <span class="source-mark" title={t('sources.readLater')}><Icon name="clock" size={12} /></span>
+                        {/if}
+                      </span>
+                    {/if}
                     <span class="source-name truncate" title={source.title || source.hash.slice(0, 12)}>{source.title || source.hash.slice(0, 12)}</span>
                     {#if source.bookmark}<span class="tag">{t('sources.tagLink')}</span>{/if}
                     {#if source.sitemap}<span class="tag">{t('sources.tagSitemap')}</span>{/if}
@@ -325,8 +468,16 @@
                     <span>{source.kind} · {fmtBytes(source.bytes)} · {relTime(source.imported_at)}</span>
                     <span class="source-origin">{subLine(source)}</span>
                   </div>
-                  {#if rowTagInfo.shown.length > 0}
+                  {#if (source.read_later && interestSlugs(source).length > 0) || rowTagInfo.shown.length > 0}
                     <div class="source-tags">
+                      {#if source.read_later && interestSlugs(source).length > 0}
+                        <span
+                          class="tag tag--interest"
+                          title={interestNames(source).join(', ')}
+                        >
+                          <Icon name="target" size={10} /> {interestNames(source)[0]}{#if interestSlugs(source).length > 1}+{interestSlugs(source).length - 1}{/if}
+                        </span>
+                      {/if}
                       {#each rowTagInfo.shown as item (item.tag)}
                         <span class="tag" class:tag--auto={item.auto}>{item.tag}</span>
                       {/each}
@@ -345,44 +496,24 @@
               </button>
 
               <div class="source-actions">
-                {#if source.rss || source.sitemap}
-                  <button
-                    class="icon-btn"
-                    title={t('sources.actionRefresh')}
-                    onclick={(event) => act(event, () => void refreshSource(source.hash))}
-                  >
-                    <Icon name="refresh" size={14} />
-                  </button>
-                {:else}
-                  <button
-                    class="icon-btn"
-                    title={t('sources.actionCapture')}
-                    onclick={(event) => act(event, () => void captureSource(source.hash))}
-                  >
-                    <Icon name="capture" size={14} />
-                  </button>
-                  <button
-                    class="icon-btn"
-                    title={t('sources.actionOutline')}
-                    onclick={(event) => act(event, () => void rebuildSourceTree(source.hash))}
-                  >
-                    <Icon name="tree" size={14} />
-                  </button>
-                  <button
-                    class="icon-btn"
-                    title={t('sources.actionDistill')}
-                    onclick={(event) => act(event, () => void distillSource(source.hash))}
-                  >
-                    <Icon name="distill" size={14} />
-                  </button>
-                  <button
-                    class="icon-btn"
-                    title={t('sources.actionReset')}
-                    onclick={(event) => act(event, () => void resetSource(source.hash))}
-                  >
-                    <Icon name="reset" size={14} />
-                  </button>
-                {/if}
+                <button
+                  class="icon-btn"
+                  class:is-on={source.read_later}
+                  title={source.read_later ? t('sources.markDone') : t('sources.readLaterAction')}
+                  aria-pressed={!!source.read_later}
+                  onclick={(event) => act(event, () => void toggleReadLater(source.hash, !source.read_later))}
+                >
+                  <Icon name="clock" size={14} />
+                </button>
+                <button
+                  class="icon-btn"
+                  class:is-on={!!source.favorite_at}
+                  title={source.favorite_at ? t('sources.unfavorite') : t('sources.favorite')}
+                  aria-pressed={!!source.favorite_at}
+                  onclick={(event) => act(event, () => void toggleFavorite(source.hash, !source.favorite_at))}
+                >
+                  <Icon name="star" size={14} />
+                </button>
                 {#if !source.origin && !source.original_name?.startsWith('wiki:')}
                   <button
                     class="icon-btn icon-btn--danger"
@@ -662,5 +793,79 @@
     .source-origin {
       display: none;
     }
+  }
+
+  /* The read-later queue: the same list, told what it is. It sits above the search because the
+     queue is a place the reader comes back to, not a filter they happened to switch on. */
+  .queue-banner {
+    /* The gap to the search below is the same 10px the search keeps to the filter row. */
+    margin: 12px 0 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    box-shadow: var(--shadow-1);
+  }
+
+  .queue-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink);
+    font-size: 12.5px;
+  }
+
+  .queue-head strong {
+    font-weight: 650;
+  }
+
+  .queue-count {
+    color: var(--faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .queue-split {
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+
+  .queue-manage {
+    margin-left: auto;
+  }
+
+  .queue-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 9px;
+  }
+
+  .source-marks {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex: none;
+    color: var(--accent);
+  }
+
+  .source-mark {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .tag--interest {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-color: transparent;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  :global(.source-actions .icon-btn.is-on) {
+    color: var(--accent);
+    background: var(--accent-soft);
   }
 </style>

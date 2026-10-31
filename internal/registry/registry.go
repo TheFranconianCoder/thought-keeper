@@ -21,6 +21,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/extract"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/favicons"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/gateways"
+	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/interests"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/langdetect"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/objects"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/persistence"
@@ -82,7 +83,10 @@ type Deps struct {
 	ResetSource            usecases.ResetSource
 	// PruneWikiLinks removes what a saved page stopped owning, in the background.
 	PruneWikiLinks usecases.PruneWikiLinks
-	AgentAvailable bool
+	// MatchSourceInterests is the automatism: a new or freshly distilled source is compared with
+	// the reader's rules and a strong match joins the read-later queue.
+	MatchSourceInterests usecases.MatchSourceInterests
+	AgentAvailable       bool
 }
 
 // Build wires the adapters, the use cases and the HTTP handler.
@@ -197,15 +201,30 @@ func Build(
 	steps := sourcemeta.NewTracker(meta, index, log)
 	intake := usecases.IntakeSource{Store: store, Index: index, SourceLog: sourceLog, Clock: clock, Steps: steps, Languages: languages}
 	list := usecases.ListSources{Index: index}
-	facets := usecases.ListSourceFacets{Index: index}
+	facets := usecases.ListSourceFacets{Index: index, Shelf: index}
 	sourceChildren := usecases.SourceChildren{Index: index}
 	setSourceTags := usecases.SetSourceTags{Index: index, Tags: steps, SourceLog: sourceLog, Clock: clock}
+	setSourceFavorite := usecases.SetSourceFavorite{Index: index, Shelf: steps, Clock: clock}
+	setReadLater := usecases.SetSourceReadLater{Index: index, Shelf: steps, Clock: clock}
+	setWikiFavorite := usecases.SetWikiFavorite{Wiki: wikiStore, Clock: clock}
 	get := usecases.GetSource{Index: index}
+
+	// The reader's standing rules. The files under interests/ are the truth; the preview reads the
+	// index for the calibration, and the ingest path matches one source in memory.
+	interestStore := interests.New(cfg.InterestsDir())
+	interestSignals := sqlc.NewInterestRepository(db, persistence.HasFTS5(db))
+	listInterests := usecases.ListInterests{Store: interestStore, Counter: index}
+	saveInterest := usecases.SaveInterest{Store: interestStore, Shelf: steps, Signals: interestSignals, Clock: clock}
+	deleteInterest := usecases.DeleteInterest{Store: interestStore}
+	previewInterest := usecases.PreviewInterest{Signals: interestSignals}
+	sourceInterests := usecases.SourceInterests{Store: interestStore, Index: index, Atoms: atomRepo}
+	rejectSourceInterest := usecases.RejectSourceInterest{Store: interestStore, Index: index, Shelf: steps, Clock: clock}
+	matchSourceInterests := usecases.MatchSourceInterests{Store: interestStore, Index: index, Atoms: atomRepo, Shelf: steps, Clock: clock}
 	maintenanceRepo := sqlc.NewMaintenanceRepository(db)
 	reindex := usecases.ReindexVault{
 		Store: store, Index: index, Atoms: atomRepo, AtomStore: atomStore,
 		Maintenance: maintenanceRepo, SourceLog: sourceLog,
-		Trees: trees, Clock: clock, Log: log, Steps: steps, Parts: partRepo,
+		Trees: trees, Clock: clock, Log: log, Steps: steps, Parts: partRepo, Shelf: index,
 		ClusterStore: clusterStore, ClusterRepo: clusterRepo,
 	}
 	capture := usecases.CaptureSource{
@@ -410,6 +429,7 @@ func Build(
 		Reconcile: handlers.ReconcileHandler{Runs: reconciler},
 		Sources: handlers.SourcesHandler{
 			Lister: list, Counter: list, Facets: facets, ChildLister: sourceChildren, TagSetter: setSourceTags,
+			Favorite: setSourceFavorite, ReadLater: setReadLater, Interests: sourceInterests,
 			Getter: get, Distill: scheduler, Summary: scheduler, Status: scheduler, Delete: deleteSource,
 			Capturer: scheduler, Sidecars: sourceSidecars, FixURLs2: fixURLs, Attacher: attachURL,
 			Content: sourceContent, Favicon: sourceFavicon, Log: sourceLog, Reset: scheduler, OnRemoved: onRemoved,
@@ -439,11 +459,15 @@ func Build(
 			Commands: commandAtoms,
 		},
 		Wiki: handlers.WikiHandler{
-			List: listWiki, Get: getWiki, Save: saveWiki, Delete: deleteWiki,
+			List: listWiki, Get: getWiki, Save: saveWiki, Delete: deleteWiki, Favorite: setWikiFavorite,
 			OnChanged:   func(_, hash string) { onAdded(hash) },
 			OnReprocess: onReprocess,
 			OnCleanup:   onCleanup,
 			OnTag:       onTag, OnDeleted: onRemoved, URLs: scheduler, OnURLRemoved: onRemoved,
+		},
+		Interests: handlers.InterestHandler{
+			Lister: listInterests, Saver: saveInterest, Deleter: deleteInterest,
+			Previewer: previewInterest, Rejecter: rejectSourceInterest,
 		},
 		Search: handlers.SearchHandler{Search: searchUC},
 		Asks:   handlers.AskHandler{Lister: listAsks, Getter: getAsk, Deleter: deleteAsk},
@@ -497,6 +521,7 @@ func Build(
 		Maintenance:            maintenanceRepo,
 		ResetSource:            resetSource,
 		PruneWikiLinks:         pruneWikiLinks,
+		MatchSourceInterests:   matchSourceInterests,
 		AgentAvailable:         agentOK,
 	}
 }

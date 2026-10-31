@@ -11,7 +11,9 @@
   import { scrollFade } from '../../lib/scroll-fade';
   import { scrollTopTarget } from '../../lib/scroll-top.svelte';
   import { asks, type PendingAsk } from '../../lib/stores/asks.svelte';
+  import { visibleCloud } from '../../lib/cloud';
   import { claims } from '../../lib/stores/claims.svelte';
+  import CloudMore from '../ui/CloudMore.svelte';
   import CopyId from '../ui/CopyId.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -46,6 +48,16 @@
       .map(([tag, count]) => ({ tag, count }))
       .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   });
+
+  let tagsExpanded = $state(false);
+  const askTagView = $derived(
+    visibleCloud(tagCloud, {
+      expanded: tagsExpanded,
+      active: tagFilter,
+      key: (item) => item.tag,
+      count: (item) => item.count,
+    }),
+  );
 
   const visibleAsks = $derived(
     tagFilter ? asks.items.filter((ask) => (ask.tags ?? []).includes(tagFilter)) : asks.items,
@@ -128,10 +140,10 @@
   }
 </script>
 
-{#snippet askRows()}
+{#snippet askRows(compact: boolean)}
   {#if tagCloud.length > 0}
     <div class="tag-cloud" use:scrollFade use:rememberScroll={'ask-tags'} aria-label={t('ask.tagsAria')}>
-      {#each tagCloud as item (item.tag)}
+      {#each askTagView.visible as item (item.tag)}
         <button
           class="chip"
           class:chip--accent={tagFilter === item.tag}
@@ -141,6 +153,12 @@
         </button>
       {/each}
     </div>
+    <CloudMore
+      hidden={askTagView.hidden}
+      expanded={tagsExpanded}
+      truncated={askTagView.truncated}
+      ontoggle={() => (tagsExpanded = !tagsExpanded)}
+    />
   {/if}
   {#if tagFilter}
     <div class="tag-filter">
@@ -180,7 +198,7 @@
                   </span>
                 {/if}
               </span>
-              {#if row.run.status === 'failed'}
+              {#if row.run.status === 'failed' && !compact}
                 <div class="saved-actions saved-actions--shown">
                   <button
                     class="icon-btn"
@@ -210,22 +228,24 @@
                   </span>
                 </span>
               </button>
-              <div class="saved-actions">
-                <button
-                  class="icon-btn"
-                  title={t('ask.askAgain')}
-                  onclick={(event) => act(event, () => askAgain(row.ask.question, row.ask.source))}
-                >
-                  <Icon name="refresh" size={14} />
-                </button>
-                <button
-                  class="icon-btn icon-btn--danger"
-                  title={t('common.delete')}
-                  onclick={(event) => act(event, () => void deleteSavedAsk(row.ask.id))}
-                >
-                  <Icon name="trash" size={14} />
-                </button>
-              </div>
+              {#if !compact}
+                <div class="saved-actions">
+                  <button
+                    class="icon-btn"
+                    title={t('ask.askAgain')}
+                    onclick={(event) => act(event, () => askAgain(row.ask.question, row.ask.source))}
+                  >
+                    <Icon name="refresh" size={14} />
+                  </button>
+                  <button
+                    class="icon-btn icon-btn--danger"
+                    title={t('common.delete')}
+                    onclick={(event) => act(event, () => void deleteSavedAsk(row.ask.id))}
+                  >
+                    <Icon name="trash" size={14} />
+                  </button>
+                </div>
+              {/if}
             </div>
           {/if}
         {/snippet}
@@ -240,7 +260,7 @@
       <ListHead title={t('ask.savedQueries')} count={asks.count || null}>
         <p class="list-sub">{t('ask.savedSub')}</p>
       </ListHead>
-      {@render askRows()}
+      {@render askRows(true)}
     </section>
   {/if}
 
@@ -350,7 +370,7 @@
           <h2>{t('ask.savedQueries')}</h2>
           {#if asks.count}<span class="count">{n(asks.count)}</span>{/if}
         </div>
-        {@render askRows()}
+        {@render askRows(false)}
       </section>
     {/if}
   </section>
@@ -555,7 +575,9 @@
   }
 
   .ask-head {
-    margin-bottom: 16px;
+    /* The same 22px the global .page-head gives Start: the first box starts at the same place on
+       both pages, so the two front doors read as one layout. */
+    margin-bottom: 22px;
   }
 
   .back-link {

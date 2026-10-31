@@ -35,6 +35,9 @@ type ReindexVault struct {
 	SourceLog interfaces.SourceLog
 	// Steps rebuilds the index's mirror of the document-step state from the vault's .meta files.
 	Steps interfaces.StepTracker
+	// Shelf restores the reader's marks (the star and the read-later queue) from the records: a
+	// deleted index must not lose what the reader kept.
+	Shelf interfaces.ShelfMirror
 	// Parts restores the part records behind the distill step.
 	Parts interfaces.PartRepository
 	// The association layer: its records are the truth, its rows the cache.
@@ -232,6 +235,16 @@ func (uc ReindexVault) steps(ctx context.Context, res ReindexResult, records map
 		if rec.Title != "" {
 			if err := uc.Index.SetSourceTitle(ctx, hash, rec.Title); err != nil && uc.Log != nil {
 				uc.Log.Warn("reindex: title not restored", "hash", hash, "err", err)
+			}
+		}
+		// The reader's marks live in the record too. Restore them even when empty: a stale star or
+		// queue entry in a reused index must not survive the rebuild.
+		if uc.Shelf != nil {
+			if err := uc.Shelf.SetSourceFavorite(ctx, hash, rec.FavoriteAt); err != nil && uc.Log != nil {
+				uc.Log.Warn("reindex: favorite not restored", "hash", hash, "err", err)
+			}
+			if err := uc.Shelf.SetSourceReadLater(ctx, hash, rec.ReadLaterAt, rec.ReadLaterDoneAt, rec.ReadLaterManual, rec.ReadLaterVia); err != nil && uc.Log != nil {
+				uc.Log.Warn("reindex: read later not restored", "hash", hash, "err", err)
 			}
 		}
 		if len(rec.Parts) > 0 && uc.Parts != nil {

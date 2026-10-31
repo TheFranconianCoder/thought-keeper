@@ -39,3 +39,14 @@ export async function deleteWikiPage(id: string): Promise<void> {
     toast(t('wiki.deleteFailed', { error: firstLine(humanError(error)) }), 'error');
   }
 }
+
+/** toggleWikiFavorite writes the reader's star on a page. The page's frontmatter is the truth; the
+ *  list and the open detail are updated in place so the star answers at once. */
+export async function toggleWikiFavorite(id: string, on: boolean): Promise<void> {
+  try {
+    const page = await wiki.toggleFavorite(id, on);
+    if (wiki.selectedId === id) wiki.selected = page;
+  } catch (error) {
+    toast(t('wiki.favoriteFailed', { error: firstLine(humanError(error)) }), 'error');
+  }
+}

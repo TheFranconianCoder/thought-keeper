@@ -54,6 +54,8 @@ type WikiPageSummary struct {
 	Tags       []string
 	AutoTags   []string
 	SourceHash string
+	// FavoriteAt is the reader's star on the page.
+	FavoriteAt time.Time
 	UpdatedAt  time.Time
 }
 
@@ -85,7 +87,7 @@ func (uc ListWikiPages) Execute(ctx context.Context) (WikiList, error) {
 	for _, p := range pages {
 		out.Pages = append(out.Pages, WikiPageSummary{
 			ID: p.ID, Title: p.Title, Tags: p.Tags, AutoTags: p.AutoTags,
-			SourceHash: p.SourceHash, UpdatedAt: p.UpdatedAt,
+			SourceHash: p.SourceHash, FavoriteAt: p.FavoriteAt, UpdatedAt: p.UpdatedAt,
 		})
 		// The cloud counts BOTH kinds: a reader filters by the tag, not by who wrote it.
 		for _, tag := range p.AllTags() {
@@ -178,6 +180,8 @@ func (uc SaveWikiPage) Execute(ctx context.Context, in WikiPageInput) (WikiPageR
 	}
 	if !created {
 		page.CreatedAt = old.CreatedAt
+		// The star is the reader's, not the editor's: an edit that never mentions it must not clear it.
+		page.FavoriteAt = old.FavoriteAt
 		// The DERIVED tags belong to the page, not to this form: the editor sends the human's tags only,
 		// and a save that forgot the derived ones would erase them every time somebody edits a typo.
 		page.AutoTags = old.AutoTags

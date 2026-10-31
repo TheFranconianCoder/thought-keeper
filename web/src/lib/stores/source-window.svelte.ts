@@ -34,7 +34,13 @@ class SourceWindowStore {
    *  Views listen to this to read the first page again even when the list is currently empty. */
   epoch = $state(0);
 
-  facets = $state<SourceFacets>({ tags: [], attached: 0 });
+  facets = $state<SourceFacets>({
+    tags: [],
+    attached: 0,
+    favorites: 0,
+    read_later: 0,
+    read_later_interests: 0,
+  });
   facetsLoaded = $state(false);
   facetsError = $state('');
 
@@ -74,6 +80,9 @@ class SourceWindowStore {
       attachedOnly: next.attachedOnly ? true : undefined,
       bookmarksOnly: next.bookmarksOnly ? true : undefined,
       failedOnly: next.failedOnly ? true : undefined,
+      favoriteOnly: next.favoriteOnly ? true : undefined,
+      readLaterOnly: next.readLaterOnly ? true : undefined,
+      interest: next.interest || undefined,
     };
     const key = JSON.stringify(filter);
     if (key === this.filterKey) return;

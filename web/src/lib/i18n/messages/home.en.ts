@@ -40,4 +40,12 @@ export const homeEn: Record<string, string> = {
   'home.pulse.clusters.many': '{count} clusters',
   'home.pulse.unclustered.one': '{count} unclustered',
   'home.pulse.unclustered.many': '{count} unclustered',
+
+  // The read-later queue on the front door.
+  'home.readLater': 'Read later',
+  'home.allReadLater': 'All',
+  'home.readLaterEmpty': 'Nothing waiting. An interest can keep this queue filled.',
+  'home.readLaterEmptyAction': 'Set up interests',
+  'home.readLaterDone': 'Done',
+
 };

@@ -3,6 +3,7 @@ package sourcemeta
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,6 +20,10 @@ type StepIndex interface {
 	ClearSourceOrigin(ctx context.Context, hash string) error
 	SetSourceTags(ctx context.Context, hash string, tags []string) error
 	SetSourceAutoTags(ctx context.Context, hash string, tags []string, at time.Time) error
+	// The reader's marks: the star and the read-later queue. They live in the record as well; the
+	// index mirror is what the windowed list filters by.
+	SetSourceFavorite(ctx context.Context, hash string, at time.Time) error
+	SetSourceReadLater(ctx context.Context, hash string, at, doneAt time.Time, manual bool, via []string) error
 }
 
 // Tracker implements interfaces.StepTracker: it writes a source's document-step state into the
@@ -100,6 +105,11 @@ func (t *Tracker) Records() (map[string]entities.SourceRecord, error) {
 			},
 			Steps: rec.Steps, Title: strings.TrimSpace(rec.Title), Tags: rec.Tags,
 			AutoTags: rec.AutoTags, AutoTagsAt: unixOrZero(rec.AutoTagsAt), Parts: rec.Parts,
+			FavoriteAt:      unixOrZero(rec.FavoriteAt),
+			ReadLaterAt:     unixOrZero(rec.ReadLaterAt),
+			ReadLaterDoneAt: unixOrZero(rec.ReadLaterDoneAt),
+			ReadLaterManual: rec.ReadLaterManual,
+			ReadLaterVia:    append([]string(nil), rec.ReadLaterVia...),
 		}
 	}
 	return out, nil
@@ -156,6 +166,102 @@ func (t *Tracker) SetSourceAutoTags(ctx context.Context, hash string, tags []str
 	return nil
 }
 
+// SetFavorite writes the reader's star into the record and the index. A zero time clears it.
+func (t *Tracker) SetFavorite(ctx context.Context, hash string, at time.Time) error {
+	if t == nil || t.Meta == nil {
+		return nil
+	}
+	var ms int64
+	if !at.IsZero() {
+		ms = at.UnixMilli()
+	}
+	if _, err := t.Meta.Update(hash, func(rec *Record) error {
+		rec.FavoriteAt = ms
+		return nil
+	}); err != nil {
+		return err
+	}
+	if t.Index != nil {
+		if err := t.Index.SetSourceFavorite(ctx, hash, at); err != nil {
+			if t.Log != nil {
+				t.Log.Warn("favorite not mirrored into the index", "hash", hash, "err", err)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// SetReadLater writes one queue state: the entry time, the done time, whether the reader queued it
+// by hand, and the interests that did. Zero times mean "never" / "still open".
+func (t *Tracker) SetReadLater(ctx context.Context, hash string, at, doneAt time.Time, manual bool, via []string) error {
+	if t == nil || t.Meta == nil {
+		return nil
+	}
+	clean := normalizeVia(via)
+	if _, err := t.Meta.Update(hash, func(rec *Record) error {
+		rec.ReadLaterAt = unixMillis(at)
+		rec.ReadLaterDoneAt = unixMillis(doneAt)
+		rec.ReadLaterManual = manual
+		rec.ReadLaterVia = clean
+		return nil
+	}); err != nil {
+		return err
+	}
+	if t.Index != nil {
+		if err := t.Index.SetSourceReadLater(ctx, hash, at, doneAt, manual, clean); err != nil {
+			if t.Log != nil {
+				t.Log.Warn("read later not mirrored into the index", "hash", hash, "err", err)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// QueueFromInterests appends the interests that matched to a queue entry that is absent or open. A
+// FINISHED entry is never re-opened: "erledigt" is the reader's decision, not a state the next
+// distill may forget. It reports whether the record changed, so the caller can publish only then.
+func (t *Tracker) QueueFromInterests(ctx context.Context, hash string, via []string, at time.Time) (bool, error) {
+	if t == nil || t.Meta == nil {
+		return false, nil
+	}
+	clean := normalizeVia(via)
+	changed := false
+	rec, err := t.Meta.Update(hash, func(rec *Record) error {
+		if rec.ReadLaterAt != 0 && rec.ReadLaterDoneAt != 0 {
+			return nil // finished: the reader closed this one
+		}
+		if rec.ReadLaterAt == 0 {
+			rec.ReadLaterAt = unixMillis(at)
+			rec.ReadLaterDoneAt = 0
+			changed = true
+		}
+		merged := normalizeVia(append(append([]string(nil), rec.ReadLaterVia...), clean...))
+		if !sameStrings(merged, rec.ReadLaterVia) {
+			rec.ReadLaterVia = merged
+			changed = true
+		}
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	if !changed {
+		return false, nil
+	}
+	if t.Index != nil {
+		if err := t.Index.SetSourceReadLater(ctx, hash,
+			unixOrZero(rec.ReadLaterAt), unixOrZero(rec.ReadLaterDoneAt), rec.ReadLaterManual, rec.ReadLaterVia); err != nil {
+			if t.Log != nil {
+				t.Log.Warn("interest queue entry not mirrored into the index", "hash", hash, "err", err)
+			}
+			return true, err
+		}
+	}
+	return true, nil
+}
+
 // SourceTags returns every source's human and derived labels, keyed by hash. The vocabulary's rename
 // reads it from the records: the .meta file is the truth, and a curation is rare enough for the walk.
 func (t *Tracker) SourceTags(ctx context.Context) (map[string]entities.SourceTagSet, error) {
@@ -181,6 +287,42 @@ func unixOrZero(ms int64) time.Time {
 		return time.Time{}
 	}
 	return time.UnixMilli(ms).UTC()
+}
+
+func unixMillis(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixMilli()
+}
+
+// normalizeVia trims, de-duplicates and orders interest slugs. The record is read by a human as
+// well, so a stable order is worth the sort.
+func normalizeVia(via []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(via))
+	for _, slug := range via {
+		slug = strings.TrimSpace(slug)
+		if slug == "" || seen[slug] {
+			continue
+		}
+		seen[slug] = true
+		out = append(out, slug)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // SetParts records a run's part outcomes next to the source. The part record is the one piece of

@@ -33,17 +33,26 @@ type Source struct {
 	// Tags are the human's labels for this source; AutoTags are the agent's derived ones. Both are
 	// observed by the source-tags vocabulary; auto_tags_at marks a tagged source whose answer was
 	// empty, so the backfill does not ask again.
-	Tags           []string `json:"tags,omitempty"`
-	AutoTags       []string `json:"auto_tags,omitempty"`
-	AutoTagsAt     string   `json:"auto_tags_at,omitempty"`
-	PartsTotal     int      `json:"parts_total"`
-	PartsDone      int      `json:"parts_done"`
-	AtomsLeft      int      `json:"atoms_left"`
-	Bytes          int64    `json:"bytes"`
-	Pages          int      `json:"pages,omitempty"`
-	TreeState      string   `json:"tree_state"`
-	AtomCount      int      `json:"atom_count"`
-	ProvenanceRows int      `json:"provenance_rows"`
+	Tags       []string `json:"tags,omitempty"`
+	AutoTags   []string `json:"auto_tags,omitempty"`
+	AutoTagsAt string   `json:"auto_tags_at,omitempty"`
+	// The reader's marks. FavoriteAt is the star. ReadLaterAt/ReadLaterDoneAt are the queue entry;
+	// ReadLater is the derived "open" flag the row uses. ReadLaterVia names the interests that
+	// queued it, which is how the row explains itself (and why "not this interest" can undo it).
+	FavoriteAt      string   `json:"favorite_at,omitempty"`
+	ReadLaterAt     string   `json:"read_later_at,omitempty"`
+	ReadLaterDoneAt string   `json:"read_later_done_at,omitempty"`
+	ReadLaterManual bool     `json:"read_later_manual,omitempty"`
+	ReadLaterVia    []string `json:"read_later_via,omitempty"`
+	ReadLater       bool     `json:"read_later,omitempty"`
+	PartsTotal      int      `json:"parts_total"`
+	PartsDone       int      `json:"parts_done"`
+	AtomsLeft       int      `json:"atoms_left"`
+	Bytes           int64    `json:"bytes"`
+	Pages           int      `json:"pages,omitempty"`
+	TreeState       string   `json:"tree_state"`
+	AtomCount       int      `json:"atom_count"`
+	ProvenanceRows  int      `json:"provenance_rows"`
 	// Children is how many sub-sources this source owns (a sitemap's pages, a wiki page's linked
 	// URLs). Zero on a list row; only the detail read fills it.
 	Children int `json:"children,omitempty"`
@@ -109,11 +118,16 @@ type SourceTagFacet struct {
 	Count int    `json:"count"`
 }
 
-// SourceFacets is the Sources lens's facet payload: the tag cloud and the number of attached
-// snapshots. Both are vault facts, not facts about the window the list has loaded.
+// SourceFacets is the Sources lens's facet payload: the tag cloud and the vault-wide counts behind
+// the filter chips. All of them are vault facts, not facts about the window the list has loaded.
 type SourceFacets struct {
 	Tags     []SourceTagFacet `json:"tags"`
 	Attached int              `json:"attached"`
+	// Favorites is the starred sources; ReadLater is the OPEN queue; ReadLaterInterests is how much
+	// of that queue the interests put there ("4 von deinen Interessen").
+	Favorites          int `json:"favorites"`
+	ReadLater          int `json:"read_later"`
+	ReadLaterInterests int `json:"read_later_interests"`
 }
 
 // SourceTagsRequest is the body of PUT /api/v1/sources/{hash}/tags.

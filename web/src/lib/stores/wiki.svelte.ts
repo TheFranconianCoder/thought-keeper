@@ -71,6 +71,7 @@ export class WikiStore {
       tags: saved.tags,
       auto_tags: saved.auto_tags,
       source_hash: saved.source_hash,
+      favorite_at: saved.favorite_at,
       updated_at: saved.updated_at,
     };
     const index = this.pages.findIndex((entry) => entry.id === saved.id);
@@ -79,6 +80,19 @@ export class WikiStore {
     this.count = this.pages.length;
     void this.load();
     return saved;
+  }
+
+  /** toggleFavorite writes the star and mirrors the answer into the list row and the open page. */
+  async toggleFavorite(id: string, on: boolean): Promise<WikiPage> {
+    const page = await api.setWikiFavorite(id, on);
+    const index = this.pages.findIndex((entry) => entry.id === id);
+    if (index >= 0) {
+      this.pages = this.pages.map((entry, i) =>
+        i === index ? { ...entry, favorite_at: page.favorite_at } : entry,
+      );
+    }
+    if (this.selectedId === id) this.selected = page;
+    return page;
   }
 
   async remove(id: string): Promise<void> {

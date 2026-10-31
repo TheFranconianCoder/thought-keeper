@@ -10,16 +10,20 @@
     refetchSource,
     refreshSource,
     resetSource,
+    toggleFavorite,
+    toggleReadLater,
   } from '../../lib/actions';
   import { api } from '../../lib/api';
   import { fmtBytes, hostOf, prettyJson, relTime, splitFrontmatter } from '../../lib/format';
   import { n, t, tn } from '../../lib/i18n/index.svelte';
   import { askSourcePath, navigate, previousView, router, sourcePath, wikiPath } from '../../lib/router.svelte';
+  import { openInterests } from '../../lib/overlays';
   import { setPagePosition } from '../../lib/scroll-memory';
   import { sourcesTop } from '../../lib/sources-scroll';
   import { sources } from '../../lib/stores/sources.svelte';
+  import { interests } from '../../lib/stores/interests.svelte';
   import { countsOf, canAttachSnapshot, canRefreshSource, progressOf, statusLabel } from '../../lib/source-state';
-  import type { SourceNode, SourceTopic } from '../../lib/api/types';
+  import type { InterestMatch, SourceNode, SourceTopic } from '../../lib/api/types';
   import CopyId from '../ui/CopyId.svelte';
   import Icon from '../ui/Icon.svelte';
   import Frontmatter from '../ui/Frontmatter.svelte';
@@ -74,6 +78,58 @@
     return [...counts.entries()]
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  });
+
+  // The source page's interest block is computed on demand: the rule's evidence is read from the
+  // claims the vault already has, so editing a rule never leaves a stale chip behind.
+  let interestMatches = $state<InterestMatch[] | null>(null);
+  let interestSeq = 0;
+
+  async function loadInterestMatches(): Promise<void> {
+    if (!hash) return;
+    const seq = ++interestSeq;
+    try {
+      const result = await api.sourceInterests(hash);
+      if (seq !== interestSeq) return;
+      interestMatches = result.interests ?? [];
+    } catch {
+      if (seq === interestSeq) interestMatches = [];
+    }
+  }
+
+  async function decideInterest(match: InterestMatch, accepted: boolean): Promise<void> {
+    if (!match.slug || !hash) return;
+    try {
+      await api.setInterestSource(match.slug, hash, accepted);
+      await Promise.all([loadInterestMatches(), interests.refresh()]);
+      await sources.refresh(hash);
+    } catch {
+      // The block keeps its last state; the SSE frame will bring the truth.
+    }
+  }
+
+  function evidenceLabel(match: InterestMatch): string {
+    const parts: string[] = [];
+    if (match.topics && match.topics.length > 0) parts.push(match.topics.slice(0, 2).join(', '));
+    const claims = (match.terms ?? []).reduce((sum, term) => sum + (term.claims ?? 0), 0);
+    if (claims > 0) parts.push(tn('source.interestClaims', claims));
+    if (!match.enabled) parts.push(t('source.interestPaused'));
+    if (match.band === 'maybe') parts.push(t('source.interestMaybe'));
+    return parts.join(' · ');
+  }
+
+  $effect(() => {
+    const current = hash;
+    if (!current) return;
+    if (!interests.loaded) untrack(() => void interests.load());
+    untrack(() => void loadInterestMatches());
+  });
+
+  $effect(() => {
+    // A rule change (here or in another window) invalidates the evidence.
+    void interests.items;
+    void interests.loaded;
+    if (hash) untrack(() => void loadInterestMatches());
   });
 
   let partText = $state<string | null>(null);
@@ -345,9 +401,37 @@
             <span>{relTime(selected.imported_at)}</span>
             {#if selected.language}<span>·</span><span>{selected.language}</span>{/if}
             {#if selected.pages}<span>·</span><span>{tn(isEPUB ? 'source.chapters' : 'source.pages', selected.pages)}</span>{/if}
+            {#if selected.read_later && (selected.read_later_via ?? []).some((slug) => !!interests.bySlug(slug))}
+              {@const viaSlug = (selected.read_later_via ?? []).find((slug) => !!interests.bySlug(slug))!}
+              <button
+                class="chip chip--interest"
+                title={t('source.queuedByInterests')}
+                onclick={() => navigate(`#/sources?readlater=1&interest=${encodeURIComponent(viaSlug)}`)}
+              >
+                <Icon name="target" size={10} /> {interests.nameOf(viaSlug)}
+              </button>
+            {/if}
           </div>
         </div>
         <div class="source-head-actions">
+          <button
+            class="btn btn--secondary btn--sm btn--action"
+            class:active={!!selected.favorite_at}
+            title={selected.favorite_at ? t('source.unfavorite') : t('source.favorite')}
+            aria-pressed={!!selected.favorite_at}
+            onclick={() => void toggleFavorite(selected!.hash, !selected.favorite_at)}
+          >
+            <Icon name="star" size={13} /> <span class="btn-label">{selected.favorite_at ? t('source.unfavorite') : t('source.favorite')}</span>
+          </button>
+          <button
+            class="btn btn--secondary btn--sm btn--action"
+            class:active={!!selected.read_later}
+            title={selected.read_later ? t('source.markDone') : t('source.readLaterAction')}
+            aria-pressed={!!selected.read_later}
+            onclick={() => void toggleReadLater(selected!.hash, !selected.read_later)}
+          >
+            <Icon name="clock" size={13} /> <span class="btn-label">{selected.read_later ? t('source.markDone') : t('source.readLaterAction')}</span>
+          </button>
           <button
             class="btn btn--primary btn--sm btn--action"
             title={t('source.ask')}
@@ -943,6 +1027,57 @@
                 <p class="rail-note">{tn('source.moreTopics', topics.length - 5)}</p>
               {/if}
             </section>
+
+            <section class="rail-block">
+              <div class="rail-label">
+                {t('source.interests')}
+                <button class="rail-edit" title={t('interests.manageTitle')} onclick={() => openInterests()}>
+                  <Icon name="settings" size={11} /> <span class="btn-label">{t('interests.manage')}</span>
+                </button>
+              </div>
+              {#if interestMatches === null}
+                <p class="rail-note">{t('common.loading')}</p>
+              {:else if interestMatches.length === 0}
+                <p class="rail-note">{t('source.noInterests')}</p>
+                <button class="link-button interest-seed" onclick={() => openInterests(selected!.hash)}>
+                  {t('source.interestFromSource')}
+                </button>
+              {:else}
+                <div class="interest-list">
+                  {#each interestMatches as match (match.slug)}
+                    <div class="interest-row" class:interest-row--maybe={match.band === 'maybe'}>
+                      <div class="interest-main">
+                        <span class="interest-name">
+                          <Icon name="target" size={10} /> {match.name}
+                        </span>
+                        <span class="interest-evidence">{evidenceLabel(match)}</span>
+                      </div>
+                      <div class="interest-actions">
+                        {#if match.rejected}
+                          <button
+                            class="icon-btn"
+                            title={t('source.acceptInterest')}
+                            onclick={() => void decideInterest(match, true)}
+                          ><Icon name="check" size={12} /></button>
+                        {:else}
+                          {#if match.queued}
+                            <span class="interest-queued" title={t('source.queued')}><Icon name="clock" size={11} /></span>
+                          {/if}
+                          <button
+                            class="icon-btn"
+                            title={t('source.rejectInterest')}
+                            onclick={() => void decideInterest(match, false)}
+                          ><Icon name="close" size={12} /></button>
+                        {/if}
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+                <button class="link-button interest-seed" onclick={() => openInterests(selected!.hash)}>
+                  {t('source.interestFromSource')}
+                </button>
+              {/if}
+            </section>
           {/if}
 
           {#if counts}
@@ -1032,6 +1167,8 @@
   .source-head-actions {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 5px;
     flex: none;
   }
@@ -1446,5 +1583,87 @@
     .frame {
       height: 60vh;
     }
+  }
+
+  /* The reader's marks: a filled toggle reads as "on", not as another primary button. */
+  .source-head-actions :global(.btn.active) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .source-head-sub :global(.chip--interest) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-color: transparent;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .interest-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .interest-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 7px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--bg-muted);
+  }
+
+  .interest-row--maybe {
+    border-style: dashed;
+    background: transparent;
+  }
+
+  .interest-main {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .interest-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .interest-name :global(.ico) {
+    color: var(--accent);
+  }
+
+  .interest-evidence {
+    color: var(--faint);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .interest-actions {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    flex: none;
+  }
+
+  .interest-actions :global(.icon-btn) {
+    width: 22px;
+    height: 22px;
+  }
+
+  .interest-queued {
+    display: inline-flex;
+    color: var(--accent);
+    padding: 3px;
   }
 </style>

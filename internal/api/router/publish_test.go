@@ -52,10 +52,10 @@ func TestPublishWritesAnnouncesSuccessfulWrites(t *testing.T) {
 	// A write: every affected container, each once.
 	post("/api/v1/reindex")
 	types := map[string]bool{}
-	for range 5 {
+	for range 6 {
 		types[nextEvent(t, sub).Type] = true
 	}
-	for _, want := range []string{"source", "clusters", "findings", "pipeline", "wiki"} {
+	for _, want := range []string{"source", "clusters", "findings", "pipeline", "wiki", "interests"} {
 		if !types[want] {
 			t.Errorf("no %q event after a write (got %v)", want, types)
 		}

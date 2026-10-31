@@ -48,4 +48,12 @@ export const wikiDe: Record<string, string> = {
   'wiki.deleteConfirm': 'Seite löschen',
   'wiki.deleted': 'Wiki-Seite gelöscht.',
   'wiki.deleteFailed': 'Die Seite konnte nicht gelöscht werden: {error}',
+
+  // Der Stern auf einer Seite.
+  'wiki.favorites': 'Favoriten',
+  'wiki.favoritesTitle': 'Mit Stern markierte Seiten',
+  'wiki.favorite': 'Favorit',
+  'wiki.unfavorite': 'Favorit entfernen',
+  'wiki.favoriteFailed': 'Favorit nicht gespeichert: {error}',
+
 };

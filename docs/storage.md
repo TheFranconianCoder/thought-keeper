@@ -35,6 +35,7 @@ greppable, worth versioning and backing up. The app never treats a directory as 
 │   ├── topics.md
 │   ├── wiki-tags.md
 │   └── source-tags.md
+├── interests/                  # the reader's standing rules: <slug>.md (records)
 ├── asks/                       # saved Ask conversations: <run-id>.md
 ├── .thought-keeper/            # derived, hidden: favicons/
 ├── .trash/                     # deletions (trash, not delete)
@@ -51,7 +52,7 @@ page is a destination, because a human authored it.
 | Sidecar | belongs to | holds | kind |
 | --- | --- | --- | --- |
 | `<hash>.capture.md` | a source whose bytes are not readable (a PDF, an EPUB) or a wiki page representation | the content as readable Markdown | **cache** — re-derivable (`capture`) |
-| `<hash>.meta` | a source | what the source **is** (kind, language, URL, identity), its title, **human tags**, **auto tags** and when they were derived, the state of capture/outline/distill and the part records | **record** — the file IS the truth |
+| `<hash>.meta` | a source | what the source **is** (kind, language, URL, identity), its title, **human tags**, **auto tags** and when they were derived, the reader's **favorite** and **read-later** marks, the state of capture/outline/distill and the part records | **record** — the file IS the truth |
 | `<hash>.outline` | a source | the node tree with references into the readable text | **cache** — re-derivable (`rebuild-trees`) |
 | `<hash>.summary.md` | a source | its **overview**, written from the claims after a complete distill | **cache** — regenerated from the claims (a model writes it, so not byte-identical) |
 | `<hash>.log` | a source | everything done to it | **record** — history |
@@ -270,6 +271,7 @@ auto_tags:
 urls:
   - https://go.dev/blog/waza-talk
 source: <stable WikiHash>
+favorite_at: 2026-10-31T10:00:00Z
 created: 2026-10-22T09:00:00Z
 updated: 2026-10-22T09:12:00Z
 ---
@@ -505,3 +507,64 @@ items:
   versioned.
 - **No index table.** Like `asks/`, the directory is read directly: the history is small by design.
   `reindex` does not touch it.
+
+## 11. Reader marks and interests
+
+The reader's own state is deliberately small: two marks on a source, one mark on a page, and one
+file per standing rule. None of it is a tag, a topic or a claim.
+
+### The marks
+
+The source's `<hash>.meta` record carries them (the file is the truth; the index mirrors them for
+the windowed list):
+
+| key | meaning |
+| --- | --- |
+| `favorite_at` | the star on a source. No lifecycle, no label; it never feeds search or the association layer |
+| `read_later_at` | when the source entered the read-later queue |
+| `read_later_done_at` | when it left the queue (0 = still open) |
+| `read_later_manual` | the reader put it there by hand. "Not this interest" never removes a manual entry |
+| `read_later_via` | the interest slugs that queued it — the queue row's explanation and the interest filter's key |
+
+A wiki page's star is the `favorite_at` key in its frontmatter. Reindex reads both back; nothing
+about the marks is derived.
+
+### `interests/<slug>.md`
+
+One Markdown file per standing rule, YAML frontmatter only:
+
+```markdown
+---
+kind: interest
+slug: rust-async
+name: Rust async
+terms:
+  - rust
+  - async
+  - tokio
+exclude:
+  - corrosion
+kinds: [pdf]
+enabled: true
+rejected:
+  - <source hash>
+created: 2026-10-31T10:00:00Z
+updated: 2026-10-31T10:12:00Z
+---
+```
+
+- **The file is the truth.** A rule is a decision (which words mean "this is mine", what to leave
+  out, whether it is paused, which sources were rejected), and no index can rebuild it.
+- **The slug is the identity.** It is derived from the name once and never moves, so a rename does
+  not orphan the queue entries whose `read_later_via` names it.
+- **`terms` are the reader's spelling.** Matching folds and stems them; the queue shows them back.
+  A multi-word term is a conjunction. At most 12, each 2–80 characters.
+- **`exclude` vetoes.** A term that names something the reader does not mean ("corrosion" for Rust)
+  makes the source a non-match, however many right words it has.
+- **`kinds` narrows** the rule to source kinds; empty means every kind. Sitemap/feed containers are
+  never matched themselves — their pages are.
+- **`rejected` is the per-source correction.** It lives with the rule because it is a judgement about
+  the pair; deleting the rule deletes it.
+- **Nothing is written into the source.** A match is not a tag: the queue entry names the slug, and
+  the evidence is computed on demand from the claims the vault already has. `reindex` does not touch
+  the file; the index has no interest table at all.

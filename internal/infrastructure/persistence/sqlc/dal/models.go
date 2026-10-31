@@ -102,26 +102,31 @@ type RunStep struct {
 }
 
 type Source struct {
-	ID           ulid.ULID      `json:"id"`
-	Hash         string         `json:"hash"`
-	Kind         string         `json:"kind"`
-	Ext          string         `json:"ext"`
-	Path         string         `json:"path"`
-	Url          sql.NullString `json:"url"`
-	Title        string         `json:"title"`
-	OriginalName string         `json:"original_name"`
-	Bytes        int64          `json:"bytes"`
-	Pages        sql.NullInt64  `json:"pages"`
-	TreeState    string         `json:"tree_state"`
-	Steps        string         `json:"steps"`
-	UrlStatus    sql.NullInt64  `json:"url_status"`
-	UrlCheckedAt sql.NullInt64  `json:"url_checked_at"`
-	Bookmark     int64          `json:"bookmark"`
-	ImportedAt   int64          `json:"imported_at"`
-	Meta         string         `json:"meta"`
-	Tags         string         `json:"tags"`
-	AutoTags     string         `json:"auto_tags"`
-	AutoTagsAt   sql.NullInt64  `json:"auto_tags_at"`
+	ID              ulid.ULID      `json:"id"`
+	Hash            string         `json:"hash"`
+	Kind            string         `json:"kind"`
+	Ext             string         `json:"ext"`
+	Path            string         `json:"path"`
+	Url             sql.NullString `json:"url"`
+	Title           string         `json:"title"`
+	OriginalName    string         `json:"original_name"`
+	Bytes           int64          `json:"bytes"`
+	Pages           sql.NullInt64  `json:"pages"`
+	TreeState       string         `json:"tree_state"`
+	Steps           string         `json:"steps"`
+	UrlStatus       sql.NullInt64  `json:"url_status"`
+	UrlCheckedAt    sql.NullInt64  `json:"url_checked_at"`
+	Bookmark        int64          `json:"bookmark"`
+	ImportedAt      int64          `json:"imported_at"`
+	Meta            string         `json:"meta"`
+	Tags            string         `json:"tags"`
+	AutoTags        string         `json:"auto_tags"`
+	AutoTagsAt      sql.NullInt64  `json:"auto_tags_at"`
+	FavoriteAt      sql.NullInt64  `json:"favorite_at"`
+	ReadLaterAt     sql.NullInt64  `json:"read_later_at"`
+	ReadLaterDoneAt sql.NullInt64  `json:"read_later_done_at"`
+	ReadLaterManual int64          `json:"read_later_manual"`
+	ReadLaterVia    string         `json:"read_later_via"`
 }
 
 type SourceNode struct {

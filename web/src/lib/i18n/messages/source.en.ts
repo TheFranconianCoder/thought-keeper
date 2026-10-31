@@ -159,4 +159,22 @@ export const sourceEn: Record<string, string> = {
   'source.nowLabel': 'now',
   'source.partsLabel': 'parts',
   'source.claimsLabel': 'claims',
+
+  // The reader's marks and the interest block in the rail.
+  'source.favorite': 'Favorite',
+  'source.unfavorite': 'Remove favorite',
+  'source.readLaterAction': 'Read later',
+  'source.markDone': 'Done',
+  'source.interests': 'Interests',
+  'source.noInterests': 'No interest matches this source.',
+  'source.interestClaims.one': '{count} claim',
+  'source.interestClaims.many': '{count} claims',
+  'source.interestPaused': 'paused',
+  'source.interestMaybe': 'one mention',
+  'source.rejectInterest': 'Not this interest',
+  'source.acceptInterest': 'Yes, this fits',
+  'source.queued': 'In your read-later queue',
+  'source.queuedByInterests': 'Queued by an interest',
+
+  'source.interestFromSource': 'Make an interest from this source',
 };

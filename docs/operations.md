@@ -33,7 +33,7 @@ sync when a knob changes. Sections:
 | --- | --- |
 | `app` | `tray`, `autostart`, `smart_open`, `memory_limit_mb` (soft heap ceiling, 0 = none) |
 | `server` | `addr` (loopback, fixed or `:0`) |
-| `vault` | root, sources, inbox, atoms, wiki, clusters, asks, vocabulary, trash, `git.ignore_derived` |
+| `vault` | root, sources, inbox, atoms, wiki, clusters, asks, vocabulary, interests, trash, `git.ignore_derived` |
 | `index` | `path` (vault-root-relative), `favicons` |
 | `openai` | base URL, key, `model_compile`, `model_reason`, reasoning efforts, retries, timeout, headers |
 | `pipeline` | auto, auto_distill, debounce, run/cluster timeouts, parts per run, parallel parts/runs/queries, auto_continue, reconcile interval/batch |
@@ -338,6 +338,6 @@ Status → Vault offers every repair as a **button that says what it will do** b
 | `POST /refresh-urls` | check every known URL now (attached snapshots are left alone; `POST /sources/{hash}/refetch` is the explicit per-source retry) |
 | `POST /vocabulary/curate` · `/retopic` | merge names · re-derive claim topics |
 
-**Backup.** The real backup is the vault: `sources/` + `atoms/` + `wiki/` + `clusters/` (or git
-history). The index is rebuildable, so it does not need a backup. For a live copy, use SQLite's
+**Backup.** The real backup is the vault: `sources/` + `atoms/` + `wiki/` + `clusters/` +
+`interests/` (or git history). The index is rebuildable, so it does not need a backup. For a live copy, use SQLite's
 `VACUUM INTO` rather than copying `index.db` while the app runs.

@@ -88,8 +88,12 @@ type VaultConfig struct {
 	// Vocabulary holds the canonical name vocabularies (topics, branches, tags) — the agent's
 	// decisions about what a thing is CALLED, as opposed to what it says. A record, not a cache: a
 	// reindex reads it, and it belongs in a versioned vault.
-	Vocabulary string    `yaml:"vocabulary"`
-	Git        GitConfig `yaml:"git"`
+	Vocabulary string `yaml:"vocabulary"`
+	// Interests holds the reader's standing rules: one Markdown file per interest. They are a
+	// record like the vocabulary — a decision the index cannot rebuild — so they travel with the
+	// vault and are never pruned.
+	Interests string    `yaml:"interests"`
+	Git       GitConfig `yaml:"git"`
 }
 
 type GitConfig struct {
@@ -574,6 +578,15 @@ func (c Config) VocabularyDir() string {
 	dir := strings.TrimSpace(c.Vault.Vocabulary)
 	if dir == "" {
 		dir = "vocabulary"
+	}
+	return filepath.Join(c.VaultRoot(), dir)
+}
+
+// InterestsDir returns the absolute interests directory: one Markdown file per standing rule.
+func (c Config) InterestsDir() string {
+	dir := strings.TrimSpace(c.Vault.Interests)
+	if dir == "" {
+		dir = "interests"
 	}
 	return filepath.Join(c.VaultRoot(), dir)
 }

@@ -431,3 +431,25 @@ export async function migrateURLAddresses(): Promise<void> {
 export function openSourceFromHash(hash: string, node?: string): void {
   navigate(sourcePath(hash, node ? { tab: 'snapshot', part: node } : {}));
 }
+
+/** toggleFavorite writes the reader's star. It is a local mark, not a tag: the source's own record
+ *  is the truth and the list refresh shows the new state at once. */
+export async function toggleFavorite(hash: string, on: boolean): Promise<void> {
+  try {
+    await api.setSourceFavorite(hash, on);
+    await refreshSourceViews(hash);
+  } catch (error) {
+    toast(t('sources.favoriteFailed', { error: firstLine(humanError(error)) }), 'error');
+  }
+}
+
+/** toggleReadLater queues a source or finishes it. A finished entry leaves the queue; the source
+ *  itself is untouched, and the clock can put it back at the end of the queue. */
+export async function toggleReadLater(hash: string, queued: boolean): Promise<void> {
+  try {
+    await api.setSourceReadLater(hash, queued);
+    await refreshSourceViews(hash);
+  } catch (error) {
+    toast(t('sources.readLaterFailed', { error: firstLine(humanError(error)) }), 'error');
+  }
+}

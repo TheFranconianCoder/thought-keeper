@@ -10,8 +10,10 @@
   import { scrollFade } from '../../lib/scroll-fade';
   import { scrollTopTarget } from '../../lib/scroll-top.svelte';
   import { CLAIM_PAGE_SIZE, claims } from '../../lib/stores/claims.svelte';
+  import { visibleCloud } from '../../lib/cloud';
   import { connection } from '../../lib/stores/connection.svelte';
   import { system } from '../../lib/stores/system.svelte';
+  import CloudMore from '../ui/CloudMore.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
   import Markdown from '../ui/Markdown.svelte';
@@ -24,6 +26,16 @@
   const topic = $derived(router.current.view === 'claims' ? (router.current.params.get('topic') ?? '') : '');
   const commandId = $derived(
     router.current.view === 'claims' ? (router.current.params.get('command') ?? '') : '',
+  );
+
+  let topicsExpanded = $state(false);
+  const topicView = $derived(
+    visibleCloud(claims.topics, {
+      expanded: topicsExpanded,
+      active: topic,
+      key: (item) => item.topic,
+      count: (item) => item.count,
+    }),
   );
 
   let query = $state('');
@@ -175,7 +187,7 @@
           use:rememberScroll={'claims-topics'}
           aria-label={t('claims.topicsAria')}
         >
-          {#each claims.topics as item (item.topic)}
+          {#each topicView.visible as item (item.topic)}
             <a
               class="chip"
               class:chip--accent={topic === item.topic}
@@ -185,6 +197,12 @@
             </a>
           {/each}
         </div>
+        <CloudMore
+          hidden={topicView.hidden}
+          expanded={topicsExpanded}
+          truncated={topicView.truncated}
+          ontoggle={() => (topicsExpanded = !topicsExpanded)}
+        />
       {/if}
       {#if topic && !searchMode}
         <div class="filter-line">

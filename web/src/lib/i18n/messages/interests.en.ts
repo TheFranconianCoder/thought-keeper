@@ -1,0 +1,72 @@
+/** Die Interessen: stehende Regeln, die neue Quellen für die Warteschlange „Später lesen“ lesen. */
+export const interestsEn: Record<string, string> = {
+  'interests.title': 'Interests',
+  'interests.description':
+    'Standing rules that read new sources for you. A strong match joins your read-later queue; a weak one stays a suggestion.',
+  'interests.queueNote':
+    'A strong match puts the source in your read-later queue. One mention is only a suggestion — two mentions, a topic, a label or the title make it fit.',
+  'interests.new': 'New interest',
+  'interests.newTitle': 'New interest',
+  'interests.editTitle': 'Edit interest',
+  'interests.editDescription':
+    'The terms are read against claim topics, claim texts, titles and labels. Nothing is written to the source.',
+  'interests.emptyTitle': 'No interests yet',
+  'interests.emptyText':
+    'An interest watches new sources for the words you give it. Creating one shows you what it would catch today; nothing old is queued unless you ask.',
+  'interests.name': 'Name',
+  'interests.namePlaceholder': 'e.g. Rust async',
+  'interests.terms': 'What is it about?',
+  'interests.termsPlaceholder': 'Type a word or phrase, then Enter',
+  'interests.addTerm': 'Add another term',
+  'interests.removeTerm': 'Remove term',
+  'interests.termHint': 'A word or a short phrase. A phrase needs all its words. Enter or comma adds it.',
+  'interests.suggestions': 'From your vault',
+  'interests.suggestTopic': 'A topic in your claims',
+  'interests.suggestTag': 'A label on your sources',
+  'interests.tooManyTerms': 'An interest can carry at most 12 terms.',
+  'interests.advanced': 'Exclusions and source kinds',
+  'interests.exclude': 'Never fits',
+  'interests.excludePlaceholder': 'e.g. corrosion',
+  'interests.excludeHint':
+    'A source that carries one of these is not a match, however many right words it has.',
+  'interests.kinds': 'Source kinds',
+  'interests.allKinds': 'All kinds',
+  'interests.enabled': 'Active',
+  'interests.enabledHint': 'Paused rules keep their queue entries but stop watching.',
+  'interests.preview': 'Preview',
+  'interests.previewHint': 'The preview reads the vault as it is. It writes nothing.',
+  'interests.previewNone':
+    'No source carries these words yet. The rule will still watch what arrives next.',
+  'interests.previewCount': '{total} sources would fit · {strong} strong · {weak} suggestions',
+  'interests.bandFits': 'fits',
+  'interests.bandMaybe': 'maybe',
+  'interests.queueExisting': 'Queue the matching sources that are already here',
+  'interests.queueExistingHint':
+    '{count} strong matches would be queued now. Sources already in the queue (or done) stay as they are. Off by default: a new rule looks forward.',
+  'interests.create': 'Create',
+  'interests.save': 'Save',
+  'interests.created': 'Interest “{name}” created.',
+  'interests.updated': 'Interest “{name}” saved.',
+  'interests.saveFailed': 'Could not save: {error}',
+  'interests.delete': 'Delete interest',
+  'interests.deleteTitle': 'Delete “{name}”?',
+  'interests.deleteMessage':
+    'The rule stops watching. The sources it already put in your queue stay there.',
+  'interests.deleteConfirm': 'Delete',
+  'interests.deleted': 'Interest “{name}” deleted.',
+  'interests.deleteFailed': 'Could not delete: {error}',
+  'interests.pause': 'Pause',
+  'interests.resume': 'Resume',
+  'interests.edit': 'Edit',
+  'interests.open.one': '{count} open',
+  'interests.open.many': '{count} open',
+  'interests.openTitle': 'Open entries in read later',
+  'interests.excludeShort': 'not {terms}',
+  'interests.manage': 'Interests',
+  'interests.manageTitle': 'Manage the standing rules that fill your read-later queue',
+
+  'interests.rules.one': '{count} rule',
+  'interests.rules.many': '{count} rules',
+  'interests.paused': 'paused',
+
+};

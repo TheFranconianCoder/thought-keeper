@@ -50,8 +50,9 @@ sidebar on the wide layout and in a **footer navigation** when the window is nar
 button), with an Attention badge and a connection mark on Status. **The assistant sits in the top bar**
 and is not one of the lenses: it is how the app is driven from outside a click. A command resolves to
 a lens, a filter and a materialized set, and every open window follows the address it hands out. **Start** is the front door: an Ask
-box, Continue (the last opened details, local memory),
-Needs you, the newest sources and one vault-pulse line — never the newest-claims wall. A **wiki
+box, **Read later** (the oldest open queue entries with the interest that queued each), Continue
+(the last opened details, local memory), Needs you, the newest sources and one vault-pulse line —
+never the newest-claims wall. A **wiki
 page** is user-authored Markdown with tags; saving it writes a source representation and runs the
 document pipeline from capture. The app also tags a page and a source
 (auto tags, kept apart from the human's tags) and curates the three name vocabularies (`topics`,
@@ -66,6 +67,13 @@ may use nothing else. The **source lists are
 windowed**: filters and paging are server-side, only the visible range (± overscan) is read, and the
 filtered count is the scroll height. A cluster is
 **not** a lens: it has no title and no page, and it is visible only as the **peers** of a claim.
+
+The reader's own marks are **not** lenses either. A **favorite** is a star on a source or a wiki page
+and a filter in that lens; the **read-later queue** is a filter of the Sources list (`?readlater=1`,
+oldest entry first), a card on Start and a banner on the list. **Interests** are standing rules in
+`interests/`: a strong lexical match puts a NEW source into the queue, a weak one stays a suggestion
+in the source's rail. They are managed in an overlay, and their matches are computed on demand — no
+index table, no model, no second grouping.
 
 ## Positioning
 
@@ -136,6 +144,9 @@ filtered count is the scroll height. A cluster is
 | **gate** | The lock that keeps the steps apart: document steps share it, the cluster step (and a rewrite) takes it alone. | `sync.RWMutex` |
 | **owed** | Work that is due but not started (a claim no cluster owns yet). | the Job Queue |
 | **finding** | One result of a health check (lint). | `lint_findings` |
+| **favorite** | The reader's star on a source or a wiki page: "this belongs to me". No lifecycle, no label, never a ranking signal. | the source record / the page frontmatter |
+| **read later** | The reader's queue of sources. Open until marked done; otherwise a filter of the Sources list, ordered oldest entry first. | the source record + `?readlater=1` |
+| **interest** | A standing rule the reader writes: terms that make a NEW source join the read-later queue. A strong match queues; a weak one is only a suggestion. | `interests/<slug>.md` |
 | **reconcile / reindex / cleanup** | The repairs: check records against the vault; rebuild the index from the vault; prune dead cluster members. | Status → Vault |
 
 **The URL is the truth about UI state — with one exception that is deliberate.** A command's address
@@ -240,11 +251,13 @@ internal/web              embeds the built PWA
 web/                      Svelte PWA sources (task web:build → internal/web/dist)
 internal/core/entities    domain types
 internal/core/markdown    pure: titles, slugs, code quoting, topic/tag normalization
+internal/core/textmatch   pure: folding, word families and term matching (search + interests)
+internal/core/interests   pure: the interest signal bands and their evidence
 internal/core/tree        pure: tree shape, node addressing, matter filter, rendering
 internal/core/usecases    use cases; interfaces/; agents/; partialentities/
 internal/infrastructure   config, objects, atoms, wiki, clusters, markdown, extract, tree,
                           persistence (sqlc + migrations), gateways, langdetect, asks,
-                          vocabulary, sourcemeta, sourcelog, favicons, vaultgit, idpath, ...
+                          vocabulary, interests, sourcemeta, sourcelog, favicons, vaultgit, idpath, ...
 internal/types            sentinel errors
 internal/version, internal/logging
 .opencode/skills/release  the release skill: preflight, notes, source releases, tag + gh
@@ -280,6 +293,7 @@ instance, not clients of a server you operate.
 ├── atoms/            # one claim per file (source of truth)
 ├── clusters/         # titleless associations (derived cache)
 ├── vocabulary/       # canonical names + aliases: topics.md, wiki-tags.md, source-tags.md
+├── interests/        # the reader's standing rules (<slug>.md, records)
 ├── asks/             # saved Ask conversations (<run-id>.md)
 ├── commands/         # the assistant's requests (pruned after a week; git-ignored)
 ├── .thought-keeper/  # derived, hidden: favicons/

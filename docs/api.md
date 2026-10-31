@@ -19,9 +19,9 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `POST` | `/api/v1/reindex` | Rebuild index + clusters from the vault |
 | `POST` | `/api/v1/rebuild-trees` | Rebuild every outline from captured sources |
 | `GET` | `/api/v1/events` | Server-sent events (see below) |
-| `GET` | `/api/v1/sources` | List sources: `kind, q, tag, attached, bookmarks, failed, command, limit, offset`. The filters are applied in SQL; `count`/`total` is the **filtered** total (the windowed list's scroll height), not the page length |
-| `GET` | `/api/v1/sources/facets` | The Sources tag cloud (`{tags:[{tag,count}], attached}`); vault-wide, not a fact about the loaded window |
-| `GET` | `/api/v1/sources/{hash}` | A source, its step lights, counts, `tags`/`auto_tags` and `sidecars` |
+| `GET` | `/api/v1/sources` | List sources: `kind, q, tag, attached, bookmarks, failed, favorite, readlater, interest, command, limit, offset`. The filters are applied in SQL; `count`/`total` is the **filtered** total (the windowed list's scroll height), not the page length. `readlater=1` is the OPEN queue and is ordered by `read_later_at` ASC (oldest entry first); `interest=<slug>` narrows it to one rule's share |
+| `GET` | `/api/v1/sources/facets` | The Sources facets: `{tags:[{tag,count}], attached, favorites, read_later, read_later_interests}`. Vault-wide, not facts about the loaded window |
+| `GET` | `/api/v1/sources/{hash}` | A source, its step lights, counts, `tags`/`auto_tags`, the reader's marks (`favorite_at`, `read_later_at`, `read_later_done_at`, `read_later_manual`, `read_later_via`, and the derived open flag `read_later`) and `sidecars` |
 | `GET` | `/api/v1/sources/{hash}/tree` | The tree outline (`has_text` marks parts) |
 | `GET` | `/api/v1/sources/{hash}/nodes/{node}` | A node's text |
 | `GET` | `/api/v1/sources/{hash}/atoms` | The claims extracted from a source |
@@ -38,6 +38,9 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `POST` | `/api/v1/sources/{hash}/rebuild-tree` | Rebuild this source's outline |
 | `POST` | `/api/v1/sources/{hash}/distill` | Document steps for a source (`{reset:true}` starts over) |
 | `PUT` | `/api/v1/sources/{hash}/tags` | Replace the source's HUMAN tags (`{tags:[…]}`); normalized and deduplicated. Auto tags are derived, never written here |
+| `PUT` / `DELETE` | `/api/v1/sources/{hash}/favorite` | The reader's star: set / clear. Answers the source |
+| `PUT` / `DELETE` | `/api/v1/sources/{hash}/read-later` | Put the source in the open queue (a finished entry comes back at the END) / finish it. Answers the source |
+| `GET` | `/api/v1/sources/{hash}/interests` | Which of the reader's rules this source fits, with the evidence (`{interests:[{slug,name,band,terms,topics,queued,rejected,enabled}]}`). Computed on demand, never cached |
 | `POST` | `/api/v1/sources/{hash}/reset` | Drop the derivation and rebuild the tree |
 | `DELETE` | `/api/v1/sources/{hash}` | Delete a source (object → trash, orphaned claims removed). A dependent wiki/sitemap page is refused with `dependent_source`; deleting its owner removes it. |
 | `POST` | `/api/v1/add` | Add a source (`{path}` \| `{url}` \| multipart). A URL that is a sitemap or an RSS/Atom feed expands into a parent source; a manual URL is released from any owner it had |
@@ -50,7 +53,14 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/wiki/{id}` | One wiki page (Markdown body included) |
 | `POST` | `/api/v1/wiki` | Create a wiki page (writes its source) |
 | `PUT` | `/api/v1/wiki/{id}` | Edit a wiki page (writes it, then reprocesses and prunes removed links in the background) |
+| `PUT` / `DELETE` | `/api/v1/wiki/{id}/favorite` | The star on a page (its frontmatter is the truth) |
 | `DELETE` | `/api/v1/wiki/{id}` | Delete a wiki page and its source representation |
+| `GET` | `/api/v1/interests` | The reader's standing rules, each with the number of OPEN queue entries it holds |
+| `POST` | `/api/v1/interests` | Create a rule (`{name, terms, exclude?, kinds?, enabled?, queue_existing?}`). `queue_existing` is the explicit backfill and is off by default |
+| `POST` | `/api/v1/interests/preview` | Evaluate a draft against the vault (`{name, terms, exclude?, kinds?}`). Answers `{total, strong, weak, examples}`; writes nothing |
+| `PUT` | `/api/v1/interests/{slug}` | Update a rule (the slug is stable; the name may change) |
+| `DELETE` | `/api/v1/interests/{slug}` | Delete a rule. Queue entries it created stay, their `via` names a rule that no longer exists |
+| `PUT` | `/api/v1/interests/{slug}/sources/{hash}` | The reader's correction for one pair: `{accepted:true}` clears a rejection and queues the source when it fits; `{accepted:false}` records "not this interest" and removes an entry the rule queued (a manual one stays) |
 | `GET` | `/api/v1/topics/claims` | Claim topics with claim counts |
 | `GET` | `/api/v1/atoms` | List claims: `topic, status, command, limit, offset` |
 | `GET` | `/api/v1/atoms/{id}` | One claim (provenance, `clusters`, `cluster_count`) |
@@ -117,7 +127,10 @@ is read by id.
 One SSE stream (`GET /api/v1/events`) pushes events by type:
 
 `run` · `source` · `wiki` · `clusters` · `findings` · `urls` · `pipeline` · `progress` · `log` ·
-`vocabulary` · `command`
+`vocabulary` · `interests` · `command`
+
+`interests` is a state event: a rule was saved or deleted, or a match queued a source. The rule list
+and its open counts are re-read; the queue rows are source rows and ride the `source` scope.
 
 State events coalesce per type and are never dropped; `progress` coalesces per source; `log` is a
 bounded live tail. The PWA patches only the containers each event names. See `pwa.md`.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oklog/ulid/v2"
@@ -34,6 +35,11 @@ type WikiDeleter interface {
 	Execute(ctx context.Context, id ulid.ULID) (string, []string, error)
 }
 
+// WikiFavoriter writes the reader's star on a page.
+type WikiFavoriter interface {
+	Execute(ctx context.Context, id ulid.ULID, on bool) (entities.WikiPage, error)
+}
+
 // WikiURLScheduler queues the links a page declared that no source knows yet. The fetch happens in the
 // background — the save is over when the page is on disk — and the link is a source row from that
 // moment on: pending, then green, or red with the reason.
@@ -43,10 +49,11 @@ type WikiURLScheduler interface {
 
 // WikiHandler serves the wiki endpoints.
 type WikiHandler struct {
-	List   WikiLister
-	Get    WikiGetter
-	Save   WikiSaver
-	Delete WikiDeleter
+	List     WikiLister
+	Get      WikiGetter
+	Save     WikiSaver
+	Delete   WikiDeleter
+	Favorite WikiFavoriter
 	// OnChanged is called after a save, so the app can schedule the source and notify other windows.
 	OnChanged func(id, hash string)
 	// OnReprocess clears the old derivation of a changed page and only then pumps the source. It is
@@ -67,6 +74,29 @@ type WikiHandler struct {
 	// re-reads the page, so it is a no-op when nothing changed and heals a save whose cleanup was
 	// lost. It is a background job: a save deletes nothing, and the page file is already the truth.
 	OnCleanup func(pageID, staleHash string)
+}
+
+// PutFavorite serves PUT /api/v1/wiki/{id}/favorite.
+func (h WikiHandler) PutFavorite(w http.ResponseWriter, r *http.Request) { h.favorite(w, r, true) }
+
+// DeleteFavorite serves DELETE /api/v1/wiki/{id}/favorite.
+func (h WikiHandler) DeleteFavorite(w http.ResponseWriter, r *http.Request) { h.favorite(w, r, false) }
+
+func (h WikiHandler) favorite(w http.ResponseWriter, r *http.Request, on bool) {
+	id, ok := wikiID(w, r)
+	if !ok {
+		return
+	}
+	if h.Favorite == nil {
+		payloads.WriteError(w, types.New("not_implemented", "the favorite is not available", types.ErrNotImplemented))
+		return
+	}
+	page, err := h.Favorite.Execute(r.Context(), id, on)
+	if err != nil {
+		payloads.WriteError(w, err)
+		return
+	}
+	payloads.WriteJSON(w, http.StatusOK, wikiPagePayload(page))
 }
 
 // List serves GET /api/v1/wiki.
@@ -178,8 +208,15 @@ func wikiPagePayload(page entities.WikiPage) payloads.WikiPage {
 	return payloads.WikiPage{
 		ID: page.ID.String(), Title: page.Title, Tags: page.Tags, AutoTags: page.AutoTags,
 		URLs: page.URLs, Body: page.Body,
-		SourceHash: page.SourceHash,
-		CreatedAt:  page.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:  page.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		SourceHash: page.SourceHash, FavoriteAt: favoriteTime(page.FavoriteAt),
+		CreatedAt: page.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		UpdatedAt: page.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 	}
+}
+
+func favoriteTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
 }

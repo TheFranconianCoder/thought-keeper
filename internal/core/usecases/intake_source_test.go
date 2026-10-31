@@ -131,6 +131,23 @@ func (f *fakeIndex) SetSourceAutoTags(_ context.Context, hash string, tags []str
 	return nil
 }
 
+func (f *fakeIndex) SetSourceFavorite(_ context.Context, hash string, at time.Time) error {
+	if src, ok := f.m[hash]; ok {
+		src.FavoriteAt = at
+		f.m[hash] = src
+	}
+	return nil
+}
+
+func (f *fakeIndex) SetSourceReadLater(_ context.Context, hash string, at, doneAt time.Time, manual bool, via []string) error {
+	if src, ok := f.m[hash]; ok {
+		src.ReadLaterAt, src.ReadLaterDoneAt = at, doneAt
+		src.ReadLaterManual, src.ReadLaterVia = manual, via
+		f.m[hash] = src
+	}
+	return nil
+}
+
 func (f *fakeIndex) SourceTagCounts(_ context.Context) (map[string]int, error) {
 	out := map[string]int{}
 	for _, src := range f.m {

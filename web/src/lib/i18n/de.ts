@@ -9,6 +9,7 @@ import { wikiDe } from './messages/wiki.de';
 import { statusDe } from './messages/status.de';
 import { attentionDe } from './messages/attention.de';
 import { assistantDe } from './messages/assistant.de';
+import { interestsDe } from './messages/interests.de';
 
 /** The German catalog. A missing key falls back to English, never to the key itself. */
 export const de: Record<string, string> = {
@@ -23,4 +24,5 @@ export const de: Record<string, string> = {
   ...statusDe,
   ...attentionDe,
   ...assistantDe,
+  ...interestsDe,
 };

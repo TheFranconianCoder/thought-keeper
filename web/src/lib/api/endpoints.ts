@@ -16,6 +16,11 @@ import type {
   DeleteResult,
   DistillResponse,
   FindingList,
+  Interest,
+  InterestList,
+  InterestMatch,
+  InterestPreview,
+  InterestRequest,
   Pipeline,
   RebuildTreeResult,
   ReconcileResult,
@@ -65,6 +70,9 @@ export const api = {
         attached: filter.attachedOnly ? 1 : undefined,
         bookmarks: filter.bookmarksOnly ? 1 : undefined,
         failed: filter.failedOnly ? 1 : undefined,
+        favorite: filter.favoriteOnly ? 1 : undefined,
+        readlater: filter.readLaterOnly ? 1 : undefined,
+        interest: filter.interest,
         limit,
         offset,
       }),
@@ -132,6 +140,29 @@ export const api = {
     request<DeleteResult>(`/sources/${enc(hash)}`, { method: 'DELETE' }),
   setSourceTags: (hash: string, tags: string[]) =>
     request<Source>(`/sources/${enc(hash)}/tags`, json('PUT', { tags })),
+  // The reader's own marks: the star and the read-later queue. A DELETE ends the intent (the
+  // source itself is untouched).
+  setSourceFavorite: (hash: string, on: boolean) =>
+    request<Source>(`/sources/${enc(hash)}/favorite`, { method: on ? 'PUT' : 'DELETE' }),
+  setSourceReadLater: (hash: string, queued: boolean) =>
+    request<Source>(`/sources/${enc(hash)}/read-later`, { method: queued ? 'PUT' : 'DELETE' }),
+  // Which of the reader's rules this source fits, with the evidence (computed on demand).
+  sourceInterests: (hash: string) =>
+    request<{ interests: InterestMatch[] }>(`/sources/${enc(hash)}/interests`),
+
+  // ── Interests ──────────────────────────────────────────────────────────
+  interests: () => request<InterestList>('/interests'),
+  saveInterest: (slug: string, body: InterestRequest) =>
+    request<Interest>(slug ? `/interests/${enc(slug)}` : '/interests', json(slug ? 'PUT' : 'POST', body)),
+  deleteInterest: (slug: string) =>
+    request<{ slug: string }>(`/interests/${enc(slug)}`, { method: 'DELETE' }),
+  previewInterest: (body: InterestRequest) =>
+    request<InterestPreview>('/interests/preview', json('POST', body)),
+  setInterestSource: (slug: string, hash: string, accepted: boolean) =>
+    request<{ slug: string; hash: string; accepted: boolean }>(
+      `/interests/${enc(slug)}/sources/${enc(hash)}`,
+      json('PUT', { accepted }),
+    ),
 
   // ── Wiki ───────────────────────────────────────────────────────────────
   wiki: () => request<WikiList>('/wiki'),
@@ -139,6 +170,8 @@ export const api = {
   saveWiki: (id: string, page: { title: string; tags: string[]; body: string }) =>
     request<WikiPage>(id ? `/wiki/${enc(id)}` : '/wiki', json(id ? 'PUT' : 'POST', page)),
   deleteWiki: (id: string) => request<{ id: string }>(`/wiki/${enc(id)}`, { method: 'DELETE' }),
+  setWikiFavorite: (id: string, on: boolean) =>
+    request<WikiPage>(`/wiki/${enc(id)}/favorite`, { method: on ? 'PUT' : 'DELETE' }),
 
   // ── Claims ─────────────────────────────────────────────────────────────
   claimTopics: () => request<TopicUseList>('/topics/claims'),

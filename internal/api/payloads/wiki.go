@@ -10,7 +10,9 @@ type WikiSummary struct {
 	// AutoTags are the tags the app derived from the page; the human's tags are not repeated here.
 	AutoTags   []string `json:"auto_tags,omitempty"`
 	SourceHash string   `json:"source_hash,omitempty"`
-	UpdatedAt  string   `json:"updated_at,omitempty"`
+	// FavoriteAt is the reader's star on the page (the frontmatter is the truth).
+	FavoriteAt string `json:"favorite_at,omitempty"`
+	UpdatedAt  string `json:"updated_at,omitempty"`
 }
 
 // WikiTag is one tag in the cloud.
@@ -38,6 +40,7 @@ type WikiPage struct {
 	URLs       []string `json:"urls,omitempty"`
 	Body       string   `json:"body"`
 	SourceHash string   `json:"source_hash,omitempty"`
+	FavoriteAt string   `json:"favorite_at,omitempty"`
 	CreatedAt  string   `json:"created_at,omitempty"`
 	UpdatedAt  string   `json:"updated_at,omitempty"`
 }
@@ -54,8 +57,8 @@ func WikiListFromUseCase(in usecases.WikiList) WikiList {
 	for _, p := range in.Pages {
 		out.Pages = append(out.Pages, WikiSummary{
 			ID: p.ID.String(), Title: p.Title, Tags: p.Tags, AutoTags: p.AutoTags,
-			SourceHash: p.SourceHash,
-			UpdatedAt:  p.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			SourceHash: p.SourceHash, FavoriteAt: wireTime(p.FavoriteAt),
+			UpdatedAt: p.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		})
 	}
 	for _, t := range in.Tags {

@@ -14,6 +14,7 @@ The agent picks the substrate that fits the question:
 | Claim proximity | the same cluster, and separately the same topic | `GET /atoms/{id}/related` |
 | Source recency | the newest sources by vault arrival, paged, with a short overview excerpt | `list_sources`, `read_source_summary` |
 | Tree index (PageIndex) | per-source hierarchical tree | `read_source_node` (distill), `GET /sources/{hash}/tree` |
+| Interest match | a standing rule's terms read against a source's topics, claim texts, title and labels | the read-later queue (`?readlater=1`) |
 
 **The tree is built once per source.** Retrieval mimics a human using a table of contents: read the
 outline, reason about which part is relevant, open the part, cite it. An outline stores structure
@@ -39,14 +40,46 @@ then the only evidence the answer may use.
 - Ask includes the vault's language set in its prompt, so a question can be answered against sources
   in another language.
 
-## 3. What is not a part
+## 3. Interest matching is a standing lexical read
+
+An **interest** is a named rule that watches NEW sources. Its match is the same lexical substrate as
+search, applied to one source at a time and turned into a BAND, never a score the reader has to
+trust:
+
+| Signal | Weight |
+| --- | --- |
+| a claim **topic** names the term (`async` in `async-runtime`) | strong |
+| an **auto tag** or a human tag names the term | strong |
+| the **title** carries the term | strong |
+| the term appears in **claim texts** (two or more claims) | strong (a theme) |
+| the term appears in exactly one claim | weak (`maybe`) |
+| a term in the interest's **exclude** list appears anywhere | veto |
+
+- **Folding and word families are shared with search** (`core/textmatch`): "caching" and "cache",
+  "Chaos" and "chaotisch", "Häuser" and "Haus". The matcher is intentionally STRICTER than the
+  search's recall ladder — it does not use the short prefix family, because a three-letter prefix of
+  "rust" would also catch "Russia".
+- **Only a strong match queues a source** (the read-later queue); a weak one is shown in the source's
+  rail as a suggestion. One mention is easy to produce by accident; two are a theme.
+- **It looks forward only.** A source that arrived before the rule existed is never queued by it; the
+  editor's explicit "queue the existing matches" checkbox is the one backfill.
+- **The evidence is the answer.** Every match names the terms and what they hit (a topic, N claims, a
+  label, the title), and "not this interest" records a veto in the rule's file. Nothing is written
+  into the source's tags or record.
+- **No model and no embeddings run in the loop.** The incremental pass is a few string comparisons
+  over the claims the source already has; the editor's preview reads the vault through FTS5 once.
+- **Why a rule never lives in a cache:** the matches are a function of the current rule and the
+  current claims. Computing them on demand means an edit can never leave a stale membership behind —
+  and `reindex` has nothing to rebuild.
+
+## 4. What is not a part
 
 A **navigation block** is not a part: a short block of Markdown links and list markers is dropped by
 the outline builder and never counts as a part. A page with no heading keeps the page-per-node
 shape; the book's own front/back matter is dropped by `core/tree/matter.go` (exact title match, body
 never consulted).
 
-## 4. Citations are mandatory and traceable
+## 5. Citations are mandatory and traceable
 
 - A query answer references the **claims** it used as `[[claim:<id>|short claim text]]` links and a
   **source's overview** as `[[source:<hash>|<source title>]]`. A claim citation supports a precise
@@ -72,7 +105,7 @@ never consulted).
 - Every answer is saved as an Ask record (`asks/<run-id>.md`), so an answer stays traceable to its
   run, its tool steps and the claims and sources it cited.
 
-## 5. A claim's neighbours
+## 6. A claim's neighbours
 
 The Claims detail view calls `/atoms/{id}/related`, which returns **two disjoint lists**: the claim's
 **cluster peers** and the other claims under the **same topic**. They answer different questions —
@@ -81,7 +114,7 @@ sections instead of one ranking. A cluster is many-to-many: a claim can travel w
 and the peer list is the only place that becomes visible. `read_atom` returns the same peers (bounded to
 eight, id + claim + topic) so the model can open one if it needs the body.
 
-## 6. The in-app finders
+## 7. The in-app finders
 
 - The **search palette** (top bar, `⌘K` / `Ctrl K`) searches claims first and can switch to sources.
   The Sources layer uses the **same text fields as the Sources list** — title, original name, URL,
@@ -91,7 +124,7 @@ eight, id + claim + topic) so the model can open one if it needs the body.
 - There is no separate search page: the palette is the one global finder, and claims remain
   searchable where they live.
 
-## 7. Scale
+## 8. Scale
 
 FTS5 and hashed sharding handle tens of thousands of objects. When navigation feels lossy, the
 vectorless answer is a better hierarchy — never a vector store.

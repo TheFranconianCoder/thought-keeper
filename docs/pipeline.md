@@ -163,6 +163,19 @@ the consistency job backfills sources that were never tagged (`auto_tags_at` in 
 the marker), a few per pass. A reset clears the derived labels; the next complete distill writes new
 ones. The human tags are records and survive both.
 
+**A source is also read against the reader's INTERESTS** at every point that can reveal evidence:
+when it arrives (a bookmark will never be distilled), when capture knows its title and language, when
+the outline writes the real title, and after a complete distill (now the claim topics and claim texts
+exist). The pass has **no
+model, no gate and no run row of its own**: it compares the source's topics, claims, title and labels
+with every enabled rule in memory, and a STRONG match writes the read-later mark into the source
+record. It looks forward only: a source that arrived before the rule existed is never queued by it;
+the editor's explicit checkbox is the one backfill. The work runs on a small queue `interestQueue`
+beside the tag worker, so a sitemap that adds forty pages does not start forty matchers at once.
+Nothing is written into the source's tags, its claims or the index's derived values — the match is
+computed on demand wherever it is shown, which is why editing a rule never leaves stale memberships
+behind.
+
 ### 2.4 cluster (over the whole vault)
 
 Deterministic, no model. Inputs: the claims no cluster owns yet and the existing memberships.

@@ -4,6 +4,7 @@ import { EventStream } from './event-stream';
 import { noteFrame, setConnectionState, connection } from '../stores/connection.svelte';
 import { system } from '../stores/system.svelte';
 import { sources } from '../stores/sources.svelte';
+import { interests } from '../stores/interests.svelte';
 import { bookmarkWindow, failedWindow, sourceWindow } from '../stores/source-window.svelte';
 import { claims } from '../stores/claims.svelte';
 import { wiki } from '../stores/wiki.svelte';
@@ -333,6 +334,12 @@ function handleFrame(frame: StreamFrame): void {
     case 'findings':
       schedule('findings');
       return;
+    case 'interests':
+      // A rule was saved, or a match queued a source. The queue rows are source rows, so the
+      // source scope already invalidates them; this refreshes the rule names and their open counts.
+      void interests.refresh();
+      schedule('sources');
+      return;
     case 'clusters':
       handleClusters(data);
       return;
@@ -375,6 +382,7 @@ export async function resyncAll(force = false): Promise<void> {
     claimsVisible() ? claims.load(claims.topic) : Promise.resolve(),
     topicsVisible() ? claims.loadTopics() : Promise.resolve(),
     asks.load(),
+    interests.load(true),
   ]);
 
   await Promise.all([

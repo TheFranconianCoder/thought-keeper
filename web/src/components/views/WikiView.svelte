@@ -1,15 +1,17 @@
 <script lang="ts">
   import { clearable } from '../../lib/clearable';
   import { untrack } from 'svelte';
-  import { deleteWikiPage, saveWikiPage } from '../../lib/actions';
+  import { deleteWikiPage, saveWikiPage, toggleWikiFavorite } from '../../lib/actions';
   import { api } from '../../lib/api';
   import { n, t } from '../../lib/i18n/index.svelte';
-  import { navigate, router, sourcePath, wikiPath } from '../../lib/router.svelte';
+  import { navigate, router, sourcePath, withQuery, withoutQuery, wikiPath } from '../../lib/router.svelte';
   import AssistantBanner from '../assistant/AssistantBanner.svelte';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
   import { scrollTopTarget } from '../../lib/scroll-top.svelte';
   import { wiki } from '../../lib/stores/wiki.svelte';
+  import { visibleCloud } from '../../lib/cloud';
+  import CloudMore from '../ui/CloudMore.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
   import Markdown from '../ui/Markdown.svelte';
@@ -36,6 +38,18 @@
   // An assistant result in the wiki is the record's set, in the record's order: a requested list
   // ("my pages about GitHub") is not the same thing as the whole wiki with a search box.
   const commandId = $derived(route.view === 'wiki' ? (route.params.get('command') ?? '') : '');
+  // The star is a named filter in the address, like a tag: a link to "my favorite pages" stays true.
+  const favoriteOnly = $derived(route.view === 'wiki' && route.params.get('favorite') === '1');
+  const favoriteCount = $derived(wiki.pages.filter((page) => !!page.favorite_at).length);
+  let tagsExpanded = $state(false);
+  const tagView = $derived(
+    visibleCloud(wiki.tags, {
+      expanded: tagsExpanded,
+      active: wiki.filter,
+      key: (item) => item.tag,
+      count: (item) => item.count,
+    }),
+  );
   // The record's items, in the record's order, WITH the model's reason for each: a researched set
   // is a judgement, and the reason is what lets the reader check it.
   let commandItems = $state<{ ref: string; why: string }[]>([]);
@@ -73,8 +87,16 @@
         .filter((page): page is WikiSummary => page !== undefined);
     }
     const term = query.trim().toLowerCase();
-    return wiki.filteredPages().filter((page) => !term || page.title.toLowerCase().includes(term));
+    return wiki
+      .filteredPages()
+      .filter((page) => !favoriteOnly || !!page.favorite_at)
+      .filter((page) => !term || page.title.toLowerCase().includes(term));
   });
+
+  function toggleFavoriteFilter(): void {
+    if (favoriteOnly) navigate(withoutQuery('favorite'));
+    else navigate(withQuery('favorite', '1'));
+  }
 
   $effect(() => {
     const current = router.current;
@@ -200,6 +222,19 @@
         />
       </div>
 
+      {#if favoriteCount > 0 || favoriteOnly}
+        <div class="list-filters wiki-filters">
+          <button
+            class="chip"
+            class:chip--accent={favoriteOnly}
+            aria-pressed={favoriteOnly}
+            title={t('wiki.favoritesTitle')}
+            onclick={toggleFavoriteFilter}
+          >
+            <Icon name="star" size={12} /> {t('wiki.favorites')}<span class="chip-count">{n(favoriteCount)}</span>
+          </button>
+        </div>
+      {/if}
       {#if wiki.tags.length > 0 && !commandId}
         <div
           class="chip-cloud"
@@ -207,7 +242,7 @@
           use:rememberScroll={'wiki-tags'}
           aria-label={t('wiki.tagsAria')}
         >
-          {#each wiki.tags as tag (tag.tag)}
+          {#each tagView.visible as tag (tag.tag)}
             <button
               class="chip"
               class:chip--accent={wiki.filter === tag.tag}
@@ -217,6 +252,12 @@
             </button>
           {/each}
         </div>
+        <CloudMore
+          hidden={tagView.hidden}
+          expanded={tagsExpanded}
+          truncated={tagView.truncated}
+          ontoggle={() => (tagsExpanded = !tagsExpanded)}
+        />
       {/if}
       {#if wiki.filter}
         <div class="filter-line">
@@ -242,8 +283,8 @@
       {:else if pages.length === 0}
         <EmptyState
           icon="wiki"
-          title={wiki.filter || query ? t('wiki.noMatch') : t('wiki.emptyTitle')}
-          text={wiki.filter || query ? t('wiki.noMatchText') : t('wiki.emptyText')}
+          title={wiki.filter || query || favoriteOnly ? t('wiki.noMatch') : t('wiki.emptyTitle')}
+          text={wiki.filter || query || favoriteOnly ? t('wiki.noMatchText') : t('wiki.emptyText')}
         >
           <button class="btn btn--primary btn--sm" onclick={startNew}>
             <Icon name="plus" size={13} /> {t('wiki.writeFirst')}
@@ -258,7 +299,10 @@
               title={whyFor(page.id)}
               onclick={() => navigate(wikiPath(page.id))}
             >
-              <span class="page-title">{page.title || t('wiki.untitled')}</span>
+              <span class="page-title">
+                {#if page.favorite_at}<Icon name="star" size={11} class="page-star" />{/if}
+                {page.title || t('wiki.untitled')}
+              </span>
               {#if (page.tags?.length ?? 0) + (page.auto_tags?.length ?? 0) > 0}
                 <span class="page-tags">
                   {#each page.tags ?? [] as tag (tag)}<span class="tag">{tag}</span>{/each}
@@ -382,6 +426,15 @@
               </div>
             </div>
             <div class="page-actions">
+              <button
+                class="btn btn--secondary btn--sm btn--action"
+                class:active={!!selected.favorite_at}
+                title={selected.favorite_at ? t('wiki.unfavorite') : t('wiki.favorite')}
+                aria-pressed={!!selected.favorite_at}
+                onclick={() => void toggleWikiFavorite(selected!.id, !selected.favorite_at)}
+              >
+                <Icon name="star" size={13} /> <span class="btn-label">{selected.favorite_at ? t('wiki.unfavorite') : t('wiki.favorite')}</span>
+              </button>
               {#if selected.source_hash}
                 <button
                   class="btn btn--secondary btn--sm btn--action"
@@ -495,12 +548,30 @@
 
   .page-title {
     grid-column: 1;
+    display: flex;
+    align-items: center;
+    gap: 5px;
     overflow: hidden;
     color: var(--ink);
     font-size: 13.5px;
     font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .page-title :global(.page-star) {
+    color: var(--accent);
+    flex: none;
+  }
+
+  .wiki-filters {
+    margin-top: 2px;
+  }
+
+  .page-actions :global(.btn.active) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
   }
 
   .page-date {

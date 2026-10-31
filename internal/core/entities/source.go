@@ -84,6 +84,14 @@ type SourceFilter struct {
 	// lens's source half, served by the index rather than by reading every source and filtering in
 	// the client.
 	FailedOnly bool
+	// FavoriteOnly keeps the reader's starred sources.
+	FavoriteOnly bool
+	// ReadLaterOnly keeps the OPEN read-later queue: queued and not yet finished. The queue view is
+	// this filter, ordered oldest-first; it is not a second list model.
+	ReadLaterOnly bool
+	// Interest narrows the queue to the sources one interest queued (a slug). It is a named filter
+	// like a tag, so its address means the same thing forever.
+	Interest string
 }
 
 type Source struct {
@@ -148,9 +156,21 @@ type Source struct {
 	// zero means this source was never tagged and the consistency job owes it a pass.
 	AutoTags   []string
 	AutoTagsAt time.Time
-	ImportedAt time.Time
-	Meta       string // free-form JSON
-	AtomCount  int    // derived: atoms that cite this source and can be resolved
+	// FavoriteAt is the reader's own mark: "this belongs to me". It has no lifecycle and no label;
+	// it is not a tag and never feeds search or the association layer. The source record is the truth.
+	FavoriteAt time.Time
+	// ReadLaterAt is when the source entered the reader's queue, ReadLaterDoneAt when it left it
+	// (zero while it waits). ReadLaterManual says the reader put it there by hand, which keeps "not
+	// this interest" from removing a queue entry they made themselves.
+	ReadLaterAt     time.Time
+	ReadLaterDoneAt time.Time
+	ReadLaterManual bool
+	// ReadLaterVia names the interests that queued the source. It is how the queue row explains
+	// itself and how an interest's filter finds its entries.
+	ReadLaterVia []string
+	ImportedAt   time.Time
+	Meta         string // free-form JSON
+	AtomCount    int    // derived: atoms that cite this source and can be resolved
 	// ProvenanceRows is the raw number of atom_sources rows, orphans included. It differs from
 	// AtomCount exactly when the index carries damaged rows — which is a fact worth showing.
 	ProvenanceRows int

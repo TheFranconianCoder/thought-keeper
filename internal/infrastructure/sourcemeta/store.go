@@ -57,6 +57,16 @@ type Record struct {
 	// clears them, and the consistency job owes a never-tagged source a pass.
 	AutoTags   []string `json:"auto_tags,omitempty"`
 	AutoTagsAt int64    `json:"auto_tags_at,omitempty"`
+	// The reader's own marks. FavoriteAt is the star (a shelf, no lifecycle). ReadLaterAt is when
+	// the source entered the queue and ReadLaterDoneAt when it left it (0 = never / still open).
+	// ReadLaterManual says the reader queued it by hand, so "not this interest" cannot remove their
+	// entry. ReadLaterVia names the interests that queued it — the queue row's explanation and the
+	// interest filter's key. They are HUMAN state, not derived: a reindex restores them.
+	FavoriteAt      int64    `json:"favorite_at,omitempty"`
+	ReadLaterAt     int64    `json:"read_later_at,omitempty"`
+	ReadLaterDoneAt int64    `json:"read_later_done_at,omitempty"`
+	ReadLaterManual bool     `json:"read_later_manual,omitempty"`
+	ReadLaterVia    []string `json:"read_later_via,omitempty"`
 	// ContentHash is the URL SNAPSHOT's hash — the refresher's "same page or changed page". It lives
 	// in the vault because the index is disposable: with it only in the index, a reindex made every
 	// URL look changed and the next refresh filed a second snapshot for each of them.

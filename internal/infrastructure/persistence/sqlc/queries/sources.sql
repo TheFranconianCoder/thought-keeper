@@ -321,7 +321,40 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
                 ELSE '' END) IN ('true', '1'))
   AND (sqlc.arg(bookmarks) = 0 OR bookmark = 1)
   AND (sqlc.arg(failed) = 0 OR instr(steps, '"state":"failed"') > 0)
+  AND (sqlc.arg(favorite) = 0 OR favorite_at IS NOT NULL)
+  AND (sqlc.arg(read_later) = 0
+       OR (read_later_at IS NOT NULL AND read_later_done_at IS NULL))
+  AND (sqlc.arg(interest) = ''
+       OR instr(read_later_via, '"' || sqlc.arg(interest) || '"') > 0)
 ORDER BY imported_at DESC
+LIMIT sqlc.arg(limit) OFFSET sqlc.arg(offset);
+
+-- name: ListSourcesQueue :many
+-- The read-later queue, worked front to back. It is the SAME list with the same filters, ordered by
+-- when the source entered the queue instead of when the vault received it; a queue that grows at the
+-- wrong end is a stack.
+SELECT * FROM sources
+WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
+  AND (sqlc.arg(query) = ''
+       OR instr(lower(title), lower(sqlc.arg(query))) > 0
+       OR instr(lower(original_name), lower(sqlc.arg(query))) > 0
+       OR instr(lower(COALESCE(url, '')), lower(sqlc.arg(query))) > 0
+       OR instr(lower(tags), lower(sqlc.arg(query))) > 0
+       OR instr(lower(auto_tags), lower(sqlc.arg(query))) > 0)
+  AND (sqlc.arg(tag) = ''
+       OR instr(tags, '"' || sqlc.arg(tag) || '"') > 0
+       OR instr(auto_tags, '"' || sqlc.arg(tag) || '"') > 0)
+  AND (sqlc.arg(attached) = 0
+       OR (CASE WHEN json_valid(meta)
+                THEN COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '')
+                ELSE '' END) IN ('true', '1'))
+  AND (sqlc.arg(bookmarks) = 0 OR bookmark = 1)
+  AND (sqlc.arg(failed) = 0 OR instr(steps, '"state":"failed"') > 0)
+  AND (sqlc.arg(favorite) = 0 OR favorite_at IS NOT NULL)
+  AND read_later_at IS NOT NULL AND read_later_done_at IS NULL
+  AND (sqlc.arg(interest) = ''
+       OR instr(read_later_via, '"' || sqlc.arg(interest) || '"') > 0)
+ORDER BY read_later_at ASC, imported_at DESC
 LIMIT sqlc.arg(limit) OFFSET sqlc.arg(offset);
 
 -- name: CountSourcesFiltered :one
@@ -341,7 +374,43 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
                 THEN COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '')
                 ELSE '' END) IN ('true', '1'))
   AND (sqlc.arg(bookmarks) = 0 OR bookmark = 1)
-  AND (sqlc.arg(failed) = 0 OR instr(steps, '"state":"failed"') > 0);
+  AND (sqlc.arg(failed) = 0 OR instr(steps, '"state":"failed"') > 0)
+  AND (sqlc.arg(favorite) = 0 OR favorite_at IS NOT NULL)
+  AND (sqlc.arg(read_later) = 0
+       OR (read_later_at IS NOT NULL AND read_later_done_at IS NULL))
+  AND (sqlc.arg(interest) = ''
+       OR instr(read_later_via, '"' || sqlc.arg(interest) || '"') > 0);
+
+-- name: SetSourceFavorite :exec
+UPDATE sources SET favorite_at = sqlc.arg(favorite_at) WHERE hash = sqlc.arg(hash);
+
+-- name: SetSourceReadLater :exec
+UPDATE sources SET
+    read_later_at = sqlc.arg(read_later_at),
+    read_later_done_at = sqlc.arg(read_later_done_at),
+    read_later_manual = sqlc.arg(read_later_manual),
+    read_later_via = sqlc.arg(read_later_via)
+WHERE hash = sqlc.arg(hash);
+
+-- name: CountReadLater :one
+-- The open queue: the number the Start card's head and the Sources filter chip show.
+SELECT COUNT(*) FROM sources
+WHERE read_later_at IS NOT NULL AND read_later_done_at IS NULL;
+
+-- name: CountReadLaterFromInterests :one
+-- How much of the open queue the interests put there, so the queue can say "4 von deinen Interessen".
+SELECT COUNT(*) FROM sources
+WHERE read_later_at IS NOT NULL AND read_later_done_at IS NULL
+  AND read_later_via <> '[]';
+
+-- name: CountReadLaterVia :one
+-- One interest's share of the open queue (the manager's count).
+SELECT COUNT(*) FROM sources
+WHERE read_later_at IS NOT NULL AND read_later_done_at IS NULL
+  AND instr(read_later_via, '"' || sqlc.arg(interest) || '"') > 0;
+
+-- name: CountFavorites :one
+SELECT COUNT(*) FROM sources WHERE favorite_at IS NOT NULL;
 
 -- name: CountAttachedSources :one
 SELECT COUNT(*) FROM sources

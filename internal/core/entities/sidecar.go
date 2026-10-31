@@ -76,7 +76,14 @@ type SourceRecord struct {
 	// complete distill writes new ones.
 	AutoTags   []string
 	AutoTagsAt time.Time
-	Parts      map[string]PartRecord
+	// The reader's marks: the star and the read-later queue. They are human state, so a reindex
+	// restores them exactly as they were.
+	FavoriteAt      time.Time
+	ReadLaterAt     time.Time
+	ReadLaterDoneAt time.Time
+	ReadLaterManual bool
+	ReadLaterVia    []string
+	Parts           map[string]PartRecord
 }
 
 // URLHash is the ADDRESS of a URL source: a stable hash of the URL itself.

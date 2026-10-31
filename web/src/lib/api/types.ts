@@ -134,6 +134,15 @@ export interface Source {
   original_name: string;
   /** The human's coarse labels, observed by the source-tags vocabulary. */
   tags?: string[];
+  /** The reader's star: a shelf, no lifecycle, never a ranking signal. */
+  favorite_at?: string;
+  /** The read-later queue entry. `read_later` is the derived OPEN flag the row uses. */
+  read_later_at?: string;
+  read_later_done_at?: string;
+  read_later_manual?: boolean;
+  /** The interests that queued the source (slugs); the queue row's explanation. */
+  read_later_via?: string[];
+  read_later?: boolean;
   /** The agent's derived labels (kept apart from the human's), and when they were derived. */
   auto_tags?: string[];
   auto_tags_at?: string;
@@ -176,6 +185,12 @@ export interface SourceListFilter {
   attachedOnly?: boolean;
   bookmarksOnly?: boolean;
   failedOnly?: boolean;
+  /** The reader's star. */
+  favoriteOnly?: boolean;
+  /** The OPEN read-later queue, ordered oldest entry first by the server. */
+  readLaterOnly?: boolean;
+  /** One interest's share of the queue (a named filter, like a tag). */
+  interest?: string;
   /**
    * command is an assistant result: the server reads the materialized set from the record instead
    * of filtering. It is one filter dimension, so the window (count, pages, scroll height) works
@@ -193,6 +208,10 @@ export interface SourceTagFacet {
 export interface SourceFacets {
   tags: SourceTagFacet[];
   attached: number;
+  /** Vault-wide counts behind the filter chips and the queue banner. */
+  favorites: number;
+  read_later: number;
+  read_later_interests: number;
 }
 
 export interface SourceNode {
@@ -280,6 +299,8 @@ export interface WikiSummary {
   tags?: string[];
   auto_tags?: string[];
   source_hash?: string;
+  /** The reader's star on the page (the frontmatter is the truth). */
+  favorite_at?: string;
   updated_at?: string;
 }
 
@@ -298,6 +319,67 @@ export interface WikiPage extends WikiSummary {
   urls?: string[];
   body: string;
   created_at?: string;
+}
+
+/** One standing rule: the words that make a source relevant, and its label in the queue. */
+export interface Interest {
+  slug: string;
+  name: string;
+  terms: string[];
+  exclude?: string[];
+  kinds?: string[];
+  enabled: boolean;
+  /** How many OPEN read-later entries this rule holds. */
+  open: number;
+  rejected?: string[];
+  created?: string;
+  updated?: string;
+}
+
+export interface InterestList {
+  interests: Interest[];
+  count: number;
+}
+
+/** One term's evidence in one source. */
+export interface InterestTerm {
+  term: string;
+  topics?: string[];
+  claims?: number;
+  title?: boolean;
+  tags?: string[];
+}
+
+/** One source's result for one rule, with the reason. The rail and the preview share it. */
+export interface InterestMatch {
+  slug?: string;
+  name: string;
+  band: 'fits' | 'maybe';
+  terms?: InterestTerm[];
+  topics?: string[];
+  hash?: string;
+  title?: string;
+  kind?: string;
+  queued?: boolean;
+  rejected?: boolean;
+  enabled: boolean;
+}
+
+export interface InterestPreview {
+  total: number;
+  strong: number;
+  weak: number;
+  examples: InterestMatch[];
+}
+
+export interface InterestRequest {
+  name: string;
+  terms: string[];
+  exclude?: string[];
+  kinds?: string[];
+  enabled?: boolean;
+  /** Explicit backfill: queue the sources that already fit. Off by default. */
+  queue_existing?: boolean;
 }
 
 export interface AskSummary {

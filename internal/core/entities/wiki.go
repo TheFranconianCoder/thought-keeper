@@ -82,6 +82,9 @@ type WikiPage struct {
 	// the page's lifetime (WikiHash), so an edit re-processes the same source from capture instead of
 	// filing a second one beside it.
 	SourceHash string
+	// FavoriteAt is the reader's star on the page. It lives in the page's frontmatter (the page is
+	// the truth) and has no other meaning: it never ranks search or reaches a claim.
+	FavoriteAt time.Time
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }

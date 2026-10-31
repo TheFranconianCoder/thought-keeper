@@ -74,4 +74,7 @@ export const commonEn: Record<string, string> = {
   'format.daysAgo.many': '{count}d ago',
 
   'errors.cancelled': 'The request was cancelled.',
+
+  'cloud.more': 'more',
+  'cloud.less': 'Show less',
 };

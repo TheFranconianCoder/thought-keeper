@@ -44,6 +44,10 @@
     warning: 'M10 3 17.5 16H2.5z M10 8v4 M10 14.5h.01',
     error: 'M10 2.8a7.2 7.2 0 1 0 0 14.4 7.2 7.2 0 0 0 0-14.4z M7 7l6 6 M13 7l-6 6',
     clock: 'M10 2.8a7.2 7.2 0 1 0 0 14.4 7.2 7.2 0 0 0 0-14.4z M10 5.5V10l3 2',
+    // The reader's own marks: a star (favorite) and a target (interest). The target is a ring with
+    // a centre, deliberately not a tag outline: an interest is attention, not a label.
+    star: 'M10 3.1l2 4.1 4.5.7-3.3 3.2.8 4.5L10 13.5l-4 2.1.8-4.5L3.5 7.9l4.5-.7z',
+    target: 'M10 2.8a7.2 7.2 0 1 0 0 14.4 7.2 7.2 0 0 0 0-14.4z M10 6.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6z',
     settings: 'M10 7.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6z M10 2.5v2 M10 15.5v2 M2.5 10h2 M15.5 10h2 M4.7 4.7l1.4 1.4 M13.9 13.9l1.4 1.4 M15.3 4.7l-1.4 1.4 M6.1 13.9l-1.4 1.4',
     panelLeft: 'M3.5 4h13v12h-13z M8 4v12',
     spark: 'M10 2.5 11.8 7.2 16.5 9 11.8 10.8 10 15.5 8.2 10.8 3.5 9 8.2 7.2z',
@@ -74,6 +78,7 @@
 
   const filled: Record<string, string> = {
     auto: 'M10 2.8a7.2 7.2 0 0 0 0 14.4z',
+    star: 'M10 3.1l2 4.1 4.5.7-3.3 3.2.8 4.5L10 13.5l-4 2.1.8-4.5L3.5 7.9l4.5-.7z',
   };
 </script>
 

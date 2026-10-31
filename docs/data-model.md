@@ -8,10 +8,10 @@ true.
 
 | Entity | Meaning |
 | --- | --- |
-| `Source` | An immutable input: `id`, `hash`, `kind`, `ext`, `path`, `url`, `title`, `original_name`, `tags` (human labels), `auto_tags` (derived labels) and `auto_tags_at`, `bytes`, `pages`, `tree_state`, `steps`, `url_status`, `url_checked_at`, `bookmark`, `meta`. |
+| `Source` | An immutable input: `id`, `hash`, `kind`, `ext`, `path`, `url`, `title`, `original_name`, `tags` (human labels), `auto_tags` (derived labels) and `auto_tags_at`, the reader's marks (`favorite_at`, `read_later_at`, `read_later_done_at`, `read_later_manual`, `read_later_via`), `bytes`, `pages`, `tree_state`, `steps`, `url_status`, `url_checked_at`, `bookmark`, `meta`. |
 | `SourceNode` | A tree node: `node_id`, `parent_id`, `depth`, `ord`, `title`, `summary`, `start_page`, `end_page`, `text_hash`. |
 | `Atom` | One claim: `id`, `topic`, `claim`, `type`, `status`, `body`, `sources`. |
-| `WikiPage` | User-authored Markdown: `id`, `title`, `tags` (human), `auto_tags` (derived), `urls`, `source` (stable `WikiHash`), timestamps, body. |
+| `WikiPage` | User-authored Markdown: `id`, `title`, `tags` (human), `auto_tags` (derived), `urls`, `source` (stable `WikiHash`), `favorite_at`, timestamps, body. |
 | `Cluster` | A titleless association: `id`, `atoms`, `signature`, `created`, `updated`. |
 | `ClusterMembership` | One cluster→atom edge. |
 | `Link` | An atom edge: `from_id`, `raw_target`, `to_id`, `alias`, `heading`, `occurrences`, `position`. |
@@ -19,6 +19,7 @@ true.
 | `LintFinding` | Health result: `layer`, `kind`, `severity`, `subject_kind` (atom/cluster/source), `subject_id`, `message`. |
 | `StepStatus` | One step's state for one source, persisted in the source's `.meta`. |
 | `Vocabulary` | A namespace's canonical names and what they absorbed. Three namespaces: `topics`, `wiki-tags` and `source-tags`. |
+| `Interest` | One standing rule: `slug` (identity), `name`, `terms`, `exclude`, `kinds`, `enabled`, `rejected` (source hashes), `created`, `updated`. A FILE record (`interests/<slug>.md`), not an index entity; its matches are computed on demand. |
 | `Run` | One run: `op` (`pipeline` \| `query` \| `lint` \| `vocabulary` \| `tag` \| `summary`), `step` (capture/outline/distill/cluster), model, tokens, status, and the question for a query. |
 | `StepRecord` | One tool call of a run: `tool`, argument/result digests, error flag, duration. |
 | `Command` | One assistant request: `id`, `text`, `lens`, `criteria`, `items` (the materialized set, in order), `total`/`vault`/`scanned`, `url`, `generated`, `created`. A FILE record (`commands/<id>.md`), short-lived, with **no index table** — the directory is read directly, like `asks/`, and `reindex` leaves it alone. |
@@ -49,6 +50,7 @@ index is disposable — deleting it loses nothing but time.
 | `00007_drop_atom_links.sql` | drops `atom_links` (a claim body has no links) and raises the shape marker |
 | `00008_sources_imported_at.sql` | an index on `sources(imported_at)` for the recency window |
 | `00009_sources_kind_epub.sql` | rebuilds `sources` so `kind` also accepts `epub` (a book's chapters are captured like a PDF's pages) |
+| `00010_sources_shelf.sql` | adds the reader's marks to `sources` (`favorite_at`, `read_later_at`, `read_later_done_at`, `read_later_manual`, `read_later_via`) plus the two indexes the queue and the star filter read |
 
 A schema change is a **new** migration; a change of vocabulary is done in the initial file with the
 database thrown away. The initial file writes the shape marker (`PRAGMA user_version`), and
@@ -63,7 +65,8 @@ sentence — which file it is and what to do ("delete it and reindex; the vault 
 ```sql
 sources(id, hash, kind, ext, path, url, title, original_name, bytes, pages,
         tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta,
-        tags, auto_tags, auto_tags_at)
+        tags, auto_tags, auto_tags_at,
+        favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via)
 source_nodes(source_id, node_id, parent_id, depth, ord, title, summary,
              start_page, end_page, text_hash)
 atoms(id, topic, path, claim, body, frontmatter, type, status, body_hash,
@@ -91,6 +94,13 @@ Notes that matter:
   it, and the source-tags vocabulary reads them instead of opening one file per source.
   `auto_tags_at` (NULL = never tagged) is the backfill marker: a completely distilled source without
   it is owed one derivation pass, and an empty answer still stamps it so the pass does not repeat.
+- **`sources.favorite_at` / `read_later_*`** mirror the reader's marks from the source record. The
+  record is the truth; `reindex` restores the columns from it. The queue is "open" exactly when
+  `read_later_at IS NOT NULL AND read_later_done_at IS NULL`, and it is ordered by `read_later_at`
+  (oldest first), not by arrival. `read_later_via` is a JSON array of interest slugs.
+- **There is no interest table.** A rule is a file (`interests/<slug>.md`) and its matches are a
+  pure function of the source's claims, topics, title and labels read at the moment somebody asks —
+  so an edit never leaves a stale membership behind, and a reindex has nothing to rebuild.
 - **`runs` is append-only audit.** `op` names the class of work, `step` names which of the four steps
   a pipeline run executed. `tag` is a wiki-page tagging run, `summary` a source's overview run.
   Nothing rebuilds it.
@@ -117,6 +127,11 @@ index keeps **one** connection — every connection to `:memory:` is a separate 
 - `atoms_of(cluster) = cluster_atoms WHERE cluster_id = cluster.id`
 - `topic_counts` (claim topics, with claim counts)
 - `unclustered = atoms with no cluster_atoms row` — the backlog of step 4
+- `read_later` = open queue count; `read_later_interests` = open entries with a non-empty
+  `read_later_via`; `favorites` = starred sources. The queue's per-interest slice is
+  `read_later_via` matching a slug
+- `interest_match(source, rule)` = the lexical evaluation of `interests.ForSource` + `Evaluate`;
+  never stored, never a tag
 - `graph` = cluster membership + provenance edges (source node → atom)
 - `atom_count` of a source counts **resolvable** claims, never provenance rows alone
 - the fourth light of a source is derived from its claims and their memberships, never stored

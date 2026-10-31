@@ -48,7 +48,7 @@ func publishWrites(hub *stream.Hub) func(http.Handler) http.Handler {
 				return
 			}
 			cause := r.Method + " " + r.URL.Path
-			for _, typ := range []string{"source", "clusters", "findings", "pipeline", "wiki"} {
+			for _, typ := range []string{"source", "clusters", "findings", "pipeline", "wiki", "interests"} {
 				hub.Publish(typ, map[string]any{"cause": cause})
 			}
 		})

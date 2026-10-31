@@ -147,6 +147,16 @@ type App struct {
 	summaryQueue  chan runJob
 	summaryMu     sync.Mutex
 	summaryActive map[string]bool
+	// The interest matcher has no model and a tiny cost, but it reads a source's claims: it runs on
+	// its own small worker so a click never waits for it. interestQueue is a set (a source is queued
+	// at most once at a time) and interestMu guards it.
+	matchInterests usecases.MatchSourceInterests
+	interestQueue  chan string
+	interestMu     sync.Mutex
+	interestActive map[string]bool
+	// interestAgain remembers a request that arrived while the pass was already running (the outline
+	// finishing during the add-time match): the source changed, so it is matched once more.
+	interestAgain map[string]bool
 	// summaryRemaining is the backlog the consistency walk measured (a set, so a completed summary
 	// leaves it before the next walk) and summaryRunning is what the summary worker executes right
 	// now. Both feed the Status lens while the backfill runs.
@@ -344,6 +354,9 @@ func New(opts Options) (*App, error) {
 		summaryRemaining: make(map[string]bool),
 		summaryRunning:   make(map[string]bool),
 		sourceTagActive:  make(map[string]bool),
+		interestQueue:    make(chan string, 256),
+		interestActive:   make(map[string]bool),
+		interestAgain:    make(map[string]bool),
 		vocabularyQueue:  make(chan runJob, 4),
 		// The first automatic curation waits one cooldown: a fresh start has work to do before the
 		// names are worth a pass, and a seven-minute model call at minute one is not a good morning.
@@ -399,6 +412,7 @@ func New(opts Options) (*App, error) {
 	a.tagPage = reg.TagWikiPage
 	a.summary = reg.SourceSummary
 	a.tagSource = reg.TagSource
+	a.matchInterests = reg.MatchSourceInterests
 	a.curate = reg.VocabularyCurate
 	a.rebranch = reg.RebranchClaims
 	a.vocabularyReconcile = reg.VocabularyReconcile
@@ -497,6 +511,10 @@ func (a *App) Reset(hash string) (usecases.ResetResult, error) {
 func (a *App) onAdded(hash string) {
 	a.hub.Publish("source", map[string]string{"hash": hash})
 	a.pumpPipeline("source added")
+	// A new source is checked against the reader's interests immediately: a bookmark will never be
+	// distilled, and a page that fails downstream still has its title and labels. The pass runs on
+	// its own worker; the add returns at once.
+	a.requestInterestMatch(hash)
 }
 
 // enqueuePipeline starts a source's document steps at step 1: a source whose bytes are not readable
@@ -823,6 +841,9 @@ func (a *App) captureWorker() {
 			}
 			a.log.Info("source captured", "hash", hash, "parts", res.Parts,
 				"units", res.Pages, "ocr", res.OCR, "chars", res.Chars, "rendered", res.Rendered)
+			// Step 1 knows the title and the language; the interest pass can read them now, even when
+			// the derivation that follows fails.
+			a.requestInterestMatch(hash)
 			// Step 1 is done for this source; the global pump decides whether the outline stage may
 			// now begin for EVERY source that owes it.
 			a.pumpPipeline("capture finished")
@@ -892,6 +913,7 @@ func (a *App) Run() error {
 	}
 	go a.captureWorker()
 	go a.treeWorker()
+	go a.interestWorker()
 	// Document runs across DIFFERENT sources are independent; only the same source is serialised
 	// (claimDistill). One source stuck against a slow endpoint must not block every other document.
 	for i := 0; i < a.cfg.Pipeline.ParallelRuns; i++ {
@@ -1335,6 +1357,9 @@ func (a *App) handleDrop(path string) {
 		}
 		a.log.Info("source added", "hash", src.Hash, "kind", src.Kind, "bytes", src.Bytes, "file", filepath.Base(path))
 		a.enqueuePipeline(src.Hash)
+		// A dropped source is checked against the interests at once: the intake already knows its
+		// kind and name, and the pass runs on its own worker.
+		a.requestInterestMatch(src.Hash)
 	}()
 }
 
@@ -1447,6 +1472,9 @@ func (a *App) treeWorker() {
 				continue
 			}
 			a.log.Info("tree built", "hash", hash, "nodes", res.Nodes, "units", res.Pages, "ocr", res.OCR, "reopened", res.Reopened)
+			// The outline is where a Markdown source gets its real title. Match now, so a failed
+			// distill does not hide a source that obviously belongs to a rule.
+			a.requestInterestMatch(hash)
 			// The outline is complete for this source; the pump decides whether the distill stage is
 			// now open for all sources (a reopened part is simply part of that stage).
 			a.pumpPipeline("outline finished")
@@ -1721,6 +1749,64 @@ func (a *App) ScheduleSourceTag(hash string) (string, error) {
 		return "", types.New("conflict", "the tag queue is full", types.ErrConflict)
 	}
 	return runID.String(), nil
+}
+
+// requestInterestMatch asks for one source's interest pass. It is a small queue, not a goroutine
+// per event: a sitemap that adds forty pages must not start forty matchers at once. A source that is
+// already waiting is not queued twice.
+func (a *App) requestInterestMatch(hash string) {
+	if hash == "" || a.interestQueue == nil || a.matchInterests.Store == nil {
+		return
+	}
+	a.interestMu.Lock()
+	if a.interestActive[hash] {
+		// The source changed while its pass was running. Mark it for one more pass instead of
+		// dropping the newer state on the floor.
+		a.interestAgain[hash] = true
+		a.interestMu.Unlock()
+		return
+	}
+	a.interestActive[hash] = true
+	a.interestMu.Unlock()
+	select {
+	case a.interestQueue <- hash:
+	default:
+		a.interestMu.Lock()
+		delete(a.interestActive, hash)
+		a.interestMu.Unlock()
+	}
+}
+
+// interestWorker runs the interest pass: no model, no gate, index and record writes only. A match
+// that queues the source publishes the source event (the queue row changed) and an interests frame
+// (the manager's counts changed).
+func (a *App) interestWorker() {
+	for {
+		select {
+		case <-a.quit:
+			return
+		case hash := <-a.interestQueue:
+			res, err := a.matchInterests.Execute(context.Background(), hash)
+			a.interestMu.Lock()
+			delete(a.interestActive, hash)
+			again := a.interestAgain[hash]
+			delete(a.interestAgain, hash)
+			a.interestMu.Unlock()
+			if again {
+				a.requestInterestMatch(hash)
+			}
+			if err != nil {
+				a.log.Debug("interest match failed", "hash", hash, "err", err)
+				continue
+			}
+			if len(res.Queued) == 0 {
+				continue
+			}
+			a.log.Info("source queued by interests", "hash", hash, "interests", res.Queued)
+			a.publish("source", map[string]any{"hash": hash})
+			a.publish("interests", map[string]any{"hash": hash, "queued": res.Queued})
+		}
+	}
 }
 
 // requestSourceTag asks for the derivation and ignores "already queued".
@@ -2724,6 +2810,10 @@ func (a *App) runOne(job runJob) {
 			if !job.reset {
 				a.requestSummary(job.hash)
 				a.requestSourceTag(job.hash)
+				// The claims are what the interest matcher reads; the pass runs again now that they
+				// exist, so a rule can match on a topic or on two claim mentions, not only on the
+				// title it saw at intake.
+				a.requestInterestMatch(job.hash)
 			}
 		}
 		// A reset that arrived WHILE this run was working has to be honoured after it: its flag is

@@ -30,6 +30,10 @@ vault:
                                            # and source tags — decisions about what a thing is called,
                                            # as opposed to what it says. Records, not caches: a
                                            # reindex reads them, and they belong in a versioned vault.
+    interests: 'interests'                 # the reader's standing rules: one Markdown file per
+                                           # interest. They decide which NEW sources join the
+                                           # read-later queue. Records, not caches: they travel with
+                                           # the vault and are never pruned.
     trash: '.trash'
     git:
         ignore_derived: true               # a vault under version control: keep the DERIVED files

@@ -45,15 +45,21 @@ func (uc ListSources) Count(ctx context.Context, filter entities.SourceFilter) (
 // the list happens to have loaded.
 type ListSourceFacets struct {
 	Index interfaces.IndexRepository
+	// Shelf answers the star and queue counts. Nil (a test, a bare app) leaves them zero.
+	Shelf interfaces.ShelfCounter
 }
 
 // SourceFacetsResult is the facet payload.
 type SourceFacetsResult struct {
 	Tags     []partialentities.NameUses
 	Attached int
+	// The vault-wide counts behind the filter chips and the queue banner.
+	Favorites          int
+	ReadLater          int
+	ReadLaterInterests int
 }
 
-// Execute counts the tags and the attached snapshots.
+// Execute counts the tags, the attached snapshots and the reader's marks.
 func (uc ListSourceFacets) Execute(ctx context.Context) (SourceFacetsResult, error) {
 	counts, err := uc.Index.SourceTagCounts(ctx)
 	if err != nil {
@@ -73,7 +79,19 @@ func (uc ListSourceFacets) Execute(ctx context.Context) (SourceFacetsResult, err
 	if err != nil {
 		return SourceFacetsResult{}, err
 	}
-	return SourceFacetsResult{Tags: out, Attached: attached}, nil
+	res := SourceFacetsResult{Tags: out, Attached: attached}
+	if uc.Shelf != nil {
+		if n, cErr := uc.Shelf.CountFavorites(ctx); cErr == nil {
+			res.Favorites = n
+		}
+		if n, cErr := uc.Shelf.CountReadLater(ctx); cErr == nil {
+			res.ReadLater = n
+		}
+		if n, cErr := uc.Shelf.CountReadLaterFromInterests(ctx); cErr == nil {
+			res.ReadLaterInterests = n
+		}
+	}
+	return res, nil
 }
 
 // GetSource returns one source by its content hash.

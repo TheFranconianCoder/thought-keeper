@@ -133,11 +133,12 @@ of features.
 
 ### Start
 
-The front door, not a data dump: an **Ask** box with the three latest questions, **Continue** (the last
-sources, claims, wiki pages and questions you opened — local memory, not a vault record), **Needs you**
-(failed sources, findings and unclustered claims; quiet when there is nothing), the five newest sources
-with their live step state, and one calm vault-pulse line. A new vault starts with "add the first
-source" here.
+The front door, not a data dump: an **Ask** box with the three latest questions, **Read later**
+(the three oldest entries in your queue, with the interest that queued each — and its empty state is
+one quiet line), **Continue** (the last sources, claims, wiki pages and questions you opened — local
+memory, not a vault record), **Needs you** (failed sources, findings and unclustered claims; quiet
+when there is nothing), the five newest sources with their live step state, and one calm vault-pulse
+line. A new vault starts with "add the first source" here.
 
 ### Claims
 
@@ -188,6 +189,17 @@ source" here.
 - **Bookmarks** are URLs that cannot be read (a video, a JavaScript app): kept as metadata-only
   sources and collected in their own lens, never distilled. A page that answers with a login or a
   paywall is **blocked** instead, so it never becomes a bookmark that pretends there was no text.
+- **Favorites and read later are the reader's marks, not labels.** A **star** on a source or a wiki
+  page is a durable "this is mine" with a filter in that lens; the **read-later queue** is an open
+  list of sources, ordered oldest entry first, with a banner in the Sources lens and a card on
+  Start. Neither is a tag, a topic or a claim, and neither changes search or the association layer.
+- **Interests are standing rules that fill the queue.** You write a name and a few terms; a strong
+  match — a claim topic, a label, the title, or two claim mentions — puts a NEW source into read
+  later, while a single mention stays a suggestion in the source's rail. The editor previews a rule
+  against the vault before saving, the rule looks forward only (an explicit checkbox is the one
+  backfill), and every match carries its evidence. The matcher is the same lexical substrate as
+  search, with no model, no embeddings and no tokens; "not this interest" is a one-click correction.
+  They are managed in an overlay — there is no ninth lens.
 - **Pages and sitemaps are re-checked once a week, feeds daily** (configurable, and on demand), with
   a per-source and per-page HTTP status; broken links stay visible. A sitemap is reconciled against
   its list 1:1; a feed only extends. A URL you add yourself wins over any page, sitemap or feed that
@@ -366,7 +378,7 @@ One location, default `~/thought-keeper`. Readable, greppable, versionable, back
 │   └── 7f/3a/
 │       ├── 7f3a…<sha256>.pdf        # the object
 │       ├── 7f3a…<sha256>.capture.md # readable rendering (PDFs, EPUBs)
-│       ├── 7f3a…<sha256>.meta       # identity + step record + part records
+│       ├── 7f3a…<sha256>.meta       # identity + step record + the reader's marks
 │       ├── 7f3a…<sha256>.outline    # the node tree
 │       ├── 7f3a…<sha256>.summary.md # the overview
 │       └── 7f3a…<sha256>.log        # everything done to this source
@@ -374,6 +386,7 @@ One location, default `~/thought-keeper`. Readable, greppable, versionable, back
 ├── atoms/                    # one claim per file (source of truth)
 ├── clusters/                 # titleless associations (derived cache)
 ├── vocabulary/               # canonical names + aliases: topics.md, wiki-tags.md, source-tags.md
+├── interests/                # the reader's standing rules (records)
 ├── asks/                     # saved Ask conversations
 ├── .thought-keeper/          # derived, hidden: favicons/
 ├── .trash/                   # deletions go here, not away

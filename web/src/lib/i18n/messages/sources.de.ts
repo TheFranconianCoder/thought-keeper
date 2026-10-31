@@ -234,4 +234,24 @@ export const sourcesDe: Record<string, string> = {
   'sources.migrateNothing': 'Jede URL-Quelle hat bereits ihre URL-Adresse.',
   'sources.migrateDone': '{moved} verschoben · {claims} neu zugeordnet.',
   'sources.migrateFailed': 'Die Migration der URL-Adressen ist fehlgeschlagen: {error}',
+
+  // Die eigenen Marken: Stern und Warteschlange.
+  'sources.readLater': 'Später lesen',
+  'sources.readLaterTitle': 'Die offene Warteschlange, älteste zuerst',
+  'sources.favorites': 'Favoriten',
+  'sources.favoritesTitle': 'Mit Stern markierte Quellen',
+  'sources.favorite': 'Favorit',
+  'sources.unfavorite': 'Favorit entfernen',
+  'sources.readLaterAction': 'Später lesen',
+  'sources.markDone': 'Erledigt',
+  'sources.favoriteFailed': 'Favorit nicht gespeichert: {error}',
+  'sources.readLaterFailed': 'Warteschlange nicht geändert: {error}',
+  'sources.queueTitle': 'Später lesen',
+  'sources.queueAll': 'Alle',
+  'sources.queueSplit': '— {from} von deinen Interessen · {self} selbst',
+
+
+  'sources.queueEmptyTitle': 'Nichts vorgemerkt',
+  'sources.queueEmptyText': 'Die Warteschlange ist leer. Ein Interesse kann sie füllen — oder du legst eine Quelle mit der Uhr hierher.',
+
 };

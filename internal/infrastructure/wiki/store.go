@@ -48,6 +48,7 @@ type frontmatter struct {
 	AutoTags   []string `yaml:"auto_tags,omitempty"`
 	URLs       []string `yaml:"urls,omitempty"`
 	SourceHash string   `yaml:"source,omitempty"`
+	FavoriteAt string   `yaml:"favorite_at,omitempty"`
 	Created    string   `yaml:"created,omitempty"`
 	Updated    string   `yaml:"updated,omitempty"`
 }
@@ -62,6 +63,9 @@ func Encode(page entities.WikiPage) ([]byte, error) {
 		AutoTags:   NormalizeTags(page.AutoTags),
 		URLs:       append([]string(nil), page.URLs...),
 		SourceHash: page.SourceHash,
+	}
+	if !page.FavoriteAt.IsZero() {
+		fm.FavoriteAt = page.FavoriteAt.UTC().Format(time.RFC3339)
 	}
 	if !page.CreatedAt.IsZero() {
 		fm.Created = page.CreatedAt.UTC().Format(time.RFC3339)
@@ -110,6 +114,9 @@ func Decode(data []byte) (entities.WikiPage, error) {
 		ID: id, Title: strings.TrimSpace(fm.Title), Tags: NormalizeTags(fm.Tags),
 		AutoTags: NormalizeTags(fm.AutoTags),
 		URLs:     append([]string(nil), fm.URLs...), Body: strings.TrimRight(body, "\n"), SourceHash: fm.SourceHash,
+	}
+	if t, err := time.Parse(time.RFC3339, fm.FavoriteAt); err == nil {
+		page.FavoriteAt = t
 	}
 	if t, err := time.Parse(time.RFC3339, fm.Created); err == nil {
 		page.CreatedAt = t

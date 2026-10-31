@@ -48,4 +48,12 @@ export const wikiEn: Record<string, string> = {
   'wiki.deleteConfirm': 'Delete page',
   'wiki.deleted': 'Wiki page deleted.',
   'wiki.deleteFailed': 'Could not delete the page: {error}',
+
+  // The reader's star on a page.
+  'wiki.favorites': 'Favorites',
+  'wiki.favoritesTitle': 'Starred pages',
+  'wiki.favorite': 'Favorite',
+  'wiki.unfavorite': 'Remove favorite',
+  'wiki.favoriteFailed': 'Could not save the favorite: {error}',
+
 };

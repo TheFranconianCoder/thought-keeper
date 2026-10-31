@@ -19,8 +19,14 @@ type tagIndex struct {
 }
 
 func (i *tagIndex) SetSourceSteps(context.Context, string, entities.StepSet) error { return nil }
-func (i *tagIndex) SetSourceTitle(context.Context, string, string) error           { return nil }
-func (i *tagIndex) SetSourceLanguage(context.Context, string, string) error        { return nil }
+
+func (i *tagIndex) SetSourceFavorite(context.Context, string, time.Time) error { return nil }
+
+func (i *tagIndex) SetSourceReadLater(context.Context, string, time.Time, time.Time, bool, []string) error {
+	return nil
+}
+func (i *tagIndex) SetSourceTitle(context.Context, string, string) error    { return nil }
+func (i *tagIndex) SetSourceLanguage(context.Context, string, string) error { return nil }
 func (i *tagIndex) SetSourceOrigin(context.Context, string, string, string, string) error {
 	return nil
 }

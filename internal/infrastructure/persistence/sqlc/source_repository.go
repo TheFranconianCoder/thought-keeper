@@ -486,9 +486,84 @@ func (r *SourceRepository) CountSources(ctx context.Context, filter entities.Sou
 		Attached:  boolParam(filter.AttachedOnly),
 		Bookmarks: boolParam(filter.BookmarksOnly),
 		Failed:    boolParam(filter.FailedOnly),
+		Favorite:  boolParam(filter.FavoriteOnly),
+		ReadLater: boolParam(filter.ReadLaterOnly),
+		Interest:  filter.Interest,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("count sources: %w", err)
+	}
+	return int(n), nil
+}
+
+// SetSourceFavorite mirrors the reader's star into the index. The <hash>.meta record is the truth;
+// this column is what the windowed list filters by.
+func (r *SourceRepository) SetSourceFavorite(ctx context.Context, hash string, at time.Time) error {
+	if err := r.q.SetSourceFavorite(ctx, dal.SetSourceFavoriteParams{
+		FavoriteAt: nullTime(at), Hash: hash,
+	}); err != nil {
+		return fmt.Errorf("set source favorite: %w", err)
+	}
+	return nil
+}
+
+// SetSourceReadLater mirrors the read-later queue entry (open, done, manual, via) into the index.
+func (r *SourceRepository) SetSourceReadLater(ctx context.Context, hash string, at, doneAt time.Time, manual bool, via []string) error {
+	if via == nil {
+		via = []string{}
+	}
+	encoded, err := json.Marshal(via)
+	if err != nil {
+		return fmt.Errorf("encode read later via: %w", err)
+	}
+	manualInt := int64(0)
+	if manual {
+		manualInt = 1
+	}
+	if err := r.q.SetSourceReadLater(ctx, dal.SetSourceReadLaterParams{
+		ReadLaterAt:     nullTime(at),
+		ReadLaterDoneAt: nullTime(doneAt),
+		ReadLaterManual: manualInt,
+		ReadLaterVia:    string(encoded),
+		Hash:            hash,
+	}); err != nil {
+		return fmt.Errorf("set source read later: %w", err)
+	}
+	return nil
+}
+
+// CountReadLater is the open read-later queue.
+func (r *SourceRepository) CountReadLater(ctx context.Context) (int, error) {
+	n, err := r.q.CountReadLater(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count read later: %w", err)
+	}
+	return int(n), nil
+}
+
+// CountReadLaterFromInterests is how many OPEN queue entries an interest put there.
+func (r *SourceRepository) CountReadLaterFromInterests(ctx context.Context) (int, error) {
+	n, err := r.q.CountReadLaterFromInterests(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count read later via interests: %w", err)
+	}
+	return int(n), nil
+}
+
+// CountReadLaterVia is one interest's share of the open queue.
+func (r *SourceRepository) CountReadLaterVia(ctx context.Context, slug string) (int, error) {
+	n, err := r.q.CountReadLaterVia(ctx, sql.NullString{String: slug, Valid: slug != ""})
+	if err != nil {
+		return 0, fmt.Errorf("count read later via %s: %w", slug, err)
+	}
+	return int(n), nil
+}
+
+// CountFavorites is how many sources carry the reader's star.
+func (r *SourceRepository) CountFavorites(ctx context.Context) (int, error) {
+	n, err := r.q.CountFavorites(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count favorites: %w", err)
 	}
 	return int(n), nil
 }
@@ -512,16 +587,39 @@ func boolParam(only bool) int64 {
 
 // ListSources returns sources ordered by import time (newest first), narrowed by filter.
 func (r *SourceRepository) ListSources(ctx context.Context, filter entities.SourceFilter, limit, offset int) ([]entities.Source, error) {
-	rows, err := r.q.ListSourcesFiltered(ctx, dal.ListSourcesFilteredParams{
-		Kind:      filter.Kind,
-		Query:     filter.Query,
-		Tag:       filter.Tag,
-		Attached:  boolParam(filter.AttachedOnly),
-		Bookmarks: boolParam(filter.BookmarksOnly),
-		Failed:    boolParam(filter.FailedOnly),
-		Limit:     int64(limit),
-		Offset:    int64(offset),
-	})
+	var (
+		rows []dal.Source
+		err  error
+	)
+	if filter.ReadLaterOnly {
+		// The queue is the same filter with a different order: oldest entry first.
+		rows, err = r.q.ListSourcesQueue(ctx, dal.ListSourcesQueueParams{
+			Kind:      filter.Kind,
+			Query:     filter.Query,
+			Tag:       filter.Tag,
+			Attached:  boolParam(filter.AttachedOnly),
+			Bookmarks: boolParam(filter.BookmarksOnly),
+			Failed:    boolParam(filter.FailedOnly),
+			Favorite:  boolParam(filter.FavoriteOnly),
+			Interest:  filter.Interest,
+			Limit:     int64(limit),
+			Offset:    int64(offset),
+		})
+	} else {
+		rows, err = r.q.ListSourcesFiltered(ctx, dal.ListSourcesFilteredParams{
+			Kind:      filter.Kind,
+			Query:     filter.Query,
+			Tag:       filter.Tag,
+			Attached:  boolParam(filter.AttachedOnly),
+			Bookmarks: boolParam(filter.BookmarksOnly),
+			Failed:    boolParam(filter.FailedOnly),
+			Favorite:  boolParam(filter.FavoriteOnly),
+			ReadLater: boolParam(filter.ReadLaterOnly),
+			Interest:  filter.Interest,
+			Limit:     int64(limit),
+			Offset:    int64(offset),
+		})
+	}
 	if err != nil {
 		return nil, fmt.Errorf("list sources: %w", err)
 	}
@@ -824,6 +922,12 @@ func toEntity(row dal.Source) entities.Source {
 		AutoTags:     decodeSourceTags(row.AutoTags),
 		AutoTagsAt:   timeFromNull(row.AutoTagsAt),
 		Steps:        decodeStepSet(row.Steps),
+
+		FavoriteAt:      timeFromNull(row.FavoriteAt),
+		ReadLaterAt:     timeFromNull(row.ReadLaterAt),
+		ReadLaterDoneAt: timeFromNull(row.ReadLaterDoneAt),
+		ReadLaterManual: row.ReadLaterManual != 0,
+		ReadLaterVia:    decodeSourceTags(row.ReadLaterVia),
 	}
 	// OriginalName stays EMPTY when it is not recorded. It is the raw input's own name — the file
 	// name, or the URL — and the title must never stand in for it: the two are different things, and

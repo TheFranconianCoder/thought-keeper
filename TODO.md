@@ -124,9 +124,28 @@ are.
   that page; a later sitemap refresh that no longer lists it will not delete it, but the sitemap's
   other pages stay owned. A "this site is mine, never own its URLs" rule is not implemented.
 
+## Reader marks and interests (open work)
+
+1. **"Watch this topic" is not a gesture yet.** An interest CAN be seeded from a source (its topics
+   and labels become the draft's terms, `?interests=1&seed=<hash>`), but the Claims lens's topic
+   chips only filter. A "watch" action there would reuse the same prefilled editor; no matcher
+   change.
+2. **The backfill runs on the save request.** "Queue the existing matches" walks the vault inside the
+   `POST /interests` call. It is explicit and rare, but on a large vault it should become a job with
+   a line in Status, like the summary backfill.
+3. **The matcher is lexical, so a paraphrase is invisible.** An interest on "caching" catches
+   "cache", "caches" and "caching", not "keeping a copy close". That is the house rule
+   (`similarity ≠ relevance`), not a bug — but the editor's preview is the place to say it when a
+   rule catches nothing.
+4. **No per-interest volume guard.** A broad rule can fill the read-later queue; the answer today is
+   pause, tighten the terms, or reject a source. Whether a rule needs a "at most N per day" knob is
+   open — a silent cap would hide matches, which is worse than a long queue.
+5. **Favorites stop at sources and wiki pages.** A claim has no star, because the atom file is the
+   agent's and the queue is about reading. Whether "keep this claim" deserves a mark of its own (and
+   where it would live) is open.
+
 ## Ideas
 
-- Bookmarks / Favorites / Read Later
 - Wiki / Notes Overlay / Flyover to scribble with links
 - Wiki Pages as basis for LLM suggestions (mixed document)
 - Wiki Folders (with Hierarchy); or with labels (original GMail-style)

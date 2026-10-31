@@ -36,6 +36,7 @@ type Deps struct {
 	Tree       handlers.TreeHandler
 	Atoms      handlers.AtomHandler
 	Wiki       handlers.WikiHandler
+	Interests  handlers.InterestHandler
 	Search     handlers.SearchHandler
 	Asks       handlers.AskHandler
 	// Commands is the assistant: one utterance in, one address out. It publishes its own SSE frame,
@@ -105,6 +106,14 @@ func New(deps Deps, web http.Handler) http.Handler {
 		r.Get("/sources/{hash}/children", deps.Sources.Children)
 		// Human labels on a source; the source-tags vocabulary observes them.
 		r.With(deps.Gate.Shared).Put("/sources/{hash}/tags", deps.Sources.PutTags)
+		// The reader's own marks: the star and the read-later queue. They are metadata writes, not
+		// derivations, so they take the shared side of the gate.
+		r.With(deps.Gate.Shared).Put("/sources/{hash}/favorite", deps.Sources.PutFavorite)
+		r.With(deps.Gate.Shared).Delete("/sources/{hash}/favorite", deps.Sources.DeleteFavorite)
+		r.With(deps.Gate.Shared).Put("/sources/{hash}/read-later", deps.Sources.PutReadLater)
+		r.With(deps.Gate.Shared).Delete("/sources/{hash}/read-later", deps.Sources.DeleteReadLater)
+		// The source page's rail: which of the reader's interests fit this source, with evidence.
+		r.Get("/sources/{hash}/interests", deps.Sources.ListInterests)
 		// The Summary tab: the derived overview, and the run that writes it.
 		r.Get("/sources/{hash}/summary", deps.Sources.SummaryText)
 		r.Post("/sources/{hash}/summary", deps.Sources.SummaryPost)
@@ -152,7 +161,18 @@ func New(deps Deps, web http.Handler) http.Handler {
 		r.Get("/wiki/{id}", deps.Wiki.GetPage)
 		r.Post("/wiki", deps.Wiki.Create)
 		r.Put("/wiki/{id}", deps.Wiki.Update)
+		r.With(deps.Gate.Shared).Put("/wiki/{id}/favorite", deps.Wiki.PutFavorite)
+		r.With(deps.Gate.Shared).Delete("/wiki/{id}/favorite", deps.Wiki.DeleteFavorite)
 		r.With(deps.Gate.Exclusive).Delete("/wiki/{id}", deps.Wiki.DeletePage)
+
+		// The reader's standing interest rules. The manager is an overlay; the preview is the
+		// calibration (a read, no write); the correction is one source and one rule.
+		r.Get("/interests", deps.Interests.List)
+		r.With(deps.Gate.Shared).Post("/interests", deps.Interests.Post)
+		r.Post("/interests/preview", deps.Interests.Preview)
+		r.With(deps.Gate.Shared).Put("/interests/{slug}", deps.Interests.Put)
+		r.With(deps.Gate.Shared).Delete("/interests/{slug}", deps.Interests.Delete)
+		r.With(deps.Gate.Shared).Put("/interests/{slug}/sources/{hash}", deps.Interests.PutSource)
 		r.Get("/topics/claims", deps.Atoms.ListClaimTopics)
 		r.Get("/atoms", deps.Atoms.ListAtoms)
 		// The claim LAYOUT: what a vault still holds in the old branch folders (GET) and the move to

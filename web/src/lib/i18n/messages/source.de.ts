@@ -159,4 +159,22 @@ export const sourceDe: Record<string, string> = {
   'source.nowLabel': 'jetzt',
   'source.partsLabel': 'Teile',
   'source.claimsLabel': 'Aussagen',
+
+  // Die eigenen Marken und der Interessen-Block in der Leiste.
+  'source.favorite': 'Favorit',
+  'source.unfavorite': 'Favorit entfernen',
+  'source.readLaterAction': 'Später lesen',
+  'source.markDone': 'Erledigt',
+  'source.interests': 'Interessen',
+  'source.noInterests': 'Kein Interesse passt zu dieser Quelle.',
+  'source.interestClaims.one': '{count} Aussage',
+  'source.interestClaims.many': '{count} Aussagen',
+  'source.interestPaused': 'pausiert',
+  'source.interestMaybe': 'eine Erwähnung',
+  'source.rejectInterest': 'Nicht dieses Interesse',
+  'source.acceptInterest': 'Ja, das passt',
+  'source.queued': 'In deiner Warteschlange',
+  'source.queuedByInterests': 'Von einem Interesse vorgemerkt',
+
+  'source.interestFromSource': 'Interesse daraus anlegen',
 };

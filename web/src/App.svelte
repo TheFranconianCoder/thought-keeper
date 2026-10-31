@@ -3,6 +3,7 @@
   import AddSourceDialog from './components/overlays/AddSourceDialog.svelte';
   import AssistantDialog from './components/overlays/AssistantDialog.svelte';
   import DuplicateWindow from './components/overlays/DuplicateWindow.svelte';
+  import InterestsDialog from './components/overlays/InterestsDialog.svelte';
   import SearchPalette from './components/overlays/SearchPalette.svelte';
   import ConfirmDialog from './components/ui/ConfirmDialog.svelte';
   import Toasts from './components/ui/Toasts.svelte';
@@ -185,6 +186,7 @@
 <SearchPalette />
 <AssistantDialog />
 <AddSourceDialog />
+<InterestsDialog />
 <ConfirmDialog />
 <DuplicateWindow />
 <Toasts />

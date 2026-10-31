@@ -228,4 +228,24 @@ export const sourcesEn: Record<string, string> = {
   'sources.migrateNothing': 'Every URL source already has its URL address.',
   'sources.migrateDone': 'Moved {moved} · {claims} re-pointed.',
   'sources.migrateFailed': 'URL address migration failed: {error}',
+
+  // The reader's marks: the star and the read-later queue.
+  'sources.readLater': 'Read later',
+  'sources.readLaterTitle': 'The open read-later queue, oldest first',
+  'sources.favorites': 'Favorites',
+  'sources.favoritesTitle': 'Starred sources',
+  'sources.favorite': 'Favorite',
+  'sources.unfavorite': 'Remove favorite',
+  'sources.readLaterAction': 'Read later',
+  'sources.markDone': 'Done',
+  'sources.favoriteFailed': 'Could not save the favorite: {error}',
+  'sources.readLaterFailed': 'Could not change the queue: {error}',
+  'sources.queueTitle': 'Read later',
+  'sources.queueAll': 'All',
+  'sources.queueSplit': '— {from} from your interests · {self} yourself',
+
+
+  'sources.queueEmptyTitle': 'Nothing waiting',
+  'sources.queueEmptyText': 'The queue is empty. An interest can keep it filled, or put a source here with the clock.',
+
 };

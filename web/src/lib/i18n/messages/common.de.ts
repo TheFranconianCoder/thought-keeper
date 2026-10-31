@@ -70,4 +70,7 @@ export const commonDe: Record<string, string> = {
   'format.daysAgo.many': 'vor {count} Tagen',
 
   'errors.cancelled': 'Die Anfrage wurde abgebrochen.',
+
+  'cloud.more': 'weitere',
+  'cloud.less': 'Weniger anzeigen',
 };

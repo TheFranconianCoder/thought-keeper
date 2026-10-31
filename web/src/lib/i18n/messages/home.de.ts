@@ -40,4 +40,12 @@ export const homeDe: Record<string, string> = {
   'home.pulse.clusters.many': '{count} Cluster',
   'home.pulse.unclustered.one': '{count} ungeclustert',
   'home.pulse.unclustered.many': '{count} ungeclustert',
+
+  // Die Warteschlange auf der Haustür.
+  'home.readLater': 'Später lesen',
+  'home.allReadLater': 'Alle',
+  'home.readLaterEmpty': 'Nichts vorgemerkt. Ein Interesse kann diese Warteschlange füllen.',
+  'home.readLaterEmptyAction': 'Interessen anlegen',
+  'home.readLaterDone': 'Erledigt',
+
 };

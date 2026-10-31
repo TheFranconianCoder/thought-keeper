@@ -12,38 +12,44 @@ import (
 // place that translates the domain to JSON.
 func SourceFromPartial(p partialentities.PartialSource) Source {
 	s := Source{
-		Hash:           p.Hash,
-		Kind:           p.Kind,
-		Ext:            p.Ext,
-		Path:           p.Path,
-		URL:            p.URL,
-		Title:          p.Title,
-		Language:       p.Language,
-		Origin:         p.Origin,
-		WikiPage:       p.WikiPage,
-		ParentHash:     p.ParentHash,
-		Sitemap:        p.Sitemap,
-		RSS:            p.RSS,
-		FromFeed:       p.FromFeed,
-		FeedHash:       p.FeedHash,
-		Wall:           p.Wall,
-		Attached:       p.Attached,
-		AttachedFrom:   p.AttachedFrom,
-		OriginalName:   p.OriginalName,
-		Tags:           p.Tags,
-		AutoTags:       p.AutoTags,
-		Bytes:          p.Bytes,
-		Pages:          p.Pages,
-		TreeState:      p.TreeState,
-		AtomCount:      p.AtomCount,
-		ProvenanceRows: p.ProvenanceRows,
-		Children:       p.Children,
-		PartsTotal:     p.PartsTotal,
-		PartsDone:      p.PartsDone,
-		AtomsLeft:      p.AtomsLeft,
-		URLStatus:      p.URLStatus,
-		Bookmark:       p.Bookmark,
-		ImportedAt:     p.ImportedAt.UTC().Format(time.RFC3339),
+		Hash:            p.Hash,
+		Kind:            p.Kind,
+		Ext:             p.Ext,
+		Path:            p.Path,
+		URL:             p.URL,
+		Title:           p.Title,
+		Language:        p.Language,
+		Origin:          p.Origin,
+		WikiPage:        p.WikiPage,
+		ParentHash:      p.ParentHash,
+		Sitemap:         p.Sitemap,
+		RSS:             p.RSS,
+		FromFeed:        p.FromFeed,
+		FeedHash:        p.FeedHash,
+		Wall:            p.Wall,
+		Attached:        p.Attached,
+		AttachedFrom:    p.AttachedFrom,
+		OriginalName:    p.OriginalName,
+		Tags:            p.Tags,
+		AutoTags:        p.AutoTags,
+		FavoriteAt:      wireTime(p.FavoriteAt),
+		ReadLaterAt:     wireTime(p.ReadLaterAt),
+		ReadLaterDoneAt: wireTime(p.ReadLaterDoneAt),
+		ReadLaterManual: p.ReadLaterManual,
+		ReadLaterVia:    p.ReadLaterVia,
+		ReadLater:       !p.ReadLaterAt.IsZero() && p.ReadLaterDoneAt.IsZero(),
+		Bytes:           p.Bytes,
+		Pages:           p.Pages,
+		TreeState:       p.TreeState,
+		AtomCount:       p.AtomCount,
+		ProvenanceRows:  p.ProvenanceRows,
+		Children:        p.Children,
+		PartsTotal:      p.PartsTotal,
+		PartsDone:       p.PartsDone,
+		AtomsLeft:       p.AtomsLeft,
+		URLStatus:       p.URLStatus,
+		Bookmark:        p.Bookmark,
+		ImportedAt:      p.ImportedAt.UTC().Format(time.RFC3339),
 	}
 	if !p.URLChecked.IsZero() {
 		s.URLCheckedAt = p.URLChecked.UTC().Format(time.RFC3339)
@@ -53,6 +59,14 @@ func SourceFromPartial(p partialentities.PartialSource) Source {
 	}
 	s.Steps = stepsFromPartial(p)
 	return s
+}
+
+// wireTime formats an optional timestamp: empty means the mark is absent, never "1970".
+func wireTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
 }
 
 // stepsFromPartial derives the four lights of a source.
