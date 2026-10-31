@@ -959,6 +959,7 @@
 
 <style>
   .source-page {
+    container: source-page / inline-size;
     padding-top: 20px;
   }
 
@@ -1346,6 +1347,27 @@
     color: var(--info);
   }
 
+  /* The rail is a reading aid, not a column the content must share at every width. It moves under
+     the content once the page can no longer give the content a comfortable 760px beside it (760 +
+     280 rail + 32 gap), so the detail surface — and every wide image in it — gets the page's full
+     content width while the page's maximum still caps it. */
+  @container source-page (max-width: 1072px) {
+    .source-layout {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 22px;
+    }
+
+    .source-rail {
+      position: static;
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+  }
+
   @media (max-width: 1000px) {
     .source-layout {
       grid-template-columns: minmax(0, 1fr) 240px;
@@ -1357,6 +1379,7 @@
     .source-layout {
       display: flex;
       flex-direction: column;
+      align-items: stretch;
     }
 
     .source-rail {

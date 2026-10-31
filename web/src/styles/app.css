@@ -1721,6 +1721,10 @@ button.chip:hover {
 }
 
 .markdown img {
+  /* A wide image may use the whole reading surface, never more: max-width keeps it inside the
+     card, and height:auto keeps its aspect ratio when an explicit size came with the Markdown. */
+  max-width: 100%;
+  height: auto;
   border-radius: var(--radius);
 }
 

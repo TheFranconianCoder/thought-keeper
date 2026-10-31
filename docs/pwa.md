@@ -17,7 +17,9 @@ keeps one place in every language, and the narrow layout needs no extra line for
 a page has one (Start, Ask, Status), sits below the row and may wrap without moving the heading or
 the action. Narrow list rows also drop their action buttons (the detail carries them, **icon-only**),
 and the Sources list trades the four step lights and the status line for **one lamp**: its ring is the
-slower progress dimension, its colour the aggregate state.
+slower progress dimension, its colour the aggregate state. The long **feed item** / **feed copy**
+labels shorten to **item** / **copy** in a narrow window, with the full label in the tooltip, so a
+feed row keeps its title.
 
 | Lens | What it shows |
 | --- | --- |
@@ -181,6 +183,9 @@ One SSE connection (`GET /api/v1/events`) replaces polling. Event types:
 - A PDF source shows its **readable rendering** (the text step 1 extracted) in the snapshot tab; the
   PDF itself is one tab away. The rendering is capped (a preview for tens of pages) and the raw file
   is always reachable.
+- **A source's rail sits under the content when the page is narrow.** The reading surface then keeps
+  the full page width for its text and for wide images; the page's maximum width still caps the
+  surface, and an image never grows past it.
 - Every derived file of a source is readable in the **Files** tab: the step record, the outline, the
   summary, the log, the object. The tree is the table of contents; clicking a node opens that part of
   the text.

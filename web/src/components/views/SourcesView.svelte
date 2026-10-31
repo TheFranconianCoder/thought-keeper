@@ -309,8 +309,14 @@
                     {#if source.sitemap}<span class="tag">{t('sources.tagSitemap')}</span>{/if}
                     {#if source.rss}<span class="tag">{t('sources.tagFeed')}</span>{/if}
                     {#if source.origin === 'sitemap'}<span class="tag">{t('sources.tagSitemapPage')}</span>{/if}
-                    {#if source.origin === 'rss'}<span class="tag">{t('sources.tagFeedItem')}</span>{/if}
-                    {#if source.from_feed}<span class="tag">{t('sources.tagFeedCopy')}</span>{/if}
+                    {#if source.origin === 'rss'}
+                      <span class="tag tag--wide">{t('sources.tagFeedItem')}</span>
+                      <span class="tag tag--narrow" title={t('sources.tagFeedItem')}>{t('sources.tagFeedItemShort')}</span>
+                    {/if}
+                    {#if source.from_feed}
+                      <span class="tag tag--wide">{t('sources.tagFeedCopy')}</span>
+                      <span class="tag tag--narrow" title={t('sources.tagFeedCopy')}>{t('sources.tagFeedCopyShort')}</span>
+                    {/if}
                     {#if source.original_name?.startsWith('wiki:')}<span class="tag">{t('sources.tagWiki')}</span>{/if}
                     {#if source.origin === 'wiki'}<span class="tag">{t('sources.tagWikiUrl')}</span>{/if}
                   </div>
@@ -496,6 +502,12 @@
     flex: none;
   }
 
+  /* The two feed labels are long enough to eat the title on a narrow row: the list carries a
+     shortened variant there, with the full label in the tooltip. */
+  .source-title > .tag--narrow {
+    display: none;
+  }
+
   .source-name {
     flex: 1 1 auto;
     min-width: 0;
@@ -614,6 +626,17 @@
   .source-lamp {
     display: none;
     flex: none;
+  }
+
+  @media (max-width: 1000px) {
+    /* A narrow window: use the shortened feed labels, with the full label in the tooltip. */
+    .source-title > .tag--wide {
+      display: none;
+    }
+
+    .source-title > .tag--narrow {
+      display: inline-flex;
+    }
   }
 
   @media (max-width: 860px) {
