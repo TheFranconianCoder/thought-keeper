@@ -223,7 +223,7 @@ func Build(
 		Vocab: vocabStore, Runs: runRepo, Clock: clock, Log: log,
 		PartsPerRun: cfg.Pipeline.PartsPerRun, Parallel: cfg.Pipeline.ParallelParts,
 		MaxIterations: cfg.OpenAI.MaxIterations, Language: cfg.Language.Claims,
-		ReasoningEffort: cfg.OpenAI.ReasoningEffortDistill,
+		ReasoningEffort: cfg.OpenAI.ReasoningEffortDistill, Model: cfg.OpenAI.ModelCompile,
 	}
 	treesUC := usecases.Trees{
 		Store: store, Index: index, Trees: trees, Extractor: extractor,
@@ -237,7 +237,7 @@ func Build(
 	vocabulary := usecases.Vocabulary{
 		Atoms: atomRepo, AtomStore: atomStore, Wiki: wikiStore, Reader: index, Sources: steps,
 		Tags: steps, Index: index, Vocab: vocabStore, Runs: runRepo, SourceLog: sourceLog,
-		Gateway: gw, Model: cfg.OpenAI.ModelCompile, Clock: clock, Log: log,
+		Gateway: gw, Model: cfg.OpenAI.ModelCompile, Apply: true, Clock: clock, Log: log,
 	}
 	sources := usecases.Sources{
 		Store: store, Index: index, Atoms: atomRepo, AtomStore: atomStore,
@@ -265,7 +265,11 @@ func Build(
 		MaxItems: cfg.Assistant.MaxItems, ScanLimit: cfg.Assistant.ScanLimit,
 		Retention: commandRetention,
 	}
-	claims := usecases.Claims{Atoms: atomRepo, AtomStore: atomStore, Clusters: clusterRepo}
+	claims := usecases.Claims{
+		Atoms: atomRepo, AtomStore: atomStore, Clusters: clusterRepo,
+		// The rebranch pass is the one claim repair that runs to completion when it is started.
+		MaxClaims: 12000, Parallel: 4, Apply: true,
+	}
 	runs := usecases.Runs{Store: runRepo, Clock: clock}
 
 	derivation.Tags = steps

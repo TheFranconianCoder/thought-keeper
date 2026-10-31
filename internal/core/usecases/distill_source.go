@@ -253,8 +253,13 @@ func (uc Derivation) distill(ctx context.Context, hash string, rec *StepRecorder
 	// here, not at the top of Distill: a document whose parts are all finished needs no model at all
 	// (its record is still mirrored), and refusing that would be a lie about the work left.
 	if len(todo) > 0 && (uc.Gateway == nil || uc.Model == "") {
-		return DistillResult{}, types.New("not_implemented",
-			"distill needs a model: set OPENAI_API_KEY to derive claims", types.ErrNotImplemented)
+		// Name the cause that is actually missing: an absent key and an unwired model name are
+		// different mistakes, and "set OPENAI_API_KEY" sent the reader after the wrong one.
+		reason := "distill has no model configured (openai.model_compile is empty)"
+		if uc.Gateway == nil {
+			reason = "distill has no agent configured: set OPENAI_API_KEY (env or .env)"
+		}
+		return DistillResult{}, types.New("not_implemented", reason, types.ErrNotImplemented)
 	}
 
 	// Parts are independent of each other (they only need the tree), so they are derived
