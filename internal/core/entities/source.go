@@ -65,7 +65,6 @@ func (k SourceKind) NeedsCapture() bool { return k == SourceKindPDF || k == Sour
 // It names the count for the reader: a book has chapters, a PDF has pages.
 func (k SourceKind) HasChapters() bool { return k == SourceKindEPUB }
 
-// Source is one immutable raw object in the content-addressed store.
 // SourceFilter narrows a source list. Every field is optional; the zero value means "the whole
 // vault". The repository applies the filter in SQL, so a page's COUNT is the count of the FILTERED
 // list — the number the windowed scroller needs for its height.

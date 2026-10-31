@@ -49,14 +49,14 @@ func (s *Store) Append(_ context.Context, hash string, e interfaces.SourceLogEve
 		return
 	}
 	if info, err := os.Stat(path); err == nil && info.Size() > maxBytes {
-		_ = os.Rename(path, path+".1")
+		_ = os.Rename(path, path+".1") //nolint:errcheck // a trash move is best effort; a missing file is the goal
 	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}
-	defer func() { _ = f.Close() }()
-	_, _ = f.WriteString(line)
+	defer func() { _ = f.Close() }() //nolint:errcheck // a close or an unlock has nothing left to report
+	_, _ = f.WriteString(line)       //nolint:errcheck // best effort; the caller handles the empty result
 	if s.OnAppend != nil {
 		// Out of the lock (a subscriber may do work), but guaranteed to be taken again: the
 		// deferred Unlock runs last.

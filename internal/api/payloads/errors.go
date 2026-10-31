@@ -46,7 +46,7 @@ func HTTPStatus(err error) int {
 func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v) //nolint:errcheck // a malformed value falls back to the zero value
 }
 
 // WriteError writes the error body once, centrally.

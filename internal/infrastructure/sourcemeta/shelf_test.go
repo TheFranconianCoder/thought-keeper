@@ -27,10 +27,12 @@ func (i *shelfIndex) SetSourceTags(context.Context, string, []string) error { re
 func (i *shelfIndex) SetSourceAutoTags(context.Context, string, []string, time.Time) error {
 	return nil
 }
+
 func (i *shelfIndex) SetSourceFavorite(_ context.Context, _ string, at time.Time) error {
 	i.favoriteAt = at
 	return nil
 }
+
 func (i *shelfIndex) SetSourceReadLater(_ context.Context, _ string, at, doneAt time.Time, manual bool, via []string) error {
 	i.readAt, i.doneAt, i.manual, i.via = at, doneAt, manual, via
 	return nil

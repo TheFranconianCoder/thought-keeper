@@ -69,9 +69,9 @@ func (s *Store) Write(_ context.Context, a entities.Ask) error {
 		return fmt.Errorf("asks: temp: %w", err)
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer os.Remove(tmpName) //nolint:errcheck // a trash move is best effort; a missing file is the goal
 	if _, err := tmp.Write(b); err != nil {
-		_ = tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		return fmt.Errorf("asks: write: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
@@ -202,7 +202,7 @@ func encode(a entities.Ask) ([]byte, error) {
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
 	if err := enc.Encode(fm); err != nil {
-		_ = enc.Close()
+		_ = enc.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		return nil, fmt.Errorf("asks: encode frontmatter: %w", err)
 	}
 	if err := enc.Close(); err != nil {
@@ -232,8 +232,18 @@ func decode(b []byte) (entities.Ask, error) {
 	if err != nil {
 		return entities.Ask{}, fmt.Errorf("asks: invalid id: %w", err)
 	}
-	created, _ := time.Parse(time.RFC3339, fm.Created)
-	updated, _ := time.Parse(time.RFC3339, fm.Updated)
+	created := parseOptionalTime(fm.Created)
+	updated := parseOptionalTime(fm.Updated)
 	body := strings.TrimSpace(after)
 	return entities.Ask{ID: id, Question: fm.Question, Answer: body, Tags: fm.Tags, Source: fm.Source, CreatedAt: created, UpdatedAt: updated}, nil
+}
+
+// parseOptionalTime reads a frontmatter timestamp. An empty or malformed value is the zero time: the
+// record is still readable, and the list sorts it as the oldest it has.
+func parseOptionalTime(v string) time.Time {
+	t, err := time.Parse(time.RFC3339, v)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }

@@ -316,6 +316,9 @@ records are specified in **`docs/storage.md`**.
   are source-only for now: `release-commit.sh` tags an existing commit and publishes the notes,
   `release.sh` builds the three binaries once they ship. It never commits and never moves a tag.
 - **Errors are sentinel types** from `internal/types/errors.go`, mapped to the wire once.
+- **An ignored error says why.** `errcheck` runs with `check-blank: true`, so `_ = f()` is not a way
+  out: either handle the error or mark the line `//nolint:errcheck // <reason>`. The reason names the
+  category (a close, a trash move, the index as a light), never "lint".
 - **No silent writes and no invented records.** A failed step is recorded; a dead link is listed;
   an unavailable OCR path is flagged, never silently empty.
 - **The vault is the truth.** The index is a cache; `reindex` and `rebuild-trees` rebuild it from

@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 )
@@ -44,12 +45,12 @@ func (s SchemaStatus) Fix(path string) string {
 // InspectSchema reads the index's shape marker.
 func InspectSchema(db *sql.DB) (SchemaStatus, error) {
 	st := SchemaStatus{Expected: SchemaVersion}
-	if err := db.QueryRow("PRAGMA user_version").Scan(&st.Version); err != nil {
+	if err := db.QueryRowContext(context.Background(), "PRAGMA user_version").Scan(&st.Version); err != nil {
 		return st, fmt.Errorf("pragma user_version: %w", err)
 	}
 	var n int
 	// "Does it hold a schema at all": sqlite_master is empty in a fresh file.
-	if err := db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").Scan(&n); err != nil {
+	if err := db.QueryRowContext(context.Background(), "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").Scan(&n); err != nil {
 		return st, fmt.Errorf("count tables: %w", err)
 	}
 	st.Tables = n > 0

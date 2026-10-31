@@ -129,7 +129,7 @@ func (s *Store) Scan(_ context.Context) ([]entities.Atom, error) {
 		}
 		a, err := mdcodec.DecodeAtom(data)
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // an absent file is the zero atom, not an error
 		}
 		rel, err := filepath.Rel(s.root, path)
 		if err != nil {

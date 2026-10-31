@@ -246,7 +246,7 @@ func (r *AtomRepository) ListOldestAtoms(ctx context.Context, limit int) ([]enti
 	return out, nil
 }
 
-// ListTopics returns claim topics with atom counts.
+// ListClaimTopics returns claim topics with atom counts.
 func (r *AtomRepository) ListClaimTopics(ctx context.Context) ([]entities.TopicUse, error) {
 	rows, err := r.q.ListClaimTopics(ctx)
 	if err != nil {

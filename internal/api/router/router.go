@@ -67,7 +67,6 @@ func New(deps Deps, web http.Handler) http.Handler {
 	}
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	if deps.Log != nil {
 		r.Use(requestLogger(deps.Log))

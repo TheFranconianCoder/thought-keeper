@@ -64,7 +64,7 @@ func (f *Fetcher) Fetch(ctx context.Context, rawURL string) (interfaces.FetchedP
 		return interfaces.FetchedPage{}, types.New("invalid_url", "only http and https URLs are supported", types.ErrInvalidURL)
 	}
 	if !f.cfg.AllowPrivate {
-		if err := guardPrivateHost(u.Hostname()); err != nil {
+		if err := guardPrivateHost(ctx, u.Hostname()); err != nil {
 			return interfaces.FetchedPage{}, err
 		}
 	}
@@ -101,12 +101,13 @@ func (f *Fetcher) Fetch(ctx context.Context, rawURL string) (interfaces.FetchedP
 	}, nil
 }
 
-func guardPrivateHost(host string) error {
-	ips, err := net.LookupIP(host)
+func guardPrivateHost(ctx context.Context, host string) error {
+	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 	if err != nil {
 		return fmt.Errorf("resolve %s: %w", host, err)
 	}
-	for _, ip := range ips {
+	for _, addr := range addrs {
+		ip := addr.IP
 		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
 			ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
 			return types.New("forbidden", "refusing to fetch a private, loopback or link-local address", types.ErrForbidden)

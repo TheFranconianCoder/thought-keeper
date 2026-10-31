@@ -146,9 +146,9 @@ func (s *Store) Write(_ context.Context, page entities.WikiPage) error {
 		return fmt.Errorf("wiki: temp file: %w", err)
 	}
 	name := tmp.Name()
-	defer func() { _ = os.Remove(name) }()
+	defer func() { _ = os.Remove(name) }() //nolint:errcheck // a trash move is best effort; a missing file is the goal
 	if _, err := tmp.Write(b); err != nil {
-		_ = tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		return fmt.Errorf("wiki: write: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
@@ -187,11 +187,11 @@ func (s *Store) List(_ context.Context) ([]entities.WikiPage, error) {
 		}
 		b, err := os.ReadFile(path)
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // an absent page is the zero page, not an error
 		}
 		page, err := Decode(b)
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // an absent page is the zero page, not an error
 		}
 		out = append(out, page)
 		return nil
@@ -223,7 +223,7 @@ func (s *Store) Remove(_ context.Context, id ulid.ULID) error {
 		return fmt.Errorf("wiki: trash dir: %w", err)
 	}
 	dst := filepath.Join(trash, id.String()+".md")
-	_ = os.Remove(dst)
+	_ = os.Remove(dst) //nolint:errcheck // a trash move is best effort; a missing file is the goal
 	if err := os.Rename(src, dst); err != nil {
 		return fmt.Errorf("wiki: trash: %w", err)
 	}

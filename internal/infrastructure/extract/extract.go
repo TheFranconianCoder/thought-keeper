@@ -44,11 +44,9 @@ func New(runner interfaces.ToolRunner, cfg Config) *Extractor {
 func (e *Extractor) Extract(ctx context.Context, ext string, data []byte, onEvent func(entities.ExtractEvent)) (entities.Extraction, error) {
 	switch strings.ToLower(ext) {
 	case ".md", ".markdown":
-		parts, err := markdownSections(data)
-		return entities.Extraction{Parts: parts}, err
+		return entities.Extraction{Parts: markdownSections(data)}, nil
 	case ".txt":
-		parts, err := textSections(data)
-		return entities.Extraction{Parts: parts}, err
+		return entities.Extraction{Parts: textSections(data)}, nil
 	case ".pdf":
 		parts, err := e.pdfSections(ctx, data, onEvent)
 		return entities.Extraction{Parts: parts}, err

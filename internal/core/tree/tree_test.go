@@ -154,7 +154,7 @@ func TestMatterFilterKeepsContentAboutTheSameWords(t *testing.T) {
 		{Level: 2, Title: "References in depth", Text: "How references are represented in memory."},
 	})
 	if len(nodes) != 7 { // root + six
-		var titles []string
+		titles := make([]string, 0, len(nodes))
 		for _, n := range nodes {
 			titles = append(titles, n.Title)
 		}

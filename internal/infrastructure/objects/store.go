@@ -47,12 +47,12 @@ func (s *Store) Put(_ context.Context, ext string, r io.Reader) (entities.Object
 		return entities.Object{}, fmt.Errorf("objects: temp file: %w", err)
 	}
 	tmpName := f.Name()
-	defer func() { _ = os.Remove(tmpName) }()
+	defer func() { _ = os.Remove(tmpName) }() //nolint:errcheck // a trash move is best effort; a missing file is the goal
 
 	h := sha256.New()
 	n, err := io.Copy(io.MultiWriter(f, h), r)
 	if err != nil {
-		_ = f.Close()
+		_ = f.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		return entities.Object{}, fmt.Errorf("objects: write: %w", err)
 	}
 	if err := f.Close(); err != nil {
@@ -127,7 +127,7 @@ func (s *Store) Remove(_ context.Context, hash, ext string) error {
 		return fmt.Errorf("objects: trash dir: %w", err)
 	}
 	dst := filepath.Join(s.trash, hash+strings.ToLower(ext))
-	_ = os.Remove(dst)
+	_ = os.Remove(dst) //nolint:errcheck // a trash move is best effort; a missing file is the goal
 	if err := os.Rename(src, dst); err != nil {
 		return fmt.Errorf("objects: trash: %w", err)
 	}
@@ -144,8 +144,6 @@ func SidecarPath(root, hash, suffix string) string {
 	return filepath.Join(root, hash[:2], hash[2:4], hash+suffix)
 }
 
-// StatObject returns the object's size and whether it exists. The object IS the source: without it
-// there is nothing to derive from, and no reindex can bring it back.
 // DeclaredURL reads the URL a source's object declares in its YAML header (see
 // markdown.SourceDeclaredURL). Only the head of the file is read: the header is at the top, and a
 // snapshot can be megabytes.
@@ -157,9 +155,9 @@ func (s *Store) DeclaredURL(_ context.Context, hash, ext string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = f.Close() }() //nolint:errcheck // a close or an unlock has nothing left to report
 	head := make([]byte, 8<<10)
-	n, _ := io.ReadFull(f, head)
+	n, _ := io.ReadFull(f, head) //nolint:errcheck // a short read is the expected outcome; n says how much arrived
 	return markdown.SourceDeclaredURL(string(head[:n])), nil
 }
 
@@ -369,9 +367,9 @@ func writeAtomic(dst string, content []byte) error {
 		return fmt.Errorf("objects: temp file: %w", err)
 	}
 	name := f.Name()
-	defer func() { _ = os.Remove(name) }()
+	defer func() { _ = os.Remove(name) }() //nolint:errcheck // a trash move is best effort; a missing file is the goal
 	if _, err := f.Write(content); err != nil {
-		_ = f.Close()
+		_ = f.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		return fmt.Errorf("objects: write: %w", err)
 	}
 	if err := f.Close(); err != nil {

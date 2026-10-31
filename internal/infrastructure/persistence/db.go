@@ -2,6 +2,7 @@
 package persistence
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -47,16 +48,16 @@ func Open(path string) (*sql.DB, error) {
 	// Verify what the DSN promises instead of assuming it: silent integrity loss is exactly
 	// what this check exists to prevent.
 	var fk int
-	if err := db.QueryRow("PRAGMA foreign_keys").Scan(&fk); err != nil {
-		_ = db.Close()
+	if err := db.QueryRowContext(context.Background(), "PRAGMA foreign_keys").Scan(&fk); err != nil {
+		_ = db.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		return nil, fmt.Errorf("pragma foreign_keys: %w", err)
 	}
 	if fk != 1 {
-		_ = db.Close()
+		_ = db.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		return nil, fmt.Errorf("pragma foreign_keys is off: the index would lose referential integrity")
 	}
-	if err := db.Ping(); err != nil {
-		_ = db.Close()
+	if err := db.PingContext(context.Background()); err != nil {
+		_ = db.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		return nil, fmt.Errorf("ping sqlite: %w", err)
 	}
 	return db, nil
@@ -75,10 +76,10 @@ func isMemoryDB(path string) bool {
 
 // HasFTS5 probes whether the SQLite build supports the FTS5 extension.
 func HasFTS5(db *sql.DB) bool {
-	if _, err := db.Exec("CREATE VIRTUAL TABLE IF NOT EXISTS _fts5_probe USING fts5(x);"); err != nil {
+	if _, err := db.ExecContext(context.Background(), "CREATE VIRTUAL TABLE IF NOT EXISTS _fts5_probe USING fts5(x);"); err != nil {
 		return false
 	}
-	_, _ = db.Exec("DROP TABLE IF EXISTS _fts5_probe;")
+	_, _ = db.ExecContext(context.Background(), "DROP TABLE IF EXISTS _fts5_probe;") //nolint:errcheck // best effort; the caller handles the empty result
 	return true
 }
 
@@ -86,7 +87,7 @@ func HasFTS5(db *sql.DB) bool {
 // yet. Both the table and the condition are fixed internal identifiers, never user input.
 func CountWhere(db *sql.DB, table, where string) int64 {
 	var n int64
-	row := db.QueryRow("SELECT count(*) FROM " + table + " WHERE " + where) //nolint:gosec // fixed internal identifiers
+	row := db.QueryRowContext(context.Background(), "SELECT count(*) FROM "+table+" WHERE "+where) //nolint:gosec // fixed internal identifiers
 	if err := row.Scan(&n); err != nil {
 		return 0
 	}
@@ -98,7 +99,7 @@ func CountWhere(db *sql.DB, table, where string) int64 {
 // (the Sources view shows titles, not hashes).
 func SourceTitle(db *sql.DB, hash string) string {
 	var title string
-	if err := db.QueryRow("SELECT title FROM sources WHERE hash = ?", hash).Scan(&title); err != nil {
+	if err := db.QueryRowContext(context.Background(), "SELECT title FROM sources WHERE hash = ?", hash).Scan(&title); err != nil {
 		return ""
 	}
 	return title
@@ -106,7 +107,7 @@ func SourceTitle(db *sql.DB, hash string) string {
 
 // Count returns the row count of a table, or 0 when the table does not exist yet.
 func Count(db *sql.DB, table string) int64 {
-	n, _ := CountChecked(db, table)
+	n, _ := CountChecked(db, table) //nolint:errcheck // the error is deliberately not actionable here
 	return n
 }
 
@@ -115,7 +116,7 @@ func Count(db *sql.DB, table string) int64 {
 func CountChecked(db *sql.DB, table string) (int64, error) {
 	var n int64
 	// The table name is not user input; it comes from a fixed set of constants.
-	row := db.QueryRow("SELECT count(*) FROM " + table) //nolint:gosec // fixed internal identifiers
+	row := db.QueryRowContext(context.Background(), "SELECT count(*) FROM "+table) //nolint:gosec // fixed internal identifiers
 	if err := row.Scan(&n); err != nil {
 		return 0, err
 	}

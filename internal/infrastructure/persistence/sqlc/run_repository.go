@@ -78,7 +78,7 @@ func (r *RunRepository) AbandonRunningRuns(ctx context.Context, reason string, a
 	if err != nil {
 		return 0, fmt.Errorf("abandon running runs: %w", err)
 	}
-	n, _ := res.RowsAffected()
+	n, _ := res.RowsAffected() //nolint:errcheck // best effort; the caller handles the empty result
 	return n, nil
 }
 

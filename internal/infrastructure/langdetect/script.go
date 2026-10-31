@@ -88,23 +88,23 @@ func DetectScript(text string) *unicode.RangeTable {
 
 	// find the script that occurs the most in the text and return it.
 	jpCount := 0
-	max := 0
+	best := 0
 	maxScript := &unicode.RangeTable{}
 	for _, script := range scriptCounter {
-		if script.count > max {
-			max = script.count
+		if script.count > best {
+			best = script.count
 			maxScript = script.script
 			if script.script == _HiraganaKatakana {
-				jpCount = max
+				jpCount = best
 			}
 		}
 	}
 
 	switch {
-	case max == 0:
+	case best == 0:
 		// if no valid script is detected, return nil.
 		return nil
-	case max != 0 && (maxScript == unicode.Han && jpCount > 0):
+	case best != 0 && (maxScript == unicode.Han && jpCount > 0):
 		// If Hiragana or Katakana is included, even if judged as Mandarin,
 		// it is regarded as Japanese. Japanese uses Kanji (unicode.Han)
 		// in addition to Hiragana and Katakana.

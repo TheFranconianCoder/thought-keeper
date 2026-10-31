@@ -114,10 +114,10 @@ func repeatedBandLines(pages [][]string) map[string]bool {
 			counts[key]++
 		}
 	}
-	min := max(furnitureMinPages, 3)
+	minPages := max(furnitureMinPages, 3)
 	repeated := make(map[string]bool)
 	for key, n := range counts {
-		if n >= min && float64(n) >= furnitureShare*float64(len(pages)) {
+		if n >= minPages && float64(n) >= furnitureShare*float64(len(pages)) {
 			repeated[key] = true
 		}
 	}
@@ -156,7 +156,7 @@ func furnitureKey(line string) string {
 	}
 	t = digitRun.ReplaceAllString(t, "#")
 	t = strings.Join(strings.Fields(t), " ")
-	t = strings.Trim(t, "-–—–_|[](){}.:;,*•·")
+	t = strings.Trim(t, "-–—_|[](){}.:;,*•·")
 	t = strings.TrimSpace(t)
 	if t == "" || t == "#" {
 		return "" // a pure number: handled by the number rule, never a "repeated line"

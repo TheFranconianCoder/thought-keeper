@@ -128,12 +128,12 @@ func preview(text string) string {
 	if text == "" {
 		return ""
 	}
-	const max = 240
-	if len(text) <= max {
+	const maxSummary = 240
+	if len(text) <= maxSummary {
 		return text
 	}
-	cut := text[:max]
-	if at := strings.LastIndexByte(cut, ' '); at > max/2 {
+	cut := text[:maxSummary]
+	if at := strings.LastIndexByte(cut, ' '); at > maxSummary/2 {
 		cut = cut[:at]
 	}
 	return cut + "…"

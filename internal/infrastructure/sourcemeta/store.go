@@ -133,7 +133,7 @@ func (s *Store) Read(hash string) (Record, error) {
 	if err := json.Unmarshal(b, &rec); err != nil {
 		// A corrupt sidecar must not take the vault down: it is derived bookkeeping, and the
 		// source itself is untouched. Report it as unrecorded and let the next write repair it.
-		return Record{Hash: hash, Steps: entities.NewStepSet()}, nil
+		return Record{Hash: hash, Steps: entities.NewStepSet()}, nil //nolint:nilerr // an absent record is the zero value, not an error
 	}
 	if rec.Steps == nil {
 		rec.Steps = entities.NewStepSet()
@@ -174,9 +174,9 @@ func (s *Store) Write(rec Record) error {
 		return err
 	}
 	name := tmp.Name()
-	defer func() { _ = os.Remove(name) }()
+	defer func() { _ = os.Remove(name) }() //nolint:errcheck // a trash move is best effort; a missing file is the goal
 	if _, err := tmp.Write(b); err != nil {
-		_ = tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		return err
 	}
 	if err := tmp.Close(); err != nil {
@@ -266,7 +266,7 @@ func (s *Store) Scan() (map[string]Record, error) {
 		}
 		rec, err := s.Read(hash)
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // an absent record is the zero value, not an error
 		}
 		out[hash] = rec
 		return nil

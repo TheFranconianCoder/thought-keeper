@@ -33,7 +33,7 @@ func (s *Store) Trash(_ context.Context, a entities.Atom) error {
 		return fmt.Errorf("atoms: trash dir: %w", err)
 	}
 	dst := filepath.Join(s.trashDir(), filepath.Base(src))
-	_ = os.Remove(dst)
+	_ = os.Remove(dst) //nolint:errcheck // a trash move is best effort; a missing file is the goal
 	if err := os.Rename(src, dst); err != nil {
 		return fmt.Errorf("atoms: trash: %w", err)
 	}

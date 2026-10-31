@@ -50,7 +50,7 @@ func TestInterestCandidatesCarryEverySignal(t *testing.T) {
 		ID: ulid.Make(), Topic: "async-runtime",
 		Path: "async-runtime/tokio.md", Claim: "Tokio schedules asynchronous tasks.",
 		Body: "The runtime polls futures.", Status: entities.AtomActive,
-		Sources: []entities.AtomSource{{Hash: hash, NodeID: "0.1"}},
+		Sources:   []entities.AtomSource{{Hash: hash, NodeID: "0.1"}},
 		CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatal(err)

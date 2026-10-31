@@ -494,7 +494,7 @@ func isEPUBContent(mediaType, href string) bool {
 }
 
 func hasEPUBProperty(properties, want string) bool {
-	for _, p := range strings.Fields(properties) {
+	for p := range strings.FieldsSeq(properties) {
 		if strings.EqualFold(p, want) {
 			return true
 		}

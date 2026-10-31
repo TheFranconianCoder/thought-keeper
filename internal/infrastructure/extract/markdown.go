@@ -8,8 +8,8 @@ import (
 
 // markdownSections splits Markdown by ATX headings into nested parts. A YAML
 // frontmatter block is dropped; fenced code is never treated as headings.
-func markdownSections(data []byte) ([]entities.Part, error) {
-	return splitMarkdown(stripFrontmatter(string(data))), nil
+func markdownSections(data []byte) []entities.Part {
+	return splitMarkdown(stripFrontmatter(string(data)))
 }
 
 // splitMarkdown splits plain Markdown (no frontmatter to strip) into nested parts, one per heading.

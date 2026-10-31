@@ -73,14 +73,14 @@ func cleanURL(raw string) string {
 		if last != ')' && last != ']' && last != '}' {
 			break
 		}
-		open, close := byte('('), byte(')')
+		openB, closeB := byte('('), byte(')')
 		switch last {
 		case ']':
-			open, close = '[', ']'
+			openB, closeB = '[', ']'
 		case '}':
-			open, close = '{', '}'
+			openB, closeB = '{', '}'
 		}
-		if strings.Count(raw, string(open)) >= strings.Count(raw, string(close)) {
+		if strings.Count(raw, string(openB)) >= strings.Count(raw, string(closeB)) {
 			break
 		}
 		raw = raw[:len(raw)-1]

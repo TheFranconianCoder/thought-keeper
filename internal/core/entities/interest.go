@@ -1,6 +1,9 @@
 package entities
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // Interest is one standing rule the reader keeps: the terms that describe what they want to read,
 // and the label the queue shows when a new source matches it.
@@ -37,20 +40,10 @@ func (i Interest) MatchesKind(kind SourceKind) bool {
 	if len(i.Kinds) == 0 {
 		return true
 	}
-	for _, k := range i.Kinds {
-		if k == string(kind) {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(i.Kinds, string(kind))
 }
 
 // Rejects reports whether this source was already ruled out for the interest.
 func (i Interest) Rejects(hash string) bool {
-	for _, h := range i.Rejected {
-		if h == hash {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(i.Rejected, hash)
 }

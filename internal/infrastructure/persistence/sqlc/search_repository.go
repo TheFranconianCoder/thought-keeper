@@ -34,7 +34,10 @@ func (r *SearchRepository) Search(ctx context.Context, query, layer string, limi
 	}
 	var hits []interfaces.SearchHit
 	if layer == "" || layer == "atoms" {
-		languages, _ := r.Languages(ctx)
+		languages, langErr := r.Languages(ctx)
+		if langErr != nil {
+			languages = nil // the hint only tunes the match
+		}
 		h, err := r.searchTable(ctx, "atoms_fts", "atoms", "claim", q, limit, "atom", languages, "")
 		if err != nil {
 			return nil, err
@@ -65,7 +68,10 @@ func (r *SearchRepository) SearchInSource(ctx context.Context, query, sourceHash
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	languages, _ := r.Languages(ctx)
+	languages, langErr := r.Languages(ctx)
+	if langErr != nil {
+		languages = nil // the hint only tunes the match
+	}
 	return r.searchTable(ctx, "atoms_fts", "atoms", "claim", q, limit, "atom", languages, hash)
 }
 

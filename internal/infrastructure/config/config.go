@@ -647,7 +647,7 @@ func configDir() string {
 	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
 		return dir
 	}
-	home, _ := os.UserHomeDir()
+	home, _ := os.UserHomeDir() //nolint:errcheck // best effort; the caller handles the empty result
 	return filepath.Join(home, ".config")
 }
 

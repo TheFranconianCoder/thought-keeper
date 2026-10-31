@@ -21,10 +21,6 @@ func Asset(name string) ([]byte, error) {
 	return fs.ReadFile(sub, name)
 }
 
-// Handler serves the embedded PWA. Assets are served from dist; any other path
-// falls back to index.html so client-side routes work. When the UI has not been
-// built (dist holds only the placeholder) it serves a short notice instead of
-// failing, so the Go binary still builds and runs.
 // setCacheHeaders tells the browser how to treat a path: never cache the shell, cache the
 // hashed assets forever. Without this, index.html could be reused from the HTTP cache and a
 // rebuilt UI would never show up.
@@ -87,7 +83,7 @@ func exists(sub fs.FS, name string) bool {
 	if err != nil {
 		return false
 	}
-	_ = f.Close()
+	_ = f.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 	return true
 }
 
@@ -101,7 +97,7 @@ func lastSegment(p string) string {
 func serveHTML(w http.ResponseWriter, status int, body []byte) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	_, _ = w.Write(body)
+	_, _ = w.Write(body) //nolint:errcheck // the client is gone; there is nothing to do
 }
 
 const notBuiltPage = `<!doctype html>

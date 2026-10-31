@@ -191,9 +191,8 @@ func decodeStepSet(raw string) entities.StepSet {
 	return set
 }
 
-// SetSourceLanguage writes the language hint into the source's free-form metadata. The language
-// lives in the .meta record as well; this is the index mirror the search reads without opening a
-// file per source.
+// SetSourceOrigin writes the ownership marker into the source's free-form metadata: who declared
+// the URL (a wiki page, a sitemap or a feed) and under which parent.
 func (r *SourceRepository) SetSourceOrigin(ctx context.Context, hash, origin, wikiPage, parentHash string) error {
 	if strings.TrimSpace(origin) == "" {
 		return nil
@@ -223,7 +222,7 @@ func (r *SourceRepository) ClearSourceOrigin(ctx context.Context, hash string) e
 	}
 	m := map[string]any{}
 	if strings.TrimSpace(raw) != "" {
-		_ = json.Unmarshal([]byte(raw), &m)
+		_ = json.Unmarshal([]byte(raw), &m) //nolint:errcheck // a malformed value falls back to the zero value
 	}
 	delete(m, "origin")
 	delete(m, "wiki_page")
@@ -281,7 +280,7 @@ func withMetaLanguage(raw, language string) string {
 func withMetaFields(raw string, fields map[string]string) string {
 	m := map[string]any{}
 	if strings.TrimSpace(raw) != "" {
-		_ = json.Unmarshal([]byte(raw), &m)
+		_ = json.Unmarshal([]byte(raw), &m) //nolint:errcheck // a malformed value falls back to the zero value
 	}
 	if m == nil {
 		m = map[string]any{}

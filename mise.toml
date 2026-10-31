@@ -2,7 +2,7 @@
 go = "1.27"
 node = "26"                # PWA toolchain (Vite + Svelte); Node >=22.12 required
 pnpm = "12.15.0"          # the PWA package manager
-"golangci-lint" = "2.12"
+"golangci-lint" = "2.15"  # 2.12 is built on Go 1.26 and cannot read a Go 1.27 module
 gofumpt = "0.11"
 sqlc = "1.31"
 goose = "3.27"

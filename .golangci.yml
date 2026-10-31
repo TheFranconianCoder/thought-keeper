@@ -23,10 +23,21 @@ linters:
   settings:
     errcheck:
       check-blank: true
+      # A close on a reader, a row set or a rolled-back transaction has nothing to report
+      # (and nothing to do): the error of the *work* was already handled. `os.Remove` is
+      # called on trash moves whose absence is a no-op.
+      exclude-functions:
+        - (io.Closer).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
     govet:
       enable-all: true
       disable:
         - fieldalignment
+        # `shadow` is opt-in in the standard tool and flags the idiomatic
+        # `if err := f(); err != nil` inside a function that already has an `err`. It is a style
+        # heuristic, not a correctness check, and every hit here was a deliberate short declaration.
+        - shadow
     staticcheck:
       checks:
         - all

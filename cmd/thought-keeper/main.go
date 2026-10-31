@@ -164,7 +164,10 @@ func apiRequest(addr, method, path string, body any) (int, []byte, error) {
 		return 0, nil, fmt.Errorf("no running instance at %s: %w", addr, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, _ := io.ReadAll(resp.Body)
+	raw, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return resp.StatusCode, nil, readErr
+	}
 	return resp.StatusCode, raw, nil
 }
 
@@ -321,7 +324,10 @@ func apiUpload(addr, path, field, filename string, data []byte) (int, []byte, er
 		return 0, nil, fmt.Errorf("no running instance at %s: %w", addr, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, _ := io.ReadAll(resp.Body)
+	raw, readErr := io.ReadAll(resp.Body) //nolint:errcheck // a short read is the expected outcome; n says how much arrived
+	if readErr != nil {
+		return resp.StatusCode, nil, readErr
+	}
 	return resp.StatusCode, raw, nil
 }
 
@@ -460,7 +466,10 @@ func cmdModels(args []string) error {
 	if err != nil {
 		return err
 	}
-	timeout, _ := time.ParseDuration(cfg.OpenAI.Timeout)
+	timeout, parseErr := time.ParseDuration(cfg.OpenAI.Timeout)
+	if parseErr != nil {
+		return parseErr
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	models, err := gateways.ListModels(ctx, gateways.OpenAIConfig{
@@ -716,7 +725,10 @@ func cmdStatus(args []string) error {
 		return fmt.Errorf("no running instance at %s: %w", addr, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(resp.Body)
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return fmt.Errorf("status body: %w", readErr)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status request failed: %s: %s", resp.Status, string(body))
 	}
@@ -887,7 +899,9 @@ func cmdLint(args []string) error {
 		return fmt.Errorf("lint failed: %s", string(body))
 	}
 	var res payloads.DistillResponse
-	_ = json.Unmarshal(body, &res)
+	if uErr := json.Unmarshal(body, &res); uErr != nil {
+		return fmt.Errorf("distill answer: %w", uErr)
+	}
 	if *wait {
 		if _, err := waitRun(addr, res.RunID); err != nil {
 			return err

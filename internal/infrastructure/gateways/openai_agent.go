@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -156,7 +155,7 @@ func (a *OpenAIAgent) Complete(ctx context.Context, req interfaces.AgentRequest)
 			Function: &openai.FunctionDefinition{
 				Name:        t.Name,
 				Description: t.Description,
-				Parameters:  json.RawMessage(t.Parameters),
+				Parameters:  t.Parameters,
 			},
 		})
 	}

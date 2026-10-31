@@ -51,9 +51,9 @@ func Slug(s string) string {
 		}
 	}
 	out := strings.Trim(b.String(), "-")
-	const max = 60
-	if len(out) > max {
-		out = strings.Trim(out[:max], "-")
+	const maxSlug = 60
+	if len(out) > maxSlug {
+		out = strings.Trim(out[:maxSlug], "-")
 	}
 	if out == "" {
 		out = "untitled"

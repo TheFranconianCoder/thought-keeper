@@ -1,6 +1,9 @@
 package persistence
 
-import "database/sql"
+import (
+	"context"
+	"database/sql"
+)
 
 // CountUnclustered is how many claims no cluster owns: the backlog of the association step.
 func CountUnclustered(db *sql.DB) int64 {
@@ -8,8 +11,10 @@ func CountUnclustered(db *sql.DB) int64 {
 		return 0
 	}
 	var n int64
-	_ = db.QueryRow(`SELECT count(*) FROM atoms a
-		WHERE NOT EXISTS (SELECT 1 FROM cluster_atoms ca WHERE ca.atom_id = a.id)`).Scan(&n)
+	if err := db.QueryRowContext(context.Background(), `SELECT count(*) FROM atoms a
+		WHERE NOT EXISTS (SELECT 1 FROM cluster_atoms ca WHERE ca.atom_id = a.id)`).Scan(&n); err != nil {
+		return 0
+	}
 	return n
 }
 
@@ -21,10 +26,12 @@ func CountFailedSources(db *sql.DB) int64 {
 		return 0
 	}
 	var n int64
-	_ = db.QueryRow(`SELECT count(*) FROM sources
+	if err := db.QueryRowContext(context.Background(), `SELECT count(*) FROM sources
 		WHERE json_valid(steps) AND EXISTS (
 			SELECT 1 FROM json_each(sources.steps)
 			WHERE json_extract(json_each.value, '$.state') = 'failed'
-		)`).Scan(&n)
+		)`).Scan(&n); err != nil {
+		return 0
+	}
 	return n
 }

@@ -46,7 +46,7 @@ func TestPublishWritesAnnouncesSuccessfulWrites(t *testing.T) {
 
 	post := func(path string) {
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, nil))
+		r.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, nil))
 	}
 
 	// A write: every affected container, each once.
@@ -72,7 +72,7 @@ func TestPublishWritesAnnouncesSuccessfulWrites(t *testing.T) {
 
 	// A read changes nothing either.
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/notes", nil))
+	r.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/notes", nil))
 	if n := sub.Pending(); n != 0 {
 		t.Errorf("a read announced itself (%d events)", n)
 	}

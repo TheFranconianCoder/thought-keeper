@@ -48,7 +48,7 @@ func TestRequestLoggerKeepsReadsOutOfInfo(t *testing.T) {
 
 			requestLogger(logger)(next).ServeHTTP(
 				httptest.NewRecorder(),
-				httptest.NewRequest(tc.method, tc.path, nil),
+				httptest.NewRequestWithContext(context.Background(), tc.method, tc.path, nil),
 			)
 
 			if len(captured.records) != 1 {

@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -32,14 +33,14 @@ func EnsureFTS(db *sql.DB, log *slog.Logger) bool {
 		return false
 	}
 	for _, stmt := range ftsTriggers {
-		if _, err := db.Exec(stmt); err != nil {
+		if _, err := db.ExecContext(context.Background(), stmt); err != nil {
 			log.Warn("fts trigger", "err", err)
 			return false
 		}
 	}
 	// Rebuild so rows written before the triggers existed are indexed too.
 	for _, table := range []string{"atoms_fts", "source_nodes_fts"} {
-		if _, err := db.Exec(fmt.Sprintf("INSERT INTO %s(%s) VALUES ('rebuild')", table, table)); err != nil {
+		if _, err := db.ExecContext(context.Background(), fmt.Sprintf("INSERT INTO %s(%s) VALUES ('rebuild')", table, table)); err != nil {
 			log.Warn("fts rebuild", "table", table, "err", err)
 		}
 	}

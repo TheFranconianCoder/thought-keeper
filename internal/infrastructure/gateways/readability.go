@@ -30,7 +30,7 @@ func (ReadabilityConverter) Convert(_ context.Context, raw []byte, pageURL strin
 
 	var parsed *url.URL
 	if pageURL != "" {
-		parsed, _ = url.Parse(pageURL)
+		parsed, _ = url.Parse(pageURL) //nolint:errcheck // best effort; the caller handles the empty result
 	}
 	readTitle, readExcerpt, readSite, readLang, readIcon := "", "", "", "", ""
 	if article, err := readability.FromReader(strings.NewReader(content), parsed); err == nil {

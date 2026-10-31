@@ -7,7 +7,7 @@ import (
 )
 
 // textSections splits plain text on blank lines into flat paragraph parts.
-func textSections(data []byte) ([]entities.Part, error) {
+func textSections(data []byte) []entities.Part {
 	var parts []entities.Part
 	for _, block := range splitParagraphs(string(data)) {
 		block = strings.TrimSpace(block)
@@ -16,7 +16,7 @@ func textSections(data []byte) ([]entities.Part, error) {
 		}
 		parts = append(parts, entities.Part{Level: 1, Title: firstLine(block), Text: block})
 	}
-	return parts, nil
+	return parts
 }
 
 func splitParagraphs(s string) []string {
@@ -44,9 +44,9 @@ func firstLine(s string) string {
 		s = s[:idx]
 	}
 	s = strings.TrimSpace(s)
-	const max = 80
-	if len(s) > max {
-		return strings.TrimSpace(s[:max])
+	const maxHeading = 80
+	if len(s) > maxHeading {
+		return strings.TrimSpace(s[:maxHeading])
 	}
 	return s
 }

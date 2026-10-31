@@ -256,14 +256,14 @@ func askCitationLabels(lines []string) map[string]string {
 			}
 		}
 		for _, m := range askClaimMarkdownLink.FindAllStringSubmatch(line, -1) {
-			label, _ := markdownCitationLabel(m[1])
+			label := markdownCitationLabel(m[1])
 			if strings.EqualFold(label, "claim") {
 				continue
 			}
 			record(citationKey(citeClaim, m[2]), label, true)
 		}
 		for _, m := range askSourceMarkdownLink.FindAllStringSubmatch(line, -1) {
-			label, _ := markdownCitationLabel(m[1])
+			label := markdownCitationLabel(m[1])
 			if strings.EqualFold(label, "source") {
 				continue
 			}
@@ -280,12 +280,12 @@ func isNumber(value string) bool {
 
 // markdownCitationLabel reads the label of an already-normalized claim link. A prose citation is
 // written as [\[label\]](…), so the outer escaped brackets are syntax, not part of the label.
-func markdownCitationLabel(content string) (string, bool) {
+func markdownCitationLabel(content string) string {
 	bracketed := strings.HasPrefix(content, `\[`) && strings.HasSuffix(content, `\]`)
 	if bracketed {
 		content = strings.TrimSuffix(strings.TrimPrefix(content, `\[`), `\]`)
 	}
-	return unescapeCitationLabel(content), bracketed
+	return unescapeCitationLabel(content)
 }
 
 func fallbackCitationLabel(key string) string {

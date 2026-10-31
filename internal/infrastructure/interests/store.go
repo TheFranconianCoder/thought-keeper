@@ -150,9 +150,9 @@ func (s *Store) write(rule entities.Interest) error {
 		return err
 	}
 	name := tmp.Name()
-	defer func() { _ = os.Remove(name) }()
+	defer func() { _ = os.Remove(name) }() //nolint:errcheck // a trash move is best effort; a missing file is the goal
 	if _, err := tmp.Write(b); err != nil {
-		_ = tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		return err
 	}
 	if err := tmp.Close(); err != nil {

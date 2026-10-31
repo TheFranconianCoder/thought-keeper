@@ -1,9 +1,12 @@
 package entities
 
-import "maps"
+import (
+	"maps"
+	"time"
+)
 
-import "time"
-
+// Step is one of the four pipeline steps.
+//
 // The pipeline has exactly four steps, and they are STICTLY separated:
 //
 //	capture → outline → distill → compile
