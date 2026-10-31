@@ -5,18 +5,15 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// SourceFavicon serves a URL source's stored icon.
-type SourceFavicon struct {
-	Index    interfaces.IndexRepository
-	Favicons interfaces.FaviconStore
-}
+// FaviconOpener returns a source's favicon. A handler holds this value; nil means the feature is not
+// wired.
+type FaviconOpener func(ctx context.Context, hash string) (io.ReadCloser, string, error)
 
-// Execute returns the icon reader and its content type.
-func (uc SourceFavicon) Execute(ctx context.Context, hash string) (io.ReadCloser, string, error) {
+// Favicon serves the favicon of a source.
+func (uc Sources) Favicon(ctx context.Context, hash string) (io.ReadCloser, string, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
 		return nil, "", err

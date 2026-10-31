@@ -1,21 +1,15 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/payloads"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
-
-// VocabularyReporter reads the observed catalogs against the decided vocabularies.
-type VocabularyReporter interface {
-	Execute(ctx context.Context) ([]partialentities.VocabularyHealth, error)
-}
 
 // VocabularyScheduler queues a curation run for one namespace.
 type VocabularyScheduler interface {
@@ -28,7 +22,7 @@ type VocabularyScheduler interface {
 // names there are, how much of the knowledge the head carries, what is mechanically wrong, and what the
 // curation has not seen yet.
 type VocabularyHandler struct {
-	Report  VocabularyReporter
+	Report  usecases.VocabularyReporter
 	Consume VocabularyScheduler
 }
 
@@ -38,7 +32,7 @@ func (h VocabularyHandler) Get(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("not_implemented", "vocabulary is not configured", types.ErrNotImplemented))
 		return
 	}
-	res, err := h.Report.Execute(r.Context())
+	res, err := h.Report(r.Context())
 	if err != nil {
 		payloads.WriteError(w, err)
 		return

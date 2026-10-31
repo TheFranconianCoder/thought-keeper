@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -15,27 +14,6 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// CommandRunner reads one utterance and returns the command it became. The context names the
-// surface the reader made the request from ("this claim" needs to know which one).
-type CommandRunner interface {
-	Execute(ctx context.Context, text string, context usecases.CommandRefs) (partialentities.PartialCommand, error)
-}
-
-// CommandLister returns the assistant's history.
-type CommandLister interface {
-	Execute(ctx context.Context, limit, offset int) ([]partialentities.PartialCommand, error)
-}
-
-// CommandGetter returns one command.
-type CommandGetter interface {
-	Execute(ctx context.Context, id ulid.ULID) (partialentities.PartialCommand, error)
-}
-
-// CommandDeleter removes one command from the history.
-type CommandDeleter interface {
-	Execute(ctx context.Context, id ulid.ULID) error
-}
-
 // CommandNotifier broadcasts a command to every connected client. It is what makes the assistant a
 // REMOTE control: the request may come from anywhere, and the UI that is open follows the address.
 type CommandNotifier interface {
@@ -44,10 +22,10 @@ type CommandNotifier interface {
 
 // CommandHandler serves the assistant's commands.
 type CommandHandler struct {
-	Runner   CommandRunner
-	Lister   CommandLister
-	Getter   CommandGetter
-	Deleter  CommandDeleter
+	Runner   usecases.CommandRunner
+	Lister   usecases.CommandLister
+	Getter   usecases.CommandGetter
+	Deleter  usecases.CommandDeleter
 	Notifier CommandNotifier
 }
 
@@ -69,7 +47,7 @@ func (h CommandHandler) Post(w http.ResponseWriter, r *http.Request) {
 	if req.Context != nil {
 		refs.View, refs.ID = req.Context.View, req.Context.ID
 	}
-	cmd, err := h.Runner.Execute(r.Context(), req.Text, refs)
+	cmd, err := h.Runner(r.Context(), req.Text, refs)
 	if err != nil {
 		if h.Notifier != nil {
 			h.Notifier.Publish("command", map[string]any{
@@ -91,7 +69,7 @@ func (h CommandHandler) Post(w http.ResponseWriter, r *http.Request) {
 
 // List serves GET /api/v1/commands.
 func (h CommandHandler) List(w http.ResponseWriter, r *http.Request) {
-	items, err := h.Lister.Execute(r.Context(), atoiDefault(r.URL.Query().Get("limit"), 20), atoiDefault(r.URL.Query().Get("offset"), 0))
+	items, err := h.Lister(r.Context(), atoiDefault(r.URL.Query().Get("limit"), 20), atoiDefault(r.URL.Query().Get("offset"), 0))
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -110,7 +88,7 @@ func (h CommandHandler) GetOne(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("invalid_id", "id must be a 26-character ULID", types.ErrInvalidID))
 		return
 	}
-	cmd, err := h.Getter.Execute(r.Context(), id)
+	cmd, err := h.Getter(r.Context(), id)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -125,7 +103,7 @@ func (h CommandHandler) DeleteOne(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("invalid_id", "id must be a 26-character ULID", types.ErrInvalidID))
 		return
 	}
-	if err := h.Deleter.Execute(r.Context(), id); err != nil {
+	if err := h.Deleter(r.Context(), id); err != nil {
 		payloads.WriteError(w, err)
 		return
 	}

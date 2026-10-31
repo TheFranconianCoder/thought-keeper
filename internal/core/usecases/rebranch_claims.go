@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -18,37 +17,6 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/agents"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
-
-// RebranchClaims re-derives the TOPIC of every claim from the claim itself.
-//
-// A topic is the subject of ONE claim — the finest level of the name vocabularies. It is written by the
-// distill, per claim, and nothing else can recover it: when a curation collapsed the branch vocabulary
-// to a handful of umbrella names (it did — 104 names merged under a numeric aim), every claim lost the
-// subject it was derived with, and an alias table cannot split a merge back: it does not know which
-// claim had which name. The claim TEXT is the evidence that survives, so the labels are re-derived from
-// it — the model gets the claims and the topics in use, and names each claim's subject.
-//
-// It is a LABEL change and nothing else. No claim is rewritten and no source is read.
-// The claims are taken OLDEST FIRST and a re-labelled claim gets a new `updated_at`, so the next run
-// continues where this one stopped — the queue is the clock, not a cursor file.
-type RebranchClaims struct {
-	Atoms     interfaces.AtomRepository
-	AtomStore interfaces.AtomStore
-	Vocab     interfaces.VocabularyStore
-	Gateway   interfaces.AgentGateway
-	Model     string
-	Runs      interfaces.RunRepository
-	Clock     interfaces.Clock
-	Log       *slog.Logger
-	OnPhase   func(phase string)
-	// MaxClaims bounds one run. The corpus of a grown vault is tens of thousands of claims; a pass that
-	// runs for hours is a pass nobody starts. The rest follows on the next press (oldest first).
-	MaxClaims int
-	// Parallel is how many questions are in flight. They write nothing; the labels are applied after.
-	Parallel int
-	// Apply=false only measures (a dry run).
-	Apply bool
-}
 
 // RebranchResult says what one pass did.
 type RebranchResult struct {
@@ -84,8 +52,8 @@ type labelledBatch struct {
 	err    error
 }
 
-// Execute re-labels one bounded batch of claims.
-func (uc RebranchClaims) Execute(ctx context.Context, runID ulid.ULID) (res RebranchResult, err error) {
+// Rebranch re-labels the claims against the curated topic vocabulary.
+func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchResult, err error) {
 	// The run row is closed here: a pass that never finishes leaves a run stuck in "running", and a
 	// reader who pressed the button would never learn whether it worked.
 	defer func() {
@@ -103,7 +71,7 @@ func (uc RebranchClaims) Execute(ctx context.Context, runID ulid.ULID) (res Rebr
 			run.Error = err.Error()
 			run.Answer = ""
 		}
-		_ = uc.Runs.FinishRun(ctx, run)
+		_ = uc.Runs.FinishRun(ctx, run) //nolint:errcheck // the run row is an audit trail; the work already ended
 	}()
 	if uc.Atoms == nil || uc.Gateway == nil || uc.Model == "" {
 		return res, fmt.Errorf("rebranch: no model or no atom repository configured")
@@ -242,7 +210,7 @@ func (uc RebranchClaims) Execute(ctx context.Context, runID ulid.ULID) (res Rebr
 }
 
 // ask labels ONE batch: the claims by number, the topics in use as the names to reuse.
-func (uc RebranchClaims) ask(ctx context.Context, atoms []entities.Atom, known []string) labelledBatch {
+func (uc Claims) ask(ctx context.Context, atoms []entities.Atom, known []string) labelledBatch {
 	out := labelledBatch{atoms: atoms, labels: map[int]string{}}
 	callCtx, cancel := context.WithTimeout(ctx, rebranchCallTime)
 	defer cancel()
@@ -291,7 +259,7 @@ func atomLines(atoms []entities.Atom) string {
 }
 
 // write persists ONE claim: the file first (the source of truth), then the row.
-func (uc RebranchClaims) write(ctx context.Context, a entities.Atom) error {
+func (uc Claims) write(ctx context.Context, a entities.Atom) error {
 	if uc.AtomStore != nil {
 		if _, err := uc.AtomStore.Write(ctx, a); err != nil {
 			return err
@@ -304,7 +272,7 @@ func (uc RebranchClaims) write(ctx context.Context, a entities.Atom) error {
 // table: the merges it records are the collapse this pass is repairing — a name that came back must not
 // be mapped away again, and a true synonym is re-decided by the next curation (which no longer aims for
 // a shorter list).
-func (uc RebranchClaims) rebuildVocabulary(ctx context.Context) {
+func (uc Claims) rebuildVocabulary(ctx context.Context) {
 	if uc.Vocab == nil {
 		return
 	}
@@ -317,7 +285,7 @@ func (uc RebranchClaims) rebuildVocabulary(ctx context.Context) {
 		names = append(names, b.Topic)
 	}
 	sort.Strings(names)
-	existing, _ := uc.Vocab.Read(entities.VocabularyTopics)
+	existing, _ := uc.Vocab.Read(entities.VocabularyTopics) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	v := entities.Vocabulary{Namespace: entities.VocabularyTopics, Canonical: names, BroadTokens: existing.BroadTokens}
 	if uc.Clock != nil {
 		v.Updated = uc.Clock.Now()
@@ -327,7 +295,7 @@ func (uc RebranchClaims) rebuildVocabulary(ctx context.Context) {
 	}
 }
 
-func (uc RebranchClaims) phase(name string) {
+func (uc Claims) phase(name string) {
 	if uc.OnPhase != nil {
 		uc.OnPhase(name)
 	}

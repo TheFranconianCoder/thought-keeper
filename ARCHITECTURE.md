@@ -113,12 +113,19 @@ trees, the association layer and reasoning, not embeddings.
 6. **Wiring happens in exactly two places:** `cmd/thought-keeper` (lifecycle) and
    `internal/registry` (constructing adapters and handing them over as interfaces). Use cases
    never know concrete types.
-7. **Handlers and repositories stay dumb:** handlers parse, call one use case, map the result.
-   Stores translate hashes/ids ↔ bytes; repositories translate arguments into SQL. No hashing
+7. **A handler holds a function type, not an interface.** A use case is **one struct per domain**
+   (`Sources`, `Wiki`, `Claims`, `URLs`, `Derivation`, …) with one receiver function per operation;
+   every receiver function a caller holds is named by its own function type, declared directly above
+   it (`type SourceLister func(…)`). A handler field is that type, so `nil` means "the feature is
+   not wired". `internal/api` declares no interface whose implementation is a use case — it keeps one
+   only for a value built outside `internal/core` (the app, an infrastructure adapter, a registry
+   decorator).
+8. **Handlers and repositories stay dumb:** handlers parse, call one function of a use case, map the
+   result. Stores translate hashes/ids ↔ bytes; repositories translate arguments into SQL. No hashing
    policy, no agent policy outside use cases.
-8. **Time is a port.** Use cases read the clock through an interface (`Clock`), never `time.Now()`.
-9. **Errors are types, not strings.** Sentinel errors in `internal/types/errors.go`, translated
-   to HTTP once in `internal/api`.
+9. **Time is a port.** Use cases read the clock through an interface (`Clock`), never `time.Now()`.
+10. **Errors are types, not strings.** Sentinel errors in `internal/types/errors.go`, translated
+    to HTTP once in `internal/api`.
 
 ### 2.3 Naming Conventions
 

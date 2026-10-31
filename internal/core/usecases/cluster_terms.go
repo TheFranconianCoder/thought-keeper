@@ -1,7 +1,6 @@
 package usecases
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
@@ -137,35 +136,4 @@ func distinguishingTerms(a entities.Atom, common func(string) bool) map[string]b
 		out[t] = true
 	}
 	return out
-}
-
-// clusterTerms names what a group is about: its most frequent content terms, ties broken by first
-// appearance (so the result is stable). It is used only for logging/probe output now: a cluster has
-// no title.
-func clusterTerms(atoms []entities.Atom, common func(string) bool) []string {
-	counts := map[string]int{}
-	var firstSeen []string
-	for _, a := range atoms {
-		for t := range distinguishingTerms(a, common) {
-			if counts[t] == 0 {
-				firstSeen = append(firstSeen, t)
-			}
-			counts[t]++
-		}
-	}
-	if len(firstSeen) == 0 {
-		for _, a := range atoms {
-			for t := range termSet(a) {
-				if counts[t] == 0 {
-					firstSeen = append(firstSeen, t)
-				}
-				counts[t]++
-			}
-		}
-	}
-	sort.SliceStable(firstSeen, func(i, j int) bool { return counts[firstSeen[i]] > counts[firstSeen[j]] })
-	if len(firstSeen) > 6 {
-		firstSeen = firstSeen[:6]
-	}
-	return firstSeen
 }

@@ -71,13 +71,26 @@ type WikiList struct {
 	Tags  []WikiTagCount
 }
 
-// ListWikiPages scans the page files. It is deliberately not an index query: the page file is the
-// truth, and a wiki with a few hundred pages is cheaper to read than another cache to keep honest.
-type ListWikiPages struct {
-	Pages interfaces.WikiStore
+// Wiki is the use case of the user-authored pages: the Markdown file is the truth, and a save writes
+// the source representation the document pipeline runs on.
+type Wiki struct {
+	Pages        interfaces.WikiStore
+	Store        interfaces.SourceStore
+	Index        interfaces.IndexRepository
+	Steps        interfaces.StepTracker
+	SourceLog    interfaces.SourceLog
+	DeleteSource SourceOwnedDeleter
+	Clock        interfaces.Clock
+	Log          *slog.Logger
 }
 
-func (uc ListWikiPages) Execute(ctx context.Context) (WikiList, error) {
+// WikiLister lists the pages and the tag cloud. A handler holds this value; nil means the feature is
+// not wired.
+type WikiLister func(ctx context.Context) (WikiList, error)
+
+// List scans the page files. It is deliberately not an index query: the page file is the truth, and a
+// wiki with a few hundred pages is cheaper to read than another cache to keep honest.
+func (uc Wiki) List(ctx context.Context) (WikiList, error) {
 	pages, err := uc.Pages.List(ctx)
 	if err != nil {
 		return WikiList{}, err
@@ -107,12 +120,12 @@ func (uc ListWikiPages) Execute(ctx context.Context) (WikiList, error) {
 	return out, nil
 }
 
-// GetWikiPage reads one page by ID.
-type GetWikiPage struct {
-	Pages interfaces.WikiStore
-}
+// WikiGetter names one page operation. A handler holds this value; nil means the feature is not
+// wired.
+type WikiGetter func(ctx context.Context, id ulid.ULID) (entities.WikiPage, error)
 
-func (uc GetWikiPage) Execute(ctx context.Context, id ulid.ULID) (entities.WikiPage, error) {
+// Get reads one page by ID.
+func (uc Wiki) Get(ctx context.Context, id ulid.ULID) (entities.WikiPage, error) {
 	page, err := uc.Pages.Read(ctx, id)
 	if err != nil {
 		if errors.Is(err, types.ErrNotFound) {
@@ -123,29 +136,12 @@ func (uc GetWikiPage) Execute(ctx context.Context, id ulid.ULID) (entities.WikiP
 	return page, nil
 }
 
-// SaveWikiPage writes the page file and its source representation.
-//
-// The source has a STABLE address (entities.WikiHash), so an edit reprocesses the same source from
-// capture instead of adding a second source. The old derivation is cleared first: the tree and the
-// claims describe the old text, and a page edit is a new document, not a correction of a node.
-//
-// NOTHING IS FETCHED AND NOTHING IS DELETED HERE. A page with a hundred links used to fetch every new
-// link inside the request; fetching moves to the caller's queue (WikiPageResult.URLsAdded). A link
-// that LEFT the page used to be deleted inside the request too, and that delete walked the whole atom
-// vault — one save took 73 seconds for three removed links. The page file is the new truth; the
-// caller runs PruneWikiLinks in the background after every save, which reconciles the sources the
-// page owns with what it declares.
-type SaveWikiPage struct {
-	Pages     interfaces.WikiStore
-	Store     interfaces.SourceStore
-	Index     interfaces.IndexRepository
-	Steps     interfaces.StepTracker
-	SourceLog interfaces.SourceLog
-	Clock     interfaces.Clock
-	Log       *slog.Logger
-}
+// WikiSaver names one page operation. A handler holds this value; nil means the feature is not
+// wired.
+type WikiSaver func(ctx context.Context, in WikiPageInput) (WikiPageResult, error)
 
-func (uc SaveWikiPage) Execute(ctx context.Context, in WikiPageInput) (WikiPageResult, error) {
+// Save writes the page and its source representation.
+func (uc Wiki) Save(ctx context.Context, in WikiPageInput) (WikiPageResult, error) {
 	now := uc.Clock.Now()
 	id := in.ID
 	created := false
@@ -246,7 +242,7 @@ func (uc SaveWikiPage) Execute(ctx context.Context, in WikiPageInput) (WikiPageR
 		}); err != nil && uc.Log != nil {
 			uc.Log.Warn("wiki: source identity not recorded", "hash", hash, "err", err)
 		}
-		_ = uc.Steps.SetTitle(hash, title)
+		_ = uc.Steps.SetTitle(hash, title) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		// The save is step 1 again: the pump will capture the new bytes, then outline and distill.
 		if err := uc.Steps.Record(ctx, hash, entities.StepCapture, entities.StepStatus{
 			State: entities.StepPending, At: now, Detail: "wiki page changed",
@@ -273,7 +269,7 @@ func (uc SaveWikiPage) Execute(ctx context.Context, in WikiPageInput) (WikiPageR
 //
 // ONE index read, not one per link: FindURLSource lists every URL source on each call, and a page with
 // 63 links paid that whole list 63 times inside the save.
-func (uc SaveWikiPage) newLinks(ctx context.Context, page entities.WikiPage) []string {
+func (uc Wiki) newLinks(ctx context.Context, page entities.WikiPage) []string {
 	if len(page.URLs) == 0 {
 		return nil
 	}
@@ -348,32 +344,17 @@ func otherPagesURLKeys(ctx context.Context, pages interfaces.WikiStore, pageID u
 	return refs, true
 }
 
-// PruneWikiLinks removes what a page stopped owning: the URL sources it brought in and no longer
-// declares, plus an older representation it pointed at before the stable WikiHash.
-//
-// It runs OFF the request path and inside the vault gate, after EVERY save, and RE-READS the page
-// instead of trusting a diff. That makes it idempotent and race-safe (a link the reader re-added
-// before the job ran is declared again, so its source stays) and it heals what a diff could not: a
-// crash between the page file and the cleanup, or a page edited outside the app.
-type PruneWikiLinks struct {
-	Pages  interfaces.WikiStore
-	Index  interfaces.IndexRepository
-	Delete DeleteSource
-	Log    *slog.Logger
-}
-
 // PruneWikiLinksResult reports what the pass removed.
 type PruneWikiLinksResult struct {
 	LinksRemoved int
 	StaleRemoved bool
 }
 
-// Execute prunes one page's orphaned link sources. A page that is already gone is a no-op: its own
-// delete removed the links with it.
-func (uc PruneWikiLinks) Execute(ctx context.Context, pageID ulid.ULID, staleHash string) (PruneWikiLinksResult, error) {
+// PruneLinks removes what a saved page stopped owning.
+func (uc Wiki) PruneLinks(ctx context.Context, pageID ulid.ULID, staleHash string) (PruneWikiLinksResult, error) {
 	var res PruneWikiLinksResult
 	if staleHash != "" {
-		if _, err := uc.Delete.ExecuteOwned(ctx, staleHash); err != nil {
+		if _, err := uc.DeleteSource(ctx, staleHash); err != nil {
 			if uc.Log != nil {
 				uc.Log.Warn("wiki: old representation not removed", "page", pageID.String(), "hash", staleHash, "err", err)
 			}
@@ -383,7 +364,7 @@ func (uc PruneWikiLinks) Execute(ctx context.Context, pageID ulid.ULID, staleHas
 	}
 	page, err := uc.Pages.Read(ctx, pageID)
 	if err != nil {
-		return res, nil
+		return res, nil //nolint:nilerr // a page that cannot be read has no stale hash to prune
 	}
 	declared := pageURLKeys(page)
 	children, err := uc.Index.ListSourceChildren(ctx, "", pageID.String())
@@ -409,7 +390,7 @@ func (uc PruneWikiLinks) Execute(ctx context.Context, pageID ulid.ULID, staleHas
 		if refs[entities.URLKey(child.URL)] {
 			continue
 		}
-		if _, err := uc.Delete.ExecuteOwned(ctx, child.Hash); err != nil {
+		if _, err := uc.DeleteSource(ctx, child.Hash); err != nil {
 			if uc.Log != nil {
 				uc.Log.Warn("wiki: URL source not removed", "page", pageID.String(), "url", child.URL, "err", err)
 			}
@@ -420,15 +401,12 @@ func (uc PruneWikiLinks) Execute(ctx context.Context, pageID ulid.ULID, staleHas
 	return res, nil
 }
 
-// DeleteWikiPage removes the page and the source representation it owns.
-type DeleteWikiPage struct {
-	Pages  interfaces.WikiStore
-	Index  interfaces.IndexRepository
-	Delete DeleteSource
-	Log    *slog.Logger
-}
+// WikiDeleter names one page operation. A handler holds this value; nil means the feature is not
+// wired.
+type WikiDeleter func(ctx context.Context, id ulid.ULID) (string, []string, error)
 
-func (uc DeleteWikiPage) Execute(ctx context.Context, id ulid.ULID) (string, []string, error) {
+// Delete removes the page and the representation it owned.
+func (uc Wiki) Delete(ctx context.Context, id ulid.ULID) (string, []string, error) {
 	page, err := uc.Pages.Read(ctx, id)
 	if err != nil {
 		return "", nil, types.New("not_found", "no such wiki page", types.ErrNotFound)
@@ -449,7 +427,7 @@ func (uc DeleteWikiPage) Execute(ctx context.Context, id ulid.ULID) (string, []s
 		if refsOK && refs[entities.URLKey(child.URL)] {
 			continue
 		}
-		if _, err := uc.Delete.ExecuteOwned(ctx, child.Hash); err != nil {
+		if _, err := uc.DeleteSource(ctx, child.Hash); err != nil {
 			if uc.Log != nil {
 				uc.Log.Warn("wiki: URL source not removed with the page", "page", page.ID.String(), "url", child.URL, "err", err)
 			}
@@ -459,7 +437,7 @@ func (uc DeleteWikiPage) Execute(ctx context.Context, id ulid.ULID) (string, []s
 	}
 	if page.SourceHash != "" {
 		if _, err := uc.Index.GetSourceByHash(ctx, page.SourceHash); err == nil {
-			if _, err := uc.Delete.ExecuteOwned(ctx, page.SourceHash); err != nil {
+			if _, err := uc.DeleteSource(ctx, page.SourceHash); err != nil {
 				return page.SourceHash, removedURLs, err
 			}
 		}

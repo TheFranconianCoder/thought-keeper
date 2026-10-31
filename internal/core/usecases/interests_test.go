@@ -134,10 +134,10 @@ func TestMatchSourceInterestsQueuesOnlyStrongForwardMatches(t *testing.T) {
 		{Topic: "async-runtime", Claim: "The tokio runtime steals work.", Body: ""},
 	}}
 	shelf := &fakeShelf{index: index}
-	uc := usecases.MatchSourceInterests{
+	uc := usecases.ReadLater{
 		Store: newFakeInterests(rule), Index: index, Atoms: atoms, Shelf: shelf, Clock: fixedClock{},
 	}
-	res, err := uc.Execute(context.Background(), hash)
+	res, err := uc.Match(context.Background(), hash)
 	if err != nil {
 		t.Fatalf("match: %v", err)
 	}
@@ -167,8 +167,8 @@ func TestMatchSourceInterestsNeverQueuesWhatCameBeforeTheRule(t *testing.T) {
 		{Topic: "async-runtime", Claim: "Tokio steals work.", Body: ""},
 	}}
 	shelf := &fakeShelf{index: index}
-	uc := usecases.MatchSourceInterests{Store: newFakeInterests(rule), Index: index, Atoms: atoms, Shelf: shelf, Clock: fixedClock{}}
-	res, err := uc.Execute(context.Background(), hash)
+	uc := usecases.ReadLater{Store: newFakeInterests(rule), Index: index, Atoms: atoms, Shelf: shelf, Clock: fixedClock{}}
+	res, err := uc.Match(context.Background(), hash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,8 +190,8 @@ func TestMatchSourceInterestsLeavesOneMentionAsASuggestion(t *testing.T) {
 	index.m[hash] = src
 	atoms := &fakeAtomRepo{saved: []entities.Atom{{Topic: "misc", Claim: "A passing mention of tokio.", Body: ""}}}
 	shelf := &fakeShelf{index: index}
-	uc := usecases.MatchSourceInterests{Store: newFakeInterests(rule), Index: index, Atoms: atoms, Shelf: shelf, Clock: fixedClock{}}
-	res, _ := uc.Execute(context.Background(), hash)
+	uc := usecases.ReadLater{Store: newFakeInterests(rule), Index: index, Atoms: atoms, Shelf: shelf, Clock: fixedClock{}}
+	res, _ := uc.Match(context.Background(), hash)
 	if len(res.Queued) != 0 || !index.m[hash].ReadLaterAt.IsZero() {
 		t.Fatalf("a single mention queued the source: %+v", res)
 	}
@@ -211,8 +211,8 @@ func TestMatchSourceInterestsHonoursTheRejection(t *testing.T) {
 		{Topic: "async-runtime", Claim: "Tokio steals work.", Body: ""},
 	}}
 	shelf := &fakeShelf{index: index}
-	uc := usecases.MatchSourceInterests{Store: newFakeInterests(rule), Index: index, Atoms: atoms, Shelf: shelf, Clock: fixedClock{}}
-	res, _ := uc.Execute(context.Background(), hash)
+	uc := usecases.ReadLater{Store: newFakeInterests(rule), Index: index, Atoms: atoms, Shelf: shelf, Clock: fixedClock{}}
+	res, _ := uc.Match(context.Background(), hash)
 	if len(res.Queued) != 0 {
 		t.Fatalf("a rejected source was queued: %v", res.Queued)
 	}
@@ -231,8 +231,8 @@ func TestSourceInterestsShowsEvidenceAndTheQueueState(t *testing.T) {
 		{Topic: "async-runtime", Claim: "Tokio schedules.", Body: ""},
 		{Topic: "async-runtime", Claim: "Tokio steals work.", Body: ""},
 	}}
-	uc := usecases.SourceInterests{Store: newFakeInterests(rule), Index: index, Atoms: atoms}
-	matches, err := uc.Execute(context.Background(), hash)
+	uc := usecases.ReadLater{Store: newFakeInterests(rule), Index: index, Atoms: atoms}
+	matches, err := uc.ForSource(context.Background(), hash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,8 +255,8 @@ func TestRejectingAnInterestRemovesTheAutomaticQueueEntry(t *testing.T) {
 	index.m[hash] = src
 	shelf := &fakeShelf{index: index}
 	store := newFakeInterests(rule)
-	uc := usecases.RejectSourceInterest{Store: store, Index: index, Shelf: shelf, Clock: fixedClock{}}
-	if err := uc.Execute(context.Background(), "rust-async", hash, false); err != nil {
+	uc := usecases.ReadLater{Store: store, Index: index, Shelf: shelf, Clock: fixedClock{}}
+	if err := uc.RejectInterest(context.Background(), "rust-async", hash, false); err != nil {
 		t.Fatal(err)
 	}
 	after := index.m[hash]
@@ -277,8 +277,8 @@ func TestASourceKeptByHandStaysAfterARejection(t *testing.T) {
 	src.ReadLaterAt, src.ReadLaterManual, src.ReadLaterVia = now, true, []string{"rust-async"}
 	index.m[hash] = src
 	shelf := &fakeShelf{index: index}
-	uc := usecases.RejectSourceInterest{Store: newFakeInterests(rule), Index: index, Shelf: shelf, Clock: fixedClock{}}
-	if err := uc.Execute(context.Background(), "rust-async", hash, false); err != nil {
+	uc := usecases.ReadLater{Store: newFakeInterests(rule), Index: index, Shelf: shelf, Clock: fixedClock{}}
+	if err := uc.RejectInterest(context.Background(), "rust-async", hash, false); err != nil {
 		t.Fatal(err)
 	}
 	after := index.m[hash]
@@ -289,8 +289,8 @@ func TestASourceKeptByHandStaysAfterARejection(t *testing.T) {
 
 func TestSaveInterestCreatesASlugAndRejectsADuplicate(t *testing.T) {
 	store := newFakeInterests()
-	uc := usecases.SaveInterest{Store: store, Clock: fixedClock{}}
-	rule, err := uc.Execute(context.Background(), "", usecases.InterestInput{
+	uc := usecases.ReadLater{Store: store, Clock: fixedClock{}}
+	rule, err := uc.SaveInterest(context.Background(), "", usecases.InterestInput{
 		Name: "Rust Async", Terms: []string{"rust", "Rust ", "async"}, Enabled: true,
 	})
 	if err != nil {
@@ -302,7 +302,7 @@ func TestSaveInterestCreatesASlugAndRejectsADuplicate(t *testing.T) {
 	if len(rule.Terms) != 2 {
 		t.Fatalf("terms = %v, want the duplicates dropped", rule.Terms)
 	}
-	if _, err := uc.Execute(context.Background(), "", usecases.InterestInput{
+	if _, err := uc.SaveInterest(context.Background(), "", usecases.InterestInput{
 		Name: "Rust async", Terms: []string{"rust"}, Enabled: true,
 	}); err == nil {
 		t.Fatal("a duplicate name was accepted")

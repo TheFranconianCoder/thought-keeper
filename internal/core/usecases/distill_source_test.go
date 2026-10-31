@@ -395,12 +395,11 @@ func TestDistillWritesAtomWithProvenance(t *testing.T) {
 	trees := &fakeTreeStore{m: map[string][]entities.SourceNode{}}
 	extractor := extract.New(gateways.ExecRunner{}, extract.Config{})
 
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Caching\ncaching is subtle\n")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Caching\ncaching is subtle\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
-	if _, err := (usecases.BuildTree{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).Execute(ctx, src.Hash); err != nil {
+	if _, err := (usecases.Trees{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).Build(ctx, src.Hash); err != nil {
 		t.Fatalf("build tree: %v", err)
 	}
 
@@ -414,8 +413,8 @@ func TestDistillWritesAtomWithProvenance(t *testing.T) {
 	atomStore := &fakeAtomStore{m: map[string]entities.Atom{}}
 	atomRepo := &fakeAtomRepo{}
 	runRepo := &fakeRunRepo{}
-	az := usecases.DistillSource{
-		Index: idx, Trees: trees, Atoms: atomStore, AtomRepo: atomRepo,
+	az := usecases.Derivation{
+		Index: idx, Trees: trees, AtomStore: atomStore, Atoms: atomRepo,
 		Gateway: gw, Model: "test-model", MaxIterations: 4, Clock: fixedClock{},
 	}
 	rec := usecases.NewStepRecorder(ctx, runRepo, ulid.Make(), nil)

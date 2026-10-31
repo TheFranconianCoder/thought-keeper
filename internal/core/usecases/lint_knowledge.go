@@ -11,10 +11,9 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
-// LintKnowledge runs the programmatic health checks over the claims. The semantic (LLM) pass is a
-// separate concern.
-type LintKnowledge struct {
-	Lint  interfaces.LintRepository
+// Lint is the use case of the health checks: the findings a pass wrote, and the pass itself.
+type Lint struct {
+	Store interfaces.LintRepository
 	Atoms interfaces.AtomRepository
 	Runs  interfaces.RunRepository
 	Clock interfaces.Clock
@@ -29,12 +28,12 @@ type LintResult struct {
 	Info     int
 }
 
-// Execute replaces the programmatic findings and finishes the run row.
-func (uc LintKnowledge) Execute(ctx context.Context, runID ulid.ULID) (LintResult, error) {
-	if err := uc.Lint.DeleteFindingsByLayer(ctx, entities.FindingProgrammatic); err != nil {
+// Check runs the programmatic pass and replaces the findings it owns.
+func (uc Lint) Check(ctx context.Context, runID ulid.ULID) (LintResult, error) {
+	if err := uc.Store.DeleteFindingsByLayer(ctx, entities.FindingProgrammatic); err != nil {
 		return LintResult{}, err
 	}
-	findings := ProgrammaticFindings(ctx, uc.Lint, uc.Atoms, runID, uc.Clock.Now())
+	findings := ProgrammaticFindings(ctx, uc.Store, uc.Atoms, runID, uc.Clock.Now())
 	result := LintResult{Findings: len(findings)}
 	for _, f := range findings {
 		switch f.Severity {
@@ -46,7 +45,7 @@ func (uc LintKnowledge) Execute(ctx context.Context, runID ulid.ULID) (LintResul
 			result.Info++
 		}
 	}
-	if err := uc.Lint.AddFindings(ctx, findings); err != nil && uc.Log != nil {
+	if err := uc.Store.AddFindings(ctx, findings); err != nil && uc.Log != nil {
 		uc.Log.Warn("lint: write findings", "err", err)
 	}
 
@@ -57,6 +56,6 @@ func (uc LintKnowledge) Execute(ctx context.Context, runID ulid.ULID) (LintResul
 			result.Findings, result.Errors, result.Warnings, result.Info),
 		EndedAt: now,
 	}
-	_ = uc.Runs.FinishRun(ctx, run)
+	_ = uc.Runs.FinishRun(ctx, run) //nolint:errcheck // the run row is an audit trail; the work already ended
 	return result, nil
 }

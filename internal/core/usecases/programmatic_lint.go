@@ -48,7 +48,7 @@ func ProgrammaticFindings(
 		// pass (the settle) as well as on every lint run; reading all 170k claim texts into a slice
 		// to walk them once was the last whole-corpus read left in the pipeline. A read failure is
 		// swallowed, as before: findings are best-effort and a failed scan must not fail the pass.
-		_ = atoms.StreamAtomTexts(ctx, func(a entities.Atom) error {
+		_ = atoms.StreamAtomTexts(ctx, func(a entities.Atom) error { //nolint:errcheck // a failed lint scan must not fail the pass
 			if issues := claims.Issues(a.Topic, a.Claim, a.Body); len(issues) > 0 {
 				add("not_standalone", entities.SeverityError, entities.SubjectAtom, a.ID.String(),
 					fmt.Sprintf("%s — %s", a.Claim, strings.Join(issues, "; ")))
@@ -69,7 +69,7 @@ func vocabularyDrift(ctx context.Context, atoms interfaces.AtomRepository, runID
 	if atoms == nil {
 		return nil
 	}
-	healths, err := VocabularyReport{Atoms: atoms}.Execute(ctx)
+	healths, err := Vocabulary{Atoms: atoms}.Report(ctx)
 	if err != nil {
 		return nil
 	}
@@ -115,14 +115,14 @@ func vocabularyDrift(ctx context.Context, atoms interfaces.AtomRepository, runID
 }
 
 // sampleGroups renders at most max groups for an aggregated finding.
-func sampleGroups(groups []partialentities.NameGroup, max int) string {
+func sampleGroups(groups []partialentities.NameGroup, limit int) string {
 	if len(groups) == 0 {
 		return "none"
 	}
-	parts := make([]string, 0, max)
+	parts := make([]string, 0, limit)
 	for i, g := range groups {
-		if i == max {
-			parts = append(parts, fmt.Sprintf("… and %d more", len(groups)-max))
+		if i == limit {
+			parts = append(parts, fmt.Sprintf("… and %d more", len(groups)-limit))
 			break
 		}
 		parts = append(parts, "["+groupNames(g)+"]")
@@ -133,11 +133,11 @@ func sampleGroups(groups []partialentities.NameGroup, max int) string {
 // groupNames names a group's members for a finding. It is CAPPED: a group of names that share a word
 // can hold a hundred members, and a finding nobody can read is a finding nobody acts on.
 func groupNames(g partialentities.NameGroup) string {
-	const max = 8
-	parts := make([]string, 0, max)
+	const nameCap = 8
+	parts := make([]string, 0, nameCap)
 	for i, n := range g.Names {
-		if i == max {
-			parts = append(parts, fmt.Sprintf("… and %d more", len(g.Names)-max))
+		if i == nameCap {
+			parts = append(parts, fmt.Sprintf("… and %d more", len(g.Names)-nameCap))
 			break
 		}
 		parts = append(parts, fmt.Sprintf("%q (%d)", n.Name, n.Uses))

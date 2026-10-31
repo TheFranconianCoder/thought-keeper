@@ -3,41 +3,12 @@ package usecases
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"maps"
 	"strings"
 
-	"github.com/oklog/ulid/v2"
-
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/claims"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
-
-// ApplyVocabularyMapping merges NAMES: it is a RENAME, and nothing is derived again. A claim keeps its
-// text, body, provenance and cluster membership — only its flat label changes. For a wiki tag, the
-// page's frontmatter is rewritten and nothing is re-derived either: a tag is a label, not prose.
-type ApplyVocabularyMapping struct {
-	Namespace entities.VocabularyNamespace
-	// Mapping is old → canonical. Identity entries and chains are resolved here.
-	Mapping map[string]string
-	// Canonical replaces the whole canonical set when it is given.
-	Canonical []string
-	// Run is recorded in the vocabulary file.
-	Run ulid.ULID
-
-	Vocab     interfaces.VocabularyStore
-	Atoms     interfaces.AtomRepository
-	AtomStore interfaces.AtomStore
-	// Wiki renames the TAGS of pages (the wiki-tags namespace). The page file is the truth, so the
-	// rename is a frontmatter write.
-	Wiki interfaces.WikiStore
-	// Sources renames the TAGS of sources (the source-tags namespace). The .meta record is the truth;
-	// the index is mirrored.
-	Sources interfaces.SourceTagStore
-	Clock   interfaces.Clock
-	Log     *slog.Logger
-}
 
 // ApplyVocabularyResult reports what the rename touched.
 type ApplyVocabularyResult struct {
@@ -52,8 +23,8 @@ type ApplyVocabularyResult struct {
 	Absorbed  map[string]string
 }
 
-// Execute renames every name the mapping points away from.
-func (uc ApplyVocabularyMapping) Execute(ctx context.Context) (ApplyVocabularyResult, error) {
+// ApplyMapping merges names: it is a rename and nothing is derived again.
+func (uc Vocabulary) ApplyMapping(ctx context.Context) (ApplyVocabularyResult, error) {
 	res := ApplyVocabularyResult{Namespace: string(uc.Namespace)}
 	if uc.Vocab == nil {
 		return res, fmt.Errorf("vocabulary: no store configured")
@@ -102,7 +73,7 @@ func (uc ApplyVocabularyMapping) Execute(ctx context.Context) (ApplyVocabularyRe
 	if uc.Clock != nil {
 		v.Updated = uc.Clock.Now()
 	}
-	v.Run = uc.Run
+	v.Run = uc.RunID
 	if err := uc.Vocab.Write(v); err != nil {
 		return res, err
 	}
@@ -116,7 +87,7 @@ func (uc ApplyVocabularyMapping) Execute(ctx context.Context) (ApplyVocabularyRe
 
 // renameClaimTopics rewrites the claims' flat topic. The claim keeps everything else: a subject was
 // renamed, not rewritten.
-func (uc ApplyVocabularyMapping) renameClaimTopics(ctx context.Context, mapping map[string]string) (int, error) {
+func (uc Vocabulary) renameClaimTopics(ctx context.Context, mapping map[string]string) (int, error) {
 	n := 0
 	for from, to := range mapping {
 		if claims.TopicIsStructural(to) {
@@ -142,7 +113,7 @@ func (uc ApplyVocabularyMapping) renameClaimTopics(ctx context.Context, mapping 
 
 // renamePageTags rewrites the tags in every page's frontmatter. The page's prose, its source and its
 // claims are untouched: a tag is a label on the page, not part of what it says.
-func (uc ApplyVocabularyMapping) renamePageTags(ctx context.Context, mapping map[string]string) (int, error) {
+func (uc Vocabulary) renamePageTags(ctx context.Context, mapping map[string]string) (int, error) {
 	if uc.Wiki == nil || len(mapping) == 0 {
 		return 0, nil
 	}
@@ -172,7 +143,7 @@ func (uc ApplyVocabularyMapping) renamePageTags(ctx context.Context, mapping map
 
 // renameSourceTags rewrites the labels in every source's record. The source's title, prose and
 // derivation are untouched: a tag is a label on the row, not part of what it says.
-func (uc ApplyVocabularyMapping) renameSourceTags(ctx context.Context, mapping map[string]string) (int, error) {
+func (uc Vocabulary) renameSourceTags(ctx context.Context, mapping map[string]string) (int, error) {
 	if uc.Sources == nil || len(mapping) == 0 {
 		return 0, nil
 	}
@@ -225,7 +196,7 @@ func rewriteTags(tags []string, mapping map[string]string) []string {
 	return out
 }
 
-func (uc ApplyVocabularyMapping) writeAtom(ctx context.Context, a entities.Atom) error {
+func (uc Vocabulary) writeAtom(ctx context.Context, a entities.Atom) error {
 	if uc.AtomStore != nil {
 		if _, err := uc.AtomStore.Write(ctx, a); err != nil {
 			return fmt.Errorf("write claim: %w", err)

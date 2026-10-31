@@ -98,7 +98,7 @@ func gunzipSitemap(body []byte) []byte {
 	if err != nil {
 		return body
 	}
-	defer func() { _ = reader.Close() }()
+	defer func() { _ = reader.Close() }() //nolint:errcheck // a close or an unlock has nothing left to report
 	out, err := io.ReadAll(io.LimitReader(reader, 20<<20))
 	if err != nil {
 		return body

@@ -42,12 +42,11 @@ func TestDistillTwoAtomsSameBranch(t *testing.T) {
 	trees := &fakeTreeStore{m: map[string][]entities.SourceNode{}}
 	extractor := extract.New(gateways.ExecRunner{}, extract.Config{})
 
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "n.md", Reader: strings.NewReader("# X\nbody\n")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "n.md", Reader: strings.NewReader("# X\nbody\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
-	if _, err := (usecases.BuildTree{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).Execute(ctx, src.Hash); err != nil {
+	if _, err := (usecases.Trees{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).Build(ctx, src.Hash); err != nil {
 		t.Fatalf("build tree: %v", err)
 	}
 	// Distill always runs with the source already in the index (it loads it by hash), and
@@ -68,8 +67,8 @@ func TestDistillTwoAtomsSameBranch(t *testing.T) {
 		completeResponse(),
 	}}
 
-	az := usecases.DistillSource{
-		Index: idx, Trees: trees, Atoms: atoms.New(t.TempDir()), AtomRepo: atomRepo,
+	az := usecases.Derivation{
+		Index: idx, Trees: trees, AtomStore: atoms.New(t.TempDir()), Atoms: atomRepo,
 		Gateway: gw, Model: "test", MaxIterations: 4, Clock: fixedClock{},
 	}
 	if _, err := az.Distill(ctx, src.Hash, usecases.NewStepRecorder(ctx, &fakeRunRepo{}, ulid.Make(), nil)); err != nil {
@@ -122,12 +121,11 @@ func TestFailedAtomWriteLeavesNoFile(t *testing.T) {
 	trees := &fakeTreeStore{m: map[string][]entities.SourceNode{}}
 	extractor := extract.New(gateways.ExecRunner{}, extract.Config{})
 
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "n.md", Reader: strings.NewReader("# X\nbody\n")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "n.md", Reader: strings.NewReader("# X\nbody\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
-	if _, err := (usecases.BuildTree{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).Execute(ctx, src.Hash); err != nil {
+	if _, err := (usecases.Trees{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).Build(ctx, src.Hash); err != nil {
 		t.Fatalf("build tree: %v", err)
 	}
 	if err := sqlc.NewSourceRepository(db).UpsertSource(ctx, entities.Source{
@@ -147,8 +145,8 @@ func TestFailedAtomWriteLeavesNoFile(t *testing.T) {
 		completeResponse(),
 	}}
 
-	az := usecases.DistillSource{
-		Index: idx, Trees: trees, Atoms: atoms.New(atomsDir), AtomRepo: failingSaveRepo{atomRepo},
+	az := usecases.Derivation{
+		Index: idx, Trees: trees, AtomStore: atoms.New(atomsDir), Atoms: failingSaveRepo{atomRepo},
 		Gateway: gw, Model: "test", MaxIterations: 4, Clock: fixedClock{},
 	}
 	// The run reports its own failure (a run that writes nothing while tool calls failed ends with the

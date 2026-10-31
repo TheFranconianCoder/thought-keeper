@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log/slog"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
 // errAddressTaken is returned when the address a URL source should move to is already in use. It is
@@ -15,29 +13,9 @@ import (
 // resolve (the move leaves both alone and names them in the log).
 var errAddressTaken = errors.New("the address is already taken")
 
-// MigrateURLAddresses moves URL sources onto the address they should have: the URL itself.
-//
-// A URL source used to be addressed by the hash of its FIRST snapshot — a fact about content that is a
-// moving target. That is what made a re-added or refreshed URL a second source: the address of a
-// changed page was a different address, so the vault held two rows for one URL. The address is now
-// derived from the URL (`entities.URLHash`), because the URL is what stays.
-//
-// The move keeps everything. The row keeps its ID, so every provenance row that points at it survives
-// and **no claim loses its source**; the sidecars are renamed next to the new address; and the claims
-// that cite the old address are re-pointed to the new one. Nothing is derived again — this is a
-// rename, and it says so.
-//
-// It is a BUTTON, not a habit. It rewrites files (every claim of a URL source carries its address), and
-// the vault is the user's; `Execute(ctx, false)` is the read-only preview the button is shown with, so
-// the reader sees what it would do before it does it.
-type MigrateURLAddresses struct {
-	Index     interfaces.IndexRepository
-	Store     interfaces.SourceStore
-	Atoms     interfaces.AtomRepository
-	AtomStore interfaces.AtomStore
-	Steps     interfaces.StepTracker
-	Log       *slog.Logger
-}
+// URLAddressMigrator moves URL sources onto their URL's address. A handler holds this value; nil
+// means the feature is not wired.
+type URLAddressMigrator func(ctx context.Context, apply bool) (MigrateURLAddressesResult, error)
 
 // MigrateURLAddressesResult reports what the move found and what it did.
 type MigrateURLAddressesResult struct {
@@ -55,8 +33,8 @@ type MigrateURLAddressesResult struct {
 	Pending []string
 }
 
-// Execute moves every URL source onto its URL's address. apply=false is the preview.
-func (uc MigrateURLAddresses) Execute(ctx context.Context, apply bool) (MigrateURLAddressesResult, error) {
+// Migrate moves every URL source onto its URL's address. apply=false is the preview.
+func (uc URLs) Migrate(ctx context.Context, apply bool) (MigrateURLAddressesResult, error) {
 	rows, err := uc.Index.ListURLSources(ctx)
 	if err != nil {
 		return MigrateURLAddressesResult{}, err
@@ -100,7 +78,7 @@ func (uc MigrateURLAddresses) Execute(ctx context.Context, apply bool) (MigrateU
 
 // move rewrites one URL source's address: the object, the row, the sidecars and the claims that cite
 // it. It returns how many claims were re-pointed.
-func (uc MigrateURLAddresses) move(ctx context.Context, s entities.Source, want string) (int, error) {
+func (uc URLs) move(ctx context.Context, s entities.Source, want string) (int, error) {
 	// The address must be free. A source already sitting there is the same URL (the list is per URL),
 	// so this is a collision the caller must not walk into: leaving the source alone is the honest
 	// answer, and the log names it.
@@ -147,7 +125,7 @@ func (uc MigrateURLAddresses) move(ctx context.Context, s entities.Source, want 
 // repoint rewrites the provenance of every claim of this source: the address it cites is the one it
 // came from, and that address has moved. The claim itself, its body, its branch and its node are
 // untouched — this is a rename, and a rename must not change what a claim says.
-func (uc MigrateURLAddresses) repoint(ctx context.Context, oldHash, newHash string) (int, error) {
+func (uc URLs) repoint(ctx context.Context, oldHash, newHash string) (int, error) {
 	if uc.Atoms == nil || uc.AtomStore == nil {
 		return 0, nil
 	}

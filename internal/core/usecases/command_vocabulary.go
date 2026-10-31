@@ -52,13 +52,10 @@ func (m mapping) Empty() bool { return len(m.Tags) == 0 && len(m.Topics) == 0 }
 
 // namespace caps: a set built from ten tags is not a set, it is a shrug. Three names per namespace,
 // strongest first, keeps the answer sharp and the rationale readable.
-const (
-	maxMatchedTags   = 3
-	maxMatchedTopics = 3
-)
+const ()
 
 // resolveByVocabulary maps the request onto the vault's names and materializes the set.
-func (uc RunCommand) resolveByVocabulary(ctx context.Context, cmd *entities.Command) error {
+func (uc Commands) resolveByVocabulary(ctx context.Context, cmd *entities.Command) error {
 	terms, modelFailed := uc.requestTerms(ctx, cmd.Text, cmd.Lens)
 	terms = uc.expandAliases(terms)
 	// The words became NAMES. The free text must not survive as a criterion: it was never a
@@ -84,8 +81,8 @@ func (uc RunCommand) resolveByVocabulary(ctx context.Context, cmd *entities.Comm
 
 	mapped := mapping{
 		Terms:  terms,
-		Tags:   matchNames(terms, tagCounts, maxMatchedTags),
-		Topics: matchNames(terms, topicCounts, maxMatchedTopics),
+		Tags:   matchNames(terms, tagCounts),
+		Topics: matchNames(terms, topicCounts),
 	}
 	// A claim list is built from topics; a source list from tags AND the provenance of the topics.
 	if cmd.Lens == entities.CommandClaims {
@@ -119,7 +116,7 @@ func (uc RunCommand) resolveByVocabulary(ctx context.Context, cmd *entities.Comm
 
 // sourcesFromMapping materializes a SOURCE set from the mapped names: the sources tagged with them,
 // plus the sources whose claims carry the mapped topics (provenance). Both are joins, not reads.
-func (uc RunCommand) sourcesFromMapping(ctx context.Context, cmd *entities.Command, mapped mapping) error {
+func (uc Commands) sourcesFromMapping(ctx context.Context, cmd *entities.Command, mapped mapping) error {
 	counts := map[string]int{}
 	found := map[string]int{}
 	for _, tag := range mapped.Tags {
@@ -160,7 +157,7 @@ func (uc RunCommand) sourcesFromMapping(ctx context.Context, cmd *entities.Comma
 }
 
 // claimsFromTopics materializes a CLAIM set from the mapped topics.
-func (uc RunCommand) claimsFromTopics(ctx context.Context, cmd *entities.Command, mapped mapping) error {
+func (uc Commands) claimsFromTopics(ctx context.Context, cmd *entities.Command, mapped mapping) error {
 	items := make([]entities.CommandItem, 0, uc.maxItems())
 	total := 0
 	found := map[string]int{}
@@ -185,7 +182,7 @@ func (uc RunCommand) claimsFromTopics(ctx context.Context, cmd *entities.Command
 }
 
 // wikiFromTags materializes a WIKI set from the mapped tags: a page carries the same coarse labels.
-func (uc RunCommand) wikiFromTags(ctx context.Context, cmd *entities.Command, mapped mapping) error {
+func (uc Commands) wikiFromTags(ctx context.Context, cmd *entities.Command, mapped mapping) error {
 	if uc.Wiki == nil {
 		return nil
 	}
@@ -224,7 +221,7 @@ func (uc RunCommand) wikiFromTags(ctx context.Context, cmd *entities.Command, ma
 
 // requestTerms produces the words the match runs with: the request's own meaningful words, plus —
 // when a model is configured — a small expansion for translation and synonyms.
-func (uc RunCommand) requestTerms(ctx context.Context, text string, lens entities.CommandLens) ([]string, bool) {
+func (uc Commands) requestTerms(ctx context.Context, text string, lens entities.CommandLens) ([]string, bool) {
 	terms := meaningfulWords(text)
 	if uc.Gateway == nil || uc.Model == "" {
 		return terms, false
@@ -264,7 +261,7 @@ func (uc RunCommand) requestTerms(ctx context.Context, text string, lens entitie
 // expandAliases adds the canonical name behind every curated merge. A vocabulary that absorbed
 // "cloud-computing" into "cloud" left an alias, and a request that still says the old name must
 // still land on the new one — that is the whole point of a curated vocabulary.
-func (uc RunCommand) expandAliases(terms []string) []string {
+func (uc Commands) expandAliases(terms []string) []string {
 	if uc.Vocab == nil {
 		return terms
 	}
@@ -291,7 +288,8 @@ func (uc RunCommand) expandAliases(terms []string) []string {
 
 // matchNames keeps the NAMES that a term actually matches, strongest first. This is the fallback
 // and the whole matcher: word similarity over the vault's own names, never over its content.
-func matchNames(terms []string, names map[string]int, limit int) []nameUses {
+func matchNames(terms []string, names map[string]int) []nameUses {
+	const limit = 3
 	if len(terms) == 0 || len(names) == 0 {
 		return nil
 	}
@@ -588,7 +586,7 @@ func dedupeTerms(terms []string) []string {
 func meaningfulWords(text string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, 8)
-	for _, word := range strings.Fields(strings.ToLower(text)) {
+	for word := range strings.FieldsSeq(strings.ToLower(text)) {
 		word = strings.Trim(word, ".,;:!?()[]{}'\"„“”")
 		if len(word) < 3 || seen[word] {
 			continue
@@ -618,38 +616,4 @@ func mappedNames(m mapping, found map[string]int) []entities.CommandName {
 		}
 	}
 	return out
-}
-
-// explain writes the mapping the reader can check: "software-architecture (67 sources)".
-func (m mapping) explain() []string {
-	var out []string
-	if len(m.Tags) > 0 {
-		parts := make([]string, 0, len(m.Tags))
-		for _, t := range m.Tags {
-			parts = append(parts, fmt.Sprintf("%s (%d)", t.Name, t.Count))
-		}
-		out = append(out, "tags "+strings.Join(parts, ", "))
-	}
-	if len(m.Topics) > 0 {
-		parts := make([]string, 0, len(m.Topics))
-		for _, t := range m.Topics {
-			parts = append(parts, fmt.Sprintf("%s (%d)", t.Name, t.Count))
-		}
-		out = append(out, "topics "+strings.Join(parts, ", "))
-	}
-	return out
-}
-
-func mappingRationale(m mapping, total int) string {
-	names := make([]string, 0, len(m.Tags)+len(m.Topics))
-	for _, t := range m.Tags {
-		names = append(names, t.Name)
-	}
-	for _, t := range m.Topics {
-		names = append(names, t.Name)
-	}
-	if len(names) == 0 {
-		return fmt.Sprintf("%d item(s)", total)
-	}
-	return fmt.Sprintf("%d item(s) under %s", total, strings.Join(names, ", "))
 }

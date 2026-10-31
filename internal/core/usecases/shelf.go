@@ -7,22 +7,16 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// SetSourceFavorite writes the reader's star. A favorite is not a tag and not a claim: it is the
-// only mark that says "this belongs to me", it has no lifecycle, and it never feeds search or the
-// association layer. The source's <hash>.meta record is the truth; the use case mirrors it.
-type SetSourceFavorite struct {
-	Index interfaces.IndexRepository
-	Shelf interfaces.ShelfStore
-	Clock interfaces.Clock
-}
+// SourceFavoriter writes the reader's star on a source. A handler holds this value; nil means the
+// feature is not wired.
+type SourceFavoriter func(ctx context.Context, hash string, on bool) (partialentities.PartialSource, error)
 
-// Execute sets (or clears) the star and returns the source as the wire shows it.
-func (uc SetSourceFavorite) Execute(ctx context.Context, hash string, on bool) (partialentities.PartialSource, error) {
+// SetSource sets (or clears) the star and returns the source as the wire shows it.
+func (uc Favorites) SetSource(ctx context.Context, hash string, on bool) (partialentities.PartialSource, error) {
 	if !entities.IsSHA256Hex(hash) {
 		return partialentities.PartialSource{}, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash)
 	}
@@ -43,19 +37,15 @@ func (uc SetSourceFavorite) Execute(ctx context.Context, hash string, on bool) (
 	return partialentities.PartialFromSource(src), nil
 }
 
-// SetSourceReadLater puts a source in the reader's queue or finishes it. It always sets the MANUAL
-// flag: a reader who clicks the clock meant it, and a later "not this interest" must not take their
-// entry away.
-type SetSourceReadLater struct {
-	Index interfaces.IndexRepository
-	Shelf interfaces.ShelfStore
-	Clock interfaces.Clock
-}
+// ReadLaterSetter puts a source in the reader's queue or finishes it. A handler holds this value; nil
+// means the feature is not wired.
+type ReadLaterSetter func(ctx context.Context, hash string, queued bool) (partialentities.PartialSource, error)
 
-// Execute queues, finishes, or re-opens a source. Queuing an OPEN entry is a no-op; re-queuing a
-// finished one puts it at the END of the queue (the entry time is now), because a queue is worked
-// front to back.
-func (uc SetSourceReadLater) Execute(ctx context.Context, hash string, queued bool) (partialentities.PartialSource, error) {
+// Set queues, finishes, or re-opens a source. Queuing an OPEN entry is a no-op; re-queuing a finished
+// one puts it at the END of the queue (the entry time is now), because a queue is worked front to
+// back. It always sets the MANUAL flag: a reader who clicks the clock meant it, and a later "not this
+// interest" must not take their entry away.
+func (uc ReadLater) Set(ctx context.Context, hash string, queued bool) (partialentities.PartialSource, error) {
 	if !entities.IsSHA256Hex(hash) {
 		return partialentities.PartialSource{}, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash)
 	}
@@ -82,15 +72,13 @@ func (uc SetSourceReadLater) Execute(ctx context.Context, hash string, queued bo
 	return partialentities.PartialFromSource(fresh), nil
 }
 
-// SetWikiFavorite writes the star on a wiki page. The page file is the truth (the flag lives in its
-// frontmatter); there is no index mirror, because the wiki list already reads the files.
-type SetWikiFavorite struct {
-	Wiki  interfaces.WikiStore
-	Clock interfaces.Clock
-}
+// WikiFavoriter writes the star on a wiki page. A handler holds this value; nil means the feature is
+// not wired.
+type WikiFavoriter func(ctx context.Context, id ulid.ULID, on bool) (entities.WikiPage, error)
 
-// Execute sets (or clears) the page's star.
-func (uc SetWikiFavorite) Execute(ctx context.Context, id ulid.ULID, on bool) (entities.WikiPage, error) {
+// SetWiki sets (or clears) the page's star. The page file is the truth (the flag lives in its
+// frontmatter); there is no index mirror, because the wiki list already reads the files.
+func (uc Favorites) SetWiki(ctx context.Context, id ulid.ULID, on bool) (entities.WikiPage, error) {
 	page, err := uc.Wiki.Read(ctx, id)
 	if err != nil {
 		return entities.WikiPage{}, err

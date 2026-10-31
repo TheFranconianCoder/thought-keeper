@@ -4,59 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"strings"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
-
-// ReconcileVault is the app's consistency job: it checks that what the records SAY is on disk, and
-// repairs the vault when it is not.
-//
-// It exists because the files ARE the truth. A sidecar can be deleted by accident (or by somebody
-// tidying up), and then a step that "succeeded" describes something that is not there any more: an
-// outline that is gone makes every atom's provenance point at a node that no longer exists, and every
-// page built from those atoms describes a document that is no longer outlined. Nothing in the normal
-// flow would notice — the step record says `ok`, the index says `built`, and the lights are green.
-//
-// So the job walks the sources and checks the artefacts each step claims:
-//
-//   - the OBJECT (the source itself) — if it is gone, nothing can be derived, and the source is
-//     reported failed instead of pretending;
-//   - the RENDERING when capture succeeded for a kind that has to be extracted (a PDF, an EPUB);
-//   - the OUTLINE when the outline succeeded.
-//
-// A missing artefact INVALIDATES everything after it: the derivation is thrown away (the claims; the
-// cluster records that cited them are pruned by the next cluster pass), the step record goes back to
-// where the missing file belongs, and the source is handed back to be derived again — the app
-// re-queues it (see the reconciler worker).
-type ReconcileVault struct {
-	Index interfaces.IndexRepository
-	Steps interfaces.StepTracker
-	Store interfaces.SourceStore
-	// Clean removes a source's derivation when it has to be rebuilt.
-	Clean     CleanSource
-	SourceLog interfaces.SourceLog
-	// Limit bounds how many sources one pass looks at, and Offset says where to start. Together they
-	// let a huge vault be checked in slices: the pass reports where the next one starts, so every
-	// source is looked at eventually instead of only the newest ones.
-	Limit  int
-	Offset int
-	// DryRun is the reading HALF of the job: it walks the same sources and reports what would be
-	// repaired, and writes nothing. The app runs it WITHOUT the gate, so a check every minute never
-	// queues behind a running document; only when it found something does the real pass run, under the
-	// exclusive gate, for the few sources that need it.
-	DryRun bool
-	Clock  interfaces.Clock
-	Log    *slog.Logger
-	// Languages backfills the language of sources written before the field existed. It is a hint
-	// for search and the source record, so a detector that cannot classify a short sample is fine.
-	Languages interfaces.LanguageDetector
-	// Trees lets the backfill read the outline when the raw text is code-heavy or otherwise
-	// unclassifiable. The outline's titles and summaries are natural language.
-	Trees interfaces.TreeStore
-}
 
 // ReconcileResult reports what one pass found and repaired.
 type ReconcileResult struct {
@@ -88,8 +40,8 @@ type ReconcileResult struct {
 	Repairs int
 }
 
-// Execute checks one slice of sources and repairs what it finds.
-func (uc ReconcileVault) Execute(ctx context.Context) (ReconcileResult, error) {
+// Reconcile checks every record against the vault and repairs what drifted.
+func (uc Maintenance) Reconcile(ctx context.Context) (ReconcileResult, error) {
 	if uc.Index == nil || uc.Store == nil {
 		return ReconcileResult{}, nil
 	}
@@ -128,7 +80,7 @@ func (uc ReconcileVault) Execute(ctx context.Context) (ReconcileResult, error) {
 				res.Repairs++
 				if !uc.DryRun {
 					if uc.Steps != nil {
-						_ = uc.Steps.SetLanguage(src.Hash, language)
+						_ = uc.Steps.SetLanguage(src.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 					}
 					uc.log(ctx, src.Hash, "info", "language", "source language detected", map[string]any{"language": language})
 				}
@@ -153,7 +105,7 @@ func (uc ReconcileVault) Execute(ctx context.Context) (ReconcileResult, error) {
 			res.Repairs++
 			uc.log(ctx, src.Hash, "error", "reconcile", "the source object is missing", nil)
 			if uc.Steps != nil && !uc.DryRun {
-				_ = uc.Steps.Record(ctx, src.Hash, entities.StepCapture, entities.StepStatus{
+				_ = uc.Steps.Record(ctx, src.Hash, entities.StepCapture, entities.StepStatus{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 					State: entities.StepFailed, At: uc.Clock.Now(),
 					Error: "the source object is missing from the store",
 				})
@@ -187,7 +139,7 @@ func (uc ReconcileVault) Execute(ctx context.Context) (ReconcileResult, error) {
 		}
 		// Everything derived from the missing artefact is wrong: throw the derivation away and put
 		// the step record back to where the file belongs, so the pipeline builds it again.
-		cleaned, cErr := uc.Clean.Execute(ctx, src.Hash)
+		cleaned, cErr := uc.Clean(ctx, src.Hash)
 		if cErr != nil {
 			uc.log(ctx, src.Hash, "warn", "reconcile", "could not invalidate the derivation",
 				map[string]any{"err": cErr})
@@ -199,9 +151,9 @@ func (uc ReconcileVault) Execute(ctx context.Context) (ReconcileResult, error) {
 		if uc.Steps != nil {
 			// Reset keeps `capture` (the source is still readable); a missing RENDERING is exactly the
 			// case where capture has to run again.
-			_ = uc.Steps.Reset(src.Hash)
+			_ = uc.Steps.Reset(src.Hash) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if missing == "rendering" {
-				_ = uc.Steps.Record(ctx, src.Hash, entities.StepCapture, entities.StepStatus{
+				_ = uc.Steps.Record(ctx, src.Hash, entities.StepCapture, entities.StepStatus{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 					State: entities.StepPending, At: uc.Clock.Now(), Detail: "the rendering is gone — capture again",
 				})
 			}
@@ -215,7 +167,7 @@ func (uc ReconcileVault) Execute(ctx context.Context) (ReconcileResult, error) {
 // healIdentity writes a lost identity back into the source's record. A record without a kind is not a
 // Markdown file: it is a record that lost what it knew, and the index — which mirrors that record — is
 // the only place the answer still exists.
-func (uc ReconcileVault) healIdentity(ctx context.Context, src entities.Source, res *ReconcileResult) {
+func (uc Maintenance) healIdentity(ctx context.Context, src entities.Source, res *ReconcileResult) {
 	if uc.Steps == nil || src.Kind == "" {
 		return
 	}
@@ -260,7 +212,7 @@ func (uc ReconcileVault) healIdentity(ctx context.Context, src entities.Source, 
 // `parent_hash` live only in the row's meta JSON, so a snapshot write that rebuilt that JSON from the
 // snapshot's own fields could erase them — which is exactly what happened to links a wiki page queued
 // before the merge existed. Nothing is invented: every value comes from the record.
-func (uc ReconcileVault) healOwnership(ctx context.Context, src entities.Source, res *ReconcileResult) {
+func (uc Maintenance) healOwnership(ctx context.Context, src entities.Source, res *ReconcileResult) {
 	if uc.Steps == nil || src.Kind == "" {
 		return
 	}
@@ -287,7 +239,7 @@ func (uc ReconcileVault) healOwnership(ctx context.Context, src entities.Source,
 
 // detectLanguage samples the readable text first and the outline second. The outline fallback is
 // what repairs sources whose object is mostly code or markup.
-func (uc ReconcileVault) detectLanguage(ctx context.Context, src entities.Source) string {
+func (uc Maintenance) detectLanguage(ctx context.Context, src entities.Source) string {
 	if uc.Languages == nil {
 		return ""
 	}
@@ -318,7 +270,7 @@ func (uc ReconcileVault) detectLanguage(ctx context.Context, src entities.Source
 
 // languageSample reads only enough of a source's readable text to identify a language. It uses the
 // capture rendering when there is one (a PDF, a wiki page representation) and the object otherwise.
-func languageSample(ctx context.Context, store interfaces.SourceStore, src entities.Source) string {
+func languageSample(_ context.Context, store interfaces.SourceStore, src entities.Source) string {
 	var (
 		rc  io.ReadCloser
 		err error
@@ -333,7 +285,7 @@ func languageSample(ctx context.Context, store interfaces.SourceStore, src entit
 	}
 	defer func() { _ = rc.Close() }()
 	buf := make([]byte, 128<<10)
-	n, _ := io.ReadFull(rc, buf)
+	n, _ := io.ReadFull(rc, buf) //nolint:errcheck // a short read is the expected outcome; n says how much arrived
 	if n <= 0 {
 		return ""
 	}
@@ -346,7 +298,7 @@ func hasSidecar(store interfaces.SourceStore, hash, suffix string) bool {
 	return ok
 }
 
-func (uc ReconcileVault) log(ctx context.Context, hash, level, phase, msg string, fields map[string]any) {
+func (uc Maintenance) log(ctx context.Context, hash, level, phase, msg string, fields map[string]any) {
 	if uc.SourceLog != nil {
 		uc.SourceLog.Append(ctx, hash, interfaces.SourceLogEvent{
 			At: uc.Clock.Now(), Phase: phase, Level: level, Message: msg, Fields: fields,

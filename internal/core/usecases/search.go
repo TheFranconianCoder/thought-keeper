@@ -3,21 +3,19 @@ package usecases
 import (
 	"context"
 
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
-// Search runs a lexical search over claims and source metadata. There is no page layer to search.
-type Search struct {
-	Search interfaces.SearchRepository
-}
+// Searcher runs a lexical search over claims and source metadata. A handler holds this value; nil means
+// the feature is not wired.
+type Searcher func(ctx context.Context, query, layer string, limit int) ([]partialentities.PartialHit, error)
 
-// Execute returns matches. The default layer is CLAIMS: search is claim-first.
-func (uc Search) Execute(ctx context.Context, query, layer string, limit int) ([]partialentities.PartialHit, error) {
+// Search returns matches. The default layer is CLAIMS: search is claim-first.
+func (uc Query) Search(ctx context.Context, query, layer string, limit int) ([]partialentities.PartialHit, error) {
 	if layer == "" {
 		layer = "atoms"
 	}
-	hits, err := uc.Search.Search(ctx, query, layer, limit)
+	hits, err := uc.Lexical.Search(ctx, query, layer, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -26,7 +26,7 @@ func urlSourceRow(idx *fakeIndex, rawURL string) entities.Source {
 	return src
 }
 
-func readObject(t *testing.T, uc usecases.AttachURLSnapshot, hash string) string {
+func readObject(t *testing.T, uc usecases.Sources, hash string) string {
 	t.Helper()
 	rc, err := uc.Store.Open(hash, ".md")
 	if err != nil {
@@ -50,14 +50,14 @@ func TestAttachURLSnapshotTakesTheHTML(t *testing.T) {
 	log := &fakeSourceLog{}
 	src := urlSourceRow(idx, "https://example.com/member-article")
 
-	uc := usecases.AttachURLSnapshot{
+	uc := usecases.Sources{
 		Convert: &fakeConverter{
 			title:    "The Member Article",
 			markdown: "## A section\n\n" + strings.Repeat("body text ", 40),
 		},
 		Store: store, Index: idx, Steps: steps, SourceLog: log, Clock: fixedClock{},
 	}
-	out, err := uc.Execute(ctx, usecases.AttachInput{
+	out, err := uc.Attach(ctx, usecases.AttachInput{
 		Hash: src.Hash, Name: "member-article.html", Data: []byte("<html>saved page</html>"),
 	})
 	if err != nil {
@@ -111,14 +111,14 @@ func TestAttachURLSnapshotTakesThePDF(t *testing.T) {
 	store := objects.New(t.TempDir())
 	src := urlSourceRow(idx, "https://example.com/report")
 
-	uc := usecases.AttachURLSnapshot{
+	uc := usecases.Sources{
 		Extractor: &fakeExtractor{parts: []entities.Part{
 			{Level: 1, Title: "Chapter One", Text: "It begins here."},
 			{Level: 2, Title: "A detail", Text: "More prose."},
 		}},
 		Store: store, Index: idx, Clock: fixedClock{},
 	}
-	out, err := uc.Execute(ctx, usecases.AttachInput{
+	out, err := uc.Attach(ctx, usecases.AttachInput{
 		Hash: src.Hash, Name: "The Report.pdf", Data: []byte("%PDF-1.7"),
 	})
 	if err != nil {
@@ -143,7 +143,7 @@ func TestAttachURLSnapshotRejectsWhatItCannotRead(t *testing.T) {
 	idx := newFakeIndex()
 	store := objects.New(t.TempDir())
 	src := urlSourceRow(idx, "https://example.com/a")
-	uc := usecases.AttachURLSnapshot{Store: store, Index: idx, Clock: fixedClock{}}
+	uc := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}
 
 	tests := []struct {
 		name string
@@ -155,7 +155,7 @@ func TestAttachURLSnapshotRejectsWhatItCannotRead(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := uc.Execute(ctx, tt.in); err == nil {
+			if _, err := uc.Attach(ctx, tt.in); err == nil {
 				t.Fatal("want an error")
 			}
 		})
@@ -175,8 +175,8 @@ func TestAttachURLSnapshotRefusesANonURL(t *testing.T) {
 		ID: ulid.Make(), Hash: md.Hash, Kind: entities.SourceKindMD, Ext: md.Ext, Path: md.Path,
 		Title: "A note", ImportedAt: fixedClock{}.Now(), Meta: "{}",
 	}
-	uc := usecases.AttachURLSnapshot{Store: objects.New(t.TempDir()), Index: idx, Clock: fixedClock{}}
-	if _, err := uc.Execute(ctx, usecases.AttachInput{Hash: md.Hash, Name: "a.html", Data: []byte("<html>x</html>")}); err == nil {
+	uc := usecases.Sources{Store: objects.New(t.TempDir()), Index: idx, Clock: fixedClock{}}
+	if _, err := uc.Attach(ctx, usecases.AttachInput{Hash: md.Hash, Name: "a.html", Data: []byte("<html>x</html>")}); err == nil {
 		t.Fatal("a Markdown source took an attached snapshot")
 	}
 }
@@ -198,11 +198,11 @@ func TestAttachURLSnapshotTakesABookmark(t *testing.T) {
 	}
 	idx.m[src.Hash] = src
 
-	uc := usecases.AttachURLSnapshot{
+	uc := usecases.Sources{
 		Convert: &fakeConverter{title: "The Page", markdown: strings.Repeat("the article ", 40)},
 		Store:   store, Index: idx, Steps: steps, Clock: fixedClock{},
 	}
-	if _, err := uc.Execute(ctx, usecases.AttachInput{
+	if _, err := uc.Attach(ctx, usecases.AttachInput{
 		Hash: src.Hash, Name: "page.html", Data: []byte("<html>saved</html>"),
 	}); err != nil {
 		t.Fatalf("attach to a bookmark: %v", err)
@@ -223,8 +223,8 @@ func TestAttachURLSnapshotRefusesAFeed(t *testing.T) {
 	src := urlSourceRow(idx, "https://example.com/feed.xml")
 	src.RSS = true
 	idx.m[src.Hash] = src
-	uc := usecases.AttachURLSnapshot{Store: objects.New(t.TempDir()), Index: idx, Clock: fixedClock{}}
-	if _, err := uc.Execute(ctx, usecases.AttachInput{Hash: src.Hash, Name: "page.html", Data: []byte("<html>x</html>")}); err == nil {
+	uc := usecases.Sources{Store: objects.New(t.TempDir()), Index: idx, Clock: fixedClock{}}
+	if _, err := uc.Attach(ctx, usecases.AttachInput{Hash: src.Hash, Name: "page.html", Data: []byte("<html>x</html>")}); err == nil {
 		t.Fatal("a feed took an attached snapshot")
 	}
 }

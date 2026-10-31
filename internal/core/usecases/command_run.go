@@ -20,21 +20,17 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// RunCommand executes the assistant: one utterance in, one persisted command out.
-//
-// The utterance is READ, never answered. A model may interpret it (a closed schema over this app's
-// own dimensions), and the deterministic parser is both the no-model path and the fallback when the
-// model's answer is unusable. The resolution itself is deterministic Go over the index: which rows
-// match, in which order, is never left to the model.
-type RunCommand struct {
+// Commands is the use case of the assistant: it reads an utterance into a lens, a filter and a
+// materialized set, and it keeps that set as a record until the retention window closes.
+type Commands struct {
 	Index interfaces.IndexRepository
 	Atoms interfaces.AtomRepository
 	Wiki  interfaces.WikiStore
 	// Vocab is the curated name vocabulary: its alias table turns a merged-away name into the one
 	// the vault uses now.
-	Vocab    interfaces.VocabularyStore
-	Search   interfaces.SearchRepository
-	Commands interfaces.CommandStore
+	Vocab   interfaces.VocabularyStore
+	Lexical interfaces.SearchRepository
+	Store   interfaces.CommandStore
 	// Gateway interprets the utterance. Nil is a supported state: the parser still works, and
 	// /status says the agent is off.
 	Gateway interfaces.AgentGateway
@@ -44,6 +40,8 @@ type RunCommand struct {
 	// MaxItems bounds the materialized set. A command is a UI state, not an export: the banner
 	// says when the answer was cut ("100 of 340").
 	MaxItems int
+	// Retention is how long a command record lives. Zero disables the pruning pass.
+	Retention time.Duration
 	// ScanLimit bounds how many rows one resolution looks at. The criteria that can only be applied
 	// in Go (a time window, a step state) are honest about the window they covered.
 	ScanLimit int
@@ -59,8 +57,11 @@ const (
 	commandTimeout = 30 * time.Second
 )
 
-// Execute reads the utterance, resolves it and writes the record.
-func (uc RunCommand) Execute(ctx context.Context, text string, refs CommandRefs) (partialentities.PartialCommand, error) {
+// CommandRunner reads an utterance into a command. A handler holds this value; nil means the
+// assistant is not wired.
+type CommandRunner func(ctx context.Context, text string, refs CommandRefs) (partialentities.PartialCommand, error)
+
+func (uc Commands) Run(ctx context.Context, text string, refs CommandRefs) (partialentities.PartialCommand, error) {
 	started := time.Now()
 	text = strings.Join(strings.Fields(text), " ")
 	if n := len([]rune(text)); n < 3 || n > 400 {
@@ -114,7 +115,7 @@ func (uc RunCommand) Execute(ctx context.Context, text string, refs CommandRefs)
 	}
 	cmd.Took = time.Since(started)
 	cmd.URL = CommandURL(cmd)
-	if err := uc.Commands.Write(ctx, cmd); err != nil {
+	if err := uc.Store.Write(ctx, cmd); err != nil {
 		return partialentities.PartialCommand{}, err
 	}
 	return PartialFromCommand(cmd), nil
@@ -123,7 +124,7 @@ func (uc RunCommand) Execute(ctx context.Context, text string, refs CommandRefs)
 // Interpret runs the model when one is configured and falls back to the parser. A model answer that
 // narrows nothing is NOT an interpretation — it is the prompt's "sources, unfiltered" default, which
 // would turn every misunderstanding into the whole vault. Such an answer is discarded.
-func (uc RunCommand) interpret(ctx context.Context, text string, refs CommandRefs) (ParsedCommand, string, error) {
+func (uc Commands) interpret(ctx context.Context, text string, refs CommandRefs) (ParsedCommand, string, error) {
 	// The rules decide first when they CAN decide: an enumerated filter needs no model at all, and a
 	// request with a subject marker ("about", "über", "zum Thema") is a research request whatever a
 	// model would say. Skipping the classification call here is what takes a subject request from
@@ -206,7 +207,7 @@ type commandAnswer struct {
 	Atom      string `json:"atom"`
 }
 
-func (uc RunCommand) interpretWithModel(ctx context.Context, text string, refs CommandRefs) (ParsedCommand, bool) {
+func (uc Commands) interpretWithModel(ctx context.Context, text string, refs CommandRefs) (ParsedCommand, bool) {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 
@@ -304,7 +305,7 @@ func decodeCommandAnswer(content string) (commandAnswer, error) {
 
 // topTags and topTopics are the model's vocabulary: a tag it may pick must be one the vault has, so
 // a plausible word cannot become a filter that matches nothing.
-func (uc RunCommand) topTags(ctx context.Context) []string {
+func (uc Commands) topTags(ctx context.Context) []string {
 	counts, err := uc.Index.SourceTagCounts(ctx)
 	if err != nil {
 		return nil
@@ -312,7 +313,7 @@ func (uc RunCommand) topTags(ctx context.Context) []string {
 	return topNames(counts, 40)
 }
 
-func (uc RunCommand) topTopics(ctx context.Context) []string {
+func (uc Commands) topTopics(ctx context.Context) []string {
 	uses, err := uc.Atoms.ListClaimTopics(ctx)
 	if err != nil {
 		return nil
@@ -352,7 +353,7 @@ func topNames(counts map[string]int, limit int) []string {
 	return names
 }
 
-func (uc RunCommand) warn(ctx context.Context, msg string, err error) {
+func (uc Commands) warn(ctx context.Context, msg string, err error) {
 	if uc.Log != nil {
 		uc.Log.WarnContext(ctx, msg, "error", err)
 	}
@@ -360,7 +361,7 @@ func (uc RunCommand) warn(ctx context.Context, msg string, err error) {
 
 // resolve materializes the set. It is deterministic: the rows, the window and the order all come
 // from the index, and the criteria that the index cannot express are applied here, in Go.
-func (uc RunCommand) resolve(ctx context.Context, cmd *entities.Command) error {
+func (uc Commands) resolve(ctx context.Context, cmd *entities.Command) error {
 	switch cmd.Lens {
 	case entities.CommandSources, entities.CommandAttention:
 		// THE invariant. A source list is answered only when the reading says something about a
@@ -397,7 +398,7 @@ func (uc RunCommand) resolve(ctx context.Context, cmd *entities.Command) error {
 	}
 }
 
-func (uc RunCommand) resolveSources(ctx context.Context, cmd *entities.Command) error {
+func (uc Commands) resolveSources(ctx context.Context, cmd *entities.Command) error {
 	crit := cmd.Criteria
 	if crit.Atom != "" || crit.Source != "" {
 		return uc.resolveSourcesByRefs(ctx, cmd)
@@ -466,7 +467,7 @@ func (uc RunCommand) resolveSources(ctx context.Context, cmd *entities.Command) 
 // resolveSourcesFromCounts turns "a set of sources, scored" into the command's materialized set.
 // The three ways into it — a topic's claims, one claim's provenance, one named source — all end
 // here, so the filtering, ordering and honest notes cannot drift apart.
-func (uc RunCommand) resolveSourcesFromCounts(ctx context.Context, cmd *entities.Command, counts map[string]int) error {
+func (uc Commands) resolveSourcesFromCounts(ctx context.Context, cmd *entities.Command, counts map[string]int) error {
 	crit := cmd.Criteria
 
 	type scored struct {
@@ -517,7 +518,7 @@ func (uc RunCommand) resolveSourcesFromCounts(ctx context.Context, cmd *entities
 // substring of a title — it is what ten claims are about, and the sources behind them are the
 // answer. The join is exact and cheap (the topic's claims carry their provenance), and the other
 // criteria still narrow within it.
-func (uc RunCommand) resolveSourcesByTopic(ctx context.Context, cmd *entities.Command) error {
+func (uc Commands) resolveSourcesByTopic(ctx context.Context, cmd *entities.Command) error {
 	crit := cmd.Criteria
 	atoms, err := uc.Atoms.ListAtoms(ctx, crit.FromTopic, uc.scanLimit(), 0)
 	if err != nil {
@@ -546,7 +547,7 @@ func (uc RunCommand) resolveSourcesByTopic(ctx context.Context, cmd *entities.Co
 
 // resolveSourcesByRefs answers a request that POINTS at something: one claim (its provenance is
 // the answer) or one source (a set of exactly one, or the base the other criteria narrow).
-func (uc RunCommand) resolveSourcesByRefs(ctx context.Context, cmd *entities.Command) error {
+func (uc Commands) resolveSourcesByRefs(ctx context.Context, cmd *entities.Command) error {
 	crit := cmd.Criteria
 	counts := map[string]int{}
 	switch {
@@ -601,7 +602,7 @@ func matchSourceWords(srcs []entities.Source, text string) ([]entities.Source, s
 		return strings.Contains(haystack, word)
 	}
 	all := make([]entities.Source, 0, len(srcs))
-	any := make([]entities.Source, 0, len(srcs))
+	matched := make([]entities.Source, 0, len(srcs))
 	for _, s := range srcs {
 		hits := 0
 		for _, w := range words {
@@ -613,14 +614,14 @@ func matchSourceWords(srcs []entities.Source, text string) ([]entities.Source, s
 		case hits == len(words):
 			all = append(all, s)
 		case hits > 0:
-			any = append(any, s)
+			matched = append(matched, s)
 		}
 	}
 	if len(all) > 0 {
 		return all, ""
 	}
-	if len(any) > 0 {
-		return any, fmt.Sprintf("no source has all of %s; these match at least one", strings.Join(words, ", "))
+	if len(matched) > 0 {
+		return matched, fmt.Sprintf("no source has all of %s; these match at least one", strings.Join(words, ", "))
 	}
 	return nil, fmt.Sprintf("no source mentions any of %s", strings.Join(words, ", "))
 }
@@ -667,7 +668,7 @@ func sourceMatchesCriteria(src entities.Source, crit entities.CommandCriteria) b
 // resolveWiki answers "my own pages about X". Wiki pages are few and local, so the match is done
 // here over title, tags and prose — the same "one word is enough, more words rank higher" ladder
 // the lexical search uses, without an index that does not exist for them.
-func (uc RunCommand) resolveWiki(ctx context.Context, cmd *entities.Command) error {
+func (uc Commands) resolveWiki(ctx context.Context, cmd *entities.Command) error {
 	if uc.Wiki == nil {
 		return types.New("not_implemented", "the wiki is not configured", types.ErrNotImplemented)
 	}
@@ -746,7 +747,7 @@ func (uc RunCommand) resolveWiki(ctx context.Context, cmd *entities.Command) err
 	return nil
 }
 
-func (uc RunCommand) resolveClaims(ctx context.Context, cmd *entities.Command) error {
+func (uc Commands) resolveClaims(ctx context.Context, cmd *entities.Command) error {
 	crit := cmd.Criteria
 	scan := uc.scanLimit()
 
@@ -789,7 +790,7 @@ func (uc RunCommand) resolveClaims(ctx context.Context, cmd *entities.Command) e
 
 	items := make([]entities.CommandItem, 0, uc.maxItems())
 	if crit.Text != "" {
-		hits, err := uc.Search.Search(ctx, crit.Text, "atoms", scan)
+		hits, err := uc.Lexical.Search(ctx, crit.Text, "atoms", scan)
 		if err != nil {
 			return err
 		}
@@ -836,7 +837,7 @@ func (uc RunCommand) resolveClaims(ctx context.Context, cmd *entities.Command) e
 
 // claimHasTopic re-reads one claim to check the topic. A lexical hit carries no topic, and a claim
 // that does not carry the requested topic is not part of the set.
-func (uc RunCommand) claimHasTopic(ctx context.Context, id, topic string) bool {
+func (uc Commands) claimHasTopic(ctx context.Context, id, topic string) bool {
 	parsed, err := ulid.ParseStrict(id)
 	if err != nil {
 		return false
@@ -885,14 +886,14 @@ func orderSources(srcs []entities.Source, order entities.CommandOrder) {
 	}
 }
 
-func (uc RunCommand) maxItems() int {
+func (uc Commands) maxItems() int {
 	if uc.MaxItems > 0 {
 		return uc.MaxItems
 	}
 	return defaultCommandItems
 }
 
-func (uc RunCommand) scanLimit() int {
+func (uc Commands) scanLimit() int {
 	if uc.ScanLimit > 0 {
 		return uc.ScanLimit
 	}

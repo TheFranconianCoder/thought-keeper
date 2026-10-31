@@ -29,5 +29,5 @@ func recordStep(
 	if cause != nil {
 		st.Error = cause.Error()
 	}
-	_ = tracker.Record(ctx, hash, step, st)
+	_ = tracker.Record(ctx, hash, step, st) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 }

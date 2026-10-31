@@ -35,13 +35,12 @@ func TestReconcileInvalidatesWhenAnArtefactIsGone(t *testing.T) {
 	trees := treestore.New(sourcesDir)
 	extractor := extract.New(gateways.ExecRunner{}, extract.Config{})
 
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Caching\ncaching is subtle\n")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Caching\ncaching is subtle\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
-	if _, err := (usecases.BuildTree{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).
-		Execute(ctx, src.Hash); err != nil {
+	if _, err := (usecases.Trees{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).
+		Build(ctx, src.Hash); err != nil {
 		t.Fatalf("outline: %v", err)
 	}
 	_ = trees
@@ -72,17 +71,17 @@ func TestReconcileInvalidatesWhenAnArtefactIsGone(t *testing.T) {
 	}
 
 	steps := &fakeSteps{}
-	reconcile := usecases.ReconcileVault{
+	reconcile := usecases.Maintenance{
 		Index: idx, Steps: steps, Store: store, SourceLog: &fakeSourceLog{},
-		Clean: usecases.CleanSource{
-			Parts: &fakeSections{}, Atoms: atomRepo, AtomStore: atomStore,
+		Clean: (usecases.Derivation{
+			PartRepo: &fakeSections{}, Atoms: atomRepo, AtomStore: atomStore,
 			Index: idx, Clock: fixedClock{},
-		},
+		}).Clean,
 		Clock: fixedClock{},
 	}
 
 	// 1) Everything is there: nothing to repair.
-	res, err := reconcile.Execute(ctx)
+	res, err := reconcile.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -97,7 +96,7 @@ func TestReconcileInvalidatesWhenAnArtefactIsGone(t *testing.T) {
 	if err := os.Remove(outlinePath); err != nil {
 		t.Fatalf("remove the outline: %v", err)
 	}
-	res, err = reconcile.Execute(ctx)
+	res, err = reconcile.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -119,7 +118,7 @@ func TestReconcileInvalidatesWhenAnArtefactIsGone(t *testing.T) {
 
 	// 3) A source whose OBJECT is gone cannot be derived at all: it is reported, not silently green.
 	idx.m[src.Hash] = entities.Source{ID: src.ID, Hash: "deadbeef", Kind: entities.SourceKindMD, Ext: ".md", Title: "x"}
-	res, err = reconcile.Execute(ctx)
+	res, err = reconcile.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -137,9 +136,9 @@ func TestReconcileWalksTheVaultInSlices(t *testing.T) {
 	for i := range 3 {
 		idx.m[string(rune('a'+i))] = entities.Source{Hash: string(rune('a' + i)), Kind: entities.SourceKindMD, Ext: ".md"}
 	}
-	r := usecases.ReconcileVault{Index: idx, Store: store, Limit: 2, Clock: fixedClock{}}
+	r := usecases.Maintenance{Index: idx, Store: store, Limit: 2, Clock: fixedClock{}}
 
-	first, err := r.Execute(ctx)
+	first, err := r.Reconcile(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +146,7 @@ func TestReconcileWalksTheVaultInSlices(t *testing.T) {
 		t.Errorf("first slice: checked=%d next=%d, want 2 and 2", first.Checked, first.Next)
 	}
 	r.Offset = first.Next
-	second, err := r.Execute(ctx)
+	second, err := r.Reconcile(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,18 +168,18 @@ func TestReconcileBackfillsMissingLanguage(t *testing.T) {
 	store := objects.New(sourcesDir)
 	idx := newFakeIndex()
 	steps := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), idx, nil)
-	src, err := (usecases.IntakeSource{
+	src, err := (usecases.Sources{
 		Store: store, Index: idx, Steps: steps, Clock: fixedClock{},
-	}).Execute(ctx, usecases.IntakeInput{
+	}).Intake(ctx, usecases.IntakeInput{
 		Name: "notes.md", Reader: strings.NewReader("# Caching\n\nCaching ist ein wichtiges Thema in der Softwareentwicklung.\n"),
 	})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
-	reconcile := usecases.ReconcileVault{
+	reconcile := usecases.Maintenance{
 		Index: idx, Steps: steps, Store: store, Clock: fixedClock{}, Languages: fakeLanguage("de"),
 	}
-	res, err := reconcile.Execute(ctx)
+	res, err := reconcile.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -217,11 +216,11 @@ func TestReconcileRestoresALostIdentity(t *testing.T) {
 	index := sqlc.NewSourceRepository(db)
 	metaStore := sourcemeta.New(sourcesDir)
 	steps := sourcemeta.NewTracker(metaStore, index, nil)
-	queue := usecases.QueueURLs{Index: index, Steps: steps, Clock: wikiClock{}}
+	queue := usecases.URLs{Index: index, Steps: steps, Clock: wikiClock{}}
 
 	const link = "https://example.com/lost"
 	hash := entities.URLHash(link)
-	if _, err := queue.Execute(ctx, "page-1", []string{link}); err != nil {
+	if _, err := queue.Queue(ctx, "page-1", []string{link}); err != nil {
 		t.Fatalf("queue: %v", err)
 	}
 	// The damage: the record is left with nothing but its address.
@@ -229,12 +228,12 @@ func TestReconcileRestoresALostIdentity(t *testing.T) {
 		t.Fatalf("damage: %v", err)
 	}
 
-	reconcile := usecases.ReconcileVault{Index: index, Steps: steps, Store: objects.New(sourcesDir), Clock: wikiClock{}}
+	reconcile := usecases.Maintenance{Index: index, Steps: steps, Store: objects.New(sourcesDir), Clock: wikiClock{}}
 
 	// The reading half reports the repair and writes nothing.
 	dry := reconcile
 	dry.DryRun = true
-	res, err := dry.Execute(ctx)
+	res, err := dry.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("dry: %v", err)
 	}
@@ -246,7 +245,7 @@ func TestReconcileRestoresALostIdentity(t *testing.T) {
 	}
 
 	// The real pass restores it from the index.
-	res, err = reconcile.Execute(ctx)
+	res, err = reconcile.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -271,8 +270,7 @@ func TestReconcileReportsMissingSummaries(t *testing.T) {
 	sourcesDir := t.TempDir()
 	store := objects.New(sourcesDir)
 	idx := newFakeIndex()
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Caching\ncaching is subtle\n")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Caching\ncaching is subtle\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
@@ -282,9 +280,9 @@ func TestReconcileReportsMissingSummaries(t *testing.T) {
 			With(entities.StepCapture, entities.StepStatus{State: entities.StepOK}).
 			With(entities.StepDistill, entities.StepStatus{State: entities.StepOK}),
 	}
-	r := usecases.ReconcileVault{Index: idx, Store: store, Clock: fixedClock{}}
+	r := usecases.Maintenance{Index: idx, Store: store, Clock: fixedClock{}}
 
-	res, err := r.Execute(ctx)
+	res, err := r.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -299,7 +297,7 @@ func TestReconcileReportsMissingSummaries(t *testing.T) {
 	if pErr := store.PutRendered(src.Hash, entities.SidecarSummary, []byte("overview\n")); pErr != nil {
 		t.Fatalf("summary: %v", pErr)
 	}
-	res, err = r.Execute(ctx)
+	res, err = r.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -317,7 +315,7 @@ func TestReconcileReportsMissingSummaries(t *testing.T) {
 	if pErr := store.RemoveRendered(src.Hash, entities.SidecarSummary); pErr != nil && !os.IsNotExist(pErr) {
 		t.Fatalf("remove summary: %v", pErr)
 	}
-	res, err = r.Execute(ctx)
+	res, err = r.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -334,8 +332,7 @@ func TestReconcileReportsSourcesNeverAutoTagged(t *testing.T) {
 	sourcesDir := t.TempDir()
 	store := objects.New(sourcesDir)
 	idx := newFakeIndex()
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Caching\ncaching is subtle\n")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Caching\ncaching is subtle\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
@@ -345,8 +342,8 @@ func TestReconcileReportsSourcesNeverAutoTagged(t *testing.T) {
 			With(entities.StepCapture, entities.StepStatus{State: entities.StepOK}).
 			With(entities.StepDistill, entities.StepStatus{State: entities.StepOK}),
 	}
-	r := usecases.ReconcileVault{Index: idx, Store: store, Clock: fixedClock{}}
-	res, err := r.Execute(ctx)
+	r := usecases.Maintenance{Index: idx, Store: store, Clock: fixedClock{}}
+	res, err := r.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -361,7 +358,7 @@ func TestReconcileReportsSourcesNeverAutoTagged(t *testing.T) {
 			With(entities.StepCapture, entities.StepStatus{State: entities.StepOK}).
 			With(entities.StepDistill, entities.StepStatus{State: entities.StepOK}),
 	}
-	res, err = r.Execute(ctx)
+	res, err = r.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}

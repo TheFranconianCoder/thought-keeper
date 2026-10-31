@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -45,13 +46,17 @@ func ReadEndpoint() (string, error) {
 	return e.Addr, nil
 }
 
-func removeEndpoint() { _ = os.Remove(config.EndpointPath()) }
+func removeEndpoint() { _ = os.Remove(config.EndpointPath()) } //nolint:errcheck // a trash move is best effort; a missing file is the goal
 
 // Ping reports whether a Thought Keeper instance answers on addr. It is used to
 // validate a published endpoint before telling the user "already running".
 func Ping(addr string) error {
 	client := &http.Client{Timeout: 1500 * time.Millisecond}
-	resp, err := client.Get("http://" + addr + "/api/v1/status")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+addr+"/api/v1/status", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}

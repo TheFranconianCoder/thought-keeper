@@ -17,7 +17,7 @@ const duplicatesTTL = 30 * time.Second
 // cachedDuplicates serialises and briefly caches the duplicate detection. The mutex is held across
 // the scan on purpose: a second caller waits for the first instead of scanning the same vault again.
 type cachedDuplicates struct {
-	uc usecases.CollapseDuplicateAtoms
+	uc usecases.Claims
 
 	mu    sync.Mutex
 	at    time.Time
@@ -42,7 +42,7 @@ func (c *cachedDuplicates) Detect(ctx context.Context) (partialentities.PartialA
 func (c *cachedDuplicates) Execute(ctx context.Context) (partialentities.PartialAtomDuplicates, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	res, err := c.uc.Execute(ctx)
+	res, err := c.uc.Collapse(ctx)
 	c.valid = false
 	return res, err
 }

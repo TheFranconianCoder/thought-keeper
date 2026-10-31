@@ -52,13 +52,13 @@ func TestSaveWikiPageOwnsOneStableSource(t *testing.T) {
 	trees := treestore.New(sourcesDir)
 	parts := sqlc.NewPartRepository(db)
 	steps := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), index, nil)
-	clean := usecases.CleanSource{Parts: parts, Atoms: atomRepo, AtomStore: atomStore, Index: index, Clock: wikiClock{}}
+	clean := usecases.Derivation{PartRepo: parts, Atoms: atomRepo, AtomStore: atomStore, Index: index, Clock: wikiClock{}}
 	pages := wiki.New(wikiDir)
-	save := usecases.SaveWikiPage{
+	save := usecases.Wiki{
 		Pages: pages, Store: store, Index: index, Steps: steps, Clock: wikiClock{},
 	}
 
-	first, err := save.Execute(ctx, usecases.WikiPageInput{
+	first, err := save.Save(ctx, usecases.WikiPageInput{
 		Title: "Go Concurrency", Tags: []string{"Go", "concurrency"},
 		Body: "# Channels\n\nChannels connect goroutines.",
 	})
@@ -78,10 +78,10 @@ func TestSaveWikiPageOwnsOneStableSource(t *testing.T) {
 	if src.Title != "Go Concurrency" {
 		t.Fatalf("source title = %q", src.Title)
 	}
-	captured, err := (usecases.CaptureSource{
+	captured, err := (usecases.Derivation{
 		Store: store, Index: index, Extractor: extract.New(gateways.ExecRunner{}, extract.Config{}),
 		Steps: steps, Clock: wikiClock{},
-	}).Execute(ctx, first.Hash)
+	}).Capture(ctx, first.Hash)
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
@@ -91,10 +91,10 @@ func TestSaveWikiPageOwnsOneStableSource(t *testing.T) {
 	if _, ok := store.StatObject(first.Hash, ".md"); !ok {
 		t.Fatal("capture removed the wiki page's own object")
 	}
-	built, err := (usecases.BuildTree{
+	built, err := (usecases.Trees{
 		Store: store, Index: index, Trees: trees, Extractor: extract.New(gateways.ExecRunner{}, extract.Config{}),
-		Steps: steps, Clean: clean, Parts: parts, Clock: wikiClock{},
-	}).Execute(ctx, first.Hash)
+		Steps: steps, Clean: clean.Correct, Parts: parts, Clock: wikiClock{},
+	}).Build(ctx, first.Hash)
 	if err != nil {
 		t.Fatalf("outline: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestSaveWikiPageOwnsOneStableSource(t *testing.T) {
 	}
 
 	// The same page ID, changed body: one source row, same ID and hash, capture open again.
-	second, err := save.Execute(ctx, usecases.WikiPageInput{
+	second, err := save.Save(ctx, usecases.WikiPageInput{
 		ID: first.Page.ID, Title: "Go Concurrency", Tags: []string{"go"},
 		Body: "# Channels\n\nA changed paragraph.",
 	})
@@ -139,13 +139,13 @@ func TestSaveWikiPageOwnsOneStableSource(t *testing.T) {
 	}
 
 	// A tag-only edit changes the page, not its source: no derivation is thrown away.
-	if _, err := (usecases.CaptureSource{
+	if _, err := (usecases.Derivation{
 		Store: store, Index: index, Extractor: extract.New(gateways.ExecRunner{}, extract.Config{}),
 		Steps: steps, Clock: wikiClock{},
-	}).Execute(ctx, second.Hash); err != nil {
+	}).Capture(ctx, second.Hash); err != nil {
 		t.Fatalf("capture after edit: %v", err)
 	}
-	if _, err := save.Execute(ctx, usecases.WikiPageInput{
+	if _, err := save.Save(ctx, usecases.WikiPageInput{
 		ID: first.Page.ID, Title: "Go Concurrency", Tags: []string{"go"},
 		Body: "# Channels\n\nA changed paragraph.",
 	}); err != nil {
@@ -178,15 +178,15 @@ func TestSaveWikiPageQueuesLinksWithoutFetchingThem(t *testing.T) {
 	atomRepo := sqlc.NewAtomRepository(db)
 	atomStore := atoms.New(filepath.Join(root, "atoms"))
 	steps := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), index, nil)
-	deleter := usecases.DeleteSource{Store: store, Index: index, Atoms: atomStore, AtomRepo: atomRepo, Steps: steps, Clock: wikiClock{}}
-	save := usecases.SaveWikiPage{
+	deleter := usecases.Sources{Store: store, Index: index, AtomStore: atomStore, Atoms: atomRepo, Steps: steps, Clock: wikiClock{}}
+	save := usecases.Wiki{
 		Pages: wiki.New(wikiDir), Store: store, Index: index, Steps: steps, Clock: wikiClock{},
 	}
-	prune := usecases.PruneWikiLinks{Pages: wiki.New(wikiDir), Index: index, Delete: deleter}
-	queue := usecases.QueueURLs{Index: index, Steps: steps, Clock: wikiClock{}}
+	prune := usecases.Wiki{Pages: wiki.New(wikiDir), Index: index, DeleteSource: deleter.DeleteOwned}
+	queue := usecases.URLs{Index: index, Steps: steps, Clock: wikiClock{}}
 
 	const link = "https://example.com/a"
-	first, err := save.Execute(ctx, usecases.WikiPageInput{
+	first, err := save.Save(ctx, usecases.WikiPageInput{
 		Title: "Links", Body: "See [the source](" + link + ").",
 	})
 	if err != nil {
@@ -202,7 +202,7 @@ func TestSaveWikiPageQueuesLinksWithoutFetchingThem(t *testing.T) {
 
 	// Queueing claims the link: a row and a record exist before anything is fetched, so the reader can
 	// see it and a second save does not queue it again.
-	queued, err := queue.Execute(ctx, first.Page.ID.String(), first.URLsAdded)
+	queued, err := queue.Queue(ctx, first.Page.ID.String(), first.URLsAdded)
 	if err != nil {
 		t.Fatalf("queue: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestSaveWikiPageQueuesLinksWithoutFetchingThem(t *testing.T) {
 	}
 
 	// A prose edit keeps the URL: it is known, so it is not queued again.
-	second, err := save.Execute(ctx, usecases.WikiPageInput{
+	second, err := save.Save(ctx, usecases.WikiPageInput{
 		ID: first.Page.ID, Title: "Links", Body: "Changed prose. See [the source](" + link + ").",
 	})
 	if err != nil {
@@ -244,7 +244,7 @@ func TestSaveWikiPageQueuesLinksWithoutFetchingThem(t *testing.T) {
 
 	// Removing the URL is not a delete: a save must not wait for one, so the source is still there
 	// when the save returns.
-	if _, err := save.Execute(ctx, usecases.WikiPageInput{
+	if _, err := save.Save(ctx, usecases.WikiPageInput{
 		ID: first.Page.ID, Title: "Links", Body: "No links any more.",
 	}); err != nil {
 		t.Fatalf("third save: %v", err)
@@ -255,7 +255,7 @@ func TestSaveWikiPageQueuesLinksWithoutFetchingThem(t *testing.T) {
 
 	// The background pass is what removes it — and it re-reads the page, so it only removes what the
 	// page no longer declares.
-	res, err := prune.Execute(ctx, first.Page.ID, "")
+	res, err := prune.PruneLinks(ctx, first.Page.ID, "")
 	if err != nil {
 		t.Fatalf("prune: %v", err)
 	}
@@ -269,15 +269,15 @@ func TestSaveWikiPageQueuesLinksWithoutFetchingThem(t *testing.T) {
 	// A link re-added before the job ran is declared again, so its source stays: the pass is
 	// idempotent and race-safe.
 	const kept = "https://example.com/kept"
-	if _, err := queue.Execute(ctx, first.Page.ID.String(), []string{kept}); err != nil {
+	if _, err := queue.Queue(ctx, first.Page.ID.String(), []string{kept}); err != nil {
 		t.Fatalf("queue kept: %v", err)
 	}
-	if _, err := save.Execute(ctx, usecases.WikiPageInput{
+	if _, err := save.Save(ctx, usecases.WikiPageInput{
 		ID: first.Page.ID, Title: "Links", Body: "Back: [kept](" + kept + ").",
 	}); err != nil {
 		t.Fatalf("save kept: %v", err)
 	}
-	if _, err := prune.Execute(ctx, first.Page.ID, ""); err != nil {
+	if _, err := prune.PruneLinks(ctx, first.Page.ID, ""); err != nil {
 		t.Fatalf("prune kept: %v", err)
 	}
 	if _, err := index.GetSourceByHash(ctx, entities.URLHash(kept)); err != nil {
@@ -304,27 +304,27 @@ func TestPruneWikiLinksLeavesALinkAnotherPageDeclaresAlone(t *testing.T) {
 	atomStore := atoms.New(filepath.Join(root, "atoms"))
 	steps := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), index, nil)
 	pages := wiki.New(filepath.Join(root, "wiki"))
-	deleter := usecases.DeleteSource{Store: store, Index: index, Atoms: atomStore, AtomRepo: sqlc.NewAtomRepository(db), Steps: steps, Clock: wikiClock{}}
-	save := usecases.SaveWikiPage{Pages: pages, Store: store, Index: index, Steps: steps, Clock: wikiClock{}}
-	prune := usecases.PruneWikiLinks{Pages: pages, Index: index, Delete: deleter}
-	queue := usecases.QueueURLs{Index: index, Steps: steps, Clock: wikiClock{}}
+	deleter := usecases.Sources{Store: store, Index: index, AtomStore: atomStore, Atoms: sqlc.NewAtomRepository(db), Steps: steps, Clock: wikiClock{}}
+	save := usecases.Wiki{Pages: pages, Store: store, Index: index, Steps: steps, Clock: wikiClock{}}
+	prune := usecases.Wiki{Pages: pages, Index: index, DeleteSource: deleter.DeleteOwned}
+	queue := usecases.URLs{Index: index, Steps: steps, Clock: wikiClock{}}
 
 	const link = "https://example.com/shared"
-	first, err := save.Execute(ctx, usecases.WikiPageInput{Title: "One", Body: "See " + link + "."})
+	first, err := save.Save(ctx, usecases.WikiPageInput{Title: "One", Body: "See " + link + "."})
 	if err != nil {
 		t.Fatalf("save one: %v", err)
 	}
-	second, err := save.Execute(ctx, usecases.WikiPageInput{Title: "Two", Body: "Also " + link + "."})
+	second, err := save.Save(ctx, usecases.WikiPageInput{Title: "Two", Body: "Also " + link + "."})
 	if err != nil {
 		t.Fatalf("save two: %v", err)
 	}
-	if _, err := queue.Execute(ctx, first.Page.ID.String(), []string{link}); err != nil {
+	if _, err := queue.Queue(ctx, first.Page.ID.String(), []string{link}); err != nil {
 		t.Fatalf("queue: %v", err)
 	}
-	if _, err := save.Execute(ctx, usecases.WikiPageInput{ID: first.Page.ID, Title: "One", Body: "No link."}); err != nil {
+	if _, err := save.Save(ctx, usecases.WikiPageInput{ID: first.Page.ID, Title: "One", Body: "No link."}); err != nil {
 		t.Fatalf("save one without the link: %v", err)
 	}
-	if _, err := prune.Execute(ctx, first.Page.ID, ""); err != nil {
+	if _, err := prune.PruneLinks(ctx, first.Page.ID, ""); err != nil {
 		t.Fatalf("prune: %v", err)
 	}
 	if _, err := index.GetSourceByHash(ctx, entities.URLHash(link)); err != nil {
@@ -350,7 +350,7 @@ func TestSaveWikiPageReadsTheURLCatalogOnce(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	index := &listCountingIndex{fakeIndex: newFakeIndex()}
-	save := usecases.SaveWikiPage{
+	save := usecases.Wiki{
 		Pages: wiki.New(filepath.Join(root, "wiki")),
 		Store: objects.New(filepath.Join(root, "sources")),
 		Index: index, Clock: wikiClock{},
@@ -360,7 +360,7 @@ func TestSaveWikiPageReadsTheURLCatalogOnce(t *testing.T) {
 	for i := range 40 {
 		fmt.Fprintf(&body, "- [link %d](https://example.com/%d)\n", i, i)
 	}
-	first, err := save.Execute(ctx, usecases.WikiPageInput{Title: "Many links", Body: body.String()})
+	first, err := save.Save(ctx, usecases.WikiPageInput{Title: "Many links", Body: body.String()})
 	if err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -388,13 +388,13 @@ func TestQueueURLsLeavesKnownLinksAlone(t *testing.T) {
 	}
 	index := sqlc.NewSourceRepository(db)
 	steps := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), index, nil)
-	queue := usecases.QueueURLs{Index: index, Steps: steps, Clock: wikiClock{}}
+	queue := usecases.URLs{Index: index, Steps: steps, Clock: wikiClock{}}
 
 	const link = "https://example.com/dead"
-	if _, err := queue.Execute(ctx, "page-1", []string{link, link}); err != nil {
+	if _, err := queue.Queue(ctx, "page-1", []string{link, link}); err != nil {
 		t.Fatalf("queue: %v", err)
 	}
-	again, err := queue.Execute(ctx, "page-1", []string{link})
+	again, err := queue.Queue(ctx, "page-1", []string{link})
 	if err != nil {
 		t.Fatalf("second queue: %v", err)
 	}
@@ -419,14 +419,14 @@ func TestMarkURLFailedKeepsTheLinkVisible(t *testing.T) {
 	}
 	index := sqlc.NewSourceRepository(db)
 	steps := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), index, nil)
-	queue := usecases.QueueURLs{Index: index, Steps: steps, Clock: wikiClock{}}
-	mark := usecases.MarkURLFailed{Index: index, Steps: steps, Clock: wikiClock{}}
+	queue := usecases.URLs{Index: index, Steps: steps, Clock: wikiClock{}}
+	mark := usecases.URLs{Index: index, Steps: steps, Clock: wikiClock{}}
 
 	const link = "https://example.com/gone"
-	if _, err := queue.Execute(ctx, "page-1", []string{link}); err != nil {
+	if _, err := queue.Queue(ctx, "page-1", []string{link}); err != nil {
 		t.Fatalf("queue: %v", err)
 	}
-	hash, err := mark.Execute(ctx, link, "page-1", errors.New("dial tcp: connection refused"))
+	hash, err := mark.MarkFailed(ctx, link, "page-1", errors.New("dial tcp: connection refused"))
 	if err != nil {
 		t.Fatalf("mark: %v", err)
 	}
@@ -470,9 +470,9 @@ func TestAddURLFillsAQueuedLink(t *testing.T) {
 	store := objects.New(sourcesDir)
 	index := sqlc.NewSourceRepository(db)
 	steps := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), index, nil)
-	queue := usecases.QueueURLs{Index: index, Steps: steps, Clock: wikiClock{}}
+	queue := usecases.URLs{Index: index, Steps: steps, Clock: wikiClock{}}
 	const link = "https://example.com/page"
-	if _, err := queue.Execute(ctx, "page-1", []string{link}); err != nil {
+	if _, err := queue.Queue(ctx, "page-1", []string{link}); err != nil {
 		t.Fatalf("queue: %v", err)
 	}
 	before, err := index.GetSourceByHash(ctx, entities.URLHash(link))
@@ -480,12 +480,12 @@ func TestAddURLFillsAQueuedLink(t *testing.T) {
 		t.Fatalf("queued row: %v", err)
 	}
 
-	add := usecases.AddURL{
+	add := usecases.URLs{
 		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("<html>real</html>")}},
 		Convert: &fakeConverter{title: "Real title", markdown: "## Section\n\n" + strings.Repeat("word ", 120)},
 		Store:   store, Index: index, Steps: steps, Clock: wikiClock{},
 	}
-	src, err := add.Execute(ctx, link, false)
+	src, err := add.Add(ctx, link, false)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -535,14 +535,14 @@ func TestReindexKeepsALinkThatWasNeverFetched(t *testing.T) {
 	store := objects.New(sourcesDir)
 	index := sqlc.NewSourceRepository(db)
 	steps := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), index, nil)
-	queue := usecases.QueueURLs{Index: index, Steps: steps, Clock: wikiClock{}}
+	queue := usecases.URLs{Index: index, Steps: steps, Clock: wikiClock{}}
 
 	const link = "https://example.com/never-answered"
-	if _, err := queue.Execute(ctx, "page-1", []string{link}); err != nil {
+	if _, err := queue.Queue(ctx, "page-1", []string{link}); err != nil {
 		t.Fatalf("queue: %v", err)
 	}
 	// An empty object store: the link is the only thing in the vault, and it has no bytes.
-	if _, err := (usecases.ReindexVault{Store: store, Index: index, Steps: steps, Clock: wikiClock{}}).Execute(ctx); err != nil {
+	if _, err := (usecases.Maintenance{Store: store, Index: index, Steps: steps, Clock: wikiClock{}}).Reindex(ctx); err != nil {
 		t.Fatalf("reindex: %v", err)
 	}
 	src, err := index.GetSourceByHash(ctx, entities.URLHash(link))
@@ -553,7 +553,7 @@ func TestReindexKeepsALinkThatWasNeverFetched(t *testing.T) {
 		t.Fatalf("restored row = %+v, want the page's link", src)
 	}
 	// Reconcile must not cry wolf about a source that has no object by design.
-	res, err := (usecases.ReconcileVault{Index: index, Steps: steps, Store: store, Clock: wikiClock{}}).Execute(ctx)
+	res, err := (usecases.Maintenance{Index: index, Steps: steps, Store: store, Clock: wikiClock{}}).Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}

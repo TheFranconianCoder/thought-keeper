@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/interests"
 	coremarkdown "github.com/TheFranconianCoder/thought-keeper/internal/core/markdown"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/textmatch"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
@@ -65,14 +65,11 @@ type InterestPreview struct {
 	Examples []IntersectionMatch
 }
 
-// ListInterests reads the rules and counts how many open queue entries each one holds.
-type ListInterests struct {
-	Store   interfaces.InterestStore
-	Counter interfaces.ShelfCounter
-}
+// InterestLister lists the rules, oldest first, each with how many open queue entries it holds. A
+// handler holds this value; nil means the feature is not wired.
+type InterestLister func(ctx context.Context) ([]InterestView, error)
 
-// Execute returns the rules oldest first.
-func (uc ListInterests) Execute(ctx context.Context) ([]InterestView, error) {
+func (uc ReadLater) Interests(ctx context.Context) ([]InterestView, error) {
 	rules, err := uc.Store.List(ctx)
 	if err != nil {
 		return nil, err
@@ -90,18 +87,10 @@ func (uc ListInterests) Execute(ctx context.Context) ([]InterestView, error) {
 	return out, nil
 }
 
-// SaveInterest creates or updates one rule. A rule's slug is its identity: it is derived from the
-// name once, and renaming the display name does not move the queue entries that point at it.
-type SaveInterest struct {
-	Store    interfaces.InterestStore
-	Shelf    interfaces.ShelfStore
-	Signals  interfaces.InterestSignalReader
-	Clock    interfaces.Clock
-	OnQueued func(hash string)
-}
+// InterestSaver writes a rule. A handler holds this value; nil means the feature is not wired.
+type InterestSaver func(ctx context.Context, slug string, in InterestInput) (entities.Interest, error)
 
-// Execute writes the rule and, when asked, queues the sources that already match it.
-func (uc SaveInterest) Execute(ctx context.Context, slug string, in InterestInput) (entities.Interest, error) {
+func (uc ReadLater) SaveInterest(ctx context.Context, slug string, in InterestInput) (entities.Interest, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		return entities.Interest{}, types.New("invalid_interest", "an interest needs a name", nil)
@@ -158,7 +147,7 @@ func (uc SaveInterest) Execute(ctx context.Context, slug string, in InterestInpu
 
 // queueExisting is the one explicit backfill: the human asked for the sources that already fit. It
 // is never automatic — a new rule must not flood a queue with material the reader has long read.
-func (uc SaveInterest) queueExisting(ctx context.Context, rule entities.Interest, now time.Time) {
+func (uc ReadLater) queueExisting(ctx context.Context, rule entities.Interest, now time.Time) {
 	if uc.Signals == nil || uc.Shelf == nil {
 		return
 	}
@@ -180,14 +169,10 @@ func (uc SaveInterest) queueExisting(ctx context.Context, rule entities.Interest
 	}
 }
 
-// DeleteInterest removes a rule. The queue entries it created stay: they are the reader's queue
-// now. Their `via` list keeps a slug no rule answers any more, which the UI simply does not render.
-type DeleteInterest struct {
-	Store interfaces.InterestStore
-}
+// InterestDeleter removes a rule. A handler holds this value; nil means the feature is not wired.
+type InterestDeleter func(ctx context.Context, slug string) error
 
-// Execute deletes one rule.
-func (uc DeleteInterest) Execute(ctx context.Context, slug string) error {
+func (uc ReadLater) DeleteInterest(ctx context.Context, slug string) error {
 	if strings.TrimSpace(slug) == "" {
 		return types.New("invalid_interest", "an interest slug is required", nil)
 	}
@@ -201,25 +186,15 @@ func (uc DeleteInterest) Execute(ctx context.Context, slug string) error {
 // claims, topics, title and labels are compared with every enabled rule, and a STRONG match queues
 // it. Only strong matches queue; "maybe" stays a suggestion in the rail.
 //
-// Two guards keep the queue honest: a source that arrived BEFORE the rule existed is never queued
-// (a rule looks forward; the backfill is an explicit checkbox), and a finished entry is never
-// re-opened.
-type MatchSourceInterests struct {
-	Store interfaces.InterestStore
-	Index interfaces.IndexRepository
-	Atoms interfaces.AtomRepository
-	Shelf interfaces.ShelfStore
-	Clock interfaces.Clock
-}
 
 // MatchSourceResult reports what the pass did.
 type MatchSourceResult struct {
 	Queued []string // the interest slugs that queued the source
 }
 
-// Execute runs the comparison for one source. A source that is still unreadable has nothing to
+// Match runs the comparison for one source. A source that is still unreadable has nothing to
 // compare; that is not an error.
-func (uc MatchSourceInterests) Execute(ctx context.Context, hash string) (MatchSourceResult, error) {
+func (uc ReadLater) Match(ctx context.Context, hash string) (MatchSourceResult, error) {
 	var out MatchSourceResult
 	rules, err := uc.Store.List(ctx)
 	if err != nil || len(rules) == 0 {
@@ -280,17 +255,11 @@ func (uc MatchSourceInterests) Execute(ctx context.Context, hash string) (MatchS
 	return out, nil
 }
 
-// SourceInterests answers "which rules does this source fit?" for the source page's rail. It is
-// computed on demand: the evidence is derived from the claims the vault already has, so it is always
-// current — editing a rule does not leave a stale cache behind.
-type SourceInterests struct {
-	Store interfaces.InterestStore
-	Index interfaces.IndexRepository
-	Atoms interfaces.AtomRepository
-}
+// SourceInterestLister lists the rules one source fits, with the evidence. A handler holds this value;
+// nil means the feature is not wired.
+type SourceInterestLister func(ctx context.Context, hash string) ([]IntersectionMatch, error)
 
-// Execute returns both bands (fits and maybe), strongest first.
-func (uc SourceInterests) Execute(ctx context.Context, hash string) ([]IntersectionMatch, error) {
+func (uc ReadLater) ForSource(ctx context.Context, hash string) ([]IntersectionMatch, error) {
 	if !entities.IsSHA256Hex(hash) {
 		return nil, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash)
 	}
@@ -349,19 +318,11 @@ func (uc SourceInterests) Execute(ctx context.Context, hash string) ([]Intersect
 	return out, nil
 }
 
-// RejectSourceInterest records the reader's correction and updates the queue entry it caused.
-// Rejecting removes the rule's slug from the entry's via list; if the entry was not manual and no
-// interest is left, the entry leaves the queue. Accepting clears the correction and queues the
-// source when the rule currently fits it.
-type RejectSourceInterest struct {
-	Store interfaces.InterestStore
-	Index interfaces.IndexRepository
-	Shelf interfaces.ShelfStore
-	Clock interfaces.Clock
-}
+// InterestRejecter records that one source does not fit one rule. A handler holds this value; nil means
+// the feature is not wired.
+type InterestRejecter func(ctx context.Context, slug, hash string, accepted bool) error
 
-// Execute sets the correction. accepted=false means "not this interest".
-func (uc RejectSourceInterest) Execute(ctx context.Context, slug, hash string, accepted bool) error {
+func (uc ReadLater) RejectInterest(ctx context.Context, slug, hash string, accepted bool) error {
 	if !entities.IsSHA256Hex(hash) {
 		return types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash)
 	}
@@ -389,14 +350,11 @@ func (uc RejectSourceInterest) Execute(ctx context.Context, slug, hash string, a
 	return uc.Shelf.SetReadLater(ctx, hash, src.ReadLaterAt, src.ReadLaterDoneAt, src.ReadLaterManual, via)
 }
 
-// PreviewInterest is the calibration moment: it reads a draft rule against the vault as it is and
-// reports how many sources would fit, how many are only a suggestion, and the strongest examples.
-type PreviewInterest struct {
-	Signals interfaces.InterestSignalReader
-}
+// InterestPreviewer calibrates a rule against the vault without saving it. A handler holds this value;
+// nil means the feature is not wired.
+type InterestPreviewer func(ctx context.Context, in InterestInput) (InterestPreview, error)
 
-// Execute evaluates a draft. It writes nothing.
-func (uc PreviewInterest) Execute(ctx context.Context, in InterestInput) (InterestPreview, error) {
+func (uc ReadLater) PreviewInterest(ctx context.Context, in InterestInput) (InterestPreview, error) {
 	terms, err := normalizeInterestTerms(in.Terms)
 	if err != nil {
 		return InterestPreview{}, err
@@ -503,12 +461,7 @@ func normalizeInterestKinds(raw []string) ([]string, error) {
 }
 
 func containsString(list []string, value string) bool {
-	for _, item := range list {
-		if item == value {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, value)
 }
 
 func removeString(list []string, value string) []string {

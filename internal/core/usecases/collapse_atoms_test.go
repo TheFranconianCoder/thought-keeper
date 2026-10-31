@@ -71,7 +71,7 @@ func TestCollapseDuplicateAtomsReadsTheIndex(t *testing.T) {
 	}
 
 	store := &trashSpy{}
-	uc := usecases.CollapseDuplicateAtoms{Atoms: store, AtomRepo: repo}
+	uc := usecases.Claims{AtomStore: store, Atoms: repo}
 
 	got, err := uc.Detect(ctx)
 	if err != nil {
@@ -81,7 +81,7 @@ func TestCollapseDuplicateAtomsReadsTheIndex(t *testing.T) {
 		t.Fatalf("detect = %+v, want ONE group of TWO copies (the shared-words claim is not a copy)", got)
 	}
 
-	collapsed, err := uc.Execute(ctx)
+	collapsed, err := uc.Collapse(ctx)
 	if err != nil {
 		t.Fatalf("collapse: %v", err)
 	}

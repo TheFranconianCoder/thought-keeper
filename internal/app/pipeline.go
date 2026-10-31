@@ -62,16 +62,6 @@ func (a *App) leaveDocument(step entities.Step) {
 	a.publishPipeline()
 }
 
-func (a *App) queueDocument(step entities.Step, delta int) {
-	a.pipeMu.Lock()
-	a.pipe.docQueued[step] += delta
-	if a.pipe.docQueued[step] < 0 {
-		a.pipe.docQueued[step] = 0
-	}
-	a.pipeMu.Unlock()
-	a.publishPipeline()
-}
-
 func (a *App) enterCluster() {
 	a.pipeMu.Lock()
 	a.pipe.clusterWaiting--
@@ -419,7 +409,7 @@ func (a *App) reconcile(reason string) {
 		check := a.reconcilePass
 		check.Offset = a.reconcileOffset
 		check.DryRun = true
-		res, err = check.Execute(ctx)
+		res, err = check.Reconcile(ctx)
 		if err == nil && res.Repairs > 0 {
 			a.log.Info("consistency: repairs needed", "reason", reason,
 				"invalidated", len(res.Invalidated), "broken", len(res.Broken),
@@ -427,7 +417,7 @@ func (a *App) reconcile(reason string) {
 			pass := a.reconcilePass
 			pass.Offset = a.reconcileOffset
 			a.gate.Lock()
-			res, err = pass.Execute(ctx)
+			res, err = pass.Reconcile(ctx)
 			a.gate.Unlock()
 		}
 	}
@@ -437,7 +427,7 @@ func (a *App) reconcile(reason string) {
 	// a command that lives an hour longer costs nothing.
 	if a.pruneInterval > 0 && !time.Now().Before(a.nextPrune) {
 		a.nextPrune = time.Now().Add(a.pruneInterval)
-		if n, pErr := a.pruneCommands.Execute(ctx); pErr != nil {
+		if n, pErr := a.pruneCommands.Prune(ctx); pErr != nil {
 			a.log.Warn("assistant: pruning the command history failed", "err", pErr)
 		} else if n > 0 {
 			a.log.Info("assistant: pruned expired commands", "removed", n)
@@ -495,7 +485,7 @@ func (a *App) requestClusterIfDue(reason string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	srcs, err := a.pendingCluster.Execute(ctx)
+	srcs, err := a.pendingCluster.WithUnclustered(ctx)
 	if err != nil {
 		return
 	}
@@ -517,7 +507,7 @@ func (a *App) requestClusterIfDue(reason string) {
 	if stalled >= maxClusterNoProgress {
 		return
 	}
-	_, _ = a.requestCluster(reason)
+	_, _ = a.requestCluster(reason) //nolint:errcheck // the run row is an audit trail; the work already ended
 }
 
 // requestCluster asks for a cluster pass — but only when there is something to do. The backlog is
@@ -541,7 +531,7 @@ func (a *App) requestCluster(reason string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	srcs, err := a.pendingCluster.Execute(ctx)
+	srcs, err := a.pendingCluster.WithUnclustered(ctx)
 	if err != nil {
 		a.log.Warn("cluster: cannot read the backlog", "err", err)
 		return "", err
@@ -550,7 +540,7 @@ func (a *App) requestCluster(reason string) (string, error) {
 		a.log.Debug("cluster pass not needed", "reason", reason)
 		return "", nil
 	}
-	runID, err := a.startRun.Execute(ctx, entities.RunPipeline, "", entities.StepCluster, "cluster")
+	runID, err := a.startRun.Start(ctx, entities.RunPipeline, "", entities.StepCluster, "cluster")
 	if err != nil {
 		a.log.Warn("cluster: cannot start the run", "err", err)
 		return "", err
@@ -603,14 +593,14 @@ func (a *App) runCluster(job runJob) {
 		ctx, cancel := a.runContextFor(job.op)
 		defer cancel()
 		a.publish("run", map[string]any{"run_id": run, "op": string(job.op), "step": string(job.step), "status": "running"})
-		res, err := a.clusterPass.Execute(ctx, job.runID)
+		res, err := a.clusterPass.Pass(ctx, job.runID)
 		if err != nil {
 			return err
 		}
 		// The pass settles itself: dead members are pruned and the findings refreshed, so a
 		// finished pass leaves no stale membership.
-		if a.cleanup.Clusters != nil {
-			if _, cErr := a.cleanup.Execute(ctx); cErr != nil {
+		if a.cleanup.ClusterRepo != nil {
+			if _, cErr := a.cleanup.Cleanup(ctx); cErr != nil {
 				a.log.Warn("cluster settle failed", "run", run, "err", cErr)
 			}
 		}
@@ -636,7 +626,7 @@ func (a *App) runCluster(job runJob) {
 		a.publish("clusters", map[string]any{"clusters": res.New, "atoms": res.Atoms})
 		if res.Remaining > 0 {
 			a.log.Info("cluster pass continues", "remaining", res.Remaining)
-			_, _ = a.requestCluster("continuation")
+			_, _ = a.requestCluster("continuation") //nolint:errcheck // the run row is an audit trail; the work already ended
 		}
 		return nil
 	})

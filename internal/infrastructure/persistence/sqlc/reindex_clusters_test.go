@@ -32,7 +32,7 @@ func TestReindexRemovesClusterRowsWithoutRecords(t *testing.T) {
 		t.Fatalf("seed cluster: %v %d", err, len(rec))
 	}
 
-	reindex := usecases.ReindexVault{
+	reindex := usecases.Maintenance{
 		Store: objects.New(t.TempDir()), Index: index, Atoms: atoms,
 		AtomStore:    atomstore.New(t.TempDir()),
 		ClusterStore: clusters.New(t.TempDir()), ClusterRepo: clusterRepo,
@@ -47,7 +47,7 @@ func TestReindexRemovesClusterRowsWithoutRecords(t *testing.T) {
 	}
 	t.Logf("reason: %s", reason)
 
-	if _, err := reindex.Execute(ctx); err != nil {
+	if _, err := reindex.Reindex(ctx); err != nil {
 		t.Fatalf("reindex: %v", err)
 	}
 	if n, err := clusterRepo.CountClusters(ctx); err != nil || n != 0 {

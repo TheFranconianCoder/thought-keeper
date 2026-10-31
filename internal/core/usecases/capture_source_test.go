@@ -156,8 +156,7 @@ func TestCaptureWritesTheRenderingAndTheOutlineReadsIt(t *testing.T) {
 	trees := &fakeTreeStore{m: map[string][]entities.SourceNode{}}
 
 	// A PDF: its bytes are not readable, which is exactly why step 1 exists.
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "book.pdf", Reader: strings.NewReader("%PDF-1.7 not text")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "book.pdf", Reader: strings.NewReader("%PDF-1.7 not text")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
@@ -172,11 +171,11 @@ func TestCaptureWritesTheRenderingAndTheOutlineReadsIt(t *testing.T) {
 	steps := &fakeSteps{}
 	extractor := &fakeExtractor{parts: parts}
 	log := &fakeSourceLog{}
-	capture := usecases.CaptureSource{
+	capture := usecases.Derivation{
 		Store: store, Index: idx, Extractor: extractor, Steps: steps,
 		SourceLog: log, Clock: fixedClock{}, Log: nil,
 	}
-	res, err := capture.Execute(ctx, src.Hash)
+	res, err := capture.Capture(ctx, src.Hash)
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
@@ -209,8 +208,8 @@ func TestCaptureWritesTheRenderingAndTheOutlineReadsIt(t *testing.T) {
 
 	// Step 2 reads: the extractor must NOT be called again.
 	before := extractor.calls
-	bt := usecases.BuildTree{Store: store, Index: idx, Trees: trees, Extractor: explodingExtractor{t}, Clock: fixedClock{}}
-	tres, err := bt.Execute(ctx, src.Hash)
+	bt := usecases.Trees{Store: store, Index: idx, Trees: trees, Extractor: explodingExtractor{t}, Clock: fixedClock{}}
+	tres, err := bt.Build(ctx, src.Hash)
 	if err != nil {
 		t.Fatalf("outline: %v", err)
 	}
@@ -237,17 +236,16 @@ func TestCaptureFailureIsRecorded(t *testing.T) {
 	ctx := context.Background()
 	store := objects.New(t.TempDir())
 	idx := newFakeIndex()
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "scan.pdf", Reader: strings.NewReader("%PDF no text layer")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "scan.pdf", Reader: strings.NewReader("%PDF no text layer")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
 	steps := &fakeSteps{}
-	capture := usecases.CaptureSource{
+	capture := usecases.Derivation{
 		Store: store, Index: idx, Extractor: &fakeExtractor{err: errors.New("no text layer and no OCR")},
 		Steps: steps, Clock: fixedClock{},
 	}
-	if _, err := capture.Execute(ctx, src.Hash); err == nil {
+	if _, err := capture.Capture(ctx, src.Hash); err == nil {
 		t.Fatal("a failed capture must return its error")
 	}
 	states := steps.seen[entities.StepCapture]
@@ -267,9 +265,9 @@ func TestIntakeLeavesCaptureOpenForAPDF(t *testing.T) {
 	store := objects.New(t.TempDir())
 	idx := newFakeIndex()
 	steps := &fakeSteps{}
-	intake := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}, Steps: steps}
+	intake := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}, Steps: steps}
 
-	if _, err := intake.Execute(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# T\nbody\n")}); err != nil {
+	if _, err := intake.Intake(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# T\nbody\n")}); err != nil {
 		t.Fatalf("intake md: %v", err)
 	}
 	md := steps.seen[entities.StepCapture][len(steps.seen[entities.StepCapture])-1]
@@ -277,7 +275,7 @@ func TestIntakeLeavesCaptureOpenForAPDF(t *testing.T) {
 		t.Errorf("markdown capture = %q, want ok (the object is readable)", md.State)
 	}
 
-	if _, err := intake.Execute(ctx, usecases.IntakeInput{Name: "book.pdf", Reader: strings.NewReader("%PDF")}); err != nil {
+	if _, err := intake.Intake(ctx, usecases.IntakeInput{Name: "book.pdf", Reader: strings.NewReader("%PDF")}); err != nil {
 		t.Fatalf("intake pdf: %v", err)
 	}
 	pdf := steps.seen[entities.StepCapture][len(steps.seen[entities.StepCapture])-1]
@@ -287,7 +285,7 @@ func TestIntakeLeavesCaptureOpenForAPDF(t *testing.T) {
 
 	// An EPUB is a container, not text: step 1 has to read its chapters, so the capture is open here
 	// too — and the source is filed with the right kind.
-	epubSrc, err := intake.Execute(ctx, usecases.IntakeInput{Name: "book.epub", Reader: strings.NewReader("PK\x03\x04")})
+	epubSrc, err := intake.Intake(ctx, usecases.IntakeInput{Name: "book.epub", Reader: strings.NewReader("PK\x03\x04")})
 	if err != nil {
 		t.Fatalf("intake epub: %v", err)
 	}
@@ -307,14 +305,13 @@ func TestCaptureReadsABook(t *testing.T) {
 	ctx := context.Background()
 	store := objects.New(t.TempDir())
 	idx := newFakeIndex()
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "book.epub", Reader: strings.NewReader("PK\x03\x04")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "book.epub", Reader: strings.NewReader("PK\x03\x04")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
 
 	steps := &fakeSteps{}
-	capture := usecases.CaptureSource{
+	capture := usecases.Derivation{
 		Store: store, Index: idx, Steps: steps, Clock: fixedClock{},
 		Extractor: &fakeExtractor{
 			parts: []entities.Part{
@@ -325,7 +322,7 @@ func TestCaptureReadsABook(t *testing.T) {
 			language: "en",
 		},
 	}
-	res, err := capture.Execute(ctx, src.Hash)
+	res, err := capture.Capture(ctx, src.Hash)
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}

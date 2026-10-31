@@ -42,7 +42,7 @@ func TestRebranchClaimsRelabelsFromTheClaimText(t *testing.T) {
 		"A context cancels work when its deadline passes.",
 		"Goroutines are cheap user-space threads.",
 	}
-	var ids []ulid.ULID
+	ids := make([]ulid.ULID, 0, len(claims))
 	for i, claim := range claims {
 		stored, wErr := atomStore.Write(ctx, entities.Atom{
 			ID: ulid.Make(), Topic: "go", Path: "x.md", Claim: claim, Body: "b",
@@ -57,8 +57,8 @@ func TestRebranchClaimsRelabelsFromTheClaimText(t *testing.T) {
 		}
 		ids = append(ids, stored.ID)
 	}
-	runID, err := usecases.StartRun{Runs: sqlc.NewRunRepository(db), Clock: fixedClock{}}.
-		Execute(ctx, entities.RunVocabulary, "test", entities.Step(""), "rebranch")
+	runID, err := usecases.Runs{Store: sqlc.NewRunRepository(db), Clock: fixedClock{}}.
+		Start(ctx, entities.RunVocabulary, "test", entities.Step(""), "rebranch")
 	if err != nil {
 		t.Fatalf("start run: %v", err)
 	}
@@ -66,11 +66,11 @@ func TestRebranchClaimsRelabelsFromTheClaimText(t *testing.T) {
 	gw := &fakeGateway{responses: []interfaces.AgentResponse{
 		finalResponse(`{"claims":[{"n":1,"topic":"go-http"},{"n":2,"topic":"go-context"},{"n":3,"topic":"go"}]}`),
 	}}
-	uc := usecases.RebranchClaims{
+	uc := usecases.Claims{
 		Atoms: atomRepo, AtomStore: atomStore, Vocab: vocabStore, Gateway: gw, Model: "test",
 		Runs: sqlc.NewRunRepository(db), Clock: fixedClock{}, Apply: true,
 	}
-	res, err := uc.Execute(ctx, runID)
+	res, err := uc.Rebranch(ctx, runID)
 	if err != nil {
 		t.Fatalf("rebranch: %v", err)
 	}

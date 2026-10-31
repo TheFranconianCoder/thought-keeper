@@ -40,52 +40,52 @@ import (
 type Deps struct {
 	Handler http.Handler
 	// VocabularyCurate asks the model what the claim-topic vocabulary should become and applies it.
-	VocabularyCurate usecases.CurateVocabulary
+	VocabularyCurate usecases.Vocabulary
 	// TagWikiPage derives a page's tags from its title and prose.
-	TagWikiPage usecases.TagWikiPage
+	TagWikiPage usecases.Vocabulary
 	// SourceSummary writes a source's overview from its claims.
-	SourceSummary usecases.SourceSummary
+	SourceSummary usecases.Sources
 	// TagSource derives a source's auto tags from its claims.
-	TagSource           usecases.TagSource
-	RebranchClaims      usecases.RebranchClaims
-	VocabularyReconcile usecases.ReconcileVocabulary
-	Intake              usecases.IntakeSource
-	BuildTree           usecases.BuildTree
-	StartRun            usecases.StartRun
-	DocumentRun         usecases.DocumentRun
-	Reconcile           usecases.ReconcileVault
-	Reindex             usecases.ReindexVault
+	TagSource           usecases.Vocabulary
+	RebranchClaims      usecases.Claims
+	VocabularyReconcile usecases.Vocabulary
+	Intake              usecases.Sources
+	BuildTree           usecases.Trees
+	StartRun            usecases.Runs
+	DocumentRun         usecases.Derivation
+	Reconcile           usecases.Maintenance
+	Reindex             usecases.Maintenance
 	// PruneCommands enforces the assistant's retention in the same tick as the consistency job.
-	PruneCommands usecases.PruneCommands
-	Capture       usecases.CaptureSource
+	PruneCommands usecases.Commands
+	Capture       usecases.Derivation
 	// ClusterPass is step 4: the titleless association of claims.
-	ClusterPass usecases.ClusterPass
-	Cleanup     usecases.Cleanup
-	Query       usecases.QueryKnowledge
-	Lint        usecases.LintKnowledge
-	AddURL      usecases.AddURL
-	RefreshURLs usecases.RefreshURLs
+	ClusterPass usecases.Clusters
+	Cleanup     usecases.Maintenance
+	Query       usecases.Query
+	Lint        usecases.Lint
+	AddURL      usecases.URLs
+	RefreshURLs usecases.URLs
 	// QueueURLs claims the links a wiki page brings before anything is fetched; MarkURLFailed records
 	// the ones whose fetch did not happen, so a dead link stays visible instead of vanishing.
-	QueueURLs      usecases.QueueURLs
-	MarkURLFailed  usecases.MarkURLFailed
-	GetSource      usecases.GetSource
-	SourceHasAtoms usecases.SourceHasAtoms
+	QueueURLs      usecases.URLs
+	MarkURLFailed  usecases.URLs
+	GetSource      usecases.Sources
+	SourceHasAtoms usecases.Sources
 	SourceLog      interfaces.SourceLog
 	// Steps is the source step tracker (the <hash>.meta records).
 	Steps                interfaces.StepTracker
-	SourcesWithOpenParts usecases.SourcesWithOpenParts
-	SourcesWithoutAtoms  usecases.SourcesWithoutAtoms
+	SourcesWithOpenParts usecases.Sources
+	SourcesWithoutAtoms  usecases.Sources
 	// SourcesWithUnclustered is the backlog of step 4.
-	SourcesWithUnclustered usecases.SourcesWithUnclustered
-	SourcesWithoutTree     usecases.SourcesWithoutTree
+	SourcesWithUnclustered usecases.Sources
+	SourcesWithoutTree     usecases.Sources
 	Maintenance            interfaces.Maintenance
-	ResetSource            usecases.ResetSource
+	ResetSource            usecases.Derivation
 	// PruneWikiLinks removes what a saved page stopped owning, in the background.
-	PruneWikiLinks usecases.PruneWikiLinks
+	PruneWikiLinks usecases.Wiki
 	// MatchSourceInterests is the automatism: a new or freshly distilled source is compared with
 	// the reader's rules and a strong match joins the read-later queue.
-	MatchSourceInterests usecases.MatchSourceInterests
+	MatchSourceInterests usecases.ReadLater
 	AgentAvailable       bool
 }
 
@@ -113,8 +113,8 @@ func Build(
 	// The URL cadences: `capture.refresh_interval` is for a page or a sitemap, and
 	// `capture.feed_refresh_interval` for a feed's item list. The worker checks for due sources far
 	// more often; each interval belongs to the source's url_checked_at.
-	refreshMinAge, _ := time.ParseDuration(cfg.Capture.RefreshInterval)
-	feedRefreshMinAge, _ := time.ParseDuration(cfg.Capture.FeedRefreshInterval)
+	refreshMinAge := durationOr(cfg.Capture.RefreshInterval, 168*time.Hour, log, "capture.refresh_interval")
+	feedRefreshMinAge := durationOr(cfg.Capture.FeedRefreshInterval, 24*time.Hour, log, "capture.feed_refresh_interval")
 	index := sqlc.NewSourceRepository(db)
 	trees := treeStore.New(cfg.SourcesDir())
 	atomStore := atoms.New(cfg.AtomsDir())
@@ -132,7 +132,7 @@ func Build(
 	runner := gateways.ExecRunner{}
 	languages := langdetect.Detector{}
 
-	fetchTimeout, _ := time.ParseDuration(cfg.Fetch.Timeout)
+	fetchTimeout := durationOr(cfg.Fetch.Timeout, 30*time.Second, log, "fetch.timeout")
 	fetcher := gateways.NewFetcher(gateways.FetcherConfig{
 		Timeout:      fetchTimeout,
 		MaxBytes:     cfg.Fetch.MaxBytes,
@@ -154,7 +154,7 @@ func Build(
 		Log:                 log,
 	})
 
-	timeout, _ := time.ParseDuration(cfg.OpenAI.Timeout)
+	timeout := durationOr(cfg.OpenAI.Timeout, 60*time.Second, log, "openai.timeout")
 	retryBackoff, err := time.ParseDuration(cfg.OpenAI.RetryBackoff)
 	if err != nil || retryBackoff <= 0 {
 		retryBackoff = 2 * time.Second
@@ -199,166 +199,91 @@ func Build(
 	partRepo := sqlc.NewPartRepository(db)
 	meta := sourcemeta.New(cfg.SourcesDir())
 	steps := sourcemeta.NewTracker(meta, index, log)
-	intake := usecases.IntakeSource{Store: store, Index: index, SourceLog: sourceLog, Clock: clock, Steps: steps, Languages: languages}
-	list := usecases.ListSources{Index: index}
-	facets := usecases.ListSourceFacets{Index: index, Shelf: index}
-	sourceChildren := usecases.SourceChildren{Index: index}
-	setSourceTags := usecases.SetSourceTags{Index: index, Tags: steps, SourceLog: sourceLog, Clock: clock}
-	setSourceFavorite := usecases.SetSourceFavorite{Index: index, Shelf: steps, Clock: clock}
-	setReadLater := usecases.SetSourceReadLater{Index: index, Shelf: steps, Clock: clock}
-	setWikiFavorite := usecases.SetWikiFavorite{Wiki: wikiStore, Clock: clock}
-	get := usecases.GetSource{Index: index}
+	favorites := usecases.Favorites{Index: index, Shelf: steps, Wiki: wikiStore, Clock: clock}
 
 	// The reader's standing rules. The files under interests/ are the truth; the preview reads the
 	// index for the calibration, and the ingest path matches one source in memory.
 	interestStore := interests.New(cfg.InterestsDir())
 	interestSignals := sqlc.NewInterestRepository(db, persistence.HasFTS5(db))
-	listInterests := usecases.ListInterests{Store: interestStore, Counter: index}
-	saveInterest := usecases.SaveInterest{Store: interestStore, Shelf: steps, Signals: interestSignals, Clock: clock}
-	deleteInterest := usecases.DeleteInterest{Store: interestStore}
-	previewInterest := usecases.PreviewInterest{Signals: interestSignals}
-	sourceInterests := usecases.SourceInterests{Store: interestStore, Index: index, Atoms: atomRepo}
-	rejectSourceInterest := usecases.RejectSourceInterest{Store: interestStore, Index: index, Shelf: steps, Clock: clock}
-	matchSourceInterests := usecases.MatchSourceInterests{Store: interestStore, Index: index, Atoms: atomRepo, Shelf: steps, Clock: clock}
+	readLater := usecases.ReadLater{
+		Store: interestStore, Counter: index, Shelf: steps, Signals: interestSignals,
+		Index: index, Atoms: atomRepo, Clock: clock,
+	}
 	maintenanceRepo := sqlc.NewMaintenanceRepository(db)
-	reindex := usecases.ReindexVault{
+	maintenance := usecases.Maintenance{
 		Store: store, Index: index, Atoms: atomRepo, AtomStore: atomStore,
-		Maintenance: maintenanceRepo, SourceLog: sourceLog,
+		MaintenanceRepo: maintenanceRepo, SourceLog: sourceLog, Lint: lintRepo,
 		Trees: trees, Clock: clock, Log: log, Steps: steps, Parts: partRepo, Shelf: index,
 		ClusterStore: clusterStore, ClusterRepo: clusterRepo,
+		Limit: cfg.Pipeline.ReconcileBatch, Languages: languages,
 	}
-	capture := usecases.CaptureSource{
+	derivation := usecases.Derivation{
 		Store: store, Index: index, Extractor: extractor, Steps: steps, Languages: languages,
-		SourceLog: sourceLog, Clock: clock, Log: log,
+		SourceLog: sourceLog, Trees: trees, PartRepo: partRepo, Atoms: atomRepo, AtomStore: atomStore,
+		Vocab: vocabStore, Runs: runRepo, Clock: clock, Log: log,
+		PartsPerRun: cfg.Pipeline.PartsPerRun, Parallel: cfg.Pipeline.ParallelParts,
+		MaxIterations: cfg.OpenAI.MaxIterations, Language: cfg.Language.Claims,
+		ReasoningEffort: cfg.OpenAI.ReasoningEffortDistill,
 	}
-	buildTree := usecases.BuildTree{
+	treesUC := usecases.Trees{
 		Store: store, Index: index, Trees: trees, Extractor: extractor,
 		SourceLog: sourceLog, Clock: clock, Gateway: gw, Model: cfg.OpenAI.ModelCompile,
 		Steps: steps, Languages: languages,
 	}
-	rebuildTrees := usecases.RebuildTrees{Index: index, BuildTree: buildTree}
 
 	faviconStore := favicons.New(cfg.FaviconsDir())
-	addURL := usecases.AddURL{Fetch: fetcher, Convert: converter, Store: store, Index: index, Favicons: faviconStore, MinTextChars: cfg.Capture.MinTextChars, Clock: clock, Log: log, Steps: steps, Languages: languages, SourceLog: sourceLog}
-	queueURLs := usecases.QueueURLs{Index: index, Steps: steps, Clock: clock, Log: log}
-	markURLFailed := usecases.MarkURLFailed{Index: index, Steps: steps, SourceLog: sourceLog, Clock: clock, Log: log}
-	attachURL := usecases.AttachURLSnapshot{
-		Convert: converter, Extractor: extractor, Store: store, Index: index, Steps: steps,
-		SourceLog: sourceLog, Languages: languages, Clock: clock, Log: log,
-		// An attachment is a local file the human chose; the PDF ceiling is the honest bound, since a
-		// page saved as PDF is the largest form an attachment takes.
+	// A page's and a source's tags are DERIVED, and the vocabulary they write into is the one the
+	// curation maintains.
+	vocabulary := usecases.Vocabulary{
+		Atoms: atomRepo, AtomStore: atomStore, Wiki: wikiStore, Reader: index, Sources: steps,
+		Tags: steps, Index: index, Vocab: vocabStore, Runs: runRepo, SourceLog: sourceLog,
+		Gateway: gw, Model: cfg.OpenAI.ModelCompile, Clock: clock, Log: log,
+	}
+	sources := usecases.Sources{
+		Store: store, Index: index, Atoms: atomRepo, AtomStore: atomStore,
+		CommandStore: commandStore, Tags: steps, Shelf: index, Favicons: faviconStore,
+		Declared: store, Trees: trees, Convert: converter, Extractor: extractor,
+		Gateway: gw, SourceLog: sourceLog, Steps: steps, Languages: languages, Runs: runRepo,
+		Clock: clock, Log: log, Model: cfg.OpenAI.ModelCompile, Language: cfg.Language.Summary,
 		MaxBytes: cfg.PDF.MaxBytes,
 	}
-	vocabularyReport := usecases.VocabularyReport{
-		Atoms: atomRepo, Wiki: wikiStore, Sources: index, Vocab: vocabStore,
-	}
-	vocabularyReconcile := usecases.ReconcileVocabulary{
-		Report: vocabularyReport, Vocab: vocabStore, Clock: clock, Log: log,
-	}
-	vocabularyCurate := usecases.CurateVocabulary{
-		Report: vocabularyReport, Atoms: atomRepo, Wiki: wikiStore, Sources: steps,
-		Gateway: gw, Model: cfg.OpenAI.ModelCompile, Apply: true,
-		Vocab: vocabStore, AtomStore: atomStore,
-		Runs: runRepo, Clock: clock, Log: log,
-	}
-	// A wiki page's tags are DERIVED from its own title and prose, and the vocabulary it writes into
-	// is the one the curation maintains.
-	tagWikiPage := usecases.TagWikiPage{
-		Gateway: gw, Model: cfg.OpenAI.ModelCompile, Pages: wikiStore, Vocab: vocabStore,
-		Clock: clock, Log: log,
-	}
-	sourceSummary := usecases.SourceSummary{
-		Index: index, Atoms: atomRepo, Trees: trees, Store: store,
-		Gateway: gw, Model: cfg.OpenAI.ModelCompile, Language: cfg.Language.Summary,
-		Runs: runRepo, SourceLog: sourceLog, Clock: clock, Log: log,
-	}
-	tagSource := usecases.TagSource{
-		Index: index, Atoms: atomRepo, Tags: steps,
-		Gateway: gw, Model: cfg.OpenAI.ModelCompile, Vocab: vocabStore,
-		Runs: runRepo, SourceLog: sourceLog, Clock: clock, Log: log,
-	}
-	deleteSource := usecases.DeleteSource{
-		Store: store, Index: index, Atoms: atomStore, AtomRepo: atomRepo,
-		SourceLog: sourceLog, Clock: clock, Log: log, Steps: steps,
-	}
-	refreshURLs := usecases.RefreshURLs{
-		Fetch: fetcher, Convert: converter, Store: store, Index: index, Atoms: atomRepo,
-		Favicons: faviconStore, Clock: clock, Log: log, Steps: steps, Languages: languages,
-		SourceLog: sourceLog, MinAge: refreshMinAge, FeedMinAge: feedRefreshMinAge,
-		MinTextChars: cfg.Capture.MinTextChars,
+	urls := usecases.URLs{
+		Fetch: fetcher, Convert: converter, Store: store, Index: index, Atoms: atomRepo, AtomStore: atomStore,
+		Favicons: faviconStore, Steps: steps, Languages: languages, SourceLog: sourceLog,
+		Clock: clock, Log: log, MinTextChars: cfg.Capture.MinTextChars,
+		MinAge: refreshMinAge, FeedMinAge: feedRefreshMinAge,
 		// A sitemap is a complete list: a page that left it is deleted by its owner. A feed never
 		// deletes; the same use case decides from the parent's marker.
-		Delete: deleteSource,
+		Delete: sources.DeleteOwned,
 	}
-	migrateURLAddresses := usecases.MigrateURLAddresses{
-		Index: index, Store: store, Atoms: atomRepo, AtomStore: atomStore, Steps: steps, Log: log,
-	}
-	listWiki := usecases.ListWikiPages{Pages: wikiStore}
-	getWiki := usecases.GetWikiPage{Pages: wikiStore}
-	sourceContent := usecases.SourceContent{Index: index, Store: store}
-	sourceSidecars := usecases.SourceSidecars{Index: index, Store: store}
-	fixURLs := usecases.FixURLKinds{Index: index, Declared: store, Steps: steps, Log: log}
-	sourceFavicon := usecases.SourceFavicon{Index: index, Favicons: faviconStore}
-	getTree := usecases.GetTree{Index: index}
-	getNode := usecases.GetNode{Trees: trees, Index: index, Store: store}
 
-	listAtoms := usecases.ListAtoms{AtomRepo: atomRepo, Clusters: clusterRepo}
-	listBranches := usecases.ListClaimTopics{AtomRepo: atomRepo}
-	listAsks := usecases.ListAsks{Asks: askStore, Atoms: atomRepo, Sources: index}
-	getAsk := usecases.GetAsk{Asks: askStore, Atoms: atomRepo, Sources: index}
-	deleteAsk := usecases.DeleteAsk{Asks: askStore}
-	runCommand := usecases.RunCommand{
-		Index: index, Atoms: atomRepo, Wiki: wikiStore, Vocab: vocabStore,
-		Search: searchRepo, Commands: commandStore,
-		Clock: clock, Log: log,
+	asks := usecases.Asks{Store: askStore, Atoms: atomRepo, Sources: index}
+	commandRetention := durationOr(cfg.Assistant.Retention, 7*24*time.Hour, log, "assistant.retention")
+	commands := usecases.Commands{
+		Store: commandStore, Index: index, Atoms: atomRepo, Wiki: wikiStore, Vocab: vocabStore,
+		Lexical: searchRepo, Clock: clock, Log: log,
 		MaxItems: cfg.Assistant.MaxItems, ScanLimit: cfg.Assistant.ScanLimit,
+		Retention: commandRetention,
 	}
-	listCommands := usecases.ListCommands{Commands: commandStore}
-	getCommand := usecases.GetCommand{Commands: commandStore}
-	deleteCommand := usecases.DeleteCommand{Commands: commandStore}
-	commandSources := usecases.CommandSources{Commands: commandStore, Index: index}
-	commandAtoms := usecases.CommandAtoms{Commands: commandStore, Atoms: atomRepo, Clusters: clusterRepo}
-	commandRetention, _ := time.ParseDuration(cfg.Assistant.Retention)
-	pruneCommands := usecases.PruneCommands{Commands: commandStore, Retention: commandRetention, Clock: clock}
-	getAtom := usecases.GetAtom{AtomRepo: atomRepo, Clusters: clusterRepo}
-	sourceAtoms := usecases.SourceAtoms{AtomRepo: atomRepo, Clusters: clusterRepo}
-	getRun := usecases.GetRun{Runs: runRepo}
-	startRun := usecases.StartRun{Runs: runRepo, Clock: clock}
+	claims := usecases.Claims{Atoms: atomRepo, AtomStore: atomStore, Clusters: clusterRepo}
+	runs := usecases.Runs{Store: runRepo, Clock: clock}
 
-	distill := usecases.DistillSource{
-		Index: index, Trees: trees, Store: store, Atoms: atomStore, AtomRepo: atomRepo,
-		PartRepo: partRepo, SourceLog: sourceLog, Steps: steps, Vocab: vocabStore,
-		PartsPerRun: cfg.Pipeline.PartsPerRun, Parallel: cfg.Pipeline.ParallelParts,
-		Model: cfg.OpenAI.ModelCompile, Language: cfg.Language.Claims,
-		MaxIterations:   cfg.OpenAI.MaxIterations,
-		ReasoningEffort: cfg.OpenAI.ReasoningEffortDistill, Clock: clock, Log: log,
-	}
-	resetSource := usecases.ResetSource{
-		Index: index, Trees: trees, SourceLog: sourceLog, Clock: clock, Log: log, Steps: steps,
-	}
-	cleanSource := usecases.CleanSource{
-		Parts: partRepo, SourceLog: sourceLog, Index: index,
-		Atoms: atomRepo, AtomStore: atomStore, Store: store, Tags: steps, Clock: clock, Log: log,
-	}
-	buildTree.Clean = cleanSource
-	buildTree.Parts = partRepo
-	rebuildTrees = usecases.RebuildTrees{Index: index, BuildTree: buildTree}
-	resetSource.Clean = cleanSource
-	resetSource.SourceLog = sourceLog
+	derivation.Tags = steps
+	maintenance.Clean = derivation.Clean
+	treesUC.Clean = derivation.Correct
+	treesUC.Parts = partRepo
 	// A replacement snapshot (an attach or a forced fetch) is a new source text: the derivation that
 	// belonged to the old one is reset.
-	attachURL.Reset = resetSource
-	refreshURLs.Reset = resetSource
+	sources.Reset = derivation.Reset
+	urls.Reset = derivation.Reset
 
-	saveWiki := usecases.SaveWikiPage{
+	wiki := usecases.Wiki{
 		Pages: wikiStore, Store: store, Index: index, Steps: steps,
-		SourceLog: sourceLog, Clock: clock, Log: log,
+		SourceLog: sourceLog, DeleteSource: sources.DeleteOwned, Clock: clock, Log: log,
 	}
-	deleteWiki := usecases.DeleteWikiPage{Pages: wikiStore, Index: index, Delete: deleteSource, Log: log}
-	pruneWikiLinks := usecases.PruneWikiLinks{Pages: wikiStore, Index: index, Delete: deleteSource, Log: log}
 
 	// Step 4: the titleless association of claims. It is deterministic — no model, no naming.
-	clusterPass := usecases.ClusterPass{
+	clusters := usecases.Clusters{
 		Atoms: atomRepo, Clusters: clusterRepo, Store: clusterStore,
 		Settings: usecases.ClusterSettings{
 			NeighborK:          cfg.Cluster.NeighborK,
@@ -375,52 +300,38 @@ func Build(
 		},
 		Clock: clock, Log: log, Runs: runRepo, Model: "",
 	}
-	pendingCluster := usecases.SourcesWithUnclustered{Index: index}
-	documentRun := usecases.DocumentRun{
-		Reset: resetSource, Capture: capture, BuildTree: buildTree, Distill: distill,
-		SourceLog: sourceLog, Runs: runRepo, Clock: clock, Model: cfg.OpenAI.ModelCompile, Log: log,
-	}
-	reconcile := usecases.ReconcileVault{
-		Index: index, Steps: steps, Store: store, Clean: cleanSource,
-		SourceLog: sourceLog, Clock: clock, Log: log, Limit: cfg.Pipeline.ReconcileBatch,
-		Languages: languages, Trees: trees,
-	}
-	query := usecases.QueryKnowledge{
-		Atoms: atomRepo, Clusters: clusterRepo, Search: searchRepo, Index: index, Store: store,
+	pendingCluster := sources
+	query := usecases.Query{
+		Atoms: atomRepo, Clusters: clusterRepo, Lexical: searchRepo, Index: index, Store: store,
 		Asks: askStore, Runs: runRepo,
 		Model: cfg.OpenAI.ModelReason, MaxIterations: cfg.OpenAI.MaxIterations,
 		ReasoningEffort: cfg.OpenAI.ReasoningEffortReason, Clock: clock, Log: log,
 	}
-	reorganizeAtoms := usecases.ReorganizeAtoms{Atoms: atomStore, AtomRepo: atomRepo, Log: log}
-	quoteClaimCode := usecases.QuoteClaimCode{Atoms: atomStore, AtomRepo: atomRepo, Clock: clock, Log: log}
-	collapseAtoms := usecases.CollapseDuplicateAtoms{
-		Atoms: atomStore, AtomRepo: atomRepo, Clusters: clusterRepo, Clock: clock, Log: log,
-	}
+	claims.CommandStore = commandStore
+	claims.Vocab = vocabStore
+	claims.Runs = runRepo
+	claims.Clock = clock
+	claims.Log = log
 	// The duplicate check is a maintenance question the PWA asks twice at start-up; one scan serves
 	// both callers, and a collapse invalidates the answer.
-	duplicates := &cachedDuplicates{uc: collapseAtoms}
-	lintExec := usecases.LintKnowledge{
-		Lint: lintRepo, Atoms: atomRepo, Runs: runRepo, Clock: clock, Log: log,
+	duplicates := &cachedDuplicates{uc: claims}
+	lintUC := usecases.Lint{
+		Store: lintRepo, Atoms: atomRepo, Runs: runRepo, Clock: clock, Log: log,
 	}
-	cleanup := usecases.Cleanup{
-		Clusters: clusterRepo, Store: clusterStore, Atoms: atomRepo, Lint: lintRepo,
-		Clock: clock, Log: log,
-	}
+
 	if agentOK {
-		distill.Gateway = gw
+		derivation.Gateway = gw
 		query.Gateway = gw
-		documentRun.Distill = distill
 		// The assistant reads an utterance, it does not write the vault; a wrong key must not take
 		// the deterministic parser with it.
-		runCommand.Gateway = gw
-		runCommand.Model = cfg.OpenAI.ModelCompile
+		commands.Gateway = gw
+		// The rebranch pass is the one claim repair that asks the model; without a gateway it stays
+		// a dry run of the deterministic part.
+		claims.Gateway = gw
+		claims.Model = cfg.OpenAI.ModelCompile
+		commands.Model = cfg.OpenAI.ModelCompile
 	}
-	listFindings := usecases.ListFindings{Lint: lintRepo}
-	hasAtoms := usecases.SourceHasAtoms{Index: index}
-	withoutAtoms := usecases.SourcesWithoutAtoms{Index: index}
-	openParts := usecases.SourcesWithOpenParts{Index: index}
-	withoutTree := usecases.SourcesWithoutTree{Index: index}
-	searchUC := usecases.Search{Search: searchRepo}
+	hasAtoms, withoutAtoms, openParts, withoutTree := sources, sources, sources, sources
 
 	h := router.New(router.Deps{
 		Status:    status,
@@ -428,89 +339,89 @@ func Build(
 		Cluster:   handlers.ClusterHandler{Runs: clusterQueue},
 		Reconcile: handlers.ReconcileHandler{Runs: reconciler},
 		Sources: handlers.SourcesHandler{
-			Lister: list, Counter: list, Facets: facets, ChildLister: sourceChildren, TagSetter: setSourceTags,
-			Favorite: setSourceFavorite, ReadLater: setReadLater, Interests: sourceInterests,
-			Getter: get, Distill: scheduler, Summary: scheduler, Status: scheduler, Delete: deleteSource,
-			Capturer: scheduler, Sidecars: sourceSidecars, FixURLs2: fixURLs, Attacher: attachURL,
-			Content: sourceContent, Favicon: sourceFavicon, Log: sourceLog, Reset: scheduler, OnRemoved: onRemoved,
+			Lister: sources.List, Counter: sources.Count, Facets: sources.Facets, ChildLister: sources.Children,
+			TagSetter: sources.Tag,
+			Favorite:  favorites.SetSource, ReadLater: readLater.Set, Interests: readLater.ForSource,
+			Getter: sources.Get, Distill: scheduler, Summary: scheduler, Status: scheduler, Delete: sources.Delete,
+			Capturer: scheduler, Sidecars: sources.Sidecars, FixURLs2: sources.FixKinds, Attacher: sources.Attach,
+			Content: sources.Content, Rendered: sources.Rendered, Sidecar: sources.Sidecar,
+			Favicon: sources.Favicon, Log: sourceLog, Reset: scheduler, OnRemoved: onRemoved,
 			OnAttached: onAdded,
 			Mark:       scheduler,
-			Commands:   commandSources,
+			Commands:   sources.Commands,
 		},
-		Add: handlers.AddHandler{Intake: intake, URL: addURL, OnAdded: onAdded, OnReplaced: onReset, Children: scheduler},
+		Add: handlers.AddHandler{Intake: sources.Intake, URL: urls.Add, URLManual: urls.AddManual, OnAdded: onAdded, OnReplaced: onReset, Children: scheduler},
 		URL: handlers.URLHandler{
-			Refresh:      refreshURLs,
+			Refresh: urls.Refresh, RefreshAll: urls.RefreshAll,
+			RefreshOne: urls.RefreshOne, RefreshOneForce: urls.RefreshOneForce,
 			Bulk:         scheduler,
 			OnChanged:    onAdded,
 			OnReplaced:   onReset,
 			OnDiscovered: onDiscovered,
-			Addresses:    migrateURLAddresses, Mark: scheduler,
+			Addresses:    urls.Migrate, Mark: scheduler,
 		},
-		Reindex: handlers.ReindexHandler{Reindex: reindex, Mark: scheduler},
+		Reindex: handlers.ReindexHandler{Reindex: maintenance.Reindex, Mark: scheduler},
 		Vocabulary: handlers.VocabularyHandler{
-			Report: &cachedVocabulary{uc: vocabularyReport}, Consume: scheduler,
+			Report: (&cachedVocabulary{uc: vocabulary}).Report, Consume: scheduler,
 		},
-		Tree: handlers.TreeHandler{Tree: getTree, Node: getNode, Rebuilder: rebuildTrees, Builder: buildTree, Mark: scheduler},
+		Tree: handlers.TreeHandler{Tree: treesUC.Tree, Node: treesUC.Node, Rebuilder: treesUC.Rebuild, Builder: treesUC.Build, Mark: scheduler},
 		Atoms: handlers.AtomHandler{
-			Atoms: listAtoms, ClaimTopics: listBranches, GetAtom: getAtom, SourceAtoms: sourceAtoms, Runs: getRun,
-			AtomRelated: usecases.RelatedAtoms{Atoms: atomRepo, Clusters: clusterRepo},
-			AtomLayout:  reorganizeAtoms, AtomReorganize: reorganizeAtoms,
-			AtomDuplicates: duplicates, AtomCollapse: duplicates, QuoteCode: quoteClaimCode, Mark: scheduler,
-			Commands: commandAtoms,
+			Atoms: claims.List, ClaimTopics: claims.Topics, GetAtom: claims.Get, SourceAtoms: claims.BySource,
+			Runs:        runs.Get,
+			AtomRelated: claims.Related,
+			AtomLayout:  claims.Layout, AtomReorganize: claims.Reorganize,
+			AtomDuplicates: duplicates, AtomCollapse: duplicates, QuoteCode: claims.QuoteCode, Mark: scheduler,
+			Commands: claims.Commands,
 		},
 		Wiki: handlers.WikiHandler{
-			List: listWiki, Get: getWiki, Save: saveWiki, Delete: deleteWiki, Favorite: setWikiFavorite,
+			List: wiki.List, Get: wiki.Get, Save: wiki.Save, Delete: wiki.Delete, Favorite: favorites.SetWiki,
 			OnChanged:   func(_, hash string) { onAdded(hash) },
 			OnReprocess: onReprocess,
 			OnCleanup:   onCleanup,
 			OnTag:       onTag, OnDeleted: onRemoved, URLs: scheduler, OnURLRemoved: onRemoved,
 		},
 		Interests: handlers.InterestHandler{
-			Lister: listInterests, Saver: saveInterest, Deleter: deleteInterest,
-			Previewer: previewInterest, Rejecter: rejectSourceInterest,
+			Lister: readLater.Interests, Saver: readLater.SaveInterest, Deleter: readLater.DeleteInterest,
+			Previewer: readLater.PreviewInterest, Rejecter: readLater.RejectInterest,
 		},
-		Search: handlers.SearchHandler{Search: searchUC},
-		Asks:   handlers.AskHandler{Lister: listAsks, Getter: getAsk, Deleter: deleteAsk},
+		Search: handlers.SearchHandler{Search: query.Search},
+		Asks:   handlers.AskHandler{Lister: asks.List, Getter: asks.Get, Deleter: asks.Delete},
 		Commands: handlers.CommandHandler{
-			Runner: runCommand, Lister: listCommands, Getter: getCommand, Deleter: deleteCommand,
+			Runner: commands.Run, Lister: commands.List, Getter: commands.Get, Deleter: commands.Delete,
 			Notifier: hub,
 		},
 		Query:  handlers.QueryHandler{Query: scheduler},
-		Lint:   handlers.LintHandler{Lint: scheduler, Findings: listFindings, Cleanup: cleanup, Mark: scheduler},
+		Lint:   handlers.LintHandler{Lint: scheduler, Findings: lintUC.Findings, Cleanup: maintenance.Cleanup, Mark: scheduler},
 		Events: handlers.SSEHandler{Hub: hub},
 		Gate:   gate,
 		Log:    log,
 	}, web.Handler())
 
 	return Deps{
-		Handler:          h,
-		VocabularyCurate: vocabularyCurate,
-		TagWikiPage:      tagWikiPage,
-		SourceSummary:    sourceSummary,
-		TagSource:        tagSource,
-		RebranchClaims: usecases.RebranchClaims{
-			Atoms: atomRepo, AtomStore: atomStore, Vocab: vocabStore, Gateway: gw,
-			Model: cfg.OpenAI.ModelCompile, Runs: runRepo, Clock: clock, Log: log,
-			MaxClaims: 12000, Parallel: 4, Apply: true,
-		},
-		VocabularyReconcile:    vocabularyReconcile,
-		Intake:                 intake,
-		Capture:                capture,
-		BuildTree:              buildTree,
-		StartRun:               startRun,
-		DocumentRun:            documentRun,
-		Reconcile:              reconcile,
-		PruneCommands:          pruneCommands,
-		Reindex:                reindex,
-		ClusterPass:            clusterPass,
-		Cleanup:                cleanup,
+		Handler:                h,
+		VocabularyCurate:       vocabulary,
+		TagWikiPage:            vocabulary,
+		SourceSummary:          sources,
+		TagSource:              vocabulary,
+		RebranchClaims:         claims,
+		VocabularyReconcile:    vocabulary,
+		Intake:                 sources,
+		Capture:                derivation,
+		BuildTree:              treesUC,
+		StartRun:               runs,
+		DocumentRun:            derivation,
+		Reconcile:              maintenance,
+		PruneCommands:          commands,
+		Reindex:                maintenance,
+		ClusterPass:            clusters,
+		Cleanup:                maintenance,
 		Query:                  query,
-		Lint:                   lintExec,
-		AddURL:                 addURL,
-		RefreshURLs:            refreshURLs,
-		QueueURLs:              queueURLs,
-		MarkURLFailed:          markURLFailed,
-		GetSource:              get,
+		Lint:                   lintUC,
+		AddURL:                 urls,
+		RefreshURLs:            urls,
+		QueueURLs:              urls,
+		MarkURLFailed:          urls,
+		GetSource:              sources,
 		SourceHasAtoms:         hasAtoms,
 		SourceLog:              sourceLog,
 		Steps:                  steps,
@@ -519,11 +430,23 @@ func Build(
 		SourcesWithUnclustered: pendingCluster,
 		SourcesWithoutTree:     withoutTree,
 		Maintenance:            maintenanceRepo,
-		ResetSource:            resetSource,
-		PruneWikiLinks:         pruneWikiLinks,
-		MatchSourceInterests:   matchSourceInterests,
+		ResetSource:            derivation,
+		PruneWikiLinks:         wiki,
+		MatchSourceInterests:   readLater,
 		AgentAvailable:         agentOK,
 	}
 }
 
 var _ = entities.StepCluster
+
+// durationOr reads a configured duration. A value that does not parse is reported and replaced by
+// the sane default: a typo in the YAML must not silently disable a cadence.
+func durationOr(value string, fallback time.Duration, log *slog.Logger, name string) time.Duration {
+	d, err := time.ParseDuration(value)
+	if err != nil || d <= 0 {
+		log.Warn("registry: the configured duration is not usable; using the default",
+			"key", name, "value", value, "default", fallback.String(), "err", err)
+		return fallback
+	}
+	return d
+}

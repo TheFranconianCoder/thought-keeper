@@ -401,9 +401,9 @@ func TestIntakeStoresAndDedupes(t *testing.T) {
 	ctx := context.Background()
 	store := objects.New(t.TempDir())
 	idx := newFakeIndex()
-	uc := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}
+	uc := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}
 
-	first, err := uc.Execute(ctx, usecases.IntakeInput{Name: "note.md", Reader: strings.NewReader("# Hi")})
+	first, err := uc.Intake(ctx, usecases.IntakeInput{Name: "note.md", Reader: strings.NewReader("# Hi")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
@@ -413,7 +413,7 @@ func TestIntakeStoresAndDedupes(t *testing.T) {
 		t.Errorf("unexpected: %+v", first)
 	}
 
-	second, err := uc.Execute(ctx, usecases.IntakeInput{Name: "copy.md", Reader: strings.NewReader("# Hi")})
+	second, err := uc.Intake(ctx, usecases.IntakeInput{Name: "copy.md", Reader: strings.NewReader("# Hi")})
 	if err != nil {
 		t.Fatalf("intake 2: %v", err)
 	}
@@ -429,8 +429,8 @@ func TestIntakeStoresAndDedupes(t *testing.T) {
 }
 
 func TestIntakeRejectsUnsupported(t *testing.T) {
-	uc := usecases.IntakeSource{Store: objects.New(t.TempDir()), Index: newFakeIndex(), Clock: fixedClock{}}
-	_, err := uc.Execute(context.Background(), usecases.IntakeInput{Name: "x.docx", Reader: strings.NewReader("x")})
+	uc := usecases.Sources{Store: objects.New(t.TempDir()), Index: newFakeIndex(), Clock: fixedClock{}}
+	_, err := uc.Intake(context.Background(), usecases.IntakeInput{Name: "x.docx", Reader: strings.NewReader("x")})
 	if !errors.Is(err, types.ErrUnsupportedSource) {
 		t.Fatalf("err = %v, want ErrUnsupportedSource", err)
 	}
@@ -450,8 +450,8 @@ func TestReindexAddsAndRemoves(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	uc := usecases.ReindexVault{Store: store, Index: idx, Clock: fixedClock{}}
-	res, err := uc.Execute(ctx)
+	uc := usecases.Maintenance{Store: store, Index: idx, Clock: fixedClock{}}
+	res, err := uc.Reindex(ctx)
 	if err != nil {
 		t.Fatalf("reindex: %v", err)
 	}
@@ -463,7 +463,7 @@ func TestReindexAddsAndRemoves(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, a.Path)); err != nil {
 		t.Fatal(err)
 	}
-	res, err = uc.Execute(ctx)
+	res, err = uc.Reindex(ctx)
 	if err != nil {
 		t.Fatalf("reindex 2: %v", err)
 	}
@@ -500,7 +500,7 @@ func TestReindexKeepsAURLRecognizableAsAURL(t *testing.T) {
 	}
 
 	idx := newFakeIndex()
-	if _, err := (usecases.ReindexVault{Store: store, Index: idx, Steps: steps, Clock: fixedClock{}}).Execute(ctx); err != nil {
+	if _, err := (usecases.Maintenance{Store: store, Index: idx, Steps: steps, Clock: fixedClock{}}).Reindex(ctx); err != nil {
 		t.Fatalf("reindex: %v", err)
 	}
 
@@ -542,7 +542,7 @@ func TestReindexKeepsTheKindTheIndexAlreadyKnows(t *testing.T) {
 		Ext: obj.Ext, Path: obj.Path, URL: "https://example.com/old", ImportedAt: fixedClock{}.Now(),
 	}
 
-	if _, err := (usecases.ReindexVault{Store: store, Index: idx, Clock: fixedClock{}}).Execute(ctx); err != nil {
+	if _, err := (usecases.Maintenance{Store: store, Index: idx, Clock: fixedClock{}}).Reindex(ctx); err != nil {
 		t.Fatalf("reindex: %v", err)
 	}
 	got, err := idx.GetSourceByHash(ctx, obj.Hash)

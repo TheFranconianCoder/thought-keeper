@@ -39,21 +39,3 @@ func resolveVocabulary(aliases map[string]string, name string) string {
 	}
 	return name
 }
-
-// resolveVocabularyList applies the alias table to a list, dropping empty and duplicate names.
-func resolveVocabularyList(aliases map[string]string, names []string) []string {
-	if len(names) == 0 {
-		return nil
-	}
-	seen := make(map[string]bool, len(names))
-	out := make([]string, 0, len(names))
-	for _, name := range names {
-		name = resolveVocabulary(aliases, name)
-		if name == "" || seen[name] {
-			continue
-		}
-		seen[name] = true
-		out = append(out, name)
-	}
-	return out
-}

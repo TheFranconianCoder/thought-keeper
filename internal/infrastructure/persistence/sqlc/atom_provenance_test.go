@@ -69,8 +69,7 @@ func TestReindexRestoresAtomProvenanceFromFiles(t *testing.T) {
 	atomsRepo := NewAtomRepository(db)
 	atomStore := atomstore.New(t.TempDir())
 
-	src, err := usecases.IntakeSource{Store: store, Index: index, Clock: testClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "a.md", Reader: strings.NewReader("# A\nbody\n")})
+	src, err := usecases.Sources{Store: store, Index: index, Clock: testClock{}}.Intake(ctx, usecases.IntakeInput{Name: "a.md", Reader: strings.NewReader("# A\nbody\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
@@ -110,11 +109,11 @@ func TestReindexRestoresAtomProvenanceFromFiles(t *testing.T) {
 		t.Fatalf("precondition: provenance still present: %+v", got.Sources)
 	}
 
-	reindex := usecases.ReindexVault{
+	reindex := usecases.Maintenance{
 		Store: store, Index: index, Atoms: atomsRepo,
 		AtomStore: atomStore, Clock: testClock{}, Log: slog.Default(),
 	}
-	res, err := reindex.Execute(ctx)
+	res, err := reindex.Reindex(ctx)
 	if err != nil {
 		t.Fatalf("reindex: %v", err)
 	}

@@ -15,23 +15,10 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// IntakeSource stores raw bytes into the content-addressed store and records the
-// source in the index.
-type IntakeSource struct {
-	Store     interfaces.SourceStore
-	Index     interfaces.IndexRepository
-	SourceLog interfaces.SourceLog
-	Clock     interfaces.Clock
-	// Steps records the CAPTURE step: the source is taken in and readable locally from now on.
-	Steps interfaces.StepTracker
-	// Languages recognises the source's language from its own text. Nil means no detection.
-	Languages interfaces.LanguageDetector
-}
-
 // titleFromObject reads a source's own text and derives its title from it (step 1 for a document
 // whose content is readable as it is). It is best-effort: a file that cannot be read keeps the name
 // it was dropped with.
-func (uc IntakeSource) titleFromObject(ctx context.Context, hash, ext string, kind entities.SourceKind, fallback string) (string, string) {
+func (uc Sources) titleFromObject(_ context.Context, hash, ext string, kind entities.SourceKind, fallback string) (string, string) {
 	rc, err := uc.Store.Open(hash, ext)
 	if err != nil {
 		return "", ""
@@ -41,7 +28,7 @@ func (uc IntakeSource) titleFromObject(ctx context.Context, hash, ext string, ki
 	// a bounded read is enough and keeps a large .txt from being loaded twice.
 	const head = 64 << 10
 	buf := make([]byte, head)
-	n, _ := io.ReadFull(rc, buf)
+	n, _ := io.ReadFull(rc, buf) //nolint:errcheck // a short read is the expected outcome; n says how much arrived
 	if n <= 0 {
 		return "", ""
 	}
@@ -51,7 +38,7 @@ func (uc IntakeSource) titleFromObject(ctx context.Context, hash, ext string, ki
 
 // languageFromObject detects the language of a source whose bytes are readable as they are. It is
 // best-effort: a detector that cannot classify short or code-heavy text leaves the field empty.
-func (uc IntakeSource) languageFromObject(ctx context.Context, hash, ext string) string {
+func (uc Sources) languageFromObject(_ context.Context, hash, ext string) string {
 	if uc.Languages == nil {
 		return ""
 	}
@@ -62,7 +49,7 @@ func (uc IntakeSource) languageFromObject(ctx context.Context, hash, ext string)
 	defer func() { _ = rc.Close() }()
 	const sample = 128 << 10
 	buf := make([]byte, sample)
-	n, _ := io.ReadFull(rc, buf)
+	n, _ := io.ReadFull(rc, buf) //nolint:errcheck // a short read is the expected outcome; n says how much arrived
 	if n <= 0 {
 		return ""
 	}
@@ -75,8 +62,12 @@ type IntakeInput struct {
 	Reader io.Reader
 }
 
-// Execute hashes and stores the content, then upserts the index row.
-func (uc IntakeSource) Execute(ctx context.Context, in IntakeInput) (partialentities.PartialSource, error) {
+// IntakeService takes one file from the inbox into the store. A handler holds this value; nil means
+// the intake is not wired.
+type IntakeService func(ctx context.Context, in IntakeInput) (partialentities.PartialSource, error)
+
+// Intake takes one file into the store.
+func (uc Sources) Intake(ctx context.Context, in IntakeInput) (partialentities.PartialSource, error) {
 	ext := strings.ToLower(filepath.Ext(in.Name))
 	kind := entities.KindForExt(ext)
 	if kind == "" {
@@ -125,9 +116,9 @@ func (uc IntakeSource) Execute(ctx context.Context, in IntakeInput) (partialenti
 		return partialentities.PartialSource{}, err
 	}
 	if src.Language != "" {
-		_ = uc.Index.SetSourceLanguage(ctx, obj.Hash, src.Language)
+		_ = uc.Index.SetSourceLanguage(ctx, obj.Hash, src.Language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		if uc.Steps != nil {
-			_ = uc.Steps.SetLanguage(obj.Hash, src.Language)
+			_ = uc.Steps.SetLanguage(obj.Hash, src.Language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		}
 	}
 	// Read back: on a deduplicated intake the stored row keeps its original id.
@@ -150,10 +141,10 @@ func (uc IntakeSource) Execute(ctx context.Context, in IntakeInput) (partialenti
 	if uc.Steps != nil {
 		// Best-effort: the record is bookkeeping next to a source that IS stored, so a failure here
 		// must not fail the intake.
-		_ = uc.Steps.SetTitle(src.Hash, title)
+		_ = uc.Steps.SetTitle(src.Hash, title) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		// The object's file name carries the extension, not what the source IS: record the kind and
 		// the name it came in under, so a reindex does not have to guess (see entities.SourceIdentity).
-		_ = uc.Steps.SetIdentity(src.Hash, entities.SourceIdentity{
+		_ = uc.Steps.SetIdentity(src.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			Kind: kind, OriginalName: filepath.Base(in.Name), Language: src.Language,
 		})
 	}
@@ -172,7 +163,7 @@ func (uc IntakeSource) Execute(ctx context.Context, in IntakeInput) (partialenti
 			fmt.Sprintf("%s · %d bytes · text extraction pending", kind, obj.Bytes), nil)
 	}
 	if err != nil {
-		return partialentities.PartialFromSource(src), nil
+		return partialentities.PartialFromSource(src), nil //nolint:nilerr // a source with no readable text has no language
 	}
 	return partialentities.PartialFromSource(stored), nil
 }

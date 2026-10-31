@@ -68,12 +68,12 @@ func TestRefetchReplacesAnAttachedSnapshot(t *testing.T) {
 
 	fetcher := &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("<html>fresh</html>")}}
 	conv := &fakeConverter{title: "The Member Article", markdown: strings.Repeat("fresh readable text ", 40)}
-	refresh := usecases.RefreshURLs{
+	refresh := usecases.URLs{
 		Fetch: fetcher, Convert: conv, Store: store, Index: idx, Steps: steps,
-		SourceLog: log, Reset: reset, Clock: fixedClock{},
+		SourceLog: log, Reset: reset.Execute, Clock: fixedClock{},
 	}
 
-	res, err := refresh.ExecuteOneForce(ctx, src.Hash)
+	res, err := refresh.RefreshOneForce(ctx, src.Hash)
 	if err != nil {
 		t.Fatalf("refetch: %v", err)
 	}
@@ -117,12 +117,12 @@ func TestRefetchKeepsAnAttachedSnapshotWhenThePageIsStillWalled(t *testing.T) {
 	}
 
 	fetcher := &fakeFetcher{page: interfaces.FetchedPage{Status: 403, Wall: entities.WallLogin}}
-	refresh := usecases.RefreshURLs{
+	refresh := usecases.URLs{
 		Fetch: fetcher, Convert: &fakeConverter{}, Store: store, Index: idx, Steps: steps,
-		Reset: reset, Clock: fixedClock{},
+		Reset: reset.Execute, Clock: fixedClock{},
 	}
 
-	res, err := refresh.ExecuteOneForce(ctx, src.Hash)
+	res, err := refresh.RefreshOneForce(ctx, src.Hash)
 	if err != nil {
 		t.Fatalf("refetch: %v", err)
 	}
@@ -152,11 +152,11 @@ func TestAttachReplacesADerivedSnapshot(t *testing.T) {
 	reset := &fakeResetter{}
 	src := attachedSource(idx, "https://example.com/member", "sources/aa/bb/member.md", "old.html")
 
-	uc := usecases.AttachURLSnapshot{
+	uc := usecases.Sources{
 		Convert: &fakeConverter{title: "The New Page", markdown: strings.Repeat("new readable text ", 40)},
-		Store:   store, Index: idx, Reset: reset, Clock: fixedClock{},
+		Store:   store, Index: idx, Reset: reset.Execute, Clock: fixedClock{},
 	}
-	if _, err := uc.Execute(ctx, usecases.AttachInput{
+	if _, err := uc.Attach(ctx, usecases.AttachInput{
 		Hash: src.Hash, Name: "new.html", Data: []byte("<html>new</html>"),
 	}); err != nil {
 		t.Fatalf("attach: %v", err)

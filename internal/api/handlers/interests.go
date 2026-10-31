@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -9,44 +8,18 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/payloads"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// InterestLister lists the reader's rules and their queue shares.
-type InterestLister interface {
-	Execute(ctx context.Context) ([]usecases.InterestView, error)
-}
-
-// InterestSaver creates or updates a rule.
-type InterestSaver interface {
-	Execute(ctx context.Context, slug string, in usecases.InterestInput) (entities.Interest, error)
-}
-
-// InterestDeleter removes a rule.
-type InterestDeleter interface {
-	Execute(ctx context.Context, slug string) error
-}
-
-// InterestPreviewer calibrates a draft against the vault.
-type InterestPreviewer interface {
-	Execute(ctx context.Context, in usecases.InterestInput) (usecases.InterestPreview, error)
-}
-
-// InterestRejecter records a reader's correction for one source and one rule.
-type InterestRejecter interface {
-	Execute(ctx context.Context, slug, hash string, accepted bool) error
-}
-
 // InterestHandler serves the interest endpoints: the manager, its calibration preview and the
 // per-source correction. None of them run on the ingest path.
 type InterestHandler struct {
-	Lister    InterestLister
-	Saver     InterestSaver
-	Deleter   InterestDeleter
-	Previewer InterestPreviewer
-	Rejecter  InterestRejecter
+	Lister    usecases.InterestLister
+	Saver     usecases.InterestSaver
+	Deleter   usecases.InterestDeleter
+	Previewer usecases.InterestPreviewer
+	Rejecter  usecases.InterestRejecter
 }
 
 // List serves GET /api/v1/interests.
@@ -55,7 +28,7 @@ func (h InterestHandler) List(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.ErrNotFound)
 		return
 	}
-	views, err := h.Lister.Execute(r.Context())
+	views, err := h.Lister(r.Context())
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -73,7 +46,7 @@ func (h InterestHandler) Post(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.ErrNotFound)
 		return
 	}
-	rule, err := h.Saver.Execute(r.Context(), "", in)
+	rule, err := h.Saver(r.Context(), "", in)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -92,7 +65,7 @@ func (h InterestHandler) Put(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rule, err := h.Saver.Execute(r.Context(), slug, in)
+	rule, err := h.Saver(r.Context(), slug, in)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -103,7 +76,7 @@ func (h InterestHandler) Put(w http.ResponseWriter, r *http.Request) {
 // Delete serves DELETE /api/v1/interests/{slug}.
 func (h InterestHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	slug := strings.TrimSpace(chi.URLParam(r, "slug"))
-	if err := h.Deleter.Execute(r.Context(), slug); err != nil {
+	if err := h.Deleter(r.Context(), slug); err != nil {
 		payloads.WriteError(w, err)
 		return
 	}
@@ -120,7 +93,7 @@ func (h InterestHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.ErrNotFound)
 		return
 	}
-	res, err := h.Previewer.Execute(r.Context(), in)
+	res, err := h.Previewer(r.Context(), in)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -138,7 +111,7 @@ func (h InterestHandler) PutSource(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("invalid_body", "invalid JSON body", err))
 		return
 	}
-	if err := h.Rejecter.Execute(r.Context(), slug, hash, req.Accepted); err != nil {
+	if err := h.Rejecter(r.Context(), slug, hash, req.Accepted); err != nil {
 		payloads.WriteError(w, err)
 		return
 	}

@@ -2,28 +2,9 @@ package usecases
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
-
-// FixURLKinds repairs sources whose index entry lost the fact that they are URLs.
-//
-// A URL snapshot is stored as a plain <hash>.md — exactly like a Markdown source — so "this is a URL"
-// is not something the file name can say. It lives in the source's record (<hash>.meta) and, mirrored,
-// in the index; an index rebuilt from the vault alone (or written before the record carried the
-// identity) therefore called such a source a Markdown file, and its address was gone with it.
-//
-// The snapshot itself knows better: its frontmatter names the address it was fetched from. The repair
-// reads THAT and writes the fact back into both places — the row and the source's own record, so the
-// next reindex cannot lose it again.
-type FixURLKinds struct {
-	Index    interfaces.IndexRepository
-	Declared interfaces.SourceFrontmatter
-	Steps    interfaces.StepTracker
-	Log      *slog.Logger
-}
 
 // FixURLsResult reports what the repair looked at and what it fixed.
 type FixURLsResult struct {
@@ -31,8 +12,12 @@ type FixURLsResult struct {
 	Fixed   int
 }
 
-// Execute walks every source, reads the ones that could be URL snapshots, and repairs them.
-func (uc FixURLKinds) Execute(ctx context.Context) (FixURLsResult, error) {
+// URLKindFixer repairs sources whose index entry lost their kind. A handler holds this value; nil
+// means the feature is not wired.
+type URLKindFixer func(ctx context.Context) (FixURLsResult, error)
+
+// FixKinds repairs the sources that lost the fact that they are URL snapshots.
+func (uc Sources) FixKinds(ctx context.Context) (FixURLsResult, error) {
 	var res FixURLsResult
 	sources, err := uc.Index.ListSources(ctx, entities.SourceFilter{}, 1_000_000, 0)
 	if err != nil {

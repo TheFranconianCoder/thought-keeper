@@ -77,11 +77,11 @@ func TestSourceSummaryWritesFromTheClaims(t *testing.T) {
 	}}
 	store := &summaryStore{}
 	gw := &summaryGateway{answer: "## Overview\n\nShape Up replaces estimates with a fixed appetite."}
-	uc := usecases.SourceSummary{
+	uc := usecases.Sources{
 		Index: idx, Atoms: atoms, Store: store, Gateway: gw, Model: "test", Clock: fixedClock{},
 	}
 
-	res, err := uc.Execute(ctx, ulid.Make(), hash)
+	res, err := uc.Summary(ctx, ulid.Make(), hash)
 	if err != nil {
 		t.Fatalf("summary: %v", err)
 	}
@@ -115,10 +115,10 @@ func TestSourceSummaryRefusesAnUnfinishedDerivation(t *testing.T) {
 	idx := newFakeIndex()
 	summarySource(t, idx, hash, entities.StepPending)
 	store := &summaryStore{}
-	uc := usecases.SourceSummary{
+	uc := usecases.Sources{
 		Index: idx, Atoms: &fakeAtomRepo{}, Store: store, Gateway: &summaryGateway{}, Model: "test", Clock: fixedClock{},
 	}
-	if _, err := uc.Execute(ctx, ulid.Make(), hash); err == nil {
+	if _, err := uc.Summary(ctx, ulid.Make(), hash); err == nil {
 		t.Fatal("summary of a pending derivation: want an error")
 	}
 	if len(store.written) != 0 {
@@ -135,10 +135,10 @@ func TestSourceSummaryWithoutClaimsIsHonest(t *testing.T) {
 	idx := newFakeIndex()
 	summarySource(t, idx, hash, entities.StepOK)
 	store := &summaryStore{}
-	uc := usecases.SourceSummary{
+	uc := usecases.Sources{
 		Index: idx, Atoms: &fakeAtomRepo{}, Store: store, Clock: fixedClock{},
 	}
-	res, err := uc.Execute(ctx, ulid.Make(), hash)
+	res, err := uc.Summary(ctx, ulid.Make(), hash)
 	if err != nil {
 		t.Fatalf("summary: %v", err)
 	}
@@ -167,10 +167,10 @@ func TestCleanSourceDropsTheSummary(t *testing.T) {
 	repo := &fakeAtomRepo{saved: []entities.Atom{atom}}
 	atomStore := &fakeAtomStore{m: map[string]entities.Atom{atom.ID.String(): atom}}
 	store := &summaryStore{}
-	uc := usecases.CleanSource{
+	uc := usecases.Derivation{
 		Atoms: repo, AtomStore: atomStore, Store: store, Index: idx, Clock: fixedClock{},
 	}
-	if _, err := uc.Execute(ctx, hash); err != nil {
+	if _, err := uc.Clean(ctx, hash); err != nil {
 		t.Fatalf("clean: %v", err)
 	}
 	if len(store.removed) != 1 || store.removed[0] != hash+entities.SidecarSummary {

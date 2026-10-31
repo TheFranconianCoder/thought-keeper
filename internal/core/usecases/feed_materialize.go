@@ -40,7 +40,8 @@ type feedMaterializer struct {
 //
 // A KNOWN, unreadable item without a usable copy is not returned: the weekly refresh of that source
 // is the place that retries the page, not every feed expansion.
-func (m feedMaterializer) expand(ctx context.Context, feed entities.Source, items []feedItem) (toFetch []string, fromFeed int, err error) {
+func (m feedMaterializer) expand(ctx context.Context, feed entities.Source, items []feedItem) (toFetch []string, fromFeed int) {
+	var err error
 	for _, item := range items {
 		link := strings.TrimSpace(item.Link)
 		if link == "" {
@@ -87,7 +88,7 @@ func (m feedMaterializer) expand(ctx context.Context, feed entities.Source, item
 			toFetch = append(toFetch, link)
 		}
 	}
-	return toFetch, fromFeed, nil
+	return toFetch, fromFeed
 }
 
 // feedCopyNotNeeded reports whether a source already has a readable page. A bookmark, a failed
@@ -104,7 +105,7 @@ func feedCopyNotNeeded(src entities.Source) bool {
 func (m feedMaterializer) write(ctx context.Context, src entities.Source, feed entities.Source, item feedItem, content string) (bool, error) {
 	title, body, err := m.convert(ctx, item.Link, content)
 	if err != nil {
-		return false, nil
+		return false, nil //nolint:nilerr // a feed without a usable body leaves the copy empty
 	}
 	body = strings.TrimSpace(body)
 	if utf8.RuneCountInString(body) < m.minChars() {
@@ -137,20 +138,20 @@ func (m feedMaterializer) write(ctx context.Context, src entities.Source, feed e
 	if err := m.Index.FillURLSource(ctx, src); err != nil {
 		return false, err
 	}
-	_ = m.Index.SetSourceTitle(ctx, src.Hash, title)
-	_ = m.Index.SetSourceMeta(ctx, src.Hash, src.Meta)
+	_ = m.Index.SetSourceTitle(ctx, src.Hash, title)   //nolint:errcheck // the index and the step records are a light; the vault is the truth
+	_ = m.Index.SetSourceMeta(ctx, src.Hash, src.Meta) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	// There was no HTTP answer for THESE bytes: the copy came from the feed, and the page has not
 	// been checked. Leaving url_checked_at empty keeps the source due for the next refresh, so a
 	// queue job lost to a restart is retried by the hourly sweep instead of waiting a week.
-	_ = m.Index.SetSourceURLState(ctx, src.Hash, 0, time.Time{})
+	_ = m.Index.SetSourceURLState(ctx, src.Hash, 0, time.Time{}) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	if language != "" {
-		_ = m.Index.SetSourceLanguage(ctx, src.Hash, language)
+		_ = m.Index.SetSourceLanguage(ctx, src.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	}
 	if m.Steps != nil {
 		icon := faviconFromMeta(src.Meta)
-		_ = m.Steps.Reset(src.Hash)
-		_ = m.Steps.SetLanguage(src.Hash, language)
-		_ = m.Steps.SetIdentity(src.Hash, entities.SourceIdentity{
+		_ = m.Steps.Reset(src.Hash)                                //nolint:errcheck // the index and the step records are a light; the vault is the truth
+		_ = m.Steps.SetLanguage(src.Hash, language)                //nolint:errcheck // the index and the step records are a light; the vault is the truth
+		_ = m.Steps.SetIdentity(src.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			Kind: entities.SourceKindURL, URL: pageURL, Language: language, OriginalName: pageURL,
 			ContentHash: contentHashOf(title, body), FaviconHash: faviconHash(icon), FaviconExt: faviconExt(icon),
 			Origin: src.Origin, WikiPage: src.WikiPage, ParentHash: src.ParentHash,
@@ -160,7 +161,7 @@ func (m feedMaterializer) write(ctx context.Context, src entities.Source, feed e
 	feedName := firstNonEmpty(feed.Title, feed.URL, "the feed")
 	recordStep(ctx, m.Steps, m.Clock, src.Hash, entities.StepCapture, entities.StepOK,
 		"feed copy · "+feedName, nil)
-	appendSourceLog(ctx, m.SourceLog, m.Clock, src.Hash, "capture", "info", "snapshot taken from the feed",
+	appendSourceLog(ctx, m.SourceLog, m.Clock, src.Hash, "info", "snapshot taken from the feed",
 		map[string]any{"feed": feed.URL, "feed_hash": feed.Hash, "chars": len(body)})
 	return true, nil
 }

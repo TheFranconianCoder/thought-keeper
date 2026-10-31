@@ -72,7 +72,7 @@ func TestNoMessageIsEverEmpty(t *testing.T) {
 // request keeps being valid.
 func TestTranscriptStaysBounded(t *testing.T) {
 	big := strings.Repeat("x", 5000) // one answer per turn, 5 KB
-	var responses []interfaces.AgentResponse
+	responses := make([]interfaces.AgentResponse, 0, 13)
 	for i := range 12 {
 		responses = append(responses, interfaces.AgentResponse{
 			Message: interfaces.AgentMessage{Role: "assistant", ToolCalls: []interfaces.AgentToolCall{

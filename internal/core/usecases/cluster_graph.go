@@ -674,16 +674,16 @@ func (g *claimGraph) mergeClusters(settings ClusterSettings) [][]int {
 			topics[i][topic] = 1
 		}
 	}
-	var find func(int) int = func(x int) int {
+	find := func(x int) int {
 		for parent[x] != x {
 			parent[x] = parent[parent[x]]
 			x = parent[x]
 		}
 		return x
 	}
-	mergeRoots := func(ra, rb int, force bool) bool {
+	mergeRoots := func(ra, rb int, force bool) {
 		if ra == rb {
-			return false
+			return
 		}
 		if len(members[ra]) < len(members[rb]) {
 			ra, rb = rb, ra
@@ -703,7 +703,7 @@ func (g *claimGraph) mergeClusters(settings ClusterSettings) [][]int {
 			}
 		}
 		if !force && !canMerge(newInternal, newCount, span, settings) {
-			return false
+			return
 		}
 		parent[rb] = ra
 		members[ra] = append(members[ra], members[rb]...)
@@ -718,7 +718,6 @@ func (g *claimGraph) mergeClusters(settings ClusterSettings) [][]int {
 		members[rb] = nil
 		normSq[ra] = newNormSq
 		pairSum[ra] = newPairSum
-		return true
 	}
 
 	// The source OUTLINE NODE is the strongest seed a claim has: all claims distilled from one
@@ -837,7 +836,7 @@ func (g *claimGraph) mergeAcrossTopics(groups [][]int, settings ClusterSettings)
 	for i := range parent {
 		parent[i] = i
 	}
-	var find func(int) int = func(x int) int {
+	find := func(x int) int {
 		for parent[x] != x {
 			parent[x] = parent[parent[x]]
 			x = parent[x]
@@ -1016,7 +1015,7 @@ func (g *claimGraph) components(members []int, threshold float64) [][]int {
 	for i := range parent {
 		parent[i] = i
 	}
-	var find func(int) int = func(x int) int {
+	find := func(x int) int {
 		for parent[x] != x {
 			parent[x] = parent[parent[x]]
 			x = parent[x]
@@ -1084,7 +1083,7 @@ func (g *claimGraph) metricsOf(members []int, settings ClusterSettings) clusterM
 	return m
 }
 
-func (g *claimGraph) measureExternal(candidates []clusterCandidate, settings ClusterSettings) {
+func (g *claimGraph) measureExternal(candidates []clusterCandidate, _ ClusterSettings) {
 	centroids := make([]sparseVec, len(candidates))
 	head := make([][]termWeight, len(candidates))
 	l1 := make([]float64, len(candidates))

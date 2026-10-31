@@ -1,8 +1,10 @@
 package partialentities
 
-import "strings"
+import (
+	"strings"
 
-import "github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
+)
 
 // PartialNode is the DTO for entities.SourceNode.
 type PartialNode struct {

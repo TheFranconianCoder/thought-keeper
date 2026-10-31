@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -22,43 +21,6 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// DistillSource is the DISTILL step: it exposes a source's outline as
-// tools and lets the model write atoms with provenance to source nodes.
-type DistillSource struct {
-	// Parallel is how many parts of a document are derived at the same time. Parts are independent
-	// (they only need the tree), so this divides the wall-clock of a long document.
-	Parallel int
-	// PartsPerRun bounds how many unclaimed parts one run distills, so a long document is derived
-	// across several runs instead of losing everything to a timeout.
-	PartsPerRun int
-	// PartRepo records which parts are finished (a fact, not an inference from atoms).
-	PartRepo interfaces.PartRepository
-	// SourceLog records everything this run does to the source, where the source lives.
-	SourceLog interfaces.SourceLog
-	Index     interfaces.IndexRepository
-	Trees     interfaces.TreeStore
-	// Store reads the readable text a node's reference points into (the outline carries the reference,
-	// not the text).
-	Store    interfaces.SourceStore
-	Atoms    interfaces.AtomStore
-	AtomRepo interfaces.AtomRepository
-	// Vocab is the DECIDED name vocabulary. Its alias table is applied at write time: a claim that
-	// arrives with a name a curation absorbed is filed under the canonical one.
-	Vocab   interfaces.VocabularyStore
-	Gateway interfaces.AgentGateway
-	Model   string
-	// Language is the language the claims are written in (ISO 639-1, empty = English). A source's
-	// own language never decides it; the claim must read the same whatever the document used.
-	Language string
-	// ReasoningEffort is passed to the model (see interfaces.AgentRequest).
-	ReasoningEffort string
-	MaxIterations   int
-	Clock           interfaces.Clock
-	Log             *slog.Logger
-	// Steps records this step's state (distill: running/ok/failed) for the source's lights.
-	Steps interfaces.StepTracker
-}
-
 // DistillResult summarizes the distill step.
 type DistillResult struct {
 	// Parts shows how much of the document this run covered; the next run continues the rest.
@@ -74,9 +36,11 @@ type DistillResult struct {
 	Summary     string
 }
 
-// Distill runs the agent for one source and records steps on rec. It reports the DISTILL step's
-// state: what is left open (parts without a claim) is what a later run continues.
-func (uc DistillSource) Distill(ctx context.Context, hash string, rec *StepRecorder) (DistillResult, error) {
+// Distiller derives the claims of one source (step 3).
+type Distiller func(ctx context.Context, hash string, rec *StepRecorder) (DistillResult, error)
+
+// Distill derives the claims of one source.
+func (uc Derivation) Distill(ctx context.Context, hash string, rec *StepRecorder) (DistillResult, error) {
 	recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepDistill, entities.StepRunning, "", nil)
 	res, err := uc.distill(ctx, hash, rec)
 	if err != nil {
@@ -100,7 +64,7 @@ func (uc DistillSource) Distill(ctx context.Context, hash string, rec *StepRecor
 	return res, nil
 }
 
-func (uc DistillSource) distill(ctx context.Context, hash string, rec *StepRecorder) (DistillResult, error) {
+func (uc Derivation) distill(ctx context.Context, hash string, rec *StepRecorder) (DistillResult, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
 		return DistillResult{}, err
@@ -132,7 +96,7 @@ func (uc DistillSource) distill(ctx context.Context, hash string, rec *StepRecor
 				Parameters:  json.RawMessage(`{"type":"object","properties":{}}`),
 			},
 			Run: func(ctx context.Context, _ json.RawMessage) (string, error) {
-				topics, err := uc.AtomRepo.ListClaimTopics(ctx)
+				topics, err := uc.Atoms.ListClaimTopics(ctx)
 				if err != nil {
 					return "", err
 				}
@@ -140,7 +104,10 @@ func (uc DistillSource) distill(ctx context.Context, hash string, rec *StepRecor
 				for _, b := range topics {
 					m = append(m, map[string]any{"topic": b.Topic, "count": b.Count})
 				}
-				out, _ := json.Marshal(m)
+				out, marshalErr := json.Marshal(m)
+				if marshalErr != nil {
+					return "", marshalErr
+				}
 				return string(out), nil
 			},
 		},
@@ -190,7 +157,7 @@ func (uc DistillSource) distill(ctx context.Context, hash string, rec *StepRecor
 				if errors.Is(err, claims.ErrNotStandalone) {
 					// A claim about the source's structure is not knowledge. It is dropped, never
 					// written: the part stays open (or is re-read), and lint can show the pattern.
-					uc.log(ctx, rec.ID(), hash, "warn", "distill", "claim rejected: not standalone",
+					uc.log(ctx, rec.ID(), hash, "warn", "claim rejected: not standalone",
 						map[string]any{"claim": oneLine(c.Claim, 160), "topic": c.Topic, "err": err.Error()})
 					rejected++
 					continue
@@ -247,7 +214,7 @@ func (uc DistillSource) distill(ctx context.Context, hash string, rec *StepRecor
 		if allDone && uc.PartRepo != nil {
 			if err := uc.PartRepo.ClearParts(ctx, src.ID); err == nil {
 				states = map[string]entities.PartState{}
-				uc.log(ctx, runID, hash, "warn", "distill",
+				uc.log(ctx, runID, hash, "warn",
 					"the part records claimed a finished derivation with no claim — cleared, deriving again",
 					map[string]any{"parts": len(parts)})
 			}
@@ -268,11 +235,11 @@ func (uc DistillSource) distill(ctx context.Context, hash string, rec *StepRecor
 		head := partHead(part)
 		if st, ok := states[head]; ok && st.Finished() {
 			if refsOK && !claimedNodes[head] && st.Reason != "source_relative" {
-				uc.log(ctx, runID, hash, "warn", "distill", "part recorded done but has no claim — redoing", map[string]any{
+				uc.log(ctx, runID, hash, "warn", "part recorded done but has no claim — redoing", map[string]any{
 					"part": head, "state": string(st.State), "atoms": st.Atoms,
 				})
 			} else {
-				uc.log(ctx, runID, hash, "info", "distill", "part already finished", map[string]any{
+				uc.log(ctx, runID, hash, "info", "part already finished", map[string]any{
 					"part": head, "state": string(st.State), "atoms": st.Atoms, "skipped": true,
 					"finished_at": st.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 				})
@@ -470,7 +437,7 @@ func salvageClaims(content string) []writeAtomArgs {
 
 // writeClaim records ONE claim the model answered with. It is the distill's only writer of an atom —
 // there is no tool that can write.
-func (uc DistillSource) writeClaim(ctx context.Context, hash string, nodeByID map[string]entities.SourceNode, in writeAtomArgs, topicAliases map[string]string, defaultNode string) (entities.Atom, error) {
+func (uc Derivation) writeClaim(ctx context.Context, hash string, nodeByID map[string]entities.SourceNode, in writeAtomArgs, topicAliases map[string]string, defaultNode string) (entities.Atom, error) {
 	now := uc.Clock.Now()
 	a := entities.Atom{
 		ID:        ulid.Make(),
@@ -512,15 +479,15 @@ func (uc DistillSource) writeClaim(ctx context.Context, hash string, nodeByID ma
 	// A claim body has no links. A bracket pair the source quotes is syntax, and it is stored as
 	// inline code; the association lives in the clusters, never in the body.
 	a.Body, _ = coremarkdown.QuoteBracketSyntax(a.Body)
-	stored, err := uc.Atoms.Write(ctx, a)
+	stored, err := uc.AtomStore.Write(ctx, a)
 	if err != nil {
 		return entities.Atom{}, err
 	}
-	if err := uc.AtomRepo.SaveAtom(ctx, stored); err != nil {
+	if err := uc.Atoms.SaveAtom(ctx, stored); err != nil {
 		// The file is written FIRST (it is the source of truth) and the index row second. A write that
 		// cannot be recorded must not leave the file behind: an atom the index never saw is an orphan —
 		// invisible to every page, every count and every cleanup.
-		if rmErr := uc.Atoms.Remove(ctx, stored); rmErr != nil && uc.Log != nil {
+		if rmErr := uc.AtomStore.Remove(ctx, stored); rmErr != nil && uc.Log != nil {
 			uc.Log.Warn("could not remove the atom file of a failed write",
 				"atom", stored.ID.String(), "path", stored.Path, "err", rmErr)
 		}
@@ -545,17 +512,6 @@ func atomType(s string) entities.AtomType {
 	default:
 		return entities.AtomClaim
 	}
-}
-
-// partsLeftOf counts the parts that are not finished yet.
-func partsLeftOf(parts [][]entities.SourceNode, states map[string]entities.PartState) int {
-	left := 0
-	for _, part := range parts {
-		if st, ok := states[partHead(part)]; !ok || !st.Finished() {
-			left++
-		}
-	}
-	return left
 }
 
 // partHead is the top-level node id of a part (its identity for the record).
@@ -584,7 +540,7 @@ func unitBudget(base int) int {
 // left the record without them makes the pipeline read a record that no longer knows its derivation.
 // Every exit path that leaves a finished derivation calls this, including the early one for a
 // document made only of metadata.
-func (uc DistillSource) mirrorParts(ctx context.Context, hash string, sourceID ulid.ULID) {
+func (uc Derivation) mirrorParts(ctx context.Context, hash string, sourceID ulid.ULID) {
 	if uc.Steps == nil || uc.PartRepo == nil {
 		return
 	}
@@ -648,12 +604,12 @@ func partLevel(st entities.PartState) string {
 // dropPartAtoms removes the source's atoms that cite ONLY nodes of this part, so an
 // unfinished part can be derived again without duplicating what it already produced.
 // Atoms that span several parts are left alone: another part's work depends on them.
-func (uc DistillSource) dropPartAtoms(ctx context.Context, hash string, part []entities.SourceNode) int {
-	refs, err := uc.AtomRepo.NodeRefsBySource(ctx, hash)
+func (uc Derivation) dropPartAtoms(ctx context.Context, hash string, part []entities.SourceNode) int {
+	refs, err := uc.Atoms.NodeRefsBySource(ctx, hash)
 	if err != nil {
 		return 0
 	}
-	atoms, err := uc.AtomRepo.ListAtomsBySource(ctx, hash)
+	atoms, err := uc.Atoms.ListAtomsBySource(ctx, hash)
 	if err != nil {
 		return 0
 	}
@@ -677,17 +633,17 @@ func (uc DistillSource) dropPartAtoms(ctx context.Context, hash string, part []e
 		if !only {
 			continue
 		}
-		if err := uc.AtomRepo.DeleteAtom(ctx, a.ID); err != nil {
+		if err := uc.Atoms.DeleteAtom(ctx, a.ID); err != nil {
 			continue
 		}
-		_ = uc.Atoms.Remove(ctx, a)
+		_ = uc.AtomStore.Remove(ctx, a) //nolint:errcheck // a trash move is best effort; a missing file is the goal
 		removed++
 	}
 	return removed
 }
 
 // log records one source-scoped event (no-op when no log is configured).
-func (uc DistillSource) log(ctx context.Context, runID ulid.ULID, hash, level, phase, msg string, fields map[string]any) {
+func (uc Derivation) log(ctx context.Context, runID ulid.ULID, hash, level, msg string, fields map[string]any) {
 	if uc.SourceLog == nil {
 		return
 	}
@@ -696,7 +652,7 @@ func (uc DistillSource) log(ctx context.Context, runID ulid.ULID, hash, level, p
 		id = runID.String()
 	}
 	uc.SourceLog.Append(ctx, hash, interfaces.SourceLogEvent{
-		At: uc.Clock.Now(), RunID: id, Phase: phase, Level: level, Message: msg, Fields: fields,
+		At: uc.Clock.Now(), RunID: id, Phase: "distill", Level: level, Message: msg, Fields: fields,
 	})
 }
 
@@ -730,32 +686,6 @@ func unitLabel(part []entities.SourceNode) string {
 	return fmt.Sprintf("%s — %s (%d chars)", n.NodeID, oneLine(n.Title, 60), len(strings.TrimSpace(n.Text)))
 }
 
-func outlineOf(nodes []entities.SourceNode) string {
-	var b strings.Builder
-	for _, n := range nodes {
-		if n.NodeID == "0" {
-			continue
-		}
-		title := n.Title
-		if title == "" {
-			title = "(untitled)"
-		}
-		page := ""
-		if n.StartPage > 0 {
-			page = fmt.Sprintf(" — p.%d", n.StartPage)
-			if n.EndPage > n.StartPage {
-				page += fmt.Sprintf("–%d", n.EndPage)
-			}
-		}
-		indent := strings.Repeat("  ", n.Depth)
-		fmt.Fprintf(&b, "%s%s — %s%s\n", indent, n.NodeID, title, page)
-		if snippet := oneLine(n.Text, 160); snippet != "" {
-			fmt.Fprintf(&b, "%s    %s\n", indent, snippet)
-		}
-	}
-	return b.String()
-}
-
 // oneLine collapses whitespace and truncates, for a compact outline snippet.
 func oneLine(s string, limit int) string {
 	s = strings.Join(strings.Fields(s), " ")
@@ -766,9 +696,9 @@ func oneLine(s string, limit int) string {
 }
 
 // citedNodes returns the node ids of this part that an atom of the source cites.
-func (uc DistillSource) citedNodes(ctx context.Context, hash string, part []entities.SourceNode) map[string]bool {
+func (uc Derivation) citedNodes(ctx context.Context, hash string, part []entities.SourceNode) map[string]bool {
 	out := map[string]bool{}
-	refs, err := uc.AtomRepo.NodeRefsBySource(ctx, hash)
+	refs, err := uc.Atoms.NodeRefsBySource(ctx, hash)
 	if err != nil {
 		return out
 	}
@@ -787,8 +717,8 @@ func (uc DistillSource) citedNodes(ctx context.Context, hash string, part []enti
 }
 
 // atomsInPart counts the source's atoms that cite at least one node of this part.
-func (uc DistillSource) atomsInPart(ctx context.Context, hash string, part []entities.SourceNode) int {
-	refs, err := uc.AtomRepo.NodeRefsBySource(ctx, hash)
+func (uc Derivation) atomsInPart(ctx context.Context, hash string, part []entities.SourceNode) int {
+	refs, err := uc.Atoms.NodeRefsBySource(ctx, hash)
 	if err != nil {
 		return 0
 	}
@@ -809,8 +739,8 @@ func (uc DistillSource) atomsInPart(ctx context.Context, hash string, part []ent
 }
 
 // countAtoms returns how many atoms of this source exist right now.
-func (uc DistillSource) countAtoms(ctx context.Context, hash string) int {
-	atoms, err := uc.AtomRepo.ListAtomsBySource(ctx, hash)
+func (uc Derivation) countAtoms(ctx context.Context, hash string) int {
+	atoms, err := uc.Atoms.ListAtomsBySource(ctx, hash)
 	if err != nil {
 		return 0
 	}
@@ -818,7 +748,7 @@ func (uc DistillSource) countAtoms(ctx context.Context, hash string) int {
 }
 
 // finishedParts counts the source's parts recorded as done.
-func (uc DistillSource) finishedParts(ctx context.Context, sourceID ulid.ULID) int {
+func (uc Derivation) finishedParts(ctx context.Context, sourceID ulid.ULID) int {
 	if uc.PartRepo == nil {
 		return 0
 	}
@@ -838,8 +768,8 @@ func (uc DistillSource) finishedParts(ctx context.Context, sourceID ulid.ULID) i
 // claimedNodeSet returns the node ids of a source that at least one atom cites, and whether the
 // read succeeded. A failed read must not make every finished part look lost: that would re-derive
 // the whole document on a transient database error.
-func (uc DistillSource) claimedNodeSet(ctx context.Context, hash string) (map[string]bool, bool) {
-	refs, err := uc.AtomRepo.NodeRefsBySource(ctx, hash)
+func (uc Derivation) claimedNodeSet(ctx context.Context, hash string) (map[string]bool, bool) {
+	refs, err := uc.Atoms.NodeRefsBySource(ctx, hash)
 	if err != nil {
 		return nil, false
 	}
@@ -873,7 +803,7 @@ func partText(part []entities.SourceNode) string {
 // runPart derives ONE part (one text-bearing node): it drops what an earlier attempt left
 // inside it, runs the agent and records the outcome. Parts do not depend on each other, so several
 // of these run at the same time (bounded by pipeline.parallel_parts).
-func (uc DistillSource) runPart(
+func (uc Derivation) runPart(
 	ctx context.Context, runID ulid.ULID, hash string, src entities.Source, part []entities.SourceNode,
 	tools []agents.Tool, write writeClaimsFunc, states map[string]entities.PartState,
 	mu *sync.Mutex, steps, failed *int, firstErr *string, iterations, tokens *int, rec *StepRecorder,
@@ -890,11 +820,11 @@ func (uc DistillSource) runPart(
 			reason = st.Reason
 		}
 		mu.Unlock()
-		uc.log(ctx, runID, hash, "warn", "distill", "redoing an unfinished part", map[string]any{
+		uc.log(ctx, runID, hash, "warn", "redoing an unfinished part", map[string]any{
 			"part": head, "reason": reason, "removed_atoms": n,
 		})
 	}
-	uc.log(ctx, runID, hash, "info", "distill", "part start", map[string]any{
+	uc.log(ctx, runID, hash, "info", "part start", map[string]any{
 		"part": head, "label": unitLabel(part), "chars": len(strings.TrimSpace(part[0].Text)),
 	})
 
@@ -963,7 +893,6 @@ func (uc DistillSource) runPart(
 		res.Usage.CompletionTokens += passRes.Usage.CompletionTokens
 		res.Usage.TotalTokens += passRes.Usage.TotalTokens
 		elided += passRes.Elided
-		res.Content = passRes.Content
 		truncated = passRes.Truncated
 		if err != nil {
 			break
@@ -1052,7 +981,7 @@ func (uc DistillSource) runPart(
 	mu.Lock()
 	states[unitID] = state
 	mu.Unlock()
-	uc.log(ctx, runID, hash, partLevel(state), "distill", "part finished", map[string]any{
+	uc.log(ctx, runID, hash, partLevel(state), "part finished", map[string]any{
 		"part": unitID, "state": string(state.State), "reason": state.Reason,
 		// atoms = this part's claims; source_atoms = the whole source's, which is what a live view
 		// shows. Without it the UI showed the last part's count as if it were the total.
@@ -1063,7 +992,7 @@ func (uc DistillSource) runPart(
 	})
 	if err != nil && isMaxIterations(err) {
 		// Incomplete, but the run makes progress on the other parts; it will be redone.
-		uc.log(ctx, runID, hash, "warn", "distill", "part hit the iteration cap, will be redone", map[string]any{
+		uc.log(ctx, runID, hash, "warn", "part hit the iteration cap, will be redone", map[string]any{
 			"part": unitID, "err": err,
 		})
 		return nil
@@ -1076,8 +1005,8 @@ func (uc DistillSource) runPart(
 const maxUnitPasses = 4
 
 // claimsOfUnit lists the claims that exist for one part; the audit compares them with its text.
-func (uc DistillSource) claimsOfUnit(ctx context.Context, hash, nodeID string) []string {
-	refs, err := uc.AtomRepo.NodeRefsBySource(ctx, hash)
+func (uc Derivation) claimsOfUnit(ctx context.Context, hash, nodeID string) []string {
+	refs, err := uc.Atoms.NodeRefsBySource(ctx, hash)
 	if err != nil {
 		return nil
 	}
@@ -1087,7 +1016,7 @@ func (uc DistillSource) claimsOfUnit(ctx context.Context, hash, nodeID string) [
 		if !cites {
 			continue
 		}
-		if a, err := uc.AtomRepo.GetAtom(ctx, atomID); err == nil && strings.TrimSpace(a.Claim) != "" {
+		if a, err := uc.Atoms.GetAtom(ctx, atomID); err == nil && strings.TrimSpace(a.Claim) != "" {
 			out = append(out, oneLine(a.Claim, 200))
 		}
 	}
@@ -1105,7 +1034,3 @@ func bulletClaims(claims []string) string {
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
-
-// unitCovered reports whether the part's own text has a claim: with one node per unit, coverage is
-// exactly that question — no percentage, no threshold.
-func unitCovered(nodeID string, cited map[string]bool) bool { return cited[nodeID] }

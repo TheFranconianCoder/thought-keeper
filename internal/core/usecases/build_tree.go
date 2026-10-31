@@ -13,9 +13,9 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
-// BuildTree extracts a source into parts, shapes them into a tree and persists
-// both the node rows and the tree sidecar.
-type BuildTree struct {
+// Trees is the use case of the outlines: the tree a document is read as, the tree the reader sees,
+// and the repair that rebuilds one.
+type Trees struct {
 	// SourceLog records extraction and tree building where the source lives.
 	SourceLog interfaces.SourceLog
 	Clock     interfaces.Clock
@@ -29,7 +29,7 @@ type BuildTree struct {
 	// Clean removes the claims a rebuilt tree INVALIDATED — the ones whose parts changed — and keeps
 	// the rest: atoms cite tree NODES, so a node that is still there with the same text still means
 	// what its claims say. An unchanged rebuild (the common repair) removes nothing.
-	Clean CleanSource
+	Clean SourceCorrector
 	// Parts re-arms the parts a rebuild changed: their "done" record described text that is gone.
 	Parts interfaces.PartRepository
 	// Steps records this step's state (outline: running/ok/failed) for the source's lights.
@@ -53,10 +53,12 @@ type TreeResult struct {
 	Reopened int
 }
 
-// Execute builds the tree for one source hash and records the OUTLINE step's state: this is the
-// step that turns a captured source into a structure, and the step after it (distill) may only run
-// on a tree that is ok.
-func (uc BuildTree) Execute(ctx context.Context, hash string) (TreeResult, error) {
+// TreeBuilder builds one source's outline. A handler holds this value; nil means the feature is not
+// wired.
+type TreeBuilder func(ctx context.Context, hash string) (TreeResult, error)
+
+// Build reads the source's readable form into its outline.
+func (uc Trees) Build(ctx context.Context, hash string) (TreeResult, error) {
 	// Nothing to outline without a readable capture. A bookmark is metadata by definition, and a
 	// blocked URL's snapshot is a note about the GATE — a tree built from it would look like knowledge
 	// about the page, and the record already says the step does not apply. A feed or a sitemap is a
@@ -88,12 +90,12 @@ func (uc BuildTree) Execute(ctx context.Context, hash string) (TreeResult, error
 	return res, nil
 }
 
-func (uc BuildTree) execute(ctx context.Context, hash string) (TreeResult, error) {
+func (uc Trees) execute(ctx context.Context, hash string) (TreeResult, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
 		return TreeResult{}, err
 	}
-	_ = uc.Index.SetSourceTree(ctx, hash, string(entities.TreePending), "", 0)
+	_ = uc.Index.SetSourceTree(ctx, hash, string(entities.TreePending), "", 0) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 
 	// OUTLINE READS. Step 1 (capture) wrote the source's readable rendering
 	// (sources/<ab>/<cd>/<hash>.md, for a kind that has one); parsing it produces exactly the parts the bytes
@@ -101,7 +103,7 @@ func (uc BuildTree) execute(ctx context.Context, hash string) (TreeResult, error
 	// extracted here — no poppler, no tesseract, nothing that could drift.
 	parts, fromRender, err := uc.parts(ctx, hash, src)
 	if err != nil {
-		_ = uc.Index.SetSourceTree(ctx, hash, string(entities.TreeFailed), "", 0)
+		_ = uc.Index.SetSourceTree(ctx, hash, string(entities.TreeFailed), "", 0) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		return TreeResult{}, err
 	}
 	chars := 0
@@ -160,9 +162,9 @@ func (uc BuildTree) execute(ctx context.Context, hash string) (TreeResult, error
 		if language := uc.detectLanguage(src, parts, nodes, title); language != "" {
 			src.Language = language
 			if uc.Steps != nil {
-				_ = uc.Steps.SetLanguage(hash, language)
+				_ = uc.Steps.SetLanguage(hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			} else if uc.Index != nil {
-				_ = uc.Index.SetSourceLanguage(ctx, hash, language)
+				_ = uc.Index.SetSourceLanguage(ctx, hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			}
 			uc.logSource(ctx, hash, "info", "language", "source language detected", map[string]any{"language": language})
 		}
@@ -172,16 +174,16 @@ func (uc BuildTree) execute(ctx context.Context, hash string) (TreeResult, error
 	// address atoms cite, so a changed tree invalidates every atom of this source.
 	// The sidecar holds the previous tree INCLUDING the node text — the exact thing the atoms
 	// were derived from. (The index rows keep only a hash of it.)
-	previous, _ := uc.Trees.Read(ctx, hash)
+	previous, _ := uc.Trees.Read(ctx, hash) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	changed := treeChanged(previous, nodes)
 	reopened := 0
 
 	if err := uc.Index.ReplaceSourceNodes(ctx, src.ID, nodes); err != nil {
-		_ = uc.Index.SetSourceTree(ctx, hash, string(entities.TreeFailed), "", 0)
+		_ = uc.Index.SetSourceTree(ctx, hash, string(entities.TreeFailed), "", 0) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		return TreeResult{}, err
 	}
 	if err := uc.Trees.Write(ctx, hash, nodes); err != nil {
-		_ = uc.Index.SetSourceTree(ctx, hash, string(entities.TreeFailed), "", 0)
+		_ = uc.Index.SetSourceTree(ctx, hash, string(entities.TreeFailed), "", 0) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		return TreeResult{}, err
 	}
 	if err := uc.Index.SetSourceTree(ctx, hash, string(entities.TreeBuilt), title, pages); err != nil {
@@ -198,7 +200,7 @@ func (uc BuildTree) execute(ctx context.Context, hash string) (TreeResult, error
 		// whole derivation was the old answer, and it made a corrected paragraph cost every claim of a
 		// document with hundreds of parts.
 		keep := unchangedNodes(previous, nodes)
-		cleaned, err := uc.Clean.Correct(ctx, hash, keep)
+		cleaned, err := uc.Clean(ctx, hash, keep)
 		if err != nil {
 			uc.logSource(ctx, hash, "warn", "tree", "correcting the old derivation failed", map[string]any{"err": err})
 		} else {
@@ -216,7 +218,7 @@ func (uc BuildTree) execute(ctx context.Context, hash string) (TreeResult, error
 // (step 1 wrote it), otherwise the object itself — which is the readable form for Markdown, text and
 // a URL snapshot. The fallback is for a vault written before the step existed, and it says so in the
 // log: the normal path extracts nothing.
-func (uc BuildTree) parts(ctx context.Context, hash string, src entities.Source) ([]entities.Part, bool, error) {
+func (uc Trees) parts(ctx context.Context, hash string, src entities.Source) ([]entities.Part, bool, error) {
 	// ONLY a source whose bytes are not readable has a rendering. For a Markdown source the rendering
 	// IS the object (<hash>.md) — reading it here would parse the raw document as one untitled
 	// part instead of extracting its headings.
@@ -288,7 +290,7 @@ func (uc BuildTree) parts(ctx context.Context, hash string, src entities.Source)
 // node's text is, not the text itself. It is one forward scan (the parts are in document order) and
 // it says how many texts it could not find — an extractor that normalised its text, or a source whose
 // readable form is not the object it was extracted from.
-func (uc BuildTree) locate(ctx context.Context, hash, text string, parts []entities.Part) []entities.Part {
+func (uc Trees) locate(ctx context.Context, hash, text string, parts []entities.Part) []entities.Part {
 	unlocated := tree.Locate(text, parts)
 	if unlocated > 0 {
 		uc.logSource(ctx, hash, "warn", "outline", "text not found in the readable text", map[string]any{
@@ -319,7 +321,7 @@ func unchangedNodes(previous, rebuilt []entities.SourceNode) map[string]bool {
 // rearmParts marks the parts a rebuild CHANGED as open work. Their record says "done" about text that
 // is not there any more, and a done part is skipped on the next run — so it must be derived again. The
 // parts that did not change keep their record (and are not derived again).
-func (uc BuildTree) rearmParts(ctx context.Context, hash string, src entities.Source, nodes []entities.SourceNode, keep map[string]bool) int {
+func (uc Trees) rearmParts(ctx context.Context, hash string, src entities.Source, nodes []entities.SourceNode, keep map[string]bool) int {
 	if uc.Parts == nil {
 		return 0
 	}
@@ -365,7 +367,7 @@ func treeChanged(previous, rebuilt []entities.SourceNode) bool {
 
 // documentTitle names the document. The title belongs to the content, so the model decides it;
 // the raw input (a URL's declared title, the first heading, the file name) is only the fallback.
-func (uc BuildTree) documentTitle(ctx context.Context, src entities.Source, parts []entities.Part) (string, string) {
+func (uc Trees) documentTitle(ctx context.Context, src entities.Source, parts []entities.Part) (string, string) {
 	// A wiki page's title is the page's own, never the model's: the human named it, and the source
 	// is only a representation of that page.
 	if src.IsWiki() {
@@ -381,7 +383,7 @@ func (uc BuildTree) documentTitle(ctx context.Context, src entities.Source, part
 }
 
 // modelTitle asks the model for one line: the document's title.
-func (uc BuildTree) modelTitle(ctx context.Context, src entities.Source, parts []entities.Part) string {
+func (uc Trees) modelTitle(ctx context.Context, src entities.Source, parts []entities.Part) string {
 	var b strings.Builder
 	b.WriteString("Outline:\n")
 	b.WriteString(oneLine(outlineOfSourceNodes(parts), 1200))
@@ -440,7 +442,7 @@ func outlineOfSourceNodes(parts []entities.Part) string {
 }
 
 // kindOf reads the source's kind for the step detail's unit word (chapters or pages).
-func (uc BuildTree) kindOf(ctx context.Context, hash string) entities.SourceKind {
+func (uc Trees) kindOf(ctx context.Context, hash string) entities.SourceKind {
 	if uc.Index == nil {
 		return ""
 	}
@@ -452,7 +454,7 @@ func (uc BuildTree) kindOf(ctx context.Context, hash string) entities.SourceKind
 }
 
 // logSource records one source-scoped event (no-op when no log is configured).
-func (uc BuildTree) logSource(ctx context.Context, hash, level, phase, msg string, fields map[string]any) {
+func (uc Trees) logSource(ctx context.Context, hash, level, phase, msg string, fields map[string]any) {
 	if uc.SourceLog == nil || hash == "" {
 		return
 	}
@@ -464,7 +466,7 @@ func (uc BuildTree) logSource(ctx context.Context, hash, level, phase, msg strin
 // detectLanguage tries the readable text first, then the outline's natural-language titles and
 // summaries. The fallback is what gives a code-heavy Markdown source a language: its raw text is
 // mostly symbols, while its outline says what the document is about.
-func (uc BuildTree) detectLanguage(src entities.Source, parts []entities.Part, nodes []entities.SourceNode, title string) string {
+func (uc Trees) detectLanguage(_ entities.Source, parts []entities.Part, nodes []entities.SourceNode, title string) string {
 	if uc.Languages == nil {
 		return ""
 	}

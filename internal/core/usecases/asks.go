@@ -9,16 +9,21 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
-// ListAsks lists the persisted Ask conversations, newest first.
-type ListAsks struct {
-	Asks    interfaces.AskStore
+// Asks is the use case of the saved Ask conversations: a record of what was asked, read and deleted,
+// never edited.
+type Asks struct {
+	Store   interfaces.AskStore
 	Atoms   interfaces.AtomRepository
 	Sources SourceTagReader
 }
 
-// Execute returns the bounded list (the Ask view never loads the whole history at once).
-func (uc ListAsks) Execute(ctx context.Context, limit, offset int) ([]partialentities.PartialAsk, error) {
-	asks, err := uc.Asks.List(ctx, limit, offset)
+// AskLister lists the persisted conversations, newest first. A handler holds this value; nil means the
+// feature is not wired.
+type AskLister func(ctx context.Context, limit, offset int) ([]partialentities.PartialAsk, error)
+
+// List returns the bounded list (the Ask view never loads the whole history at once).
+func (uc Asks) List(ctx context.Context, limit, offset int) ([]partialentities.PartialAsk, error) {
+	asks, err := uc.Store.List(ctx, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -36,16 +41,12 @@ func (uc ListAsks) Execute(ctx context.Context, limit, offset int) ([]partialent
 	return out, nil
 }
 
-// GetAsk returns one persisted conversation.
-type GetAsk struct {
-	Asks    interfaces.AskStore
-	Atoms   interfaces.AtomRepository
-	Sources SourceTagReader
-}
+// AskGetter returns one saved Ask.
+type AskGetter func(ctx context.Context, id ulid.ULID) (partialentities.PartialAsk, error)
 
-// Execute returns one ask with its answer.
-func (uc GetAsk) Execute(ctx context.Context, id ulid.ULID) (partialentities.PartialAsk, error) {
-	a, err := uc.Asks.Get(ctx, id)
+// Get returns one ask with its answer.
+func (uc Asks) Get(ctx context.Context, id ulid.ULID) (partialentities.PartialAsk, error) {
+	a, err := uc.Store.Get(ctx, id)
 	if err != nil {
 		return partialentities.PartialAsk{}, err
 	}
@@ -59,12 +60,10 @@ func (uc GetAsk) Execute(ctx context.Context, id ulid.ULID) (partialentities.Par
 	}, nil
 }
 
-// DeleteAsk removes one saved conversation (to the vault trash).
-type DeleteAsk struct {
-	Asks interfaces.AskStore
-}
+// AskDeleter deletes one saved Ask.
+type AskDeleter func(ctx context.Context, id ulid.ULID) error
 
-// Execute deletes one ask by id.
-func (uc DeleteAsk) Execute(ctx context.Context, id ulid.ULID) error {
-	return uc.Asks.Delete(ctx, id)
+// Delete removes one saved conversation (to the vault trash).
+func (uc Asks) Delete(ctx context.Context, id ulid.ULID) error {
+	return uc.Store.Delete(ctx, id)
 }

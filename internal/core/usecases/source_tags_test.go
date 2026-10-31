@@ -95,7 +95,7 @@ func TestSetSourceTagsNormalizesAndMirrors(t *testing.T) {
 		t.Fatalf("source: %v", err)
 	}
 	tags := &fakeSourceTags{index: idx}
-	got, err := (usecases.SetSourceTags{Index: idx, Tags: tags}).Execute(ctx, hash,
+	got, err := (usecases.Sources{Index: idx, Tags: tags}).Tag(ctx, hash,
 		[]string{"  Caching Strategies ", "caching-strategies", "Go", ""})
 	if err != nil {
 		t.Fatalf("set tags: %v", err)
@@ -109,7 +109,7 @@ func TestSetSourceTagsNormalizesAndMirrors(t *testing.T) {
 	}
 
 	// An empty answer clears the labels.
-	if _, err := (usecases.SetSourceTags{Index: idx, Tags: tags}).Execute(ctx, hash, nil); err != nil {
+	if _, err := (usecases.Sources{Index: idx, Tags: tags}).Tag(ctx, hash, nil); err != nil {
 		t.Fatalf("clear tags: %v", err)
 	}
 	if len(tags.byHash[hash]) != 0 {
@@ -128,7 +128,7 @@ func TestSetSourceTagsRejectsTooMany(t *testing.T) {
 	for i := range 33 {
 		many = append(many, fmt.Sprintf("tag-%02d", i))
 	}
-	if _, err := (usecases.SetSourceTags{Index: idx, Tags: &fakeSourceTags{}}).Execute(ctx, hash, many); err == nil {
+	if _, err := (usecases.Sources{Index: idx, Tags: &fakeSourceTags{}}).Tag(ctx, hash, many); err == nil {
 		t.Fatal("33 tags accepted, want the cap")
 	}
 }
@@ -166,12 +166,12 @@ func (f *fakeVocabStore) Write(v entities.Vocabulary) error {
 // opening a file per source and reported alongside topics and wiki tags.
 func TestVocabularyReportObservesSourceTags(t *testing.T) {
 	ctx := context.Background()
-	report, err := (usecases.VocabularyReport{
+	report, err := (usecases.Vocabulary{
 		Atoms: &fakeAtomRepo{},
-		Sources: &fakeSourceTags{byHash: map[string][]string{
+		Reader: &fakeSourceTags{byHash: map[string][]string{
 			"a": {"go", "caching"}, "b": {"go"},
 		}},
-	}).Execute(ctx)
+	}).Report(ctx)
 	if err != nil {
 		t.Fatalf("report: %v", err)
 	}
@@ -204,12 +204,12 @@ func TestApplyVocabularyRenamesSourceTags(t *testing.T) {
 		},
 	}
 	vocab := &fakeVocabStore{}
-	res, err := (usecases.ApplyVocabularyMapping{
+	res, err := (usecases.Vocabulary{
 		Namespace: entities.VocabularySourceTags,
 		Mapping:   map[string]string{"cache-invalidation": "caching"},
 		Vocab:     vocab,
 		Sources:   tags,
-	}).Execute(ctx)
+	}).ApplyMapping(ctx)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -247,10 +247,10 @@ func TestTagSourceDerivesCoarseTagsFromTheClaims(t *testing.T) {
 	}}
 	tags := &fakeSourceTags{}
 	gw := &summaryGateway{answer: `{"tags":["Caching Strategies","go","caching-strategies"]}`}
-	uc := usecases.TagSource{
+	uc := usecases.Vocabulary{
 		Index: idx, Atoms: atoms, Tags: tags, Gateway: gw, Model: "test", Clock: fixedClock{},
 	}
-	res, err := uc.Execute(ctx, ulid.Make(), hash)
+	res, err := uc.TagSource(ctx, ulid.Make(), hash)
 	if err != nil {
 		t.Fatalf("tag source: %v", err)
 	}
@@ -273,10 +273,10 @@ func TestTagSourceRefusesAnUnfinishedDerivation(t *testing.T) {
 		t.Fatalf("source: %v", err)
 	}
 	tags := &fakeSourceTags{}
-	uc := usecases.TagSource{
+	uc := usecases.Vocabulary{
 		Index: idx, Atoms: &fakeAtomRepo{}, Tags: tags, Gateway: &summaryGateway{}, Model: "test", Clock: fixedClock{},
 	}
-	if _, err := uc.Execute(ctx, ulid.Make(), hash); err == nil {
+	if _, err := uc.TagSource(ctx, ulid.Make(), hash); err == nil {
 		t.Fatal("tagging a pending derivation: want an error")
 	}
 	if len(tags.auto) != 0 {
@@ -294,8 +294,8 @@ func TestTagSourceMarksASourceWithNoClaims(t *testing.T) {
 		t.Fatalf("source: %v", err)
 	}
 	tags := &fakeSourceTags{}
-	uc := usecases.TagSource{Index: idx, Atoms: &fakeAtomRepo{}, Tags: tags, Clock: fixedClock{}}
-	res, err := uc.Execute(ctx, ulid.Make(), hash)
+	uc := usecases.Vocabulary{Index: idx, Atoms: &fakeAtomRepo{}, Tags: tags, Clock: fixedClock{}}
+	res, err := uc.TagSource(ctx, ulid.Make(), hash)
 	if err != nil {
 		t.Fatalf("tag source: %v", err)
 	}

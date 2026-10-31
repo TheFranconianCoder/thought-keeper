@@ -50,7 +50,7 @@ func claimApp(runs *fakeRuns) *App {
 		executing:     map[string]entities.Step{},
 		progress:      map[string]runProgress{},
 		stalled:       map[string]int{},
-		startRun:      usecases.StartRun{Runs: runs, Clock: systemClock{}},
+		startRun:      usecases.Runs{Store: runs, Clock: systemClock{}},
 	}
 	return a
 }

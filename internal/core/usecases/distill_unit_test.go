@@ -15,14 +15,6 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
-// truncatedResponse is a turn the endpoint cut off at its output limit. The model never saw the
-// cut, so it goes on as if it had finished its answer.
-func truncatedResponse(name, args string) interfaces.AgentResponse {
-	r := toolResponse(name, args)
-	r.FinishReason = interfaces.FinishReasonLength
-	return r
-}
-
 // distillFixture runs one distill over the given tree and hands back the gateway, so a test can see
 // what the agent was actually asked.
 func distillFixture(t *testing.T, nodes []entities.SourceNode, responses []interfaces.AgentResponse) (*fakeGateway, *fakeAtomRepo, *fakeSections, *fakeSourceLog) {
@@ -55,8 +47,8 @@ func runDistill(t *testing.T, nodes []entities.SourceNode, gw interfaces.AgentGa
 	}
 	parts := &fakeSections{}
 	logs := &fakeSourceLog{}
-	az := usecases.DistillSource{
-		Index: idx, Trees: trees, Atoms: atomStore, AtomRepo: atomRepo,
+	az := usecases.Derivation{
+		Index: idx, Trees: trees, AtomStore: atomStore, Atoms: atomRepo,
 		PartRepo: parts, SourceLog: logs, PartsPerRun: 8, Parallel: 2,
 		Gateway: gw, Model: "test", MaxIterations: 6, Clock: fixedClock{},
 	}
@@ -81,8 +73,8 @@ func runDistillRaw(t *testing.T, nodes []entities.SourceNode, gw interfaces.Agen
 	}
 	parts := &fakeSections{}
 	logs := &fakeSourceLog{}
-	az := usecases.DistillSource{
-		Index: idx, Trees: trees, Atoms: atomStore, AtomRepo: atomRepo,
+	az := usecases.Derivation{
+		Index: idx, Trees: trees, AtomStore: atomStore, Atoms: atomRepo,
 		PartRepo: parts, SourceLog: logs, PartsPerRun: 8, Parallel: 2,
 		Gateway: gw, Model: "test", MaxIterations: 6, Clock: fixedClock{},
 	}
@@ -91,7 +83,7 @@ func runDistillRaw(t *testing.T, nodes []entities.SourceNode, gw interfaces.Agen
 }
 
 func promptsOf(gw *fakeGateway) []string {
-	var out []string
+	out := make([]string, 0, len(gw.requests))
 	for _, req := range gw.requests {
 		out = append(out, req.Messages[len(req.Messages)-1].Content)
 	}

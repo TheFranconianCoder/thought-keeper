@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -17,18 +16,6 @@ import (
 // maxUploadBytes caps a browser upload (drag & drop / file picker).
 const maxUploadBytes = 100 << 20
 
-// IntakeService stores a raw source and indexes it.
-type IntakeService interface {
-	Execute(ctx context.Context, in usecases.IntakeInput) (partialentities.PartialSource, error)
-}
-
-// URLService fetches a URL and stores it as a Markdown snapshot (or a bookmark), or expands it when it
-// is a sitemap or a feed. ExecuteManual is the human's own addition: it WINS over a wiki/sitemap claim.
-type URLService interface {
-	Execute(ctx context.Context, url string, bookmark bool) (partialentities.PartialSource, error)
-	ExecuteManual(ctx context.Context, url string, bookmark bool) (partialentities.PartialSource, error)
-}
-
 // AddHandler serves POST /api/v1/add. Three shapes are accepted:
 //   - JSON {"path": "..."}      — a file already on the machine
 //   - JSON {"url": "..."}       — fetch a page and snapshot it locally
@@ -37,8 +24,10 @@ type URLService interface {
 // Intake is fast (hashing, or one fetch), so it is synchronous; the slow, agent
 // backed work happens later through a run.
 type AddHandler struct {
-	Intake IntakeService
-	URL    URLService
+	Intake usecases.IntakeService
+	URL    usecases.URLAdder
+	// URLManual adds a link the human typed, which wins over an owner.
+	URLManual usecases.URLManualAdder
 	// OnAdded is called after a successful intake so the app can schedule tree
 	// building off the request path.
 	OnAdded func(hash string)
@@ -74,7 +63,7 @@ func (h AddHandler) Post(w http.ResponseWriter, r *http.Request) {
 			payloads.WriteError(w, types.New("not_implemented", "url intake is not configured", types.ErrNotImplemented))
 			return
 		}
-		src, err := h.URL.ExecuteManual(r.Context(), url, req.Bookmark)
+		src, err := h.URLManual(r.Context(), url, req.Bookmark)
 		if err != nil {
 			payloads.WriteError(w, err)
 			return
@@ -108,9 +97,9 @@ func (h AddHandler) Post(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("invalid_body", "cannot open path: "+err.Error(), err))
 		return
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = f.Close() }() //nolint:errcheck // a close or an unlock has nothing left to report
 
-	src, err := h.Intake.Execute(r.Context(), usecases.IntakeInput{Name: filepath.Base(req.Path), Reader: f})
+	src, err := h.Intake(r.Context(), usecases.IntakeInput{Name: filepath.Base(req.Path), Reader: f})
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -128,7 +117,7 @@ func (h AddHandler) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = file.Close() }()
 
-	src, err := h.Intake.Execute(r.Context(), usecases.IntakeInput{Name: header.Filename, Reader: file})
+	src, err := h.Intake(r.Context(), usecases.IntakeInput{Name: header.Filename, Reader: file})
 	if err != nil {
 		payloads.WriteError(w, err)
 		return

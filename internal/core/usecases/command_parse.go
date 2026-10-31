@@ -67,7 +67,7 @@ var lensWordSet = func() map[string]bool {
 	set := map[string]bool{}
 	for _, candidate := range lensWords {
 		for _, word := range candidate.word {
-			for _, token := range strings.Fields(strings.ToLower(word)) {
+			for token := range strings.FieldsSeq(strings.ToLower(word)) {
 				set[token] = true
 			}
 		}
@@ -147,15 +147,21 @@ var (
 
 // deicticSource and deicticAtom are how people point at what they are looking at.
 var (
-	deicticSource = []string{"diese quelle", "dieser quelle", "diesem dokument", "dieses dokument",
-		"diesem paper", "dieses paper", "this source", "this document", "this paper"}
+	deicticSource = []string{
+		"diese quelle", "dieser quelle", "diesem dokument", "dieses dokument",
+		"diesem paper", "dieses paper", "this source", "this document", "this paper",
+	}
 	// subjectMarkers say the request is about CONTENT, not about a field: it must be read.
-	subjectMarkers = []string{"über", "ueber", "zum thema", "thema", "about", "dealing with",
+	subjectMarkers = []string{
+		"über", "ueber", "zum thema", "thema", "about", "dealing with",
 		"deals with", "regarding", "handelt von", "handeln von", "beschäftigt", "concerned with",
-		"which of my", "welche meiner"}
-	deicticAtom = []string{"dieser claim", "diesen claim", "diesem claim", "dieses claim",
+		"which of my", "welche meiner",
+	}
+	deicticAtom = []string{
+		"dieser claim", "diesen claim", "diesem claim", "dieses claim",
 		"dieses claims", "diesen claims", "dieser aussage", "diese aussage", "dieser behauptung",
-		"this claim", "this statement"}
+		"this claim", "this statement",
+	}
 )
 
 // ParseCommand reads an utterance without a model.
@@ -383,7 +389,7 @@ func readWindow(lower string) (time.Duration, bool) {
 		return 30 * 24 * time.Hour, true
 	}
 	// An explicit duration ("48h", "2d", "1w") is taken as written.
-	for _, field := range strings.Fields(lower) {
+	for field := range strings.FieldsSeq(lower) {
 		if d, ok := parseWindowDuration(strings.Trim(field, ".,;:")); ok && d > 0 {
 			return d, true
 		}

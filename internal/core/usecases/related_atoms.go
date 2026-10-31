@@ -6,21 +6,12 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
-// RelatedAtoms finds the claims near one claim without embeddings.
-//
-// The strongest relation is the shared CLUSTER: claims the association step grouped together are
-// about the same subject by construction, and a cluster is many-to-many, so a claim can be near
-// claims of several groups. The flat TOPIC is the fallback relation. Other clusters are deliberately
-// NOT included through links: this is the claim trail, not page-to-page relatedness (there are no
-// pages).
-type RelatedAtoms struct {
-	Atoms    interfaces.AtomRepository
-	Clusters interfaces.ClusterRepository
-}
+// AtomRelated lists a claim's peers, plus the claims that share its topic. A handler holds this value;
+// nil means the feature is not wired.
+type AtomRelated func(ctx context.Context, id ulid.ULID, limit int) (RelatedAtomsResult, error)
 
 // RelatedAtomsResult keeps the two relations APART. They answer different questions — "what does this
 // claim travel with?" and "what else is filed under this subject?" — and a list that mixes them can
@@ -30,9 +21,8 @@ type RelatedAtomsResult struct {
 	SameTopic []partialentities.PartialAtom
 }
 
-// Execute returns claims related to id, grouped: the cluster peers first, then the claims that share
-// only its flat topic. The two groups are disjoint.
-func (uc RelatedAtoms) Execute(ctx context.Context, id ulid.ULID, limit int) (RelatedAtomsResult, error) {
+// Related returns the peers and the topic neighbours of one claim.
+func (uc Claims) Related(ctx context.Context, id ulid.ULID, limit int) (RelatedAtomsResult, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 20
 	}

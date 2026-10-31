@@ -2,34 +2,11 @@ package usecases
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
-
-// DeleteSource removes a source and everything that only existed because of it: the indexed row (its
-// nodes and provenance cascade), the content-addressed object (moved to the trash), every sidecar next
-// to it (rendering, step record, outline, log) and any atom that cited this source and no other.
-// Cluster records that cited those atoms are a cache: the next cluster pass prunes the dead members.
-//
-// The atom lookup is the INDEX's answer (ListAtomsBySource), never a walk of atoms/. That walk is
-// O(vault): it reads and decodes every claim file, and on a 172k-claim vault it cost 8–30 seconds per
-// deleted source — once per link a wiki page stopped declaring, once per page a sitemap reconciled.
-// Atom files the index never saw are `reindex`'s to find; it trashes a claim whose every source is
-// gone, which is exactly what such a file is.
-type DeleteSource struct {
-	Store     interfaces.SourceStore
-	Index     interfaces.IndexRepository
-	Atoms     interfaces.AtomStore
-	AtomRepo  interfaces.AtomRepository
-	SourceLog interfaces.SourceLog
-	// Steps drops the source's step record with the source itself.
-	Steps interfaces.StepTracker
-	Clock interfaces.Clock
-	Log   *slog.Logger
-}
 
 // DeleteResult reports what was removed.
 type DeleteResult struct {
@@ -43,16 +20,21 @@ type deletion struct {
 	seen map[string]bool
 }
 
-// Execute deletes one source by hash. A dependent source (a page a sitemap, a feed or a wiki page
-// brought in) is refused: its owner controls its lifetime. Removing a sitemap, a feed or a wiki page
-// goes through ExecuteOwned, which cascades.
-func (uc DeleteSource) Execute(ctx context.Context, hash string) (DeleteResult, error) {
+// SourceDeleter removes one source and everything derived from it. A handler holds this value; nil
+// means the feature is not wired.
+type SourceDeleter func(ctx context.Context, hash string) (DeleteResult, error)
+
+// Delete removes one source and everything derived from it.
+func (uc Sources) Delete(ctx context.Context, hash string) (DeleteResult, error) {
 	return uc.delete(cancelProof(ctx), hash, false, &deletion{seen: map[string]bool{}})
 }
 
-// ExecuteOwned removes a source that belongs to an owner. It is the internal cascade path; the API
-// never calls it directly.
-func (uc DeleteSource) ExecuteOwned(ctx context.Context, hash string) (DeleteResult, error) {
+// SourceOwnedDeleter removes a source that belongs to an owner: the cascade path another use case
+// holds.
+type SourceOwnedDeleter func(ctx context.Context, hash string) (DeleteResult, error)
+
+// DeleteOwned removes a source that belongs to an owner.
+func (uc Sources) DeleteOwned(ctx context.Context, hash string) (DeleteResult, error) {
 	return uc.delete(cancelProof(ctx), hash, true, &deletion{seen: map[string]bool{}})
 }
 
@@ -67,7 +49,7 @@ func cancelProof(ctx context.Context) context.Context {
 	return context.WithoutCancel(ctx)
 }
 
-func (uc DeleteSource) delete(ctx context.Context, hash string, allowDependent bool, d *deletion) (DeleteResult, error) {
+func (uc Sources) delete(ctx context.Context, hash string, allowDependent bool, d *deletion) (DeleteResult, error) {
 	if d.seen[hash] {
 		return DeleteResult{}, nil
 	}
@@ -121,7 +103,7 @@ func (uc DeleteSource) delete(ctx context.Context, hash string, allowDependent b
 			}
 		}
 	}
-	citing, err := uc.AtomRepo.ListAtomsBySource(ctx, hash)
+	citing, err := uc.Atoms.ListAtomsBySource(ctx, hash)
 	if err != nil {
 		// Without the index answer we cannot know what cites this source: deleting it would leave
 		// claims pointing at nothing. Stop instead of guessing.
@@ -149,17 +131,17 @@ func (uc DeleteSource) delete(ctx context.Context, hash string, allowDependent b
 		DependentsRemoved: dependents.DependentsRemoved,
 	}
 	for _, a := range citing {
-		n, err := uc.AtomRepo.CountAtomSources(ctx, a.ID)
+		n, err := uc.Atoms.CountAtomSources(ctx, a.ID)
 		if err != nil || n > 0 {
 			continue
 		}
-		if err := uc.AtomRepo.DeleteAtom(ctx, a.ID); err != nil {
+		if err := uc.Atoms.DeleteAtom(ctx, a.ID); err != nil {
 			if uc.Log != nil {
 				uc.Log.Warn("delete source: atom row", "atom", a.ID.String(), "err", err)
 			}
 			continue
 		}
-		if err := uc.Atoms.Remove(ctx, a); err != nil && uc.Log != nil {
+		if err := uc.AtomStore.Remove(ctx, a); err != nil && uc.Log != nil {
 			uc.Log.Warn("delete source: atom file", "atom", a.ID.String(), "err", err)
 		}
 		res.AtomsRemoved++

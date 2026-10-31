@@ -3,29 +3,10 @@ package usecases
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sort"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
-
-// ReconcileVocabulary makes the vocabulary files match the VAULT.
-//
-// The vault is the truth about which names EXIST (the claims carry them); the file is the
-// truth about what they were CALLED before (the absorbed map). So "adopt what is there" is not a
-// decision — it is writing down what is there — and dropping a canonical name that no longer occurs
-// anywhere is the same act from the other side. It needs no model, and it is the repair half of the
-// vocabulary the way `cleanup` is the repair half of the lint findings.
-//
-// Without it a vault has no baseline: every name would read as `new` forever, and the incremental part
-// of a curation — ask only about what arrived since the last pass — could never work.
-type ReconcileVocabulary struct {
-	Report VocabularyReport
-	Vocab  interfaces.VocabularyStore
-	Clock  interfaces.Clock
-	Log    *slog.Logger
-}
 
 // VocabularyNamespaceResult is one namespace's outcome.
 type VocabularyNamespaceResult struct {
@@ -48,13 +29,13 @@ type ReconcileVocabularyResult struct {
 	Pruned     int
 }
 
-// Execute reconciles every namespace, coarse to fine.
-func (uc ReconcileVocabulary) Execute(ctx context.Context) (ReconcileVocabularyResult, error) {
+// Reconcile repairs the vocabularies against what the vault holds.
+func (uc Vocabulary) Reconcile(ctx context.Context) (ReconcileVocabularyResult, error) {
 	var res ReconcileVocabularyResult
 	if uc.Vocab == nil {
 		return res, fmt.Errorf("vocabulary: no store configured")
 	}
-	healths, err := uc.Report.Execute(ctx)
+	healths, err := uc.Report(ctx)
 	if err != nil {
 		return res, err
 	}

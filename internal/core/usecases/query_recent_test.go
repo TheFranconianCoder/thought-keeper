@@ -66,12 +66,12 @@ func TestQueryRecentSourcesUsesTheOverview(t *testing.T) {
 		toolResponse("list_sources", `{"since":"24h"}`),
 		finalResponse("In den letzten 24 Stunden ist eine Quelle hinzugekommen. [[source:" + hash + "|A recent article]]"),
 	}}
-	uc := usecases.QueryKnowledge{
+	uc := usecases.Query{
 		Atoms: &fakeAtomRepo{}, Index: idx, Store: store,
 		Runs: &fakeRunRepo{}, Gateway: gw, Model: "test", MaxIterations: 4, Clock: fixedClock{},
 	}
 
-	res, err := uc.Execute(ctx, ulid.Make(), "Fasse die jüngsten Sources der letzten 24h zusammen.")
+	res, err := uc.Ask(ctx, ulid.Make(), "Fasse die jüngsten Sources der letzten 24h zusammen.")
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -96,12 +96,12 @@ func TestQueryRecentSourcesEmptyWindow(t *testing.T) {
 		toolResponse("list_sources", `{"since":"24h"}`),
 		finalResponse("In den letzten 24 Stunden ist keine Quelle hinzugekommen."),
 	}}
-	uc := usecases.QueryKnowledge{
+	uc := usecases.Query{
 		Atoms: &fakeAtomRepo{}, Index: idx,
 		Runs: &fakeRunRepo{}, Gateway: gw, Model: "test", MaxIterations: 4, Clock: fixedClock{},
 	}
 
-	res, err := uc.Execute(ctx, ulid.Make(), "Fasse die jüngsten Sources der letzten 24h zusammen.")
+	res, err := uc.Ask(ctx, ulid.Make(), "Fasse die jüngsten Sources der letzten 24h zusammen.")
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -131,12 +131,12 @@ func TestQueryRecentSourcesFallsBackToClaims(t *testing.T) {
 		toolResponse("read_source_summary", `{"hash":"`+hash+`"}`),
 		finalResponse("Die Quelle sagt, dass ein Cache einen versionierten Schlüssel braucht ([[claim:" + atomID.String() + "|A cache needs a versioned key.]])."),
 	}}
-	uc := usecases.QueryKnowledge{
+	uc := usecases.Query{
 		Atoms: atoms, Index: idx,
 		Runs: &fakeRunRepo{}, Gateway: gw, Model: "test", MaxIterations: 5, Clock: fixedClock{},
 	}
 
-	res, err := uc.Execute(ctx, ulid.Make(), "Fasse die jüngsten Sources der letzten 24h zusammen.")
+	res, err := uc.Ask(ctx, ulid.Make(), "Fasse die jüngsten Sources der letzten 24h zusammen.")
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -171,12 +171,12 @@ func TestQueryRecentSourcesPagesTheWholeWindow(t *testing.T) {
 		toolResponse("list_sources", `{"since":"24h","offset":8}`),
 		finalResponse(answer.String()),
 	}}
-	uc := usecases.QueryKnowledge{
+	uc := usecases.Query{
 		Atoms: &fakeAtomRepo{}, Index: idx,
 		Runs: &fakeRunRepo{}, Gateway: gw, Model: "test", MaxIterations: 6, Clock: fixedClock{},
 	}
 
-	res, err := uc.Execute(ctx, ulid.Make(), "Fasse die jüngsten Sources der letzten 24h zusammen.")
+	res, err := uc.Ask(ctx, ulid.Make(), "Fasse die jüngsten Sources der letzten 24h zusammen.")
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -211,12 +211,12 @@ func TestQueryListAtomsBySource(t *testing.T) {
 		toolResponse("list_atoms", `{"source":"`+hash+`"}`),
 		finalResponse("The source says that a cache needs a versioned key."),
 	}}
-	uc := usecases.QueryKnowledge{
+	uc := usecases.Query{
 		Atoms: atoms, Index: idx,
 		Runs: &fakeRunRepo{}, Gateway: gw, Model: "test", MaxIterations: 4, Clock: fixedClock{},
 	}
 
-	if _, err := uc.Execute(ctx, ulid.Make(), "What does the newest source say?"); err != nil {
+	if _, err := uc.Ask(ctx, ulid.Make(), "What does the newest source say?"); err != nil {
 		t.Fatalf("query: %v", err)
 	}
 	tool := toolMessage(gw.requests[1])

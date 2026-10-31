@@ -5,46 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
-
-// AttachURLSnapshot stores a page the HUMAN supplied for a URL the app could not read: a login wall, a
-// paywall, a JS application. The app does not authenticate, and it never will — but the human is
-// already logged in, in their browser. Saving the page (HTML or PDF) and attaching it is the whole
-// exchange: the human does the authenticated part, the app does the reading.
-//
-// The URL stays the ADDRESS of the source (one source per URL, everything that cites it survives), and
-// the attached file becomes its snapshot — the same place a fetch writes. The record says it was
-// attached, with the file's name and hash, and the refresh leaves such a source alone: a login page is
-// not a correction of the article.
-type AttachURLSnapshot struct {
-	// Convert turns an attached HTML page into Markdown (the same readability path a fetch uses).
-	Convert interfaces.HTMLConverter
-	// Extractor reads an attached PDF (the text layer, or OCR) into parts.
-	Extractor interfaces.Extractor
-	Store     interfaces.SourceStore
-	Index     interfaces.IndexRepository
-	Steps     interfaces.StepTracker
-	// Reset throws away the derivation a PREVIOUS snapshot produced. Replacing an attached file is a
-	// new source text: its claims and tree are not true any more, and re-arming the lights alone
-	// would mix them with the new derivation.
-	Reset     SourceResetter
-	SourceLog interfaces.SourceLog
-	Languages interfaces.LanguageDetector
-	Clock     interfaces.Clock
-	Log       *slog.Logger
-	// MaxBytes bounds one attached file. Zero means 32 MiB (the PDF ceiling is larger than a fetch's,
-	// because a page saved as PDF carries its own layout).
-	MaxBytes int64
-}
 
 // AttachInput is one human-supplied snapshot.
 type AttachInput struct {
@@ -66,8 +34,12 @@ type attachedDocument struct {
 	OCR     bool
 }
 
-// Execute stores the attachment as the URL source's new snapshot and re-arms the document steps.
-func (uc AttachURLSnapshot) Execute(ctx context.Context, in AttachInput) (partialentities.PartialSource, error) {
+// URLAttacher fills a blocked URL source with a snapshot the human supplied. A handler holds this
+// value; nil means the feature is not wired.
+type URLAttacher func(ctx context.Context, in AttachInput) (partialentities.PartialSource, error)
+
+// Attach fills a blocked URL source with a snapshot.
+func (uc Sources) Attach(ctx context.Context, in AttachInput) (partialentities.PartialSource, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, strings.TrimSpace(in.Hash))
 	if err != nil {
 		return partialentities.PartialSource{}, types.New("not_found", "the source does not exist", types.ErrNotFound)
@@ -117,7 +89,7 @@ func (uc AttachURLSnapshot) Execute(ctx context.Context, in AttachInput) (partia
 	// A source that already has bytes is being REPLACED: the old derivation was built on other text.
 	// The conversion above succeeded, so the human's new file is good before anything is dropped.
 	if src.Path != "" && uc.Reset != nil {
-		if _, err := uc.Reset.Execute(ctx, src.Hash); err != nil {
+		if _, err := uc.Reset(ctx, src.Hash); err != nil {
 			return partialentities.PartialSource{}, err
 		}
 	}
@@ -154,20 +126,20 @@ func (uc AttachURLSnapshot) Execute(ctx context.Context, in AttachInput) (partia
 	if err := uc.Index.FillURLSource(ctx, src); err != nil {
 		return partialentities.PartialSource{}, err
 	}
-	_ = uc.Index.SetSourceTitle(ctx, src.Hash, doc.Title)
-	_ = uc.Index.SetSourceMeta(ctx, src.Hash, src.Meta)
+	_ = uc.Index.SetSourceTitle(ctx, src.Hash, doc.Title) //nolint:errcheck // the index and the step records are a light; the vault is the truth
+	_ = uc.Index.SetSourceMeta(ctx, src.Hash, src.Meta)   //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	// There was no HTTP answer for THESE bytes. Zero is "unknown", which is the truth.
-	_ = uc.Index.SetSourceURLState(ctx, src.Hash, 0, now)
+	_ = uc.Index.SetSourceURLState(ctx, src.Hash, 0, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	if language != "" {
-		_ = uc.Index.SetSourceLanguage(ctx, src.Hash, language)
+		_ = uc.Index.SetSourceLanguage(ctx, src.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	}
 	if uc.Steps != nil {
 		// The old derivation was built on other bytes: reset it (capture survives, outline and
 		// distill are re-armed) and record the capture that just happened.
 		icon := faviconFromMeta(src.Meta)
-		_ = uc.Steps.Reset(src.Hash)
-		_ = uc.Steps.SetLanguage(src.Hash, language)
-		_ = uc.Steps.SetIdentity(src.Hash, entities.SourceIdentity{
+		_ = uc.Steps.Reset(src.Hash)                                //nolint:errcheck // the index and the step records are a light; the vault is the truth
+		_ = uc.Steps.SetLanguage(src.Hash, language)                //nolint:errcheck // the index and the step records are a light; the vault is the truth
+		_ = uc.Steps.SetIdentity(src.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			Kind: entities.SourceKindURL, URL: src.URL, Language: language,
 			OriginalName: src.URL, ContentHash: contentHashOf(doc.Title, body),
 			Attached: true, AttachedFrom: name, AttachedHash: sha,
@@ -177,7 +149,7 @@ func (uc AttachURLSnapshot) Execute(ctx context.Context, in AttachInput) (partia
 	}
 	recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepCapture, entities.StepOK,
 		"attached · "+name, nil)
-	appendSourceLog(ctx, uc.SourceLog, uc.Clock, src.Hash, "capture", "info", "snapshot attached",
+	appendSourceLog(ctx, uc.SourceLog, uc.Clock, src.Hash, "info", "snapshot attached",
 		map[string]any{
 			"file": name, "bytes": len(in.Data), "sha256": sha,
 			"pages": doc.Pages, "ocr": doc.OCR, "chars": len(body),
@@ -196,7 +168,7 @@ func (uc AttachURLSnapshot) Execute(ctx context.Context, in AttachInput) (partia
 
 // convert turns the attached file into Markdown, by the same paths the rest of the pipeline uses:
 // HTML through readability, a PDF through poppler/OCR, Markdown and text as they are.
-func (uc AttachURLSnapshot) convert(ctx context.Context, src entities.Source, name string, data []byte) (attachedDocument, error) {
+func (uc Sources) convert(ctx context.Context, src entities.Source, name string, data []byte) (attachedDocument, error) {
 	ext := strings.ToLower(filepath.Ext(name))
 	stem := strings.TrimSuffix(name, filepath.Ext(name))
 	switch ext {

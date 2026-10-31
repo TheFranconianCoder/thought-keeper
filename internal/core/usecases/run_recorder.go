@@ -56,7 +56,7 @@ func (r *StepRecorder) OnStep(info agents.StepInfo) {
 			r.log.Info("agent step", attrs...)
 		}
 	}
-	_ = r.runs.AddStep(r.ctx, entities.RunStep{
+	_ = r.runs.AddStep(r.ctx, entities.RunStep{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		RunID:        r.run,
 		Seq:          r.seq,
 		Tool:         info.Tool,

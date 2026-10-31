@@ -6,16 +6,12 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
-// SourceAtoms lists the atoms extracted from one source (its provenance in the
-// middle layer), so a source view can show what it produced.
-type SourceAtoms struct {
-	AtomRepo interfaces.AtomRepository
-	Clusters interfaces.ClusterRepository
-}
+// SourceAtomLister lists the claims distilled from one source. A handler holds this value; nil means
+// the feature is not wired.
+type SourceAtomLister func(ctx context.Context, hash string, limit int) (SourceAtomsResult, error)
 
 // SourceTopicUse is one of a source's claim topics with how many of its claims carry it.
 type SourceTopicUse struct {
@@ -36,12 +32,12 @@ type SourceAtomsResult struct {
 // DefaultSourceAtomsLimit bounds the claims one overlay request returns.
 const DefaultSourceAtomsLimit = 100
 
-// Execute returns the atoms citing the source with this hash, at most `limit` of them.
-func (uc SourceAtoms) Execute(ctx context.Context, hash string, limit int) (SourceAtomsResult, error) {
+// BySource returns the claims one source produced.
+func (uc Claims) BySource(ctx context.Context, hash string, limit int) (SourceAtomsResult, error) {
 	if limit <= 0 {
 		limit = DefaultSourceAtomsLimit
 	}
-	atoms, err := uc.AtomRepo.ListAtomsBySource(ctx, hash)
+	atoms, err := uc.Atoms.ListAtomsBySource(ctx, hash)
 	if err != nil {
 		return SourceAtomsResult{}, err
 	}

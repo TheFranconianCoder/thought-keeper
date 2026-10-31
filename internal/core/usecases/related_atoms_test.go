@@ -18,7 +18,7 @@ func TestRelatedAtomsUsesTheFlatTopicBeforeCompile(t *testing.T) {
 	unrelated := entities.Atom{ID: ulid.Make(), Topic: "compilers", Claim: "unrelated"}
 	repo := &fakeAtomRepo{saved: []entities.Atom{base, other, unrelated}}
 
-	got, err := (usecases.RelatedAtoms{Atoms: repo}).Execute(ctx, base.ID, 10)
+	got, err := (usecases.Claims{Atoms: repo}).Related(ctx, base.ID, 10)
 	if err != nil {
 		t.Fatalf("related: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestRelatedAtomsSeparatesPeersFromTheTopic(t *testing.T) {
 		members: map[ulid.ULID][]ulid.ULID{cluster: {base.ID, peer.ID}},
 	}
 
-	got, err := (usecases.RelatedAtoms{Atoms: repo, Clusters: clusters}).Execute(ctx, base.ID, 10)
+	got, err := (usecases.Claims{Atoms: repo, Clusters: clusters}).Related(ctx, base.ID, 10)
 	if err != nil {
 		t.Fatalf("related: %v", err)
 	}

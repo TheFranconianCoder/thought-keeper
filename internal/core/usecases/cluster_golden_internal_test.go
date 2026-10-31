@@ -184,7 +184,7 @@ func TestClusterPassGoldenFingerprint(t *testing.T) {
 	repo := &goldenAtomRepo{atoms: atoms}
 	store := &goldenClusterStore{written: map[string]string{}}
 	cRepo := &goldenClusterRepo{}
-	uc := ClusterPass{Atoms: repo, Store: store, Clusters: cRepo}
+	uc := Clusters{Atoms: repo, Store: store, Clusters: cRepo}
 
 	// 1. prune: a record that names a vanished claim.
 	exists := make(map[ulid.ULID]bool, len(atoms))

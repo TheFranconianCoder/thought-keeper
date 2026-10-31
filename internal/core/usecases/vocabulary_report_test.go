@@ -103,7 +103,7 @@ func TestBroadTokensBreakGenericNameChains(t *testing.T) {
 }
 
 func TestOversizedNearDuplicateComponentIsNotOffered(t *testing.T) {
-	var observed []partialentities.NameUses
+	observed := make([]partialentities.NameUses, 0, 20)
 	for i := range 20 {
 		observed = append(observed, partialentities.NameUses{Name: "common-one-" + string(rune('a'+i)), Uses: 1})
 	}
@@ -162,7 +162,7 @@ func (g *broadGateway) Complete(_ context.Context, req interfaces.AgentRequest) 
 
 func TestLearnBroadTokensUsesTheModelFromVaultCandidates(t *testing.T) {
 	gw := &broadGateway{answer: `{"broad_tokens":["go","rust"]}`}
-	uc := CurateVocabulary{Gateway: gw, Model: "test"}
+	uc := Vocabulary{Gateway: gw, Model: "test"}
 	observed := []partialentities.NameUses{
 		{Name: "go-http", Uses: 1},
 		{Name: "go-language", Uses: 1},

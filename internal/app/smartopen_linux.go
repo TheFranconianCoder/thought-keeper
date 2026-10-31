@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -99,11 +100,11 @@ func isChromiumPWALauncher(exec string) bool {
 // handler — nothing is lost, because that is what happened before smart open.
 func launchPWALauncher(l pwaLauncher) error {
 	if _, err := exec.LookPath("gio"); err == nil {
-		return exec.Command("gio", "launch", l.Path).Start()
+		return exec.CommandContext(context.Background(), "gio", "launch", l.Path).Start()
 	}
 	if _, err := exec.LookPath("gtk-launch"); err == nil {
 		id := strings.TrimSuffix(filepath.Base(l.Path), ".desktop")
-		return exec.Command("gtk-launch", id).Start()
+		return exec.CommandContext(context.Background(), "gtk-launch", id).Start()
 	}
 	return errors.New("neither gio nor gtk-launch is available")
 }

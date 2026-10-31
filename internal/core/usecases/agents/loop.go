@@ -169,9 +169,9 @@ func (l Loop) Run(ctx context.Context, userMessage string) (Result, error) {
 	}
 	msgs = append(msgs, interfaces.AgentMessage{Role: "user", Content: userMessage})
 
-	max := l.MaxIterations
-	if max <= 0 {
-		max = defaultMaxIterations
+	maxIter := l.MaxIterations
+	if maxIter <= 0 {
+		maxIter = defaultMaxIterations
 	}
 
 	var (
@@ -183,7 +183,7 @@ func (l Loop) Run(ctx context.Context, userMessage string) (Result, error) {
 		finishWhy     string
 		wasTruncated  bool
 	)
-	for i := 1; i <= max; i++ {
+	for i := 1; i <= maxIter; i++ {
 		call := interfaces.AgentRequest{
 			Model: l.Model, Messages: msgs, Tools: defs, ReasoningEffort: l.ReasoningEffort,
 		}
@@ -273,7 +273,7 @@ func (l Loop) Run(ctx context.Context, userMessage string) (Result, error) {
 		Model: l.Model, Messages: msgs, ReasoningEffort: l.ReasoningEffort,
 	})
 	if l.OnTurn != nil {
-		l.OnTurn(max+1, final, err)
+		l.OnTurn(maxIter+1, final, err)
 	}
 	if err == nil {
 		usage.PromptTokens += final.PromptTokens
@@ -281,14 +281,14 @@ func (l Loop) Run(ctx context.Context, userMessage string) (Result, error) {
 		usage.TotalTokens += final.TotalTokens
 		if answer := strings.TrimSpace(final.Message.Content); answer != "" {
 			return Result{
-				Content: answer, Iterations: max + 1, Usage: usage, Elided: elided,
+				Content: answer, Iterations: maxIter + 1, Usage: usage, Elided: elided,
 				FinishReason: final.FinishReason, Truncated: true,
 			}, nil
 		}
 	}
 	return Result{
-		Iterations: max, Usage: usage, Elided: elided, FinishReason: finishWhy, Truncated: wasTruncated,
-	}, fmt.Errorf("max iterations (%d) reached", max)
+		Iterations: maxIter, Usage: usage, Elided: elided, FinishReason: finishWhy, Truncated: wasTruncated,
+	}, fmt.Errorf("maxIter iterations (%d) reached", maxIter)
 }
 
 // wrapUpPrompt is the last turn's instruction: answer now, with what is already in hand. It is

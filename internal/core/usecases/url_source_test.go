@@ -54,7 +54,7 @@ func (f *fakeConverter) Convert(context.Context, []byte, string) (interfaces.Con
 func TestAddURLStoresLocalSnapshot(t *testing.T) {
 	ctx := context.Background()
 	idx := newFakeIndex()
-	uc := usecases.AddURL{
+	uc := usecases.URLs{
 		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("<html>…</html>")}},
 		Convert: &fakeConverter{title: "The Page", markdown: "# Heading\n\nBody text."},
 		Store:   objects.New(t.TempDir()),
@@ -62,7 +62,7 @@ func TestAddURLStoresLocalSnapshot(t *testing.T) {
 		Clock:   fixedClock{},
 	}
 
-	src, err := uc.Execute(ctx, "https://example.com/article", false)
+	src, err := uc.Add(ctx, "https://example.com/article", false)
 	if err != nil {
 		t.Fatalf("add url: %v", err)
 	}
@@ -83,12 +83,12 @@ func TestAddURLPersistsFaviconAndContentHashInTheRecord(t *testing.T) {
 	store := objects.New(t.TempDir())
 	icons := favicons.New(t.TempDir())
 	steps := &fakeSteps{}
-	uc := usecases.AddURL{
+	uc := usecases.URLs{
 		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("<html>…</html>")}},
 		Convert: &fakeConverter{title: "The Page", markdown: strings.Repeat("body text ", 60), favicon: "/icon.png"},
 		Store:   store, Index: idx, Favicons: icons, Steps: steps, Clock: fixedClock{},
 	}
-	src, err := uc.Execute(ctx, "https://example.com/article", false)
+	src, err := uc.Add(ctx, "https://example.com/article", false)
 	if err != nil {
 		t.Fatalf("add url: %v", err)
 	}
@@ -106,16 +106,16 @@ func TestRefreshURLsDetectsChange(t *testing.T) {
 	// long enough to be an indexed document (not a bookmark)
 	conv := &fakeConverter{title: "T", markdown: strings.Repeat("same text ", 60)}
 
-	add := usecases.AddURL{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Clock: fixedClock{}}
-	if _, err := add.Execute(ctx, "https://example.com/x", false); err != nil {
+	add := usecases.URLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Clock: fixedClock{}}
+	if _, err := add.Add(ctx, "https://example.com/x", false); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 
-	refresh := usecases.RefreshURLs{
+	refresh := usecases.URLs{
 		Atoms: nil, Fetch: fetcher, Convert: conv, Store: store, Index: idx, Clock: fixedClock{},
 	}
 
-	res, err := refresh.ExecuteAll(ctx)
+	res, err := refresh.RefreshAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestRefreshURLsDetectsChange(t *testing.T) {
 	}
 
 	conv.markdown = strings.Repeat("same text ", 60) + " but the page changed"
-	res, err = refresh.ExecuteAll(ctx)
+	res, err = refresh.RefreshAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh 2: %v", err)
 	}
@@ -154,11 +154,11 @@ func TestRefreshClearsAWallAndReportsTheReset(t *testing.T) {
 		Meta: `{"url":"` + raw + `","wall":"login_required","last_error":"login required"}`,
 	}
 	conv := &fakeConverter{title: "Readable", markdown: strings.Repeat("the article is available ", 20)}
-	refresh := usecases.RefreshURLs{
+	refresh := usecases.URLs{
 		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("<html>article</html>")}},
 		Convert: conv, Store: store, Index: idx, Steps: &fakeSteps{}, Clock: fixedClock{},
 	}
-	res, err := refresh.ExecuteOne(ctx, hash)
+	res, err := refresh.RefreshOne(ctx, hash)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestRefreshClearsAWallAndReportsTheReset(t *testing.T) {
 func TestAddURLStoresBookmarkForUnreadablePage(t *testing.T) {
 	ctx := context.Background()
 	idx := newFakeIndex()
-	uc := usecases.AddURL{
+	uc := usecases.URLs{
 		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("<html>video</html>")}},
 		Convert: &fakeConverter{title: "A Video", markdown: "Subscribe to the channel."},
 		Store:   objects.New(t.TempDir()),
@@ -185,7 +185,7 @@ func TestAddURLStoresBookmarkForUnreadablePage(t *testing.T) {
 	}
 
 	// Too little text to index → a collected link.
-	src, err := uc.Execute(ctx, "https://video.example/watch?v=abc", false)
+	src, err := uc.Add(ctx, "https://video.example/watch?v=abc", false)
 	if err != nil {
 		t.Fatalf("add bookmark: %v", err)
 	}
@@ -197,14 +197,14 @@ func TestAddURLStoresBookmarkForUnreadablePage(t *testing.T) {
 	}
 
 	// Forced bookmark wins even when the page has plenty of text.
-	long := &usecases.AddURL{
+	long := &usecases.URLs{
 		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("x")}},
 		Convert: &fakeConverter{title: "Article", markdown: strings.Repeat("word ", 200)},
 		Store:   objects.New(t.TempDir()),
 		Index:   newFakeIndex(),
 		Clock:   fixedClock{},
 	}
-	forced, err := long.Execute(ctx, "https://example.com/article", true)
+	forced, err := long.Add(ctx, "https://example.com/article", true)
 	if err != nil {
 		t.Fatalf("forced bookmark: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestAddURLStoresBookmarkForUnreadablePage(t *testing.T) {
 		t.Errorf("forced bookmark was indexed instead: %+v", forced)
 	}
 	// …and without the flag the same page is an indexed document.
-	indexed, err := long.Execute(ctx, "https://example.com/article2", false)
+	indexed, err := long.Add(ctx, "https://example.com/article2", false)
 	if err != nil {
 		t.Fatalf("indexed add: %v", err)
 	}
@@ -231,14 +231,14 @@ func TestAddingAURLTwiceRefreshesItInPlace(t *testing.T) {
 	store := objects.New(t.TempDir())
 	fetcher := &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("x")}}
 	conv := &fakeConverter{title: "T", markdown: strings.Repeat("same text ", 60)}
-	add := usecases.AddURL{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Clock: fixedClock{}}
+	add := usecases.URLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Clock: fixedClock{}}
 
-	first, err := add.Execute(ctx, "https://example.com/x", false)
+	first, err := add.Add(ctx, "https://example.com/x", false)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	// The same URL again, unchanged: still one source.
-	if _, err := add.Execute(ctx, "https://example.com/x", false); err != nil {
+	if _, err := add.Add(ctx, "https://example.com/x", false); err != nil {
 		t.Fatalf("re-add: %v", err)
 	}
 	if all := sourcesByURL(t, idx, "https://example.com/x"); len(all) != 1 {
@@ -246,7 +246,7 @@ func TestAddingAURLTwiceRefreshesItInPlace(t *testing.T) {
 	}
 	// And again after the page changed: the same source, the same address, the new bytes.
 	conv.markdown = strings.Repeat("same text ", 60) + " and now it changed"
-	again, err := add.Execute(ctx, "https://example.com/x", false)
+	again, err := add.Add(ctx, "https://example.com/x", false)
 	if err != nil {
 		t.Fatalf("re-add changed: %v", err)
 	}
@@ -278,8 +278,8 @@ func TestRefreshRepairsAMissingFaviconOnAnUnchangedPage(t *testing.T) {
 	steps := &fakeSteps{}
 	fetcher := &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("x")}}
 	conv := &fakeConverter{title: "T", markdown: strings.Repeat("same text ", 60), favicon: "/icon.png"}
-	add := usecases.AddURL{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Steps: steps, Clock: fixedClock{}}
-	src, err := add.Execute(ctx, "https://example.com/repair", false)
+	add := usecases.URLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Steps: steps, Clock: fixedClock{}}
+	src, err := add.Add(ctx, "https://example.com/repair", false)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -289,8 +289,8 @@ func TestRefreshRepairsAMissingFaviconOnAnUnchangedPage(t *testing.T) {
 	idx.m[src.Hash] = row
 	delete(steps.identities, src.Hash)
 
-	refresh := usecases.RefreshURLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Steps: steps, Clock: fixedClock{}}
-	res, err := refresh.ExecuteAll(ctx)
+	refresh := usecases.URLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Steps: steps, Clock: fixedClock{}}
+	res, err := refresh.RefreshAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -315,8 +315,8 @@ func TestRefreshRepairsAMissingFaviconAndStillDetectsAChange(t *testing.T) {
 	fetcher := &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("x")}}
 	oldBody := strings.Repeat("same text ", 60)
 	conv := &fakeConverter{title: "T", markdown: oldBody, favicon: "/icon.png"}
-	add := usecases.AddURL{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Steps: steps, Clock: fixedClock{}}
-	src, err := add.Execute(ctx, "https://example.com/repair-change", false)
+	add := usecases.URLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Steps: steps, Clock: fixedClock{}}
+	src, err := add.Add(ctx, "https://example.com/repair-change", false)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -328,8 +328,8 @@ func TestRefreshRepairsAMissingFaviconAndStillDetectsAChange(t *testing.T) {
 	delete(steps.identities, src.Hash)
 
 	conv.markdown = oldBody + " changed"
-	refresh := usecases.RefreshURLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Steps: steps, Clock: fixedClock{}}
-	res, err := refresh.ExecuteAll(ctx)
+	refresh := usecases.URLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Steps: steps, Clock: fixedClock{}}
+	res, err := refresh.RefreshAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -364,10 +364,10 @@ func TestRefreshKeepsTheFaviconOfAChangedPage(t *testing.T) {
 	fetcher := &fakeFetcher{page: page}
 	conv := &fakeConverter{title: "T", markdown: strings.Repeat("same text ", 60), favicon: "/icon.png"}
 
-	add := usecases.AddURL{
+	add := usecases.URLs{
 		Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Clock: fixedClock{},
 	}
-	if _, err := add.Execute(ctx, "https://example.com/x", false); err != nil {
+	if _, err := add.Add(ctx, "https://example.com/x", false); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	first := sourcesByURL(t, idx, "https://example.com/x")[0]
@@ -378,10 +378,10 @@ func TestRefreshKeepsTheFaviconOfAChangedPage(t *testing.T) {
 	// The site's icon cannot be fetched any more (a transient failure) AND the page changed.
 	fetcher.failIcon = true
 	conv.markdown = strings.Repeat("same text ", 60) + " but the page changed"
-	refresh := usecases.RefreshURLs{
+	refresh := usecases.URLs{
 		Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Clock: fixedClock{},
 	}
-	res, err := refresh.ExecuteAll(ctx)
+	res, err := refresh.RefreshAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -423,7 +423,7 @@ func TestAddURLRecordsALoginWall(t *testing.T) {
 	store := objects.New(t.TempDir())
 	steps := &fakeSteps{}
 	log := &fakeSourceLog{}
-	uc := usecases.AddURL{
+	uc := usecases.URLs{
 		Fetch: &fakeFetcher{page: interfaces.FetchedPage{
 			Status: 401, Wall: entities.WallLogin, FinalURL: "https://example.com/login",
 		}},
@@ -431,7 +431,7 @@ func TestAddURLRecordsALoginWall(t *testing.T) {
 		Store:   store, Index: idx, Steps: steps, SourceLog: log, Clock: fixedClock{},
 	}
 
-	src, err := uc.Execute(ctx, "https://example.com/private", false)
+	src, err := uc.Add(ctx, "https://example.com/private", false)
 	if err != nil {
 		t.Fatalf("a wall must be recorded, not returned as an error: %v", err)
 	}
@@ -476,8 +476,8 @@ func TestAddURLKeepsAReadableSnapshotWhenThePageWalls(t *testing.T) {
 	store := objects.New(t.TempDir())
 	fetcher := &fakeFetcher{page: interfaces.FetchedPage{Status: 200}}
 	conv := &fakeConverter{title: "The Article", markdown: strings.Repeat("the article text ", 30)}
-	add := usecases.AddURL{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Clock: fixedClock{}}
-	first, err := add.Execute(ctx, "https://example.com/a", false)
+	add := usecases.URLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Clock: fixedClock{}}
+	first, err := add.Add(ctx, "https://example.com/a", false)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -486,7 +486,7 @@ func TestAddURLKeepsAReadableSnapshotWhenThePageWalls(t *testing.T) {
 	_ = rc.Close()
 
 	fetcher.page = interfaces.FetchedPage{Status: 401, Wall: entities.WallLogin}
-	second, err := add.Execute(ctx, "https://example.com/a", false)
+	second, err := add.Add(ctx, "https://example.com/a", false)
 	if err != nil {
 		t.Fatalf("re-add: %v", err)
 	}
@@ -517,9 +517,9 @@ func TestRefreshLeavesAnAttachedSnapshotAlone(t *testing.T) {
 		ImportedAt: fixedClock{}.Now(),
 	}
 	fetcher := &fakeFetcher{page: interfaces.FetchedPage{Status: 200}}
-	refresh := usecases.RefreshURLs{Fetch: fetcher, Convert: &fakeConverter{}, Store: store, Index: idx, Clock: fixedClock{}}
+	refresh := usecases.URLs{Fetch: fetcher, Convert: &fakeConverter{}, Store: store, Index: idx, Clock: fixedClock{}}
 
-	res, err := refresh.ExecuteAll(ctx)
+	res, err := refresh.RefreshAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -572,11 +572,11 @@ func TestFeedRefreshUsesADailyCadence(t *testing.T) {
 	fetcher := &fakeFetcher{page: interfaces.FetchedPage{
 		Status: 200, Body: []byte(emptyFeed), ContentType: "application/rss+xml",
 	}}
-	refresh := usecases.RefreshURLs{
+	refresh := usecases.URLs{
 		Fetch: fetcher, Convert: &fakeConverter{}, Store: store, Index: idx, Clock: fixedClock{},
 		MinAge: 7 * 24 * time.Hour, FeedMinAge: 24 * time.Hour,
 	}
-	res, err := refresh.Execute(ctx)
+	res, err := refresh.Refresh(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -605,7 +605,7 @@ func TestFeedRefreshUsesADailyCadence(t *testing.T) {
 	idx.m[sitemapHash] = sitemap
 	conv := &fakeConverter{title: "Page", markdown: strings.Repeat("readable text ", 40)}
 	refresh.Convert = conv
-	res, err = refresh.Execute(ctx)
+	res, err = refresh.Refresh(ctx)
 	if err != nil {
 		t.Fatalf("refresh 2: %v", err)
 	}
@@ -637,11 +637,11 @@ func TestRefreshOnlyChecksDueURLs(t *testing.T) {
 
 	fetcher := &fakeFetcher{page: interfaces.FetchedPage{Status: 200}}
 	conv := &fakeConverter{title: "T", markdown: strings.Repeat("same text ", 60)}
-	scheduled := usecases.RefreshURLs{
+	scheduled := usecases.URLs{
 		Fetch: fetcher, Convert: conv, Store: store, Index: idx, Clock: fixedClock{},
 		MinAge: 7 * 24 * time.Hour,
 	}
-	res, err := scheduled.Execute(ctx)
+	res, err := scheduled.Refresh(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -650,7 +650,7 @@ func TestRefreshOnlyChecksDueURLs(t *testing.T) {
 	}
 
 	// The manual pass ignores the cadence: the button means "check now".
-	res, err = scheduled.ExecuteAll(ctx)
+	res, err = scheduled.RefreshAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh all: %v", err)
 	}
@@ -670,16 +670,16 @@ func TestWalledQueuedLinkKeepsItsOwner(t *testing.T) {
 	steps := &fakeSteps{}
 	const pageID = "01M5JAHSRBDSX83F8V6CR3DRH3"
 	const raw = "https://example.com/linked"
-	if _, err := (usecases.QueueURLs{Index: idx, Steps: steps, Clock: fixedClock{}}).Execute(ctx, pageID, []string{raw}); err != nil {
+	if _, err := (usecases.URLs{Index: idx, Steps: steps, Clock: fixedClock{}}).Queue(ctx, pageID, []string{raw}); err != nil {
 		t.Fatalf("queue: %v", err)
 	}
 
-	add := usecases.AddURL{
+	add := usecases.URLs{
 		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 401, Wall: entities.WallLogin}},
 		Convert: &fakeConverter{title: "Sign in", markdown: "gate"},
 		Store:   store, Index: idx, Steps: steps, Clock: fixedClock{},
 	}
-	src, err := add.Execute(ctx, raw, false)
+	src, err := add.Add(ctx, raw, false)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -721,13 +721,13 @@ func TestReconcileRestoresAnOwnerTheRowLost(t *testing.T) {
 	first := damaged("https://example.com/one")
 	second := damaged("https://example.com/two")
 
-	reconcile := usecases.ReconcileVault{
+	reconcile := usecases.Maintenance{
 		Index: idx, Steps: steps, Store: store, SourceLog: &fakeSourceLog{}, Clock: fixedClock{},
 	}
 	// The read-only half counts the repair (that is what makes the app run the real pass) ...
 	dry := reconcile
 	dry.DryRun = true
-	res, err := dry.Execute(ctx)
+	res, err := dry.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("dry reconcile: %v", err)
 	}
@@ -739,7 +739,7 @@ func TestReconcileRestoresAnOwnerTheRowLost(t *testing.T) {
 	}
 
 	// ... and one real pass writes all of them.
-	res, err = reconcile.Execute(ctx)
+	res, err = reconcile.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}

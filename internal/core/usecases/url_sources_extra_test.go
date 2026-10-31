@@ -22,22 +22,19 @@ const testFeed = `<?xml version="1.0"?>
   <item><title>Two</title><link>https://example.com/two</link></item>
 </channel></rss>`
 
-const testSitemap = `<?xml version="1.0"?>
-<urlset><url><loc>https://example.com/one</loc></url><url><loc>https://example.com/two</loc></url></urlset>`
-
 // TestQueueURLsIgnoresATrailingSlash: "/article" and "/article/" address one page. A wiki page that
 // renames its link by a slash must not claim a second source (and must not delete the first).
 func TestQueueURLsIgnoresATrailingSlash(t *testing.T) {
 	ctx := context.Background()
 	idx := newFakeIndex()
 	steps := &fakeSteps{}
-	queue := usecases.QueueURLs{Index: idx, Steps: steps, Clock: fixedClock{}}
+	queue := usecases.URLs{Index: idx, Steps: steps, Clock: fixedClock{}}
 
-	first, err := queue.Execute(ctx, "01M5JAHSRBDSX83F8V6CR3DRH3", []string{"https://example.com/article"})
+	first, err := queue.Queue(ctx, "01M5JAHSRBDSX83F8V6CR3DRH3", []string{"https://example.com/article"})
 	if err != nil || len(first) != 1 {
 		t.Fatalf("first queue = %v, %v", first, err)
 	}
-	second, err := queue.Execute(ctx, "01M5JAHSRBDSX83F8V6CR3DRH3", []string{"https://example.com/article/"})
+	second, err := queue.Queue(ctx, "01M5JAHSRBDSX83F8V6CR3DRH3", []string{"https://example.com/article/"})
 	if err != nil {
 		t.Fatalf("second queue: %v", err)
 	}
@@ -49,12 +46,12 @@ func TestQueueURLsIgnoresATrailingSlash(t *testing.T) {
 	}
 
 	// A fetch under the other spelling fills the source that exists, it does not file a second one.
-	add := usecases.AddURL{
+	add := usecases.URLs{
 		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("<html>x</html>")}},
 		Convert: &fakeConverter{title: "The Article", markdown: strings.Repeat("text ", 100)},
 		Store:   objects.New(t.TempDir()), Index: idx, Steps: steps, Clock: fixedClock{},
 	}
-	src, err := add.Execute(ctx, "https://example.com/article/", false)
+	src, err := add.Add(ctx, "https://example.com/article/", false)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -73,20 +70,20 @@ func TestManualAdditionWinsOverAnOwner(t *testing.T) {
 	ctx := context.Background()
 	idx := newFakeIndex()
 	steps := &fakeSteps{index: idx}
-	queue := usecases.QueueURLs{Index: idx, Steps: steps, Clock: fixedClock{}}
+	queue := usecases.URLs{Index: idx, Steps: steps, Clock: fixedClock{}}
 	const pageID = "01M5JAHSRBDSX83F8V6CR3DRH3"
 	const raw = "https://example.com/linked"
-	if _, err := queue.Execute(ctx, pageID, []string{raw}); err != nil {
+	if _, err := queue.Queue(ctx, pageID, []string{raw}); err != nil {
 		t.Fatalf("queue: %v", err)
 	}
-	add := usecases.AddURL{
+	add := usecases.URLs{
 		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("<html>x</html>")}},
 		Convert: &fakeConverter{title: "Linked", markdown: strings.Repeat("text ", 100)},
 		Store:   objects.New(t.TempDir()), Index: idx, Steps: steps, Clock: fixedClock{},
 	}
 
 	// The queue path (a page's link) keeps the owner.
-	src, err := add.Execute(ctx, raw, false)
+	src, err := add.Add(ctx, raw, false)
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -95,7 +92,7 @@ func TestManualAdditionWinsOverAnOwner(t *testing.T) {
 	}
 
 	// The human's own addition releases it.
-	if _, err := add.ExecuteManual(ctx, raw, false); err != nil {
+	if _, err := add.AddManual(ctx, raw, false); err != nil {
 		t.Fatalf("manual add: %v", err)
 	}
 	row := idx.m[src.Hash]
@@ -116,7 +113,7 @@ func TestFeedIsASourceOfSources(t *testing.T) {
 	ctx := context.Background()
 	idx := newFakeIndex()
 	steps := &fakeSteps{}
-	uc := usecases.AddURL{
+	uc := usecases.URLs{
 		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte(testFeed), ContentType: "application/rss+xml"}},
 		Store:   objects.New(t.TempDir()),
 		Index:   idx,
@@ -124,7 +121,7 @@ func TestFeedIsASourceOfSources(t *testing.T) {
 		Clock:   fixedClock{},
 		Convert: &fakeConverter{},
 	}
-	src, err := uc.ExecuteManual(ctx, "https://example.com/feed.xml", false)
+	src, err := uc.AddManual(ctx, "https://example.com/feed.xml", false)
 	if err != nil {
 		t.Fatalf("feed: %v", err)
 	}
@@ -183,12 +180,12 @@ func TestRefreshKeepsPagesThatLeftAFeed(t *testing.T) {
 	 <item><title>One</title><link>https://example.com/one</link></item>
 	 <item><title>Three</title><link>https://example.com/three</link></item>
 	</channel></rss>`
-	refresh := usecases.RefreshURLs{
+	refresh := usecases.URLs{
 		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte(feed), ContentType: "application/rss+xml"}},
 		Convert: &fakeConverter{}, MinAge: time.Hour,
 		Store: store, Index: idx, Steps: steps, Clock: fixedClock{},
 	}
-	res, err := refresh.ExecuteAll(ctx)
+	res, err := refresh.RefreshAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -216,7 +213,7 @@ func TestRefreshKeepsPagesThatLeftAFeed(t *testing.T) {
 	}
 
 	// The per-source Refresh ignores the cadence and refreshes exactly one source.
-	one, err := refresh.ExecuteOne(ctx, feedHash)
+	one, err := refresh.RefreshOne(ctx, feedHash)
 	if err != nil {
 		t.Fatalf("refresh one: %v", err)
 	}
@@ -257,16 +254,16 @@ func TestRefreshDeletesPagesThatLeftASitemap(t *testing.T) {
 		URLChecked: fixedClock{}.Now(), Meta: `{"url":"` + manualURL + `"}`,
 	}
 	sitemap := `<urlset><url><loc>https://example.com/one</loc></url></urlset>`
-	refresh := usecases.RefreshURLs{
+	refresh := usecases.URLs{
 		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte(sitemap), ContentType: "application/xml"}},
 		Convert: &fakeConverter{}, MinAge: time.Hour,
 		Store: store, Index: idx, Clock: fixedClock{},
-		Delete: usecases.DeleteSource{
-			Store: store, Index: idx, Atoms: atomstore.New(t.TempDir()), AtomRepo: &fakeAtomRepo{},
+		Delete: (usecases.Sources{
+			Store: store, Index: idx, AtomStore: atomstore.New(t.TempDir()), Atoms: &fakeAtomRepo{},
 			Clock: fixedClock{},
-		},
+		}).DeleteOwned,
 	}
-	res, err := refresh.Execute(ctx)
+	res, err := refresh.Refresh(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -296,7 +293,7 @@ func TestDeletingAFeedDeletesItsItems(t *testing.T) {
 		Path: "sources/aa/bb/" + feedHash + ".md", URL: "https://example.com/feed.xml",
 		Title: "The Feed", RSS: true, ImportedAt: fixedClock{}.Now(), Meta: `{"url":"https://example.com/feed.xml"}`,
 	}
-	children := []string{}
+	children := make([]string, 0, 2)
 	for _, raw := range []string{"https://example.com/one", "https://example.com/two"} {
 		hash := entities.URLHash(raw)
 		children = append(children, hash)
@@ -307,11 +304,11 @@ func TestDeletingAFeedDeletesItsItems(t *testing.T) {
 			ImportedAt: fixedClock{}.Now(), Meta: `{"url":"` + raw + `"}`,
 		}
 	}
-	del := usecases.DeleteSource{
-		Store: store, Index: idx, Atoms: atomstore.New(t.TempDir()), AtomRepo: &fakeAtomRepo{},
+	del := usecases.Sources{
+		Store: store, Index: idx, AtomStore: atomstore.New(t.TempDir()), Atoms: &fakeAtomRepo{},
 		Clock: fixedClock{},
 	}
-	res, err := del.Execute(ctx, feedHash)
+	res, err := del.Delete(ctx, feedHash)
 	if err != nil {
 		t.Fatalf("delete feed: %v", err)
 	}

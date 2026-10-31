@@ -15,18 +15,12 @@ import (
 // labels on one source would be a vocabulary of its own, and the editor cannot read them.
 const maxSourceTags = 32
 
-// SetSourceTags replaces a source's HUMAN tags. It is the same kind of label a wiki page carries: the
-// reader files and filters by it. The source's <hash>.meta record is the truth; the index mirrors it.
-// This is a metadata write, not a derivation: no claim, tree or step is touched.
-type SetSourceTags struct {
-	Index     interfaces.IndexRepository
-	Tags      interfaces.SourceTagStore
-	SourceLog interfaces.SourceLog
-	Clock     interfaces.Clock
-}
+// SourceTagSetter edits the human tags of a source. A handler holds this value; nil means the feature
+// is not wired.
+type SourceTagSetter func(ctx context.Context, hash string, tags []string) (partialentities.PartialSource, error)
 
-// Execute normalizes and stores the labels, then returns the source as the API shows it.
-func (uc SetSourceTags) Execute(ctx context.Context, hash string, tags []string) (partialentities.PartialSource, error) {
+// Tag writes the human tags of a source.
+func (uc Sources) Tag(ctx context.Context, hash string, tags []string) (partialentities.PartialSource, error) {
 	if !entities.IsSHA256Hex(hash) {
 		return partialentities.PartialSource{}, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash)
 	}

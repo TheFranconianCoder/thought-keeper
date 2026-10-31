@@ -4,14 +4,7 @@ import (
 	"context"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
-
-// RebuildTrees rebuilds every source's tree from the store.
-type RebuildTrees struct {
-	Index     interfaces.IndexRepository
-	BuildTree BuildTree
-}
 
 // RebuildTreesResult reports what a rebuild did.
 type RebuildTreesResult struct {
@@ -20,8 +13,12 @@ type RebuildTreesResult struct {
 	Failed  int
 }
 
-// Execute rebuilds all trees.
-func (uc RebuildTrees) Execute(ctx context.Context) (RebuildTreesResult, error) {
+// RebuildTreesService rebuilds the outline of every source that needs one. A handler holds this value;
+// nil means the feature is not wired.
+type RebuildTreesService func(ctx context.Context) (RebuildTreesResult, error)
+
+// Rebuild rebuilds every outline that needs one.
+func (uc Trees) Rebuild(ctx context.Context) (RebuildTreesResult, error) {
 	srcs, err := uc.Index.ListSources(ctx, entities.SourceFilter{}, 1_000_000, 0)
 	if err != nil {
 		return RebuildTreesResult{}, err
@@ -35,7 +32,7 @@ func (uc RebuildTrees) Execute(ctx context.Context) (RebuildTreesResult, error) 
 			continue
 		}
 		res.Sources++
-		if _, err := uc.BuildTree.Execute(ctx, s.Hash); err != nil {
+		if _, err := uc.Build(ctx, s.Hash); err != nil {
 			res.Failed++
 			continue
 		}

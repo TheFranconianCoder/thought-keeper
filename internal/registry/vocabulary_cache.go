@@ -16,7 +16,7 @@ import (
 const vocabularyTTL = 15 * time.Second
 
 type cachedVocabulary struct {
-	uc usecases.VocabularyReport
+	uc usecases.Vocabulary
 
 	mu    sync.Mutex
 	at    time.Time
@@ -24,13 +24,13 @@ type cachedVocabulary struct {
 	valid bool
 }
 
-func (c *cachedVocabulary) Execute(ctx context.Context) ([]partialentities.VocabularyHealth, error) {
+func (c *cachedVocabulary) Report(ctx context.Context) ([]partialentities.VocabularyHealth, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.valid && time.Since(c.at) < vocabularyTTL {
 		return c.res, nil
 	}
-	res, err := c.uc.Execute(ctx)
+	res, err := c.uc.Report(ctx)
 	if err != nil {
 		return res, err
 	}

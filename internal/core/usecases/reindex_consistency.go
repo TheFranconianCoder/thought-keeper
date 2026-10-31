@@ -16,7 +16,7 @@ import (
 //
 // This check is deliberately cheap: it reads the cluster records and the membership table, not the
 // claim bodies.
-func (uc ReindexVault) NeedsRepair(ctx context.Context) (bool, string, error) {
+func (uc Maintenance) NeedsRepair(ctx context.Context) (bool, string, error) {
 	if uc.ClusterStore == nil || uc.ClusterRepo == nil {
 		return false, "", nil
 	}

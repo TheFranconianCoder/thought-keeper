@@ -13,8 +13,6 @@ import (
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
-	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/extract"
-	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/gateways"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/objects"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
@@ -83,8 +81,8 @@ func TestDistillSkipsOnlyFinishedParts(t *testing.T) {
 	idx.m[hash] = entities.Source{ID: ulid.Make(), Hash: hash, Title: "Book", Kind: entities.SourceKindPDF, Ext: ".pdf"}
 
 	gw := &nodeIDAwareGateway{}
-	az := usecases.DistillSource{
-		Index: idx, Trees: trees, Atoms: atomStore, AtomRepo: atomRepo,
+	az := usecases.Derivation{
+		Index: idx, Trees: trees, AtomStore: atomStore, Atoms: atomRepo,
 		PartRepo: parts, SourceLog: logs, PartsPerRun: 8, Parallel: 2,
 		Gateway: gw, Model: "test", MaxIterations: 4, Clock: fixedClock{},
 	}
@@ -137,9 +135,9 @@ func TestDistillMirrorsSourceRelativePartsIntoTheRecord(t *testing.T) {
 		"0.1": {NodeID: "0.1", State: entities.PartDone, Reason: "source_relative", UpdatedAt: fixedClock{}.Now()},
 	}}
 	steps := &fakeSteps{}
-	az := usecases.DistillSource{
-		Index: idx, Trees: trees, Atoms: &fakeAtomStore{m: map[string]entities.Atom{}},
-		AtomRepo: &fakeAtomRepo{}, PartRepo: parts, Steps: steps,
+	az := usecases.Derivation{
+		Index: idx, Trees: trees, AtomStore: &fakeAtomStore{m: map[string]entities.Atom{}},
+		Atoms: &fakeAtomRepo{}, PartRepo: parts, Steps: steps,
 		PartsPerRun: 4, Parallel: 1, Model: "test", MaxIterations: 4, Clock: fixedClock{},
 	}
 	if _, err := az.Distill(ctx, hash, usecases.NewStepRecorder(ctx, &fakeRunRepo{}, ulid.Make(), nil)); err != nil {
@@ -161,7 +159,7 @@ func TestDistillResumeKeepsThePreviousDerivation(t *testing.T) {
 	sum := sha256.Sum256([]byte(body))
 	hash := hex.EncodeToString(sum[:])
 
-	setup := func() (*fakeAtomRepo, usecases.DocumentRun) {
+	setup := func() (*fakeAtomRepo, usecases.Derivation) {
 		nodes := []entities.SourceNode{
 			{NodeID: "0", Depth: 0, Title: "Doc"},
 			{NodeID: "1", Depth: 1, Title: "Chapter", Text: "text"},
@@ -181,30 +179,16 @@ func TestDistillResumeKeepsThePreviousDerivation(t *testing.T) {
 		idx := newFakeIndex()
 		idx.m[hash] = entities.Source{ID: ulid.Make(), Hash: hash, Title: "Doc", Kind: entities.SourceKindMD, Ext: ".md"}
 		gw := &fakeGateway{responses: []interfaces.AgentResponse{completeResponse(), completeResponse()}}
-		distill := usecases.DistillSource{
-			Index: idx, Trees: trees, Atoms: atomStore, AtomRepo: atomRepo,
+		run := usecases.Derivation{
+			Index: idx, Trees: trees, AtomStore: atomStore, Atoms: atomRepo,
 			Gateway: gw, Model: "test", MaxIterations: 4, PartsPerRun: 4, Clock: fixedClock{},
-		}
-		run := usecases.DocumentRun{
-			// A reset run wipes the tree and builds it again inside the run; the continue path
-			// (what this test exercises) never touches it.
-			Reset: usecases.ResetSource{
-				Index: idx, Trees: trees, Clock: fixedClock{},
-				Clean: usecases.CleanSource{
-					Atoms: atomRepo, AtomStore: atomStore, Index: idx, Clock: fixedClock{},
-				},
-			},
-			BuildTree: usecases.BuildTree{
-				Store: store, Index: idx, Trees: trees,
-				Extractor: extract.New(gateways.ExecRunner{}, extract.Config{}), Clock: fixedClock{},
-			},
-			Distill: distill, Runs: &fakeRunRepo{}, Clock: fixedClock{}, Model: "test",
+			Runs: &fakeRunRepo{},
 		}
 		return atomRepo, run
 	}
 
 	atomRepo, run := setup()
-	if _, err := run.Execute(ctx, ulid.Make(), hash, false); err != nil {
+	if _, err := run.Run(ctx, ulid.Make(), hash, false); err != nil {
 		t.Fatalf("continuing run: %v", err)
 	}
 	if len(atomRepo.saved) != 1 {
@@ -214,7 +198,7 @@ func TestDistillResumeKeepsThePreviousDerivation(t *testing.T) {
 	atomRepo, run = setup()
 	// A reset run whose model writes nothing FAILS (a document with parts always has claims) — the
 	// point here is what the reset did to the previous derivation, not the model's answer.
-	if _, err := run.Execute(ctx, ulid.Make(), hash, true); err == nil {
+	if _, err := run.Run(ctx, ulid.Make(), hash, true); err == nil {
 		t.Log("reset run succeeded")
 	}
 	if len(atomRepo.saved) != 0 {
@@ -233,15 +217,12 @@ func TestResetClearsTheSourcesLog(t *testing.T) {
 		ID: ulid.Make(), Hash: hash, Title: "Doc", Kind: entities.SourceKindMD, Ext: ".md",
 	}
 	logs := &fakeSourceLog{}
-	reset := usecases.ResetSource{
+	reset := usecases.Derivation{
 		Index: idx, Trees: &fakeTreeStore{m: map[string][]entities.SourceNode{}},
 		SourceLog: logs, Clock: fixedClock{},
-		Clean: usecases.CleanSource{
-			Atoms: &fakeAtomRepo{}, AtomStore: &fakeAtomStore{m: map[string]entities.Atom{}},
-			Index: idx, Clock: fixedClock{},
-		},
+		Atoms: &fakeAtomRepo{}, AtomStore: &fakeAtomStore{m: map[string]entities.Atom{}},
 	}
-	if _, err := reset.Execute(ctx, hash); err != nil {
+	if _, err := reset.Reset(ctx, hash); err != nil {
 		t.Fatalf("reset: %v", err)
 	}
 	if len(logs.removed) != 1 || logs.removed[0] != hash {

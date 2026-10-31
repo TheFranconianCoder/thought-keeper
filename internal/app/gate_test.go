@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,7 +20,7 @@ func TestExclusiveGateWaitsForDocument(t *testing.T) {
 	}))
 
 	a.gate.RLock()
-	go h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/", nil))
+	go h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil))
 	select {
 	case <-started:
 		t.Fatal("an exclusive write started beside a document step")
@@ -41,7 +42,7 @@ func TestSharedGateRunsBesideDocument(t *testing.T) {
 	h := a.Shared(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { close(ran) }))
 
 	a.gate.RLock()
-	go h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/", nil))
+	go h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil))
 	select {
 	case <-ran:
 	case <-time.After(2 * time.Second):

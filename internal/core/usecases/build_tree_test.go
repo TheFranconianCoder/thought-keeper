@@ -45,14 +45,14 @@ func TestBuildTreeFromMarkdown(t *testing.T) {
 	trees := &fakeTreeStore{m: map[string][]entities.SourceNode{}}
 	extractor := extract.New(gateways.ExecRunner{}, extract.Config{})
 
-	intake := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}
-	src, err := intake.Execute(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Alpha\nintro\n## Beta\nbody\n")})
+	intake := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}
+	src, err := intake.Intake(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Alpha\nintro\n## Beta\nbody\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
 
-	bt := usecases.BuildTree{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}
-	res, err := bt.Execute(ctx, src.Hash)
+	bt := usecases.Trees{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}
+	res, err := bt.Build(ctx, src.Hash)
 	if err != nil {
 		t.Fatalf("build tree: %v", err)
 	}
@@ -83,8 +83,8 @@ func TestBuildTreeFailedKeepsState(t *testing.T) {
 	store := objects.New(t.TempDir())
 	idx := newFakeIndex()
 
-	intake := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}
-	src, err := intake.Execute(ctx, usecases.IntakeInput{Name: "x.docx", Reader: strings.NewReader("x")})
+	intake := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}
+	src, err := intake.Intake(ctx, usecases.IntakeInput{Name: "x.docx", Reader: strings.NewReader("x")})
 	if err == nil {
 		t.Fatal("expected unsupported source error")
 	}
@@ -100,19 +100,18 @@ func TestTitleComesFromTheModel(t *testing.T) {
 	trees := &fakeTreeStore{m: map[string][]entities.SourceNode{}}
 	extractor := extract.New(gateways.ExecRunner{}, extract.Config{})
 
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "bericht.md", Reader: strings.NewReader("# Erste Überschrift\n\nInhalt.\n")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "bericht.md", Reader: strings.NewReader("# Erste Überschrift\n\nInhalt.\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
 	gw := &fakeGateway{responses: []interfaces.AgentResponse{
 		{Message: interfaces.AgentMessage{Role: "assistant", Content: "\"Caching und Korrektheit\"\n\nBegründung: …"}},
 	}}
-	bt := usecases.BuildTree{
+	bt := usecases.Trees{
 		Store: store, Index: idx, Trees: trees, Extractor: extractor,
 		Gateway: gw, Model: "test", Clock: fixedClock{},
 	}
-	res, err := bt.Execute(ctx, src.Hash)
+	res, err := bt.Build(ctx, src.Hash)
 	if err != nil {
 		t.Fatalf("build tree: %v", err)
 	}
@@ -138,8 +137,7 @@ func TestTitleKeepsADeclaredUrlTitle(t *testing.T) {
 	trees := &fakeTreeStore{m: map[string][]entities.SourceNode{}}
 	extractor := extract.New(gateways.ExecRunner{}, extract.Config{})
 
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "page.md", Reader: strings.NewReader("# Some Heading In The Body\n\ntext\n")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "page.md", Reader: strings.NewReader("# Some Heading In The Body\n\ntext\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
@@ -151,8 +149,8 @@ func TestTitleKeepsADeclaredUrlTitle(t *testing.T) {
 	stored.Title = "The Real Declared Title"
 	idx.m[src.Hash] = stored
 
-	bt := usecases.BuildTree{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}
-	res, err := bt.Execute(ctx, src.Hash)
+	bt := usecases.Trees{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}
+	res, err := bt.Build(ctx, src.Hash)
 	if err != nil {
 		t.Fatalf("build tree: %v", err)
 	}
@@ -172,13 +170,12 @@ func TestRebuildWithAChangedTreeCorrectsTheDerivation(t *testing.T) {
 	trees := &fakeTreeStore{m: map[string][]entities.SourceNode{}}
 	extractor := extract.New(gateways.ExecRunner{}, extract.Config{})
 
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "doc.md", Reader: strings.NewReader("# Doc\n\ntext\n")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "doc.md", Reader: strings.NewReader("# Doc\n\ntext\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
-	if _, err := (usecases.BuildTree{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).
-		Execute(ctx, src.Hash); err != nil {
+	if _, err := (usecases.Trees{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).
+		Build(ctx, src.Hash); err != nil {
 		t.Fatalf("first build: %v", err)
 	}
 
@@ -191,8 +188,8 @@ func TestRebuildWithAChangedTreeCorrectsTheDerivation(t *testing.T) {
 	}}
 	atomRepo.saved = atoms
 	parts := &fakeSections{m: map[string]entities.PartState{"0.1": {NodeID: "0.1", State: entities.PartDone}}}
-	clean := usecases.CleanSource{
-		Parts: parts, Index: idx, Atoms: atomRepo, AtomStore: atomStore,
+	clean := usecases.Derivation{
+		PartRepo: parts, Index: idx, Atoms: atomRepo, AtomStore: atomStore,
 		Clock: fixedClock{},
 	}
 
@@ -202,11 +199,11 @@ func TestRebuildWithAChangedTreeCorrectsTheDerivation(t *testing.T) {
 		{NodeID: "0.9", Title: "Renamed chapter", Text: "other text"},
 	}
 
-	bt := usecases.BuildTree{
+	bt := usecases.Trees{
 		Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{},
-		Clean: clean, Parts: parts,
+		Clean: clean.Correct, Parts: parts,
 	}
-	if _, err := bt.Execute(ctx, src.Hash); err != nil {
+	if _, err := bt.Build(ctx, src.Hash); err != nil {
 		t.Fatalf("rebuild: %v", err)
 	}
 	if len(atomRepo.saved) != 0 {
@@ -242,8 +239,8 @@ func TestBuildTreeSkipsAFeedOrSitemap(t *testing.T) {
 			}
 			steps := &fakeSteps{}
 			trees := &fakeTreeStore{m: map[string][]entities.SourceNode{}}
-			bt := usecases.BuildTree{Index: idx, Trees: trees, Steps: steps, Clock: fixedClock{}}
-			res, err := bt.Execute(ctx, hash)
+			bt := usecases.Trees{Index: idx, Trees: trees, Steps: steps, Clock: fixedClock{}}
+			res, err := bt.Build(ctx, hash)
 			if err != nil {
 				t.Fatalf("build tree: %v", err)
 			}

@@ -10,16 +10,16 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
-// StartRun creates a running agent run for the given operation and returns its id,
-// so the HTTP layer can answer 202 before the agent works.
-type StartRun struct {
-	Runs  interfaces.RunRepository
+// Runs is the use case of the run records: every pass of the pipeline, a query, a lint or a tag run is
+// one row, created before the work starts and closed by whoever ran it.
+type Runs struct {
+	Store interfaces.RunRepository
 	Clock interfaces.Clock
 }
 
-// Execute creates the run row. step names which pipeline step the run executes (capture, outline,
+// Start creates the run row. step names which pipeline step the run executes (capture, outline,
 // distill, compile); the op stays the class of work.
-func (uc StartRun) Execute(ctx context.Context, op entities.RunOp, model string, step entities.Step, target string) (ulid.ULID, error) {
+func (uc Runs) Start(ctx context.Context, op entities.RunOp, model string, step entities.Step, target string) (ulid.ULID, error) {
 	id := ulid.Make()
 	run := entities.Run{
 		ID:        id,
@@ -30,7 +30,7 @@ func (uc StartRun) Execute(ctx context.Context, op entities.RunOp, model string,
 		Status:    entities.RunRunning,
 		StartedAt: uc.Clock.Now(),
 	}
-	if err := uc.Runs.CreateRun(ctx, run); err != nil {
+	if err := uc.Store.CreateRun(ctx, run); err != nil {
 		return ulid.ULID{}, err
 	}
 	return id, nil
@@ -39,30 +39,30 @@ func (uc StartRun) Execute(ctx context.Context, op entities.RunOp, model string,
 // Abandon closes a run that never started: the run row was created, but the work could not be
 // handed to a worker (a full queue). Without this the row would stay `running` forever, and the
 // reader would see a pass that neither runs nor ends.
-func (uc StartRun) Abandon(ctx context.Context, id ulid.ULID, reason string) error {
+func (uc Runs) Abandon(ctx context.Context, id ulid.ULID, reason string) error {
 	run := entities.Run{
 		ID: id, Op: entities.RunPipeline, Status: entities.RunAborted,
 		Error: reason, StartedAt: uc.Clock.Now(), EndedAt: uc.Clock.Now(),
 	}
-	return uc.Runs.FinishRun(ctx, run)
+	return uc.Store.FinishRun(ctx, run)
 }
 
 // AbandonLeftovers closes every run a PREVIOUS process left "running". It is the first thing a start
 // does with the audit: nothing is behind those rows any more, and a history that keeps saying "running"
 // is a history that lies about what the app is doing.
-func (uc StartRun) AbandonLeftovers(ctx context.Context, reason string) (int64, error) {
-	if uc.Runs == nil {
+func (uc Runs) AbandonLeftovers(ctx context.Context, reason string) (int64, error) {
+	if uc.Store == nil {
 		return 0, nil
 	}
-	return uc.Runs.AbandonRunningRuns(ctx, reason, uc.Clock.Now())
+	return uc.Store.AbandonRunningRuns(ctx, reason, uc.Clock.Now())
 }
 
-// ExecuteQuery creates a QUERY run. The question is part of it from the start — it is what the run
-// answers, the Ask view shows it beside the answer, and filing the answer into the cluster layer files the
-// question with it — so it is written when the run is created, not only when it succeeds.
-// ExecuteQuery creates the run row for one question. A non-empty source is the run's target: the
-// question is scoped to that source and may not read any other.
-func (uc StartRun) ExecuteQuery(ctx context.Context, model, question, source string) (ulid.ULID, error) {
+// StartQuery creates the run row for one question. A non-empty source is the run's target: the
+// question is scoped to that source and may not read any other. The question is part of the run from
+// the start — it is what the run answers, the Ask view shows it beside the answer, and filing the
+// answer into the cluster layer files the question with it — so it is written when the run is
+// created, not only when it succeeds.
+func (uc Runs) StartQuery(ctx context.Context, model, question, source string) (ulid.ULID, error) {
 	id := ulid.Make()
 	run := entities.Run{
 		ID:        id,
@@ -73,7 +73,7 @@ func (uc StartRun) ExecuteQuery(ctx context.Context, model, question, source str
 		Status:    entities.RunRunning,
 		StartedAt: uc.Clock.Now(),
 	}
-	if err := uc.Runs.CreateRun(ctx, run); err != nil {
+	if err := uc.Store.CreateRun(ctx, run); err != nil {
 		return ulid.ULID{}, err
 	}
 	return id, nil

@@ -3,34 +3,18 @@ package usecases
 import (
 	"context"
 	"crypto/sha256"
-	"log/slog"
 	"sort"
 	"strings"
 
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
-// CollapseDuplicateAtoms finds claims that are the SAME claim written more than once and keeps one of
-// them. Same means: same topic, statement, provenance, body, type and status — the copies differ in
-// nothing but their ID.
-//
-// Which copy is kept: one a CLUSTER cites wins (then no association loses its claim), otherwise the
-// oldest. Everything else moves to the vault's `.trash/atoms/` — trash, not delete. The association
-// layer is a cache; the next pass prunes the records that lost a member.
-type CollapseDuplicateAtoms struct {
-	Atoms    interfaces.AtomStore
-	AtomRepo interfaces.AtomRepository
-	Clusters interfaces.ClusterRepository
-	Clock    interfaces.Clock
-	Log      *slog.Logger
-}
-
 // Detect reports the duplicate claims without touching anything.
-func (uc CollapseDuplicateAtoms) Detect(ctx context.Context) (partialentities.PartialAtomDuplicates, error) {
+// Detect reports the claims that exist more than once.
+func (uc Claims) Detect(ctx context.Context) (partialentities.PartialAtomDuplicates, error) {
 	groups, err := uc.groups(ctx)
 	if err != nil {
 		return partialentities.PartialAtomDuplicates{}, err
@@ -46,8 +30,8 @@ func (uc CollapseDuplicateAtoms) Detect(ctx context.Context) (partialentities.Pa
 	return out, nil
 }
 
-// Execute collapses them: the copies go to the trash and their index rows go with them.
-func (uc CollapseDuplicateAtoms) Execute(ctx context.Context) (partialentities.PartialAtomDuplicates, error) {
+// Collapse keeps one copy of each duplicated claim.
+func (uc Claims) Collapse(ctx context.Context) (partialentities.PartialAtomDuplicates, error) {
 	groups, err := uc.groups(ctx)
 	if err != nil {
 		return partialentities.PartialAtomDuplicates{}, err
@@ -68,12 +52,12 @@ func (uc CollapseDuplicateAtoms) Execute(ctx context.Context) (partialentities.P
 			if a.ID == keep.ID {
 				continue
 			}
-			if err := uc.AtomRepo.DeleteAtom(ctx, a.ID); err != nil {
-				uc.warn("delete atom row", a.ID, err)
+			if err := uc.Atoms.DeleteAtom(ctx, a.ID); err != nil {
+				uc.warnCollapse("delete atom row", a.ID, err)
 				continue
 			}
-			if err := uc.Atoms.Trash(ctx, a); err != nil {
-				uc.warn("trash atom file", a.ID, err)
+			if err := uc.AtomStore.Trash(ctx, a); err != nil {
+				uc.warnCollapse("trash atom file", a.ID, err)
 				continue
 			}
 			out.Collapsed++
@@ -95,14 +79,14 @@ func (uc CollapseDuplicateAtoms) Execute(ctx context.Context) (partialentities.P
 // Only hashes that COLLIDE are visited again: the few claims behind them are loaded whole (that is
 // what a collapse needs to trash a file) and re-keyed, so a hash collision can never make two
 // different claims look like copies.
-func (uc CollapseDuplicateAtoms) groups(ctx context.Context) ([][]entities.Atom, error) {
+func (uc Claims) groups(ctx context.Context) ([][]entities.Atom, error) {
 	type duplicate struct {
 		count int
 		first ulid.ULID
 		ids   []ulid.ULID
 	}
 	byHash := make(map[[sha256.Size]byte]duplicate, 4096)
-	err := uc.AtomRepo.StreamClaimIdentities(ctx, func(a entities.Atom) error {
+	err := uc.Atoms.StreamClaimIdentities(ctx, func(a entities.Atom) error {
 		h := sha256.Sum256([]byte(claimKey(a)))
 		d := byHash[h]
 		if d.count == 0 {
@@ -128,9 +112,9 @@ func (uc CollapseDuplicateAtoms) groups(ctx context.Context) ([][]entities.Atom,
 			continue
 		}
 		for _, id := range d.ids {
-			a, err := uc.AtomRepo.GetAtom(ctx, id)
+			a, err := uc.Atoms.GetAtom(ctx, id)
 			if err != nil {
-				uc.warn("load duplicate", id, err)
+				uc.warnCollapse("load duplicate", id, err)
 				continue
 			}
 			byKey[claimKey(a)] = append(byKey[claimKey(a)], a)
@@ -181,7 +165,7 @@ func pickKept(group []entities.Atom, member map[ulid.ULID]bool) entities.Atom {
 
 // clustered is the set of claims some cluster owns, asked only about the claims that are actually
 // duplicated — the collapse needs no other membership.
-func (uc CollapseDuplicateAtoms) clustered(ctx context.Context, groups [][]entities.Atom) (map[ulid.ULID]bool, error) {
+func (uc Claims) clustered(ctx context.Context, groups [][]entities.Atom) (map[ulid.ULID]bool, error) {
 	out := map[ulid.ULID]bool{}
 	if uc.Clusters == nil || len(groups) == 0 {
 		return out, nil
@@ -202,7 +186,7 @@ func (uc CollapseDuplicateAtoms) clustered(ctx context.Context, groups [][]entit
 	return out, nil
 }
 
-func (uc CollapseDuplicateAtoms) warn(msg string, id ulid.ULID, err error) {
+func (uc Claims) warnCollapse(msg string, id ulid.ULID, err error) {
 	if uc.Log != nil {
 		uc.Log.Warn("collapse duplicates: "+msg, "atom", id.String(), "err", err)
 	}

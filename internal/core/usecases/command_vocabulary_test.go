@@ -29,7 +29,7 @@ func realVocabulary() map[string]int {
 // other software-* tag. That is what inverse document frequency is for: "software" is in three
 // names and identifies none of them, "architecture" is in one.
 func TestMatchNamesPrefersTheSpecificWord(t *testing.T) {
-	got := matchNames([]string{"software", "architecture", "architektur"}, realVocabulary(), 3)
+	got := matchNames([]string{"software", "architecture", "architektur"}, realVocabulary())
 	if len(got) == 0 {
 		t.Fatal("nothing matched")
 	}
@@ -41,7 +41,7 @@ func TestMatchNamesPrefersTheSpecificWord(t *testing.T) {
 // The same word in another language is a MATCH, not a coincidence: "Architektur" and "architecture"
 // are two edits apart, and a loanword pair like that is exactly what the matcher should catch.
 func TestMatchNamesBridgesLoanwords(t *testing.T) {
-	got := matchNames([]string{"architektur"}, realVocabulary(), 3)
+	got := matchNames([]string{"architektur"}, realVocabulary())
 	if len(got) == 0 || got[0].Name != "software-architecture" {
 		t.Fatalf("a German loanword did not reach its English name: %+v", got)
 	}
@@ -50,7 +50,7 @@ func TestMatchNamesBridgesLoanwords(t *testing.T) {
 // Recall must not become noise: an unrelated word matches nothing, however it would be spelled.
 func TestMatchNamesKeepsUnrelatedWordsOut(t *testing.T) {
 	for _, term := range []string{"urlaub", "quux", "zzz"} {
-		for _, m := range matchNames([]string{term}, realVocabulary(), 3) {
+		for _, m := range matchNames([]string{term}, realVocabulary()) {
 			t.Fatalf("%q matched %q", term, m.Name)
 		}
 	}
@@ -76,7 +76,7 @@ func TestWordSimilarityHelpers(t *testing.T) {
 // A curated merge is a synonym: a request that still uses the absorbed name must land on the
 // canonical one.
 func TestExpandAliases(t *testing.T) {
-	uc := RunCommand{Vocab: fakeVocab{m: map[entities.VocabularyNamespace]entities.Vocabulary{
+	uc := Commands{Vocab: fakeVocab{m: map[entities.VocabularyNamespace]entities.Vocabulary{
 		entities.VocabularySourceTags: {
 			Namespace: entities.VocabularySourceTags,
 			Absorbed:  map[string]string{"cloud-computing": "cloud"},
@@ -100,11 +100,11 @@ func (f fakeVocab) Write(entities.Vocabulary) error { return nil }
 
 // The tag a human put on a source and the topic an agent gave a claim are matched the same way.
 func TestMatchNamesHandlesHyphenatedNames(t *testing.T) {
-	got := matchNames([]string{"software architecture"}, realVocabulary(), 3)
+	got := matchNames([]string{"software architecture"}, realVocabulary())
 	if len(got) == 0 || got[0].Name != "software-architecture" {
 		t.Fatalf("a hyphenated name was not matched: %+v", got)
 	}
-	got = matchNames([]string{"tooling"}, realVocabulary(), 3)
+	got = matchNames([]string{"tooling"}, realVocabulary())
 	if len(got) == 0 || got[0].Name != "tooling" {
 		t.Fatalf("an exact name was not matched: %+v", got)
 	}
@@ -112,7 +112,7 @@ func TestMatchNamesHandlesHyphenatedNames(t *testing.T) {
 
 // Nothing in the vocabulary → nothing. An honest empty answer beats a vague one.
 func TestMatchNamesReturnsNothingForNonsense(t *testing.T) {
-	if got := matchNames([]string{"quux", "zzz"}, realVocabulary(), 3); len(got) != 0 {
+	if got := matchNames([]string{"quux", "zzz"}, realVocabulary()); len(got) != 0 {
 		t.Fatalf("nonsense matched %+v", got)
 	}
 }

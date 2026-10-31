@@ -31,7 +31,7 @@ func TestQuoteClaimCodeRepairsBareBracketSyntax(t *testing.T) {
 	}
 	repo := &fakeAtomRepo{saved: []entities.Atom{store.m[bracket.String()], store.m[codeOnly.String()]}}
 
-	res, err := (usecases.QuoteClaimCode{Atoms: store, AtomRepo: repo, Clock: fixedClock{}}).Execute(ctx)
+	res, err := (usecases.Claims{AtomStore: store, Atoms: repo, Clock: fixedClock{}}).QuoteCode(ctx)
 	if err != nil {
 		t.Fatalf("quote claim code: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestQuoteClaimCodeRepairsBareBracketSyntax(t *testing.T) {
 	}
 
 	// A second pass finds the pair inside a code span and changes nothing.
-	again, err := (usecases.QuoteClaimCode{Atoms: store, AtomRepo: repo, Clock: fixedClock{}}).Execute(ctx)
+	again, err := (usecases.Claims{AtomStore: store, Atoms: repo, Clock: fixedClock{}}).QuoteCode(ctx)
 	if err != nil {
 		t.Fatalf("second pass: %v", err)
 	}

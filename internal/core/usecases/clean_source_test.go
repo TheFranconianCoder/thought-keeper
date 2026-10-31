@@ -27,11 +27,11 @@ func TestResetClearsPartRecordsWithoutClaims(t *testing.T) {
 		"0.1": {NodeID: "0.1", State: entities.PartDone, Reason: "source_relative"},
 	}}
 
-	clean := usecases.CleanSource{
+	clean := usecases.Derivation{
 		Atoms: &fakeAtomRepo{}, AtomStore: &fakeAtomStore{m: map[string]entities.Atom{}},
-		Parts: parts, Index: idx, Clock: fixedClock{},
+		PartRepo: parts, Index: idx, Clock: fixedClock{},
 	}
-	if _, err := clean.Execute(ctx, hash); err != nil {
+	if _, err := clean.Clean(ctx, hash); err != nil {
 		t.Fatalf("clean: %v", err)
 	}
 	if len(parts.m) != 0 {

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -15,31 +14,6 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// WikiLister lists pages and the tag cloud.
-type WikiLister interface {
-	Execute(ctx context.Context) (usecases.WikiList, error)
-}
-
-// WikiGetter reads one page.
-type WikiGetter interface {
-	Execute(ctx context.Context, id ulid.ULID) (entities.WikiPage, error)
-}
-
-// WikiSaver writes a page and its source representation.
-type WikiSaver interface {
-	Execute(ctx context.Context, in usecases.WikiPageInput) (usecases.WikiPageResult, error)
-}
-
-// WikiDeleter removes a page and its source representation.
-type WikiDeleter interface {
-	Execute(ctx context.Context, id ulid.ULID) (string, []string, error)
-}
-
-// WikiFavoriter writes the reader's star on a page.
-type WikiFavoriter interface {
-	Execute(ctx context.Context, id ulid.ULID, on bool) (entities.WikiPage, error)
-}
-
 // WikiURLScheduler queues the links a page declared that no source knows yet. The fetch happens in the
 // background — the save is over when the page is on disk — and the link is a source row from that
 // moment on: pending, then green, or red with the reason.
@@ -49,11 +23,11 @@ type WikiURLScheduler interface {
 
 // WikiHandler serves the wiki endpoints.
 type WikiHandler struct {
-	List     WikiLister
-	Get      WikiGetter
-	Save     WikiSaver
-	Delete   WikiDeleter
-	Favorite WikiFavoriter
+	List     usecases.WikiLister
+	Get      usecases.WikiGetter
+	Save     usecases.WikiSaver
+	Delete   usecases.WikiDeleter
+	Favorite usecases.WikiFavoriter
 	// OnChanged is called after a save, so the app can schedule the source and notify other windows.
 	OnChanged func(id, hash string)
 	// OnReprocess clears the old derivation of a changed page and only then pumps the source. It is
@@ -91,7 +65,7 @@ func (h WikiHandler) favorite(w http.ResponseWriter, r *http.Request, on bool) {
 		payloads.WriteError(w, types.New("not_implemented", "the favorite is not available", types.ErrNotImplemented))
 		return
 	}
-	page, err := h.Favorite.Execute(r.Context(), id, on)
+	page, err := h.Favorite(r.Context(), id, on)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -99,9 +73,9 @@ func (h WikiHandler) favorite(w http.ResponseWriter, r *http.Request, on bool) {
 	payloads.WriteJSON(w, http.StatusOK, wikiPagePayload(page))
 }
 
-// List serves GET /api/v1/wiki.
+// ListPages serves GET /api/v1/wiki.
 func (h WikiHandler) ListPages(w http.ResponseWriter, r *http.Request) {
-	res, err := h.List.Execute(r.Context())
+	res, err := h.List(r.Context())
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -109,13 +83,13 @@ func (h WikiHandler) ListPages(w http.ResponseWriter, r *http.Request) {
 	payloads.WriteJSON(w, http.StatusOK, payloads.WikiListFromUseCase(res))
 }
 
-// Get serves GET /api/v1/wiki/{id}.
+// GetPage serves GET /api/v1/wiki/{id}.
 func (h WikiHandler) GetPage(w http.ResponseWriter, r *http.Request) {
 	id, ok := wikiID(w, r)
 	if !ok {
 		return
 	}
-	page, err := h.Get.Execute(r.Context(), id)
+	page, err := h.Get(r.Context(), id)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -143,7 +117,7 @@ func (h WikiHandler) save(w http.ResponseWriter, r *http.Request, id ulid.ULID) 
 		payloads.WriteError(w, types.New("invalid_body", "invalid JSON body", err))
 		return
 	}
-	res, err := h.Save.Execute(r.Context(), usecases.WikiPageInput{
+	res, err := h.Save(r.Context(), usecases.WikiPageInput{
 		ID: id, Title: req.Title, Tags: req.Tags, Body: req.Body,
 	})
 	if err != nil {
@@ -173,13 +147,13 @@ func (h WikiHandler) save(w http.ResponseWriter, r *http.Request, id ulid.ULID) 
 	payloads.WriteJSON(w, status, wikiPagePayload(res.Page))
 }
 
-// Delete serves DELETE /api/v1/wiki/{id}.
+// DeletePage serves DELETE /api/v1/wiki/{id}.
 func (h WikiHandler) DeletePage(w http.ResponseWriter, r *http.Request) {
 	id, ok := wikiID(w, r)
 	if !ok {
 		return
 	}
-	hash, removedURLs, err := h.Delete.Execute(r.Context(), id)
+	hash, removedURLs, err := h.Delete(r.Context(), id)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return

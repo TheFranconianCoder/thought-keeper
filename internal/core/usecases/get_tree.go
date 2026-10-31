@@ -4,18 +4,16 @@ import (
 	"context"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// GetTree returns a source's node outline (without node text).
-type GetTree struct {
-	Index interfaces.IndexRepository
-}
+// TreeService returns one source's outline as the tree view shows it. A handler holds this value; nil
+// means the feature is not wired.
+type TreeService func(ctx context.Context, hash string) ([]partialentities.PartialNode, error)
 
-// Execute returns the nodes in document order, text stripped.
-func (uc GetTree) Execute(ctx context.Context, hash string) ([]partialentities.PartialNode, error) {
+// Tree returns the outline of one source.
+func (uc Trees) Tree(ctx context.Context, hash string) ([]partialentities.PartialNode, error) {
 	if !entities.IsSHA256Hex(hash) {
 		return nil, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash)
 	}
@@ -36,16 +34,12 @@ func (uc GetTree) Execute(ctx context.Context, hash string) ([]partialentities.P
 	return out, nil
 }
 
-// GetNode returns one node from the tree sidecar, including its text slice — resolved from the node's
-// REFERENCE, because the outline does not carry the text.
-type GetNode struct {
-	Trees interfaces.TreeStore
-	Index interfaces.IndexRepository
-	Store interfaces.SourceStore
-}
+// NodeService returns one node of an outline, with the text it cites. A handler holds this value; nil
+// means the feature is not wired.
+type NodeService func(ctx context.Context, hash, nodeID string) (partialentities.PartialNode, error)
 
-// Execute returns the node with the given id for a source.
-func (uc GetNode) Execute(ctx context.Context, hash, nodeID string) (partialentities.PartialNode, error) {
+// Node returns one node of the outline.
+func (uc Trees) Node(ctx context.Context, hash, nodeID string) (partialentities.PartialNode, error) {
 	if !entities.IsSHA256Hex(hash) {
 		return partialentities.PartialNode{}, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash)
 	}

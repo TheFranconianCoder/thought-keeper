@@ -2,26 +2,12 @@ package usecases
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
-
-// Cleanup repairs the association layer: it prunes cluster records whose claims are gone, drops empty
-// clusters, and refreshes the programmatic findings. It is deterministic and safe to run at the end
-// of a cluster pass; there are no pages to delete or reconcile any more.
-type Cleanup struct {
-	Clusters interfaces.ClusterRepository
-	Store    interfaces.ClusterStore
-	Atoms    interfaces.AtomRepository
-	Lint     interfaces.LintRepository
-	Clock    interfaces.Clock
-	Log      *slog.Logger
-}
 
 // CleanupResult reports what was repaired.
 type CleanupResult struct {
@@ -30,8 +16,12 @@ type CleanupResult struct {
 	Findings        int
 }
 
-// Execute runs the repair pass.
-func (uc Cleanup) Execute(ctx context.Context) (CleanupResult, error) {
+// Cleaning prunes the dead members of the derived layer. A handler holds this value; nil means the
+// feature is not wired.
+type Cleaning func(ctx context.Context) (CleanupResult, error)
+
+// Cleanup prunes what the derived layer holds for rows that are gone.
+func (uc Maintenance) Cleanup(ctx context.Context) (CleanupResult, error) {
 	var res CleanupResult
 	// The existence set only. A cluster record that keeps all its members is not touched at all, so
 	// the common shape of this pass reads no claim body — and the bodies are what the whole-vault
@@ -44,7 +34,7 @@ func (uc Cleanup) Execute(ctx context.Context) (CleanupResult, error) {
 	for _, id := range existing {
 		present[id.String()] = true
 	}
-	records, err := uc.Store.ScanMetas(ctx)
+	records, err := uc.ClusterStore.ScanMetas(ctx)
 	if err != nil {
 		return res, err
 	}
@@ -69,11 +59,11 @@ func (uc Cleanup) Execute(ctx context.Context) (CleanupResult, error) {
 			continue
 		}
 		if len(kept) == 0 {
-			if err := uc.Store.RemoveMeta(ctx, rec.ID); err != nil {
+			if err := uc.ClusterStore.RemoveMeta(ctx, rec.ID); err != nil {
 				uc.warn("remove empty cluster", rec.ID, err)
 				continue
 			}
-			_ = uc.Clusters.DeleteCluster(ctx, rec.ID)
+			_ = uc.ClusterRepo.DeleteCluster(ctx, rec.ID) //nolint:errcheck // a trash move is best effort; a missing file is the goal
 			dropped++
 			continue
 		}
@@ -101,11 +91,11 @@ func (uc Cleanup) Execute(ctx context.Context) (CleanupResult, error) {
 			rec := lost[i].rec
 			rec.Signature = subjectSignature(atomsFor(lost[i].kept, byID))
 			rec.Updated = now
-			if err := uc.Store.WriteMeta(ctx, rec); err != nil {
+			if err := uc.ClusterStore.WriteMeta(ctx, rec); err != nil {
 				uc.warn("rewrite pruned cluster", rec.ID, err)
 				continue
 			}
-			if err := uc.Clusters.SaveCluster(ctx, rec); err != nil {
+			if err := uc.ClusterRepo.SaveCluster(ctx, rec); err != nil {
 				uc.warn("index pruned cluster", rec.ID, err)
 				continue
 			}
@@ -129,14 +119,14 @@ func (uc Cleanup) Execute(ctx context.Context) (CleanupResult, error) {
 	return res, nil
 }
 
-func (uc Cleanup) now() time.Time {
+func (uc Maintenance) now() time.Time {
 	if uc.Clock != nil {
 		return uc.Clock.Now()
 	}
 	return time.Now().UTC()
 }
 
-func (uc Cleanup) warn(what string, id ulid.ULID, err error) {
+func (uc Maintenance) warn(what string, id ulid.ULID, err error) {
 	if uc.Log != nil {
 		uc.Log.Warn("cleanup: "+what, "cluster", id.String(), "err", err)
 	}

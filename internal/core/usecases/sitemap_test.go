@@ -17,7 +17,7 @@ func TestAddURLExpandsASitemap(t *testing.T) {
 	ctx := context.Background()
 	idx := newFakeIndex()
 	steps := &fakeSteps{}
-	add := usecases.AddURL{
+	add := usecases.URLs{
 		Fetch: &fakeFetcher{page: interfaces.FetchedPage{
 			Status: 200,
 			Body: []byte(`<?xml version="1.0" encoding="UTF-8"?>
@@ -32,7 +32,7 @@ func TestAddURLExpandsASitemap(t *testing.T) {
 		Store: objects.New(t.TempDir()), Index: idx, Steps: steps, Clock: fixedClock{},
 	}
 
-	src, err := add.Execute(ctx, "https://example.com/sitemap.xml", false)
+	src, err := add.Add(ctx, "https://example.com/sitemap.xml", false)
 	if err != nil {
 		t.Fatalf("add sitemap: %v", err)
 	}
@@ -78,8 +78,8 @@ func TestQueueSitemapChildrenAreOwnedByTheSitemap(t *testing.T) {
 	const independent = "https://example.com/independent"
 	_ = idx.UpsertSource(ctx, entities.Source{Hash: entities.URLHash(independent), Kind: entities.SourceKindURL, URL: independent, Title: independent})
 
-	queue := usecases.QueueURLs{Index: idx, Steps: steps, Clock: fixedClock{}}
-	queued, err := queue.ExecuteSitemap(ctx, parent, []string{one, two, independent})
+	queue := usecases.URLs{Index: idx, Steps: steps, Clock: fixedClock{}}
+	queued, err := queue.QueueSitemap(ctx, parent, []string{one, two, independent})
 	if err != nil {
 		t.Fatalf("queue sitemap: %v", err)
 	}
@@ -117,17 +117,17 @@ func TestSitemapDeleteCascadesAndDependentDeleteIsRefused(t *testing.T) {
 	_ = idx.UpsertSource(ctx, entities.Source{Hash: child, Kind: entities.SourceKindURL, URL: "https://example.com/a", Title: "A", Origin: entities.SitemapOrigin, ParentHash: parent, Sitemap: true})
 	_ = idx.UpsertSource(ctx, entities.Source{Hash: grandchild, Kind: entities.SourceKindURL, URL: "https://example.com/b", Title: "B", Origin: entities.SitemapOrigin, ParentHash: child})
 
-	del := usecases.DeleteSource{
-		Store: store, Index: idx, Atoms: nil, AtomRepo: &fakeAtomRepo{}, Steps: nil, Clock: fixedClock{},
+	del := usecases.Sources{
+		Store: store, Index: idx, AtomStore: nil, Atoms: &fakeAtomRepo{}, Steps: nil, Clock: fixedClock{},
 	}
-	if _, err := del.Execute(ctx, child); err == nil || !strings.Contains(err.Error(), "belongs to a sitemap") {
+	if _, err := del.Delete(ctx, child); err == nil || !strings.Contains(err.Error(), "belongs to a sitemap") {
 		t.Fatalf("deleting a sitemap page = %v, want a dependent_source refusal", err)
 	}
 	if _, err := idx.GetSourceByHash(ctx, grandchild); err != nil {
 		t.Fatal("the refused delete removed a page")
 	}
 
-	res, err := del.Execute(ctx, parent)
+	res, err := del.Delete(ctx, parent)
 	if err != nil {
 		t.Fatalf("delete sitemap: %v", err)
 	}

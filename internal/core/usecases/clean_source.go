@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -11,43 +10,29 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
-// CleanSource removes the CLAIMS a previous derivation of one source produced, so a re-derivation
-// replaces them instead of piling up duplicates. Identity is provenance, never a title.
-//
-// The association layer is a CACHE over the claims: deleting a claim drops its membership rows (the
-// foreign keys) and the next cluster pass prunes the records that lost a member. No page is touched —
-// there are none — so a reset no longer has a "marking" step at all.
-type CleanSource struct {
-	Parts     interfaces.PartRepository
-	SourceLog interfaces.SourceLog
-	Atoms     interfaces.AtomRepository
-	AtomStore interfaces.AtomStore
-	Store     interfaces.SourceStore
-	Tags      interfaces.SourceTagStore
-	Index     interfaces.IndexRepository
-	Clock     interfaces.Clock
-	Log       *slog.Logger
-}
-
 // CleanResult reports what a clean did.
 type CleanResult struct {
 	Atoms int
 }
 
-// Execute clears a source's derived artifacts. It is a no-op for a first run.
-func (uc CleanSource) Execute(ctx context.Context, hash string) (CleanResult, error) {
+// SourceCleaner removes a source's derivation and keeps the bytes.
+type SourceCleaner func(ctx context.Context, hash string) (CleanResult, error)
+
+// Clean removes a source's derivation.
+func (uc Derivation) Clean(ctx context.Context, hash string) (CleanResult, error) {
 	return uc.drop(ctx, hash, nil)
 }
 
-// Correct drops only the claims a rebuild INVALIDATED, and keeps the rest. `keep` is the set of node
-// ids whose text is unchanged — the addresses a claim cites, and the text it was derived from are both
-// still what they were, so those claims are still true.
-func (uc CleanSource) Correct(ctx context.Context, hash string, keep map[string]bool) (CleanResult, error) {
+// SourceCorrector removes the claims a rebuilt outline invalidated and keeps the rest.
+type SourceCorrector func(ctx context.Context, hash string, keep map[string]bool) (CleanResult, error)
+
+// Correct removes the claims a rebuilt outline invalidated.
+func (uc Derivation) Correct(ctx context.Context, hash string, keep map[string]bool) (CleanResult, error) {
 	return uc.drop(ctx, hash, keep)
 }
 
 // drop removes a source's claims — all of them, or every claim that does not cite a kept node.
-func (uc CleanSource) drop(ctx context.Context, hash string, keep map[string]bool) (CleanResult, error) {
+func (uc Derivation) drop(ctx context.Context, hash string, keep map[string]bool) (CleanResult, error) {
 	atoms, err := uc.Atoms.ListAtomsBySource(ctx, hash)
 	if err != nil {
 		return CleanResult{}, err
@@ -110,7 +95,7 @@ func (uc CleanSource) drop(ctx context.Context, hash string, keep map[string]boo
 			uc.warn("delete atom", a.ID, err)
 			continue
 		}
-		_ = uc.AtomStore.Remove(ctx, a)
+		_ = uc.AtomStore.Remove(ctx, a) //nolint:errcheck // a trash move is best effort; a missing file is the goal
 		res.Atoms++
 	}
 
@@ -121,7 +106,7 @@ func (uc CleanSource) drop(ctx context.Context, hash string, keep map[string]boo
 // clearDerived throws away what a derivation LEAVES BEHIND next to the claims: the summary, the
 // agent's auto tags and the recorded part states. A reset must do this even when the source produced
 // no claim at all (a source-relative document, a link list): "no atoms" is not "nothing to clear".
-func (uc CleanSource) clearDerived(ctx context.Context, hash string) {
+func (uc Derivation) clearDerived(ctx context.Context, hash string) {
 	if uc.Store != nil {
 		// RemoveRendered treats a missing file as done: a source without a summary loses nothing.
 		if err := uc.Store.RemoveRendered(hash, entities.SidecarSummary); err != nil && uc.Log != nil {
@@ -135,11 +120,11 @@ func (uc CleanSource) clearDerived(ctx context.Context, hash string) {
 			uc.Log.Warn("clean source: the auto tags could not be cleared", "hash", hash, "err", err)
 		}
 	}
-	if uc.Parts != nil {
+	if uc.PartRepo != nil {
 		// A reset starts the derivation over: stale "done" records would skip parts.
 		if uc.Index != nil {
 			if src, err := uc.Index.GetSourceByHash(ctx, hash); err == nil {
-				if err := uc.Parts.ClearParts(ctx, src.ID); err != nil && uc.Log != nil {
+				if err := uc.PartRepo.ClearParts(ctx, src.ID); err != nil && uc.Log != nil {
 					uc.Log.Warn("clean source: clear part states", "hash", hash, "err", err)
 				}
 			}
@@ -149,7 +134,7 @@ func (uc CleanSource) clearDerived(ctx context.Context, hash string) {
 
 // logCleaned writes the one line that says what this clean did. A reset with no claim is still a
 // reset, and its line belongs in the source's log like any other.
-func (uc CleanSource) logCleaned(ctx context.Context, hash string, atoms int, keep map[string]bool) {
+func (uc Derivation) logCleaned(ctx context.Context, hash string, atoms int, keep map[string]bool) {
 	if uc.SourceLog != nil {
 		phase, msg := "clean", "previous derivation removed (reset)"
 		if keep != nil {
@@ -166,7 +151,7 @@ func (uc CleanSource) logCleaned(ctx context.Context, hash string, atoms int, ke
 	}
 }
 
-func (uc CleanSource) warn(what string, id ulid.ULID, err error) {
+func (uc Derivation) warn(what string, id ulid.ULID, err error) {
 	if uc.Log != nil {
 		uc.Log.Warn("clean source: "+what, "id", id.String(), "err", err)
 	}

@@ -15,16 +15,9 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
-// ClusterPass is the association step: it groups claims into TITLELESS clusters and writes the
-// records under clusters/.
-//
-// There is no model in this step. Membership is a content graph (built by cluster_graph.go), so the
-// pass is deterministic and cheap. The only judgement it makes on existing data is the ATTACH step:
-// a free claim that is strongly similar to an existing cluster's centroid joins it, instead of
-// forming a near-duplicate cluster next to it. Everything else — the graph, the merge/split rules —
-// is the algorithm that already produced good groups; the page naming/review stages it used to feed
-// are gone because there is no page.
-type ClusterPass struct {
+// Clusters is the use case of the association layer: the deterministic pass that groups claims into
+// titleless clusters.
+type Clusters struct {
 	Atoms    interfaces.AtomRepository
 	Clusters interfaces.ClusterRepository
 	Store    interfaces.ClusterStore
@@ -49,9 +42,8 @@ type ClusterPassResult struct {
 	Changed   []ulid.ULID
 }
 
-// Execute clusters all claims that no cluster owns yet. It closes its own run row: a pass that
-// cannot be watched is a pass nobody can judge.
-func (uc ClusterPass) Execute(ctx context.Context, runID ulid.ULID) (res ClusterPassResult, err error) {
+// Pass runs the deterministic cluster pass.
+func (uc Clusters) Pass(ctx context.Context, runID ulid.ULID) (res ClusterPassResult, err error) {
 	defer func() {
 		if uc.Runs == nil {
 			return
@@ -60,7 +52,7 @@ func (uc ClusterPass) Execute(ctx context.Context, runID ulid.ULID) (res Cluster
 		if err != nil {
 			status, failure, answer = entities.RunFailed, err.Error(), ""
 		}
-		_ = uc.Runs.FinishRun(ctx, entities.Run{
+		_ = uc.Runs.FinishRun(ctx, entities.Run{ //nolint:errcheck // the run row is an audit trail; the work already ended
 			ID: runID, Op: entities.RunPipeline, Step: entities.StepCluster, Model: uc.Model,
 			Status: status, Answer: answer, Error: failure,
 			StartedAt: uc.now(), EndedAt: uc.now(),
@@ -204,7 +196,7 @@ func (uc ClusterPass) Execute(ctx context.Context, runID ulid.ULID) (res Cluster
 	return res, nil
 }
 
-func (uc ClusterPass) report(p ClusterProgress) {
+func (uc Clusters) report(p ClusterProgress) {
 	if uc.Progress != nil {
 		uc.Progress(p)
 	}
@@ -215,7 +207,7 @@ func (uc ClusterPass) report(p ClusterProgress) {
 // It reads no claim text for the common case: existence is the id set, and a record whose members
 // all survive is touched by nobody. Only records that ACTUALLY lost a member need their survivors'
 // text for the signature — and they are fetched in one query, after the scan classified them.
-func (uc ClusterPass) prune(ctx context.Context, records []entities.Cluster, exists map[ulid.ULID]bool) ([]entities.Cluster, []ulid.ULID, error) {
+func (uc Clusters) prune(ctx context.Context, records []entities.Cluster, exists map[ulid.ULID]bool) ([]entities.Cluster, []ulid.ULID, error) {
 	// First pass: classify, collecting the ids whose text the rewrite of a changed record needs.
 	var lost, changes []entities.Cluster
 	var keptOf [][]ulid.ULID
@@ -276,7 +268,7 @@ func (uc ClusterPass) prune(ctx context.Context, records []entities.Cluster, exi
 			if err := uc.Store.RemoveMeta(ctx, rec.ID); err != nil {
 				return nil, nil, fmt.Errorf("cluster pass: remove empty cluster: %w", err)
 			}
-			_ = uc.Clusters.DeleteCluster(ctx, rec.ID)
+			_ = uc.Clusters.DeleteCluster(ctx, rec.ID) //nolint:errcheck // a trash move is best effort; a missing file is the goal
 			changed = append(changed, rec.ID)
 			continue
 		}
@@ -312,7 +304,7 @@ type centroidTerm struct {
 // IDF, the (term, tf) contributions of every owned claim for the centroid sums, and the free set
 // itself for the caller. Nothing else is kept — the pass used to materialise a corpus of every
 // claim to place a handful of new ones.
-func (uc ClusterPass) attach(ctx context.Context, records []entities.Cluster, settings ClusterSettings) (int, []ulid.ULID, []entities.Atom, error) {
+func (uc Clusters) attach(ctx context.Context, records []entities.Cluster, settings ClusterSettings) (int, []ulid.ULID, []entities.Atom, error) {
 	owner := make(map[ulid.ULID][]int)
 	for ci, rec := range records {
 		for _, id := range rec.Atoms {
@@ -634,7 +626,7 @@ func addOverlap(assignments []clusterAssignment, g *claimGraph, settings Cluster
 
 // writeCandidates writes one cluster record per graph candidate (plus the overlap memberships) and
 // returns the record ids and the assigned claim ids.
-func (uc ClusterPass) writeCandidates(ctx context.Context, candidates []clusterAssignment, g *claimGraph, settings ClusterSettings, atomsByID map[string]entities.Atom) ([]ulid.ULID, map[ulid.ULID]bool, error) {
+func (uc Clusters) writeCandidates(ctx context.Context, candidates []clusterAssignment, g *claimGraph, _ ClusterSettings, atomsByID map[string]entities.Atom) ([]ulid.ULID, map[ulid.ULID]bool, error) {
 	now := uc.now()
 	assigned := map[ulid.ULID]bool{}
 	changed := make([]ulid.ULID, 0, len(candidates))
@@ -682,7 +674,7 @@ func atomsByIDFrom(atoms []entities.Atom) map[string]entities.Atom {
 	return out
 }
 
-func (uc ClusterPass) now() time.Time {
+func (uc Clusters) now() time.Time {
 	if uc.Clock != nil {
 		return uc.Clock.Now()
 	}

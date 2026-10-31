@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -9,14 +8,8 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/payloads"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
-
-// Searcher runs a lexical search.
-type Searcher interface {
-	Execute(ctx context.Context, query, layer string, limit int) ([]partialentities.PartialHit, error)
-}
 
 // QueryScheduler schedules a query run. A non-empty source scopes it to that one source.
 type QueryScheduler interface {
@@ -38,20 +31,15 @@ type URLBulkScheduler interface {
 	ScheduleFeedURLs(parentHash string, urls []string)
 }
 
-// FindingLister lists lint findings.
-type FindingLister interface {
-	Execute(ctx context.Context, kind string, limit, offset int) ([]partialentities.PartialFinding, error)
-}
-
 // SearchHandler serves GET /api/v1/search.
 type SearchHandler struct {
-	Search Searcher
+	Search usecases.Searcher
 }
 
 // Get serves GET /api/v1/search.
 func (h SearchHandler) Get(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	hits, err := h.Search.Execute(r.Context(), q.Get("q"), q.Get("layer"), atoiDefault(q.Get("limit"), 20))
+	hits, err := h.Search(r.Context(), q.Get("q"), q.Get("layer"), atoiDefault(q.Get("limit"), 20))
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -88,17 +76,12 @@ func (h QueryHandler) Post(w http.ResponseWriter, r *http.Request) {
 	payloads.WriteJSON(w, http.StatusAccepted, payloads.DistillResponse{RunID: runID, Status: "running"})
 }
 
-// Cleaning repairs unattributable pages and missing tags.
-type Cleaning interface {
-	Execute(ctx context.Context) (usecases.CleanupResult, error)
-}
-
 // LintHandler serves POST /api/v1/lint and GET /api/v1/lint/findings.
 type LintHandler struct {
 	Lint     LintScheduler
-	Findings FindingLister
+	Findings usecases.FindingLister
 	Mark     MaintenanceMarker
-	Cleanup  Cleaning
+	Cleanup  usecases.Cleaning
 }
 
 // CleanupPost serves POST /api/v1/cleanup.
@@ -110,7 +93,7 @@ func (h LintHandler) CleanupPost(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("not_implemented", "cleanup is not configured", types.ErrNotImplemented))
 		return
 	}
-	res, err := h.Cleanup.Execute(r.Context())
+	res, err := h.Cleanup(r.Context())
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -125,7 +108,7 @@ func (h LintHandler) CleanupPost(w http.ResponseWriter, r *http.Request) {
 // Post schedules a lint run.
 func (h LintHandler) Post(w http.ResponseWriter, r *http.Request) {
 	var req payloads.LintRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	_ = json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck // a malformed value falls back to the zero value
 	runID, err := h.Lint.ScheduleLint(req.Scope)
 	if err != nil {
 		payloads.WriteError(w, err)
@@ -134,10 +117,10 @@ func (h LintHandler) Post(w http.ResponseWriter, r *http.Request) {
 	payloads.WriteJSON(w, http.StatusAccepted, payloads.DistillResponse{RunID: runID, Status: "running"})
 }
 
-// Findings serves GET /api/v1/lint/findings.
+// ListFindings serves GET /api/v1/lint/findings.
 func (h LintHandler) ListFindings(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	findings, err := h.Findings.Execute(r.Context(), q.Get("kind"), atoiDefault(q.Get("limit"), 200), atoiDefault(q.Get("offset"), 0))
+	findings, err := h.Findings(r.Context(), q.Get("kind"), atoiDefault(q.Get("limit"), 200), atoiDefault(q.Get("offset"), 0))
 	if err != nil {
 		payloads.WriteError(w, err)
 		return

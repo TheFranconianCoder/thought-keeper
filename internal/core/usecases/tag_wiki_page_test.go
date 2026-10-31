@@ -35,10 +35,10 @@ func TestTagWikiPageWritesDerivedTags(t *testing.T) {
 	gateway := &fakeGateway{responses: []interfaces.AgentResponse{
 		{Message: interfaces.AgentMessage{Content: "Here you go:\n```json\n{\"tags\":[\"Go\",\"concurrency\",\"go\",\"Channels\"]}\n```"}},
 	}}
-	tagger := usecases.TagWikiPage{
-		Gateway: gateway, Model: "m", Pages: pages, Clock: wikiClock{},
+	tagger := usecases.Vocabulary{
+		Gateway: gateway, Model: "m", Wiki: pages, Clock: wikiClock{},
 	}
-	res, err := tagger.Execute(ctx, page.ID)
+	res, err := tagger.TagPage(ctx, page.ID)
 	if err != nil {
 		t.Fatalf("tag: %v", err)
 	}
@@ -96,11 +96,11 @@ func TestTagRenameRewritesPageTags(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	if _, err := (usecases.ApplyVocabularyMapping{
+	if _, err := (usecases.Vocabulary{
 		Namespace: entities.VocabularyWikiTags,
 		Mapping:   map[string]string{"llm-agent": "llm-agents"},
 		Vocab:     vocab, Wiki: pages, Clock: wikiClock{},
-	}).Execute(ctx); err != nil {
+	}).ApplyMapping(ctx); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 
@@ -128,9 +128,9 @@ func TestVocabularyReportSeesWikiTags(t *testing.T) {
 	root := t.TempDir()
 	pages := wiki.New(filepath.Join(root, "wiki"))
 	vocab := vocabulary.New(filepath.Join(root, "vocabulary"))
-	report := usecases.VocabularyReport{Atoms: &fakeAtomRepo{}, Wiki: pages, Vocab: vocab}
+	report := usecases.Vocabulary{Atoms: &fakeAtomRepo{}, Wiki: pages, Vocab: vocab}
 
-	healths, err := report.Execute(ctx)
+	healths, err := report.Report(ctx)
 	if err != nil {
 		t.Fatalf("report: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestVocabularyReportSeesWikiTags(t *testing.T) {
 	if err := pages.Write(ctx, page); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	healths, err = report.Execute(ctx)
+	healths, err = report.Report(ctx)
 	if err != nil {
 		t.Fatalf("report: %v", err)
 	}

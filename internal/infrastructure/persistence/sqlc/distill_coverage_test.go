@@ -93,8 +93,7 @@ func TestDistillCoversEveryTextNode(t *testing.T) {
 	atomFiles := atomstore.New(t.TempDir())
 
 	body := "# Doc\n\ntext one\n\ntext two\n"
-	src, err := usecases.IntakeSource{Store: store, Index: index, Clock: testClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "doc.md", Reader: strings.NewReader(body)})
+	src, err := usecases.Sources{Store: store, Index: index, Clock: testClock{}}.Intake(ctx, usecases.IntakeInput{Name: "doc.md", Reader: strings.NewReader(body)})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
@@ -111,8 +110,8 @@ func TestDistillCoversEveryTextNode(t *testing.T) {
 	}
 
 	agent := &partAgent{}
-	az := usecases.DistillSource{
-		Index: index, Trees: trees, Store: store, Atoms: atomFiles, AtomRepo: atomsRepo,
+	az := usecases.Derivation{
+		Index: index, Trees: trees, Store: store, AtomStore: atomFiles, Atoms: atomsRepo,
 		PartRepo: parts, PartsPerRun: 4, Parallel: 2,
 		Gateway: agent, Model: "test", MaxIterations: 4, Clock: testClock{},
 	}
@@ -182,11 +181,10 @@ func TestPendingCompileSweepFindsWhatAFailedRunLeft(t *testing.T) {
 	index := NewSourceRepository(db)
 	atomsRepo := NewAtomRepository(db)
 	clusters := NewClusterRepository(db)
-	sweep := usecases.SourcesWithUnclustered{Index: index}
+	sweep := usecases.Sources{Index: index}
 
 	mk := func(name string) string {
-		src, err := usecases.IntakeSource{Store: objects.New(t.TempDir()), Index: index, Clock: testClock{}}.
-			Execute(ctx, usecases.IntakeInput{Name: name, Reader: strings.NewReader("# " + name + "\n\nbody\n")})
+		src, err := usecases.Sources{Store: objects.New(t.TempDir()), Index: index, Clock: testClock{}}.Intake(ctx, usecases.IntakeInput{Name: name, Reader: strings.NewReader("# " + name + "\n\nbody\n")})
 		if err != nil {
 			t.Fatalf("intake %s: %v", name, err)
 		}
@@ -222,7 +220,7 @@ func TestPendingCompileSweepFindsWhatAFailedRunLeft(t *testing.T) {
 		t.Fatalf("save cluster: %v", err)
 	}
 
-	got, err := sweep.Execute(ctx)
+	got, err := sweep.WithUnclustered(ctx)
 	if err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
@@ -258,10 +256,9 @@ func TestOpenPartsSweepFindsAHalfDerivedBook(t *testing.T) {
 	index := NewSourceRepository(db)
 	parts := NewPartRepository(db)
 	atomsRepo := NewAtomRepository(db)
-	sweep := usecases.SourcesWithOpenParts{Index: index}
+	sweep := usecases.Sources{Index: index}
 
-	src, err := usecases.IntakeSource{Store: objects.New(t.TempDir()), Index: index, Clock: testClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "book.md", Reader: strings.NewReader("# Book\\n\\nbody\\n")})
+	src, err := usecases.Sources{Store: objects.New(t.TempDir()), Index: index, Clock: testClock{}}.Intake(ctx, usecases.IntakeInput{Name: "book.md", Reader: strings.NewReader("# Book\\n\\nbody\\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
@@ -295,7 +292,7 @@ func TestOpenPartsSweepFindsAHalfDerivedBook(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("part state: %v", err)
 	}
-	got, err := sweep.Execute(ctx)
+	got, err := sweep.WithOpenParts(ctx)
 	if err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
@@ -310,7 +307,7 @@ func TestOpenPartsSweepFindsAHalfDerivedBook(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("part state: %v", err)
 	}
-	gone, err := sweep.Execute(ctx)
+	gone, err := sweep.WithOpenParts(ctx)
 	if err != nil {
 		t.Fatalf("sweep: %v", err)
 	}

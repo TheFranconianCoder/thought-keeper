@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -17,26 +16,6 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
-// TagWikiPage derives the TAGS of one wiki page from its title and prose.
-//
-// A tag is a COARSE label — the word a reader filters a list of pages by — and it is the one thing a
-// human should not have to type. The derived tags are kept apart from the human's (`AutoTags`), so a
-// tagging run never re-adds a tag the reader deleted, and so the UI can say which ones the app
-// invented. Both kinds feed the same tag vocabulary, which the curation merges like any other name
-// catalog.
-type TagWikiPage struct {
-	Gateway interfaces.AgentGateway
-	Model   string
-	Pages   interfaces.WikiStore
-	// Vocab is the tag vocabulary: a tag that was merged away is written back as the name that
-	// absorbed it, so a curation does not have to learn the same synonym twice.
-	Vocab interfaces.VocabularyStore
-	Clock interfaces.Clock
-	Log   *slog.Logger
-	// Max bounds the tags (a list longer than this is not a shelf any more).
-	Max int
-}
-
 // TagResult reports what the page carries after the run.
 type TagResult struct {
 	Page   ulid.ULID
@@ -48,19 +27,19 @@ type TagResult struct {
 // the head of it (plus the title) is what the tags come from.
 const maxTagSample = 6000
 
-// Execute tags one page and writes the result into its frontmatter.
-func (uc TagWikiPage) Execute(ctx context.Context, id ulid.ULID) (TagResult, error) {
+// TagPage derives the tags of one wiki page from its own title and prose.
+func (uc Vocabulary) TagPage(ctx context.Context, id ulid.ULID) (TagResult, error) {
 	res := TagResult{Page: id}
-	page, err := uc.Pages.Read(ctx, id)
+	page, err := uc.Wiki.Read(ctx, id)
 	if err != nil {
 		return res, err
 	}
 	if uc.Gateway == nil || uc.Model == "" {
 		return res, fmt.Errorf("tagging: no model configured")
 	}
-	max := uc.Max
-	if max <= 0 {
-		max = 6
+	limit := uc.Max
+	if limit <= 0 {
+		limit = 6
 	}
 
 	body := strings.TrimSpace(page.Body)
@@ -89,7 +68,7 @@ func (uc TagWikiPage) Execute(ctx context.Context, id ulid.ULID) (TagResult, err
 	}
 	res.Tokens = resp.TotalTokens
 
-	tags := uc.normalize(parseTags(resp.Message.Content), max)
+	tags := uc.normalize(parseTags(resp.Message.Content), limit)
 	if len(tags) == 0 {
 		if uc.Log != nil {
 			uc.Log.Warn("tagging: the answer held no usable tag", "page", id.String(),
@@ -100,7 +79,7 @@ func (uc TagWikiPage) Execute(ctx context.Context, id ulid.ULID) (TagResult, err
 
 	// The page is the truth: re-read it right before writing, so a human tag added while the model was
 	// thinking is not overwritten with the copy this run started from.
-	page, err = uc.Pages.Read(ctx, id)
+	page, err = uc.Wiki.Read(ctx, id)
 	if err != nil {
 		return res, err
 	}
@@ -108,7 +87,7 @@ func (uc TagWikiPage) Execute(ctx context.Context, id ulid.ULID) (TagResult, err
 	if uc.Clock != nil {
 		page.UpdatedAt = uc.Clock.Now()
 	}
-	if err := uc.Pages.Write(ctx, page); err != nil {
+	if err := uc.Wiki.Write(ctx, page); err != nil {
 		return res, err
 	}
 	res.Tags = tags
@@ -116,7 +95,7 @@ func (uc TagWikiPage) Execute(ctx context.Context, id ulid.ULID) (TagResult, err
 }
 
 // knownTags is the tag vocabulary as a flat list: the canonical names plus everything they absorbed.
-func (uc TagWikiPage) knownTags(ctx context.Context) []string {
+func (uc Vocabulary) knownTags(_ context.Context) []string {
 	if uc.Vocab == nil {
 		return nil
 	}
@@ -138,7 +117,7 @@ func (uc TagWikiPage) knownTags(ctx context.Context) []string {
 
 // normalize cleans the model's answer: a valid tag, deduplicated, mapped through what the vocabulary
 // already merged away, and bounded.
-func (uc TagWikiPage) normalize(raw []string, max int) []string {
+func (uc Vocabulary) normalize(raw []string, limit int) []string {
 	absorbed := uc.absorbed(context.Background())
 	out := make([]string, 0, len(raw))
 	seen := map[string]bool{}
@@ -155,7 +134,7 @@ func (uc TagWikiPage) normalize(raw []string, max int) []string {
 		}
 		seen[tag] = true
 		out = append(out, tag)
-		if len(out) >= max {
+		if len(out) >= limit {
 			break
 		}
 	}
@@ -163,7 +142,7 @@ func (uc TagWikiPage) normalize(raw []string, max int) []string {
 }
 
 // absorbed is the tag vocabulary's alias table: the names a curation merged away.
-func (uc TagWikiPage) absorbed(ctx context.Context) map[string]string {
+func (uc Vocabulary) absorbed(_ context.Context) map[string]string {
 	if uc.Vocab == nil {
 		return nil
 	}

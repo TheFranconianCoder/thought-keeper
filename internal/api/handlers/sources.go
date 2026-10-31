@@ -14,85 +14,8 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/payloads"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
-
-// SourceLister lists indexed sources.
-type SourceLister interface {
-	Execute(ctx context.Context, filter entities.SourceFilter, limit, offset int) ([]partialentities.PartialSource, error)
-}
-
-// SourceCounter is the total behind a page. Nil means the page's length IS the total.
-type SourceCounter interface {
-	Count(ctx context.Context, filter entities.SourceFilter) (int, error)
-}
-
-// SourceFacetLister counts the Sources lens's facets: the tag cloud and attached snapshots.
-type SourceFacetLister interface {
-	Execute(ctx context.Context) (usecases.SourceFacetsResult, error)
-}
-
-// SourceGetter returns one source by hash.
-type SourceGetter interface {
-	Execute(ctx context.Context, hash string) (partialentities.PartialSource, error)
-}
-
-// SourceTagSetter replaces one source's human labels.
-type SourceTagSetter interface {
-	Execute(ctx context.Context, hash string, tags []string) (partialentities.PartialSource, error)
-}
-
-// SourceFavoriteSetter writes the reader's star.
-type SourceFavoriteSetter interface {
-	Execute(ctx context.Context, hash string, on bool) (partialentities.PartialSource, error)
-}
-
-// ReadLaterSetter queues, finishes or re-opens a source in the read-later queue.
-type ReadLaterSetter interface {
-	Execute(ctx context.Context, hash string, queued bool) (partialentities.PartialSource, error)
-}
-
-// SourceInterestLister computes which of the reader's interests this source fits, with evidence.
-type SourceInterestLister interface {
-	Execute(ctx context.Context, hash string) ([]usecases.IntersectionMatch, error)
-}
-
-// SourceChildLister lists the sources one source owns (a sitemap's pages, a wiki page's URLs).
-type SourceChildLister interface {
-	Execute(ctx context.Context, hash string) (usecases.SourceChildrenResult, error)
-}
-
-// SourceDeleter removes a source and its orphaned atoms.
-type SourceDeleter interface {
-	Execute(ctx context.Context, hash string) (usecases.DeleteResult, error)
-}
-
-// URLAttacher stores a human-supplied snapshot for a URL the app could not read (a login wall, a
-// paywall). The URL stays the source's address; the file becomes its snapshot.
-type URLAttacher interface {
-	Execute(ctx context.Context, in usecases.AttachInput) (partialentities.PartialSource, error)
-}
-
-// CommandSourceSet is an assistant result's materialized source set, in the command's order.
-type CommandSourceSet interface {
-	Execute(ctx context.Context, id ulid.ULID, limit, offset int) ([]partialentities.PartialSource, usecases.CommandWindow, error)
-}
-
-// SourceOpener opens a source's raw bytes for inline viewing, and its readable rendering — the
-// Markdown step 1 wrote next to a source whose bytes are not readable (a PDF, an EPUB), which is what
-// the overlay shows while the document itself stays one click away.
-type SourceOpener interface {
-	Execute(ctx context.Context, hash string) (io.ReadCloser, string, string, error)
-	Rendered(ctx context.Context, hash string) (io.ReadCloser, string, string, error)
-	// Sidecar opens one derived file by its fixed suffix (the Files view's names).
-	Sidecar(ctx context.Context, hash, suffix string) (io.ReadCloser, string, string, error)
-}
-
-// FaviconOpener returns a source's stored icon.
-type FaviconOpener interface {
-	Execute(ctx context.Context, hash string) (io.ReadCloser, string, error)
-}
 
 // SummaryScheduler writes one source's overview from its claims. The summary is a run of its own,
 // so a slow model never blocks the document that produced the claims.
@@ -103,11 +26,6 @@ type SummaryScheduler interface {
 // DistillScheduler schedules a source's DOCUMENT run (outline if needed → distill).
 type DistillScheduler interface {
 	ScheduleDistill(hash string, reset bool) (string, error)
-}
-
-// SidecarLister lists the files a source consists of (its object and its sidecars).
-type SidecarLister interface {
-	Execute(ctx context.Context, hash string) ([]usecases.Sidecar, error)
 }
 
 // RunStatus reports which DOCUMENT step is running for a source right now (empty when none is).
@@ -146,7 +64,7 @@ type ExclusiveWriter interface {
 	ExclusiveWrite(ctx context.Context, label string, fn func(context.Context) error) error
 }
 
-// Distill serves POST /api/v1/sources/{hash}/distill: it starts the source's DOCUMENT run (outline
+// DistillPost serves POST /api/v1/sources/{hash}/distill: it starts the source's DOCUMENT run (outline
 // if the tree is missing → distill). The cluster step (compile) is not part of it — it runs over the
 // whole vault and has its own endpoint.
 func (h SourcesHandler) DistillPost(w http.ResponseWriter, r *http.Request) {
@@ -158,7 +76,7 @@ func (h SourcesHandler) DistillPost(w http.ResponseWriter, r *http.Request) {
 	var req payloads.DistillRequest
 	if r.Body != nil {
 		// An empty body is the normal call (continue the derivation).
-		_ = json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck // a malformed value falls back to the zero value
 	}
 	runID, err := h.Distill.ScheduleDistill(hash, req.Reset)
 	if err != nil {
@@ -221,7 +139,7 @@ func (h SourcesHandler) Attach(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("invalid_body", "the attached file could not be read: "+err.Error(), types.ErrUnsupportedSource))
 		return
 	}
-	src, err := h.Attacher.Execute(r.Context(), usecases.AttachInput{Hash: hash, Name: header.Filename, Data: data})
+	src, err := h.Attacher(r.Context(), usecases.AttachInput{Hash: hash, Name: header.Filename, Data: data})
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -234,40 +152,43 @@ func (h SourcesHandler) Attach(w http.ResponseWriter, r *http.Request) {
 
 // SourcesHandler serves the source endpoints.
 type SourcesHandler struct {
-	Lister SourceLister
+	Lister usecases.SourceLister
 	// Counter is the total behind the page, so the list can say "200 of 465" and load the rest.
-	Counter SourceCounter
+	Counter usecases.SourceCounter
 	// Facets is the tag cloud and the attached count (nil = no facets).
-	Facets SourceFacetLister
+	Facets usecases.SourceFacetLister
 	// ChildLister is the Sub-sources tab: the sources this one owns.
-	ChildLister SourceChildLister
+	ChildLister usecases.SourceChildLister
 	// TagSetter edits the human tags of a source.
-	TagSetter SourceTagSetter
+	TagSetter usecases.SourceTagSetter
 	// Favorite and ReadLater are the reader's own marks (the star and the queue).
-	Favorite  SourceFavoriteSetter
-	ReadLater ReadLaterSetter
+	Favorite  usecases.SourceFavoriter
+	ReadLater usecases.ReadLaterSetter
 	// Interests is the source page's rail: which rules this source fits, with evidence.
-	Interests SourceInterestLister
+	Interests usecases.SourceInterestLister
 	// Summary schedules the Summary tab's run (nil = the feature is not wired).
 	Summary SummaryScheduler
-	Getter  SourceGetter
+	Getter  usecases.SourceGetter
 	// Distill schedules a source's document run; Status says which step runs for it right now.
 	Distill DistillScheduler
 	Status  RunStatus
 	// Capturer re-runs step 1 for one source; Sidecars lists the files it consists of.
 	Capturer CaptureScheduler
-	Sidecars SidecarLister
-	Delete   SourceDeleter
-	Content  SourceOpener
-	Favicon  FaviconOpener
+	Sidecars usecases.SidecarLister
+	Delete   usecases.SourceDeleter
+	Content  usecases.SourceOpener
+	// Rendered and Sidecar are the other two views of the same bytes.
+	Rendered usecases.SourceRenderer
+	Sidecar  usecases.SourceSidecarOpener
+	Favicon  usecases.FaviconOpener
 	// FixURLs2 repairs sources that lost the fact that they are URL snapshots.
-	FixURLs2 URLKindFixer
+	FixURLs2 usecases.URLKindFixer
 	// Log reads the source's own log: everything that was done to it, in one place.
 	Log SourceLogger
 	// Reset throws the source's derivation away (tree, claims) and rebuilds it.
 	Reset SourceResetter
 	// Attacher fills a blocked URL source with a snapshot the human supplied.
-	Attacher URLAttacher
+	Attacher usecases.URLAttacher
 	// OnAttached is called after a snapshot is attached, so the app can emit events and pump the
 	// document steps (the source is readable again).
 	OnAttached func(hash string)
@@ -277,7 +198,7 @@ type SourcesHandler struct {
 	Mark MaintenanceMarker
 	// Commands resolves an assistant result (?command=<id>) into rows. Nil means the address is
 	// not understood here; the named criteria beside it still filter.
-	Commands CommandSourceSet
+	Commands usecases.CommandSourceSet
 }
 
 // List serves GET /api/v1/sources.
@@ -305,7 +226,7 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 		ReadLaterOnly: truthy(q.Get("readlater")),
 		Interest:      strings.TrimSpace(q.Get("interest")),
 	}
-	srcs, err := h.Lister.Execute(r.Context(), filter, limit, offset)
+	srcs, err := h.Lister(r.Context(), filter, limit, offset)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -316,7 +237,7 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 	// list uses it as the scroll height.
 	total := len(out)
 	if h.Counter != nil {
-		if n, cErr := h.Counter.Count(r.Context(), filter); cErr == nil {
+		if n, cErr := h.Counter(r.Context(), filter); cErr == nil {
 			total = n
 		}
 	}
@@ -336,7 +257,7 @@ func (h SourcesHandler) serveCommand(w http.ResponseWriter, r *http.Request, lim
 	if err != nil {
 		return false, nil
 	}
-	srcs, window, cErr := h.Commands.Execute(r.Context(), id, limit, offset)
+	srcs, window, cErr := h.Commands(r.Context(), id, limit, offset)
 	if cErr != nil {
 		if types.CodeOf(cErr) == "not_found" {
 			return false, &payloads.CommandRef{ID: id.String(), Expired: true}
@@ -363,14 +284,14 @@ func (h SourcesHandler) decorate(out []payloads.Source) {
 	}
 }
 
-// Facets serves GET /api/v1/sources/facets: the Sources tag cloud and the attached count. It is
+// ListFacets serves GET /api/v1/sources/facets: the Sources tag cloud and the attached count. It is
 // read once per list view, never per window.
 func (h SourcesHandler) ListFacets(w http.ResponseWriter, r *http.Request) {
 	if h.Facets == nil {
 		payloads.WriteJSON(w, http.StatusOK, payloads.SourceFacets{Tags: []payloads.SourceTagFacet{}})
 		return
 	}
-	res, err := h.Facets.Execute(r.Context())
+	res, err := h.Facets(r.Context())
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -412,7 +333,7 @@ func (h SourcesHandler) shelf(w http.ResponseWriter, r *http.Request, on bool) {
 		payloads.WriteError(w, types.New("not_implemented", "the favorite is not available", types.ErrNotImplemented))
 		return
 	}
-	src, err := h.Favorite.Execute(r.Context(), hash, on)
+	src, err := h.Favorite(r.Context(), hash, on)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -430,7 +351,7 @@ func (h SourcesHandler) readLater(w http.ResponseWriter, r *http.Request, queued
 		payloads.WriteError(w, types.New("not_implemented", "the read-later queue is not available", types.ErrNotImplemented))
 		return
 	}
-	src, err := h.ReadLater.Execute(r.Context(), hash, queued)
+	src, err := h.ReadLater(r.Context(), hash, queued)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -450,7 +371,7 @@ func (h SourcesHandler) ListInterests(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteJSON(w, http.StatusOK, payloads.SourceInterests{Interests: []payloads.InterestMatch{}})
 		return
 	}
-	matches, err := h.Interests.Execute(r.Context(), hash)
+	matches, err := h.Interests(r.Context(), hash)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -466,11 +387,11 @@ func (h SourcesHandler) SummaryText(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash))
 		return
 	}
-	if h.Content == nil {
+	if h.Sidecar == nil {
 		payloads.WriteError(w, types.New("not_implemented", "the source summary is not available", types.ErrNotImplemented))
 		return
 	}
-	rc, _, _, err := h.Content.Sidecar(r.Context(), hash, entities.SidecarSummary)
+	rc, _, _, err := h.Sidecar(r.Context(), hash, entities.SidecarSummary)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -478,7 +399,7 @@ func (h SourcesHandler) SummaryText(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = rc.Close() }()
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, rc)
+	_, _ = io.Copy(w, rc) //nolint:errcheck // the client is gone; there is nothing to do
 }
 
 // SummaryPost serves POST /api/v1/sources/{hash}/summary: it schedules the run that writes (or
@@ -519,7 +440,7 @@ func (h SourcesHandler) PutTags(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("invalid_body", "the tags could not be read: "+err.Error(), types.ErrInvalidURL))
 		return
 	}
-	src, err := h.TagSetter.Execute(r.Context(), hash, req.Tags)
+	src, err := h.TagSetter(r.Context(), hash, req.Tags)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -540,7 +461,7 @@ func (h SourcesHandler) Children(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteJSON(w, http.StatusOK, payloads.SourceList{Sources: []payloads.Source{}, Count: 0, Total: 0})
 		return
 	}
-	res, err := h.ChildLister.Execute(r.Context(), hash)
+	res, err := h.ChildLister(r.Context(), hash)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -590,7 +511,7 @@ func (h SourcesHandler) LogText(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.Log == nil {
 		w.Header().Set("content-type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte("no log configured\n"))
+		_, _ = w.Write([]byte("no log configured\n")) //nolint:errcheck // the client is gone; there is nothing to do
 		return
 	}
 	text, err := h.Log.Read(r.Context(), hash)
@@ -600,12 +521,12 @@ func (h SourcesHandler) LogText(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("content-type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(text))
+	_, _ = w.Write([]byte(text)) //nolint:errcheck // the client is gone; there is nothing to do
 }
 
 // Get serves GET /api/v1/sources/{hash}.
 func (h SourcesHandler) Get(w http.ResponseWriter, r *http.Request) {
-	src, err := h.Getter.Execute(r.Context(), chi.URLParam(r, "hash"))
+	src, err := h.Getter(r.Context(), chi.URLParam(r, "hash"))
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -615,7 +536,7 @@ func (h SourcesHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// source is one folder entry with its whole story, and a missing file is exactly what the
 	// consistency job repairs. The list does not do this — it would stat files per row.
 	if h.Sidecars != nil {
-		if cars, err := h.Sidecars.Execute(r.Context(), out.Hash); err == nil {
+		if cars, err := h.Sidecars(r.Context(), out.Hash); err == nil {
 			out.Sidecars = make([]payloads.Sidecar, 0, len(cars))
 			for _, c := range cars {
 				out.Sidecars = append(out.Sidecars, payloads.Sidecar{
@@ -627,14 +548,14 @@ func (h SourcesHandler) Get(w http.ResponseWriter, r *http.Request) {
 	payloads.WriteJSON(w, http.StatusOK, out)
 }
 
-// Delete serves DELETE /api/v1/sources/{hash}.
+// DeleteSource serves DELETE /api/v1/sources/{hash}.
 func (h SourcesHandler) DeleteSource(w http.ResponseWriter, r *http.Request) {
 	hash := chi.URLParam(r, "hash")
 	if h.Delete == nil {
 		payloads.WriteError(w, types.New("not_implemented", "delete is not configured", types.ErrNotImplemented))
 		return
 	}
-	res, err := h.Delete.Execute(r.Context(), hash)
+	res, err := h.Delete(r.Context(), hash)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -645,13 +566,13 @@ func (h SourcesHandler) DeleteSource(w http.ResponseWriter, r *http.Request) {
 	payloads.WriteJSON(w, http.StatusOK, payloads.DeleteResult{Hash: hash, AtomsRemoved: res.AtomsRemoved, DependentsRemoved: res.DependentsRemoved})
 }
 
-// Favicon serves GET /api/v1/sources/{hash}/favicon.
+// FaviconServe serves GET /api/v1/sources/{hash}/favicon.
 func (h SourcesHandler) FaviconServe(w http.ResponseWriter, r *http.Request) {
 	if h.Favicon == nil {
 		http.NotFound(w, r)
 		return
 	}
-	rc, contentType, err := h.Favicon.Execute(r.Context(), chi.URLParam(r, "hash"))
+	rc, contentType, err := h.Favicon(r.Context(), chi.URLParam(r, "hash"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -660,7 +581,7 @@ func (h SourcesHandler) FaviconServe(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, rc)
+	_, _ = io.Copy(w, rc) //nolint:errcheck // the client is gone; there is nothing to do
 }
 
 // FixURLs serves POST /api/v1/fix-urls: repair sources whose index entry lost the fact that they are
@@ -673,7 +594,7 @@ func (h SourcesHandler) FixURLs(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("not_implemented", "url repair is not available", types.ErrNotImplemented))
 		return
 	}
-	res, err := h.FixURLs2.Execute(r.Context())
+	res, err := h.FixURLs2(r.Context())
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -691,11 +612,14 @@ func (h SourcesHandler) Raw(w http.ResponseWriter, r *http.Request) {
 	// `which` names what to serve: the object (default), the readable rendering, or one of the
 	// derived files the Files view lists. Anything else is a 404 — the names are fixed, so a request
 	// can never walk out of the source's folder.
-	open := h.Content.Execute
+	var open func(ctx context.Context, hash string) (io.ReadCloser, string, string, error)
+	if h.Content != nil {
+		open = h.Content
+	}
 	switch which := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("which"))); which {
 	case "", "object":
 	case "render":
-		open = h.Content.Rendered
+		open = h.Rendered
 	default:
 		suffix := which
 		if !strings.HasPrefix(suffix, ".") {
@@ -704,7 +628,7 @@ func (h SourcesHandler) Raw(w http.ResponseWriter, r *http.Request) {
 		switch suffix {
 		case entities.SidecarMeta, entities.SidecarOutline, entities.SidecarSummary, entities.SidecarLog:
 			open = func(ctx context.Context, hash string) (io.ReadCloser, string, string, error) {
-				return h.Content.Sidecar(ctx, hash, suffix)
+				return h.Sidecar(ctx, hash, suffix)
 			}
 		default:
 			payloads.WriteError(w, types.New("not_found", "this source has no file named "+which, types.ErrNotFound))
@@ -721,7 +645,7 @@ func (h SourcesHandler) Raw(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", contentTypeFor(ext))
 	w.Header().Set("Content-Disposition", "inline; filename=\""+fileName(title, ext, chi.URLParam(r, "hash"))+"\"")
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, rc)
+	_, _ = io.Copy(w, rc) //nolint:errcheck // the client is gone; there is nothing to do
 }
 
 func contentTypeFor(ext string) string {

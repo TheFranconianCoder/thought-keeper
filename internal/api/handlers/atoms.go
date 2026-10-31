@@ -14,51 +14,6 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// AtomLister lists atoms.
-type AtomLister interface {
-	Execute(ctx context.Context, topic string, limit, offset int) ([]partialentities.PartialAtom, error)
-}
-
-// ClaimTopicLister lists claim topics.
-type ClaimTopicLister interface {
-	Execute(ctx context.Context) ([]partialentities.PartialBranch, error)
-}
-
-// AtomGetter returns one atom.
-type AtomGetter interface {
-	Execute(ctx context.Context, id ulid.ULID) (partialentities.PartialAtom, error)
-}
-
-// AtomRelated returns claims related to one atom, grouped by relation.
-type AtomRelated interface {
-	Execute(ctx context.Context, id ulid.ULID, limit int) (usecases.RelatedAtomsResult, error)
-}
-
-// URLKindFixer repairs sources whose index entry lost their kind.
-type URLKindFixer interface {
-	Execute(ctx context.Context) (usecases.FixURLsResult, error)
-}
-
-// SourceAtomLister lists the atoms extracted from one source.
-type SourceAtomLister interface {
-	Execute(ctx context.Context, hash string, limit int) (usecases.SourceAtomsResult, error)
-}
-
-// RunGetter returns one run.
-type RunGetter interface {
-	Execute(ctx context.Context, id ulid.ULID) (partialentities.PartialRun, error)
-}
-
-// AtomLayoutReader reports the OLD claim layout a vault still holds (branch folders). Read-only.
-type AtomLayoutReader interface {
-	Detect(ctx context.Context) (partialentities.PartialAtomLayout, error)
-}
-
-// AtomLayoutWriter moves the claims to the layout that addresses them by their ID.
-type AtomLayoutWriter interface {
-	Execute(ctx context.Context) (partialentities.PartialAtomLayout, error)
-}
-
 // AtomDuplicateReader reports claims that exist more than once. Read-only.
 type AtomDuplicateReader interface {
 	Detect(ctx context.Context) (partialentities.PartialAtomDuplicates, error)
@@ -69,37 +24,27 @@ type AtomDuplicateCollapser interface {
 	Execute(ctx context.Context) (partialentities.PartialAtomDuplicates, error)
 }
 
-// ClaimCodeQuoter wraps bracket syntax in claim bodies in an inline code mark.
-type ClaimCodeQuoter interface {
-	Execute(ctx context.Context) (usecases.QuoteClaimCodeResult, error)
-}
-
 // AtomHandler serves the atom, claim-topic and run endpoints.
 type AtomHandler struct {
-	Atoms       AtomLister
-	ClaimTopics ClaimTopicLister
-	GetAtom     AtomGetter
-	AtomRelated AtomRelated
-	SourceAtoms SourceAtomLister
-	Runs        RunGetter
+	Atoms       usecases.AtomLister
+	ClaimTopics usecases.ClaimTopicLister
+	GetAtom     usecases.AtomGetter
+	AtomRelated usecases.AtomRelated
+	SourceAtoms usecases.SourceAtomLister
+	Runs        usecases.RunGetter
 	// AtomLayout is what a vault still holds in the old layout; AtomReorganize moves it.
-	AtomLayout     AtomLayoutReader
-	AtomReorganize AtomLayoutWriter
+	AtomLayout     usecases.AtomLayoutReader
+	AtomReorganize usecases.AtomLayoutWriter
 	// AtomDuplicates is what exists more than once; AtomCollapse keeps one copy of each claim.
 	AtomDuplicates AtomDuplicateReader
 	AtomCollapse   AtomDuplicateCollapser
 	// QuoteCode wraps bracket syntax in claim bodies in inline code (a one-time repair).
-	QuoteCode ClaimCodeQuoter
+	QuoteCode usecases.ClaimCodeQuoter
 	// Mark shows a synchronous pass in the Running list while it works.
 	Mark MaintenanceMarker
 	// Commands resolves an assistant result (?command=<id>) into claims. Nil means the address is
 	// not understood here; the named criteria beside it still filter.
-	Commands CommandAtomSet
-}
-
-// CommandAtomSet is an assistant result's materialized claim set, in the command's order.
-type CommandAtomSet interface {
-	Execute(ctx context.Context, id ulid.ULID, limit, offset int) ([]partialentities.PartialAtom, usecases.CommandWindow, error)
+	Commands usecases.CommandAtomSet
 }
 
 // GetAtomLayout serves GET /api/v1/atoms/layout: the legacy topic folders a vault written before the ID
@@ -109,7 +54,7 @@ func (h AtomHandler) GetAtomLayout(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteJSON(w, http.StatusOK, payloads.AtomLayout{})
 		return
 	}
-	res, err := h.AtomLayout.Detect(r.Context())
+	res, err := h.AtomLayout(r.Context())
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -127,7 +72,7 @@ func (h AtomHandler) PostAtomReorganize(w http.ResponseWriter, r *http.Request) 
 		payloads.WriteError(w, types.New("not_implemented", "reorganize is not configured", types.ErrNotImplemented))
 		return
 	}
-	res, err := h.AtomReorganize.Execute(r.Context())
+	res, err := h.AtomReorganize(r.Context())
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -178,7 +123,7 @@ func (h AtomHandler) PostQuoteCode(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("not_implemented", "quote claim code is not configured", types.ErrNotImplemented))
 		return
 	}
-	res, err := h.QuoteCode.Execute(r.Context())
+	res, err := h.QuoteCode(r.Context())
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -210,7 +155,7 @@ func (h AtomHandler) ListSourceAtoms(w http.ResponseWriter, r *http.Request) {
 	// overlay feel slow. The total and the distinct topics come along, so the rail still shows
 	// the whole picture.
 	limit := min(atoiDefault(r.URL.Query().Get("limit"), usecases.DefaultSourceAtomsLimit), 500)
-	res, err := h.SourceAtoms.Execute(r.Context(), chi.URLParam(r, "hash"), limit)
+	res, err := h.SourceAtoms(r.Context(), chi.URLParam(r, "hash"), limit)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -236,7 +181,7 @@ func (h AtomHandler) ListAtoms(w http.ResponseWriter, r *http.Request) {
 	if handled {
 		return
 	}
-	atoms, err := h.Atoms.Execute(r.Context(), q.Get("topic"), limit, offset)
+	atoms, err := h.Atoms(r.Context(), q.Get("topic"), limit, offset)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -257,7 +202,7 @@ func (h AtomHandler) serveCommand(w http.ResponseWriter, r *http.Request, limit,
 	if err != nil {
 		return false, nil
 	}
-	atoms, window, cErr := h.Commands.Execute(r.Context(), id, limit, offset)
+	atoms, window, cErr := h.Commands(r.Context(), id, limit, offset)
 	if cErr != nil {
 		if types.CodeOf(cErr) == "not_found" {
 			return false, &payloads.CommandRef{ID: id.String(), Expired: true}
@@ -273,7 +218,7 @@ func (h AtomHandler) serveCommand(w http.ResponseWriter, r *http.Request, limit,
 
 // ListClaimTopics serves GET /api/v1/topics/claims.
 func (h AtomHandler) ListClaimTopics(w http.ResponseWriter, r *http.Request) {
-	branches, err := h.ClaimTopics.Execute(r.Context())
+	branches, err := h.ClaimTopics(r.Context())
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -281,7 +226,6 @@ func (h AtomHandler) ListClaimTopics(w http.ResponseWriter, r *http.Request) {
 	payloads.WriteJSON(w, http.StatusOK, payloads.TopicUseList{Topics: payloads.TopicUsesFromPartials(branches), Count: len(branches)})
 }
 
-// Get serves GET /api/v1/atoms/{id}.
 // GetRelated serves GET /api/v1/atoms/{id}/related: claims near one claim (cluster first, topic next).
 func (h AtomHandler) GetRelated(w http.ResponseWriter, r *http.Request) {
 	id, err := ulid.ParseStrict(chi.URLParam(r, "id"))
@@ -295,7 +239,7 @@ func (h AtomHandler) GetRelated(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	related, err := h.AtomRelated.Execute(r.Context(), id, atoiDefault(r.URL.Query().Get("limit"), 20))
+	related, err := h.AtomRelated(r.Context(), id, atoiDefault(r.URL.Query().Get("limit"), 20))
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -313,7 +257,7 @@ func (h AtomHandler) Get(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("invalid_id", "id must be a 26-character ULID", types.ErrInvalidID))
 		return
 	}
-	atom, err := h.GetAtom.Execute(r.Context(), id)
+	atom, err := h.GetAtom(r.Context(), id)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -328,7 +272,7 @@ func (h AtomHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("invalid_id", "id must be a 26-character ULID", types.ErrInvalidID))
 		return
 	}
-	run, err := h.Runs.Execute(r.Context(), id)
+	run, err := h.Runs(r.Context(), id)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return

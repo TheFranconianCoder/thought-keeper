@@ -24,9 +24,9 @@ func BenchmarkSteadyStatePass(b *testing.B) {
 	peakHeap(b, func(ctx context.Context) {
 		atoms, records, _ := steadyStateVault(b, freeClaims)
 		repo := &goldenAtomRepo{atoms: atoms}
-		uc := ClusterPass{Atoms: repo, Store: &goldenClusterStore{written: map[string]string{}}, Clusters: &goldenClusterRepo{}}
+		uc := Clusters{Atoms: repo, Store: &goldenClusterStore{written: map[string]string{}}, Clusters: &goldenClusterRepo{}}
 
-		// The pass, in the order ClusterPass.Execute runs it.
+		// The pass, in the order Clusters.Execute runs it.
 		attached, _, free, err := uc.attach(ctx, records, settings)
 		if err != nil {
 			b.Fatal(err)

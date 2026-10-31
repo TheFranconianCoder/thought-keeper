@@ -49,7 +49,7 @@ func TestSourceListSaysThereIsMore(t *testing.T) {
 		all = append(all, partialentities.PartialSource{Hash: string(rune('a' + i)), Title: title})
 	}
 	lister := &pageLister{all: all}
-	h := SourcesHandler{Lister: lister, Counter: totalCounter{n: 3}}
+	h := SourcesHandler{Lister: lister.Execute, Counter: totalCounter{n: 3}.Count}
 
 	req := httptest.NewRequestWithContext(context.Background(), "GET", "/api/v1/sources?limit=2&offset=0", nil)
 	rec := httptest.NewRecorder()
@@ -81,7 +81,7 @@ func TestSourceListSaysThereIsMore(t *testing.T) {
 // page read and the count; a filter that only reached the page would make the scroll height lie.
 func TestSourceListParsesTheWindowFilter(t *testing.T) {
 	lister := &pageLister{}
-	h := SourcesHandler{Lister: lister, Counter: totalCounter{n: 0}}
+	h := SourcesHandler{Lister: lister.Execute, Counter: totalCounter{n: 0}.Count}
 
 	req := httptest.NewRequestWithContext(
 		context.Background(),
@@ -148,7 +148,7 @@ func TestSourceSummaryEndpoints(t *testing.T) {
 	}
 
 	h := SourcesHandler{
-		Content: summaryOpener{text: "A short overview.\n"},
+		Sidecar: summaryOpener{text: "A short overview.\n"}.Sidecar,
 		Summary: summaryScheduler{runID: "01J8RUN"},
 	}
 	rec := httptest.NewRecorder()
@@ -161,7 +161,7 @@ func TestSourceSummaryEndpoints(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	h.Content = summaryOpener{err: types.New("not_found", "no summary yet", types.ErrNotFound)}
+	h.Sidecar = summaryOpener{err: types.New("not_found", "no summary yet", types.ErrNotFound)}.Sidecar
 	h.SummaryText(rec, withHash(httptest.NewRequestWithContext(context.Background(), "GET", "/api/v1/sources/"+hash+"/summary", nil)))
 	if rec.Code != 404 {
 		t.Errorf("missing summary = %d, want 404", rec.Code)
@@ -195,7 +195,7 @@ func (t *tagSetter) Execute(_ context.Context, hash string, tags []string) (part
 func TestSourceTagsEndpoint(t *testing.T) {
 	const hash = "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899"
 	setter := &tagSetter{}
-	h := SourcesHandler{TagSetter: setter}
+	h := SourcesHandler{TagSetter: setter.Execute}
 	req := httptest.NewRequestWithContext(context.Background(), "PUT", "/api/v1/sources/"+hash+"/tags",
 		strings.NewReader(`{"tags":["go","caching"]}`))
 	rctx := chi.NewRouteContext()
@@ -219,10 +219,8 @@ func TestSourceTagsEndpoint(t *testing.T) {
 }
 
 type attachRecorder struct {
-	got     usecases.AttachInput
-	onDone  string
-	failOn  error
-	readErr error
+	got    usecases.AttachInput
+	failOn error
 }
 
 func (a *attachRecorder) Execute(_ context.Context, in usecases.AttachInput) (partialentities.PartialSource, error) {
@@ -241,7 +239,7 @@ func TestAttachEndpoint(t *testing.T) {
 	attacher := &attachRecorder{}
 	notified := ""
 	h := SourcesHandler{
-		Attacher:   attacher,
+		Attacher:   attacher.Execute,
 		OnAttached: func(h string) { notified = h },
 	}
 

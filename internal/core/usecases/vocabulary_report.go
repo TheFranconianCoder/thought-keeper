@@ -2,8 +2,11 @@ package usecases
 
 import (
 	"context"
+	"log/slog"
 	"sort"
 	"strings"
+
+	"github.com/oklog/ulid/v2"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	coremarkdown "github.com/TheFranconianCoder/thought-keeper/internal/core/markdown"
@@ -11,29 +14,44 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
-// VocabularyReport reads the OBSERVED claim-topic catalog (from the index) against the DECIDED
-// vocabulary (the vault's file) and says what shape it is in.
-//
-// It exists because a vocabulary grows with every run and drifts apart — several names for one thing,
-// and a long tail of names used once. The numbers say WHERE to look; they never say what to merge,
-// because a name used once can be the sharpest name there is (PostgreSQL with three claims and MySQL
-// with two are not "Databases"). What the numbers CAN settle is the mechanical part: names that
-// normalize to the same key, and names that share their words.
-//
-// Three namespaces: the flat SUBJECT of a claim, and the coarse TAGS of a wiki page and of a source.
-// The tags are observed where they live: a page's frontmatter and a source's .meta record (mirrored
-// into the index, which is what the report reads), never a separate catalog that could disagree.
-type VocabularyReport struct {
-	Atoms    interfaces.AtomRepository
-	Wiki     interfaces.WikiStore
-	Sources  interfaces.SourceTagReader
-	Vocab    interfaces.VocabularyStore
-	TopNames int
+// Vocabulary is the use case of the three name vocabularies: the report that says how healthy they
+// are, the reconcile that repairs them, and the curation that asks the model to merge names.
+type Vocabulary struct {
+	Atoms     interfaces.AtomRepository
+	AtomStore interfaces.AtomStore
+	Wiki      interfaces.WikiStore
+	Reader    interfaces.SourceTagReader
+	Sources   interfaces.SourceTagStore
+	Tags      interfaces.SourceTagStore
+	Index     interfaces.IndexRepository
+	Vocab     interfaces.VocabularyStore
+	Runs      interfaces.RunRepository
+	SourceLog interfaces.SourceLog
+	Gateway   interfaces.AgentGateway
+	Model     string
+	Clock     interfaces.Clock
+	Log       *slog.Logger
+	// The curation and the naming are modes, set on a copy of the value before the call.
+	Namespace entities.VocabularyNamespace
+	Mapping   map[string]string
+	Canonical []string
+	RunID     ulid.ULID
+	Apply     bool
+	TopNames  int
+	Max       int
+	Parallel  int
+	OnPhase   func(phase string)
+	ApplyGate func(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
-// Execute reports both namespaces. A namespace with nothing observed is left out: an empty catalog is
-// not a health report, and a tag namespace nobody uses yet must not read as "0 names, 0% covered".
-func (uc VocabularyReport) Execute(ctx context.Context) ([]partialentities.VocabularyHealth, error) {
+// VocabularyReporter reports how healthy the vocabularies are. A handler holds this value; nil means
+// the feature is not wired.
+type VocabularyReporter func(ctx context.Context) ([]partialentities.VocabularyHealth, error)
+
+// Report aggregates the names the vault uses and what they collide with. A namespace with nothing
+// observed is left out: an empty catalog is not a health report, and a tag namespace nobody uses yet
+// must not read as "0 names, 0% covered".
+func (uc Vocabulary) Report(ctx context.Context) ([]partialentities.VocabularyHealth, error) {
 	topics, err := uc.observed(ctx)
 	if err != nil {
 		return nil, err
@@ -57,7 +75,7 @@ func (uc VocabularyReport) Execute(ctx context.Context) ([]partialentities.Vocab
 }
 
 // vocabulary reads one namespace's decided names; a missing store (or file) is an empty vocabulary.
-func (uc VocabularyReport) vocabulary(ns entities.VocabularyNamespace) entities.Vocabulary {
+func (uc Vocabulary) vocabulary(ns entities.VocabularyNamespace) entities.Vocabulary {
 	if uc.Vocab == nil {
 		return entities.Vocabulary{Namespace: ns, Absorbed: map[string]string{}}
 	}
@@ -69,7 +87,7 @@ func (uc VocabularyReport) vocabulary(ns entities.VocabularyNamespace) entities.
 }
 
 // observedTags counts the tags of every page: the human's and the derived ones.
-func (uc VocabularyReport) observedTags(ctx context.Context) ([]partialentities.NameUses, error) {
+func (uc Vocabulary) observedTags(ctx context.Context) ([]partialentities.NameUses, error) {
 	if uc.Wiki == nil {
 		return nil, nil
 	}
@@ -92,11 +110,11 @@ func (uc VocabularyReport) observedTags(ctx context.Context) ([]partialentities.
 
 // observedSourceTags counts the human labels of every source. The index mirrors the .meta records, so
 // the report does not open 465 files to answer a health question.
-func (uc VocabularyReport) observedSourceTags(ctx context.Context) ([]partialentities.NameUses, error) {
-	if uc.Sources == nil {
+func (uc Vocabulary) observedSourceTags(ctx context.Context) ([]partialentities.NameUses, error) {
+	if uc.Reader == nil {
 		return nil, nil
 	}
-	counts, err := uc.Sources.SourceTagCounts(ctx)
+	counts, err := uc.Reader.SourceTagCounts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +126,7 @@ func (uc VocabularyReport) observedSourceTags(ctx context.Context) ([]partialent
 }
 
 // observed reads the catalog the index knows: the names that exist right now, with their counts.
-func (uc VocabularyReport) observed(ctx context.Context) ([]partialentities.NameUses, error) {
+func (uc Vocabulary) observed(ctx context.Context) ([]partialentities.NameUses, error) {
 	topics, err := uc.Atoms.ListClaimTopics(ctx)
 	if err != nil {
 		return nil, err
@@ -131,7 +149,7 @@ func keyOf(name string, ns entities.VocabularyNamespace) string {
 }
 
 // health computes the numbers, and the two findings that need no judgement.
-func (uc VocabularyReport) health(observed []partialentities.NameUses, vocab entities.Vocabulary, ns entities.VocabularyNamespace) partialentities.VocabularyHealth {
+func (uc Vocabulary) health(observed []partialentities.NameUses, vocab entities.Vocabulary, ns entities.VocabularyNamespace) partialentities.VocabularyHealth {
 	h := partialentities.VocabularyHealth{
 		Namespace: string(ns),
 		Canonical: len(vocab.Canonical),
@@ -233,7 +251,7 @@ func nearDuplicates(observed []partialentities.NameUses, broad map[string]bool) 
 	for i := range parent {
 		parent[i] = i
 	}
-	var find func(int) int = func(i int) int {
+	find := func(i int) int {
 		for parent[i] != i {
 			parent[i] = parent[parent[i]]
 			i = parent[i]

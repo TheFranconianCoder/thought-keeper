@@ -34,7 +34,7 @@ func TestFeedCopyMakesAJavaScriptPageReadable(t *testing.T) {
 	idx := newFakeIndex()
 	store := objects.New(t.TempDir())
 	steps := &fakeSteps{index: idx}
-	uc := usecases.AddURL{
+	uc := usecases.URLs{
 		Fetch:        &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte(feedWithCopy), ContentType: "application/rss+xml"}},
 		Convert:      &fakeConverter{title: "Copied", markdown: strings.Repeat("article body ", 60)},
 		Store:        store,
@@ -43,7 +43,7 @@ func TestFeedCopyMakesAJavaScriptPageReadable(t *testing.T) {
 		Clock:        fixedClock{},
 		MinTextChars: 40,
 	}
-	src, err := uc.ExecuteManual(ctx, "https://example.com/feed.xml", false)
+	src, err := uc.AddManual(ctx, "https://example.com/feed.xml", false)
 	if err != nil {
 		t.Fatalf("feed: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestFeedRefreshFillsAnExistingBookmark(t *testing.T) {
 		Meta: `{"url":"https://example.com/one","bookmark":true,"origin":"rss","parent_hash":"` + feedHash + `"}`,
 	}
 
-	refresh := usecases.RefreshURLs{
+	refresh := usecases.URLs{
 		Fetch:        &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte(feedWithCopy), ContentType: "application/rss+xml"}},
 		Convert:      &fakeConverter{title: "Copied", markdown: strings.Repeat("article body ", 60)},
 		Store:        store,
@@ -114,7 +114,7 @@ func TestFeedRefreshFillsAnExistingBookmark(t *testing.T) {
 		MinAge:       time.Hour,
 		MinTextChars: 40,
 	}
-	if _, err := refresh.ExecuteAll(ctx); err != nil {
+	if _, err := refresh.RefreshAll(ctx); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	one := idx.m[oneHash]
@@ -154,7 +154,7 @@ func TestRefreshKeepsAFeedCopyWhenThePageStillDoesNotRead(t *testing.T) {
 	if _, err := store.PutAt(hash, ".md", []byte("the readable copy from the feed\n")); err != nil {
 		t.Fatal(err)
 	}
-	refresh := usecases.RefreshURLs{
+	refresh := usecases.URLs{
 		Fetch:        &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("<html>enable js</html>"), ContentType: "text/html"}},
 		Convert:      &fakeConverter{markdown: ""},
 		Store:        store,
@@ -162,7 +162,7 @@ func TestRefreshKeepsAFeedCopyWhenThePageStillDoesNotRead(t *testing.T) {
 		Clock:        fixedClock{},
 		MinTextChars: 40,
 	}
-	res, err := refresh.ExecuteAll(ctx)
+	res, err := refresh.RefreshAll(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -203,11 +203,11 @@ func TestDeletingAFeedSurvivesACanceledRequest(t *testing.T) {
 	}
 	cancel() // the request is gone before the cascade starts
 
-	del := usecases.DeleteSource{
-		Store: store, Index: idx, Atoms: atomstore.New(t.TempDir()), AtomRepo: &fakeAtomRepo{},
+	del := usecases.Sources{
+		Store: store, Index: idx, AtomStore: atomstore.New(t.TempDir()), Atoms: &fakeAtomRepo{},
 		Clock: fixedClock{},
 	}
-	if _, err := del.ExecuteOwned(ctx, feedHash); err != nil {
+	if _, err := del.DeleteOwned(ctx, feedHash); err != nil {
 		t.Fatalf("delete with a canceled request: %v", err)
 	}
 	if len(idx.m) != 0 {

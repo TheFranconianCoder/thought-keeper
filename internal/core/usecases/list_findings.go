@@ -3,24 +3,22 @@ package usecases
 import (
 	"context"
 
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
-// ListFindings lists stored lint findings.
-type ListFindings struct {
-	Lint interfaces.LintRepository
-}
+// FindingLister lists stored lint findings. A handler holds this value; nil means the feature is not
+// wired.
+type FindingLister func(ctx context.Context, kind string, limit, offset int) ([]partialentities.PartialFinding, error)
 
-// Execute returns findings, optionally filtered by kind.
-func (uc ListFindings) Execute(ctx context.Context, kind string, limit, offset int) ([]partialentities.PartialFinding, error) {
+// Findings returns findings, optionally filtered by kind.
+func (uc Lint) Findings(ctx context.Context, kind string, limit, offset int) ([]partialentities.PartialFinding, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	findings, err := uc.Lint.ListFindings(ctx, kind, limit, offset)
+	findings, err := uc.Store.ListFindings(ctx, kind, limit, offset)
 	if err != nil {
 		return nil, err
 	}

@@ -49,15 +49,15 @@ func TestQueryAnswersWithCitations(t *testing.T) {
 		},
 	}}
 	asks := &fakeAskStore{}
-	uc := usecases.QueryKnowledge{
+	uc := usecases.Query{
 		Atoms: &fakeAtomRepo{},
-		Search: fakeSearch{hits: []interfaces.SearchHit{
+		Lexical: fakeSearch{hits: []interfaces.SearchHit{
 			{ID: ulid.Make().String(), Kind: "atom", Title: "Caching is subtle", Snippet: "s"},
 		}},
 		Asks: asks, Runs: runRepo, Gateway: gw, Model: "test", MaxIterations: 4, Clock: fixedClock{},
 	}
 
-	res, err := uc.Execute(ctx, ulid.Make(), "What about caching?")
+	res, err := uc.Ask(ctx, ulid.Make(), "What about caching?")
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -101,12 +101,12 @@ func TestScopedQueryStaysInOneSource(t *testing.T) {
 		},
 	}}
 	asks := &fakeAskStore{}
-	uc := usecases.QueryKnowledge{
-		Atoms: &fakeAtomRepo{}, Search: search, Asks: asks, Runs: runRepo,
+	uc := usecases.Query{
+		Atoms: &fakeAtomRepo{}, Lexical: search, Asks: asks, Runs: runRepo,
 		Gateway: gw, Model: "test", MaxIterations: 4, Clock: fixedClock{},
 	}
 
-	if _, err := uc.ExecuteScoped(ctx, ulid.Make(), "What does this source say?", hash); err != nil {
+	if _, err := uc.AskScoped(ctx, ulid.Make(), "What does this source say?", hash); err != nil {
 		t.Fatalf("scoped query: %v", err)
 	}
 	if !search.scoped || search.scope != hash {

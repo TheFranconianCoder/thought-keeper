@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"maps"
 	"sort"
 	"strings"
@@ -19,32 +18,6 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
-
-// CurateVocabulary asks the model what the claim-topic vocabulary should become.
-//
-// A topic is the flat subject of a CLAIM. It is a free name invented at write time, so it drifts. The
-// pass merges names that mean the same thing, and nothing else: a rename changes only the claims'
-// label. No prose is derived again, and there is no page vocabulary any more.
-type CurateVocabulary struct {
-	Namespace entities.VocabularyNamespace
-	Report    VocabularyReport
-	Atoms     interfaces.AtomRepository
-	Gateway   interfaces.AgentGateway
-	Model     string
-	Apply     bool
-	Vocab     interfaces.VocabularyStore
-	// Wiki applies a TAG rename (the wiki-tags namespace) to the pages' frontmatter.
-	Wiki interfaces.WikiStore
-	// Sources applies a TAG rename (the source-tags namespace) to the sources' records.
-	Sources   interfaces.SourceTagStore
-	AtomStore interfaces.AtomStore
-	Runs      interfaces.RunRepository
-	Clock     interfaces.Clock
-	Log       *slog.Logger
-	OnPhase   func(phase string)
-	Parallel  int
-	ApplyGate func(ctx context.Context, fn func(ctx context.Context) error) error
-}
 
 // CurateResult is what the model answered.
 type CurateResult struct {
@@ -63,7 +36,7 @@ const (
 	samplesPerName   = 0
 )
 
-func (uc CurateVocabulary) phase(name string) {
+func (uc Vocabulary) phase(name string) {
 	if uc.OnPhase != nil {
 		uc.OnPhase(name)
 	}
@@ -71,8 +44,8 @@ func (uc CurateVocabulary) phase(name string) {
 
 const vocabularyCallTimeout = 10 * time.Minute
 
-// Execute asks the model about one namespace and applies the answer.
-func (uc CurateVocabulary) Execute(ctx context.Context, runID ulid.ULID) (res CurateResult, err error) {
+// Curate asks the model to merge names and applies what it decided.
+func (uc Vocabulary) Curate(ctx context.Context, runID ulid.ULID) (res CurateResult, err error) {
 	res = CurateResult{Namespace: string(uc.Namespace), Mapping: map[string]string{}}
 	finished := false
 	finish := func(status entities.RunStatus, answer string) {
@@ -88,7 +61,7 @@ func (uc CurateVocabulary) Execute(ctx context.Context, runID ulid.ULID) (res Cu
 			run.Error = answer
 			run.Answer = ""
 		}
-		_ = uc.Runs.FinishRun(ctx, run)
+		_ = uc.Runs.FinishRun(ctx, run) //nolint:errcheck // the run row is an audit trail; the work already ended
 	}
 	defer func() {
 		if finished {
@@ -113,7 +86,7 @@ func (uc CurateVocabulary) Execute(ctx context.Context, runID ulid.ULID) (res Cu
 	}
 	// The catalog of THIS namespace. Broad tokens and near-duplicate families are namespace-local:
 	// a source tag must be judged with the source tags, not with the claim topics.
-	healths, err := uc.Report.Execute(ctx)
+	healths, err := uc.Report(ctx)
 	if err != nil {
 		return res, err
 	}
@@ -155,7 +128,7 @@ func (uc CurateVocabulary) Execute(ctx context.Context, runID ulid.ULID) (res Cu
 		}
 		// The families are built WITH the broad tokens; re-read the health so the freshly learned
 		// set orders the candidates instead of the fallback.
-		healths, err = uc.Report.Execute(ctx)
+		healths, err = uc.Report(ctx)
 		if err != nil {
 			return res, err
 		}
@@ -210,7 +183,7 @@ type chunkAnswer struct {
 	err       error
 }
 
-func (uc CurateVocabulary) askAll(ctx context.Context, chunks [][]nameCount) []chunkAnswer {
+func (uc Vocabulary) askAll(ctx context.Context, chunks [][]nameCount) []chunkAnswer {
 	answers := make([]chunkAnswer, len(chunks))
 	if len(chunks) == 0 {
 		return answers
@@ -242,17 +215,13 @@ func (uc CurateVocabulary) askAll(ctx context.Context, chunks [][]nameCount) []c
 	return answers
 }
 
-func (uc CurateVocabulary) askChunk(ctx context.Context, chunk []nameCount) chunkAnswer {
+func (uc Vocabulary) askChunk(ctx context.Context, chunk []nameCount) chunkAnswer {
 	answer := chunkAnswer{chunk: chunk, mapping: map[string]string{}}
 	if uc.Gateway == nil || uc.Model == "" {
 		answer.err = fmt.Errorf("vocabulary: no model configured")
 		return answer
 	}
-	entries, err := uc.evidence(ctx, chunk)
-	if err != nil {
-		answer.err = err
-		return answer
-	}
+	entries := uc.evidence(chunk)
 	callCtx, cancel := context.WithTimeout(ctx, vocabularyCallTimeout)
 	defer cancel()
 	system := agents.VocabularyCurateSystem + agents.VocabularyNameRules
@@ -311,15 +280,15 @@ func (uc CurateVocabulary) askChunk(ctx context.Context, chunk []nameCount) chun
 }
 
 func logHead(s string) string {
-	const max = 600
+	const maxHead = 600
 	s = strings.TrimSpace(s)
-	if len(s) <= max {
+	if len(s) <= maxHead {
 		return s
 	}
-	return s[:max] + "…"
+	return s[:maxHead] + "…"
 }
 
-func (uc CurateVocabulary) applyChunk(ctx context.Context, answer chunkAnswer, part, parts int, res *CurateResult) error {
+func (uc Vocabulary) applyChunk(ctx context.Context, answer chunkAnswer, part, parts int, res *CurateResult) error {
 	res.Tokens += answer.tokens
 	if uc.Vocab != nil {
 		v, vErr := uc.Vocab.Read(uc.Namespace)
@@ -329,7 +298,9 @@ func (uc CurateVocabulary) applyChunk(ctx context.Context, answer chunkAnswer, p
 					v.Decided = append(v.Decided, n.name)
 				}
 			}
-			_ = uc.Vocab.Write(v)
+			if wErr := uc.Vocab.Write(v); wErr != nil {
+				return fmt.Errorf("writing the vocabulary: %w", wErr)
+			}
 		}
 	}
 	if !uc.Apply || (len(answer.mapping) == 0 && len(answer.canonical) == 0) {
@@ -337,12 +308,11 @@ func (uc CurateVocabulary) applyChunk(ctx context.Context, answer chunkAnswer, p
 	}
 	uc.phase(fmt.Sprintf("applying the mapping (%d/%d)", part, parts))
 	var applied ApplyVocabularyResult
+	rename := uc
+	rename.Mapping = answer.mapping
+	rename.Canonical = answer.canonical
 	apply := func(ctx context.Context) error {
-		got, aErr := ApplyVocabularyMapping{
-			Namespace: uc.Namespace, Mapping: answer.mapping, Canonical: answer.canonical,
-			Vocab: uc.Vocab, Atoms: uc.Atoms, AtomStore: uc.AtomStore, Wiki: uc.Wiki,
-			Sources: uc.Sources, Clock: uc.Clock, Log: uc.Log,
-		}.Execute(ctx)
+		got, aErr := rename.ApplyMapping(ctx)
 		if aErr != nil {
 			return fmt.Errorf("applying the mapping: %w", aErr)
 		}
@@ -424,7 +394,7 @@ func familyOrderedNameUses(observed []nameCount, flagged map[string]bool, judged
 	return out
 }
 
-func chunkByFamily(chosen []nameCount, max, maxChunks int) [][]nameCount {
+func chunkByFamily(chosen []nameCount, maxNames, maxChunks int) [][]nameCount {
 	var out [][]nameCount
 	var cur []nameCount
 	flush := func() {
@@ -441,8 +411,8 @@ func chunkByFamily(chosen []nameCount, max, maxChunks int) [][]nameCount {
 		// Keep one family together where possible, but never let a family larger than the
 		// per-question limit become one giant prompt. A chunk is what the model can answer.
 		for i < j {
-			take := min(j-i, max)
-			if len(cur) > 0 && len(cur)+take > max {
+			take := min(j-i, maxNames)
+			if len(cur) > 0 && len(cur)+take > maxNames {
 				flush()
 			}
 			cur = append(cur, chosen[i:i+take]...)
@@ -456,12 +426,12 @@ func chunkByFamily(chosen []nameCount, max, maxChunks int) [][]nameCount {
 	return out
 }
 
-func (uc CurateVocabulary) evidence(ctx context.Context, names []nameCount) ([]string, error) {
+func (uc Vocabulary) evidence(names []nameCount) []string {
 	out := make([]string, 0, len(names))
 	for _, n := range names {
 		out = append(out, fmt.Sprintf("- %q (%s)", n.name, uses(n.uses)))
 	}
-	return out, nil
+	return out
 }
 
 func uses(n int) string {
@@ -495,7 +465,7 @@ func parseVocabularyAnswer(raw string) ([]string, map[string]string, error) {
 // learnBroadTokens asks the model which tokens are too generic for THIS vault's near-duplicate
 // detection. The candidates come from the observed catalog's own document frequency; the model
 // chooses among them. With no model, the same frequency signal is used directly.
-func (uc CurateVocabulary) learnBroadTokens(ctx context.Context, observed []partialentities.NameUses) []string {
+func (uc Vocabulary) learnBroadTokens(ctx context.Context, observed []partialentities.NameUses) []string {
 	candidates := tokenCandidates(observed)
 	if len(candidates) == 0 {
 		return nil

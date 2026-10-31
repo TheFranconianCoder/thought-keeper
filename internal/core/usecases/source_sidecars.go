@@ -4,19 +4,8 @@ import (
 	"context"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
-
-// SourceSidecars reports which of a source's derived files exist and how big they are.
-//
-// It is the reader's view of the sidecar rule: a source is one folder entry with its whole story
-// (the object plus the rendering, the step record, the outline and the log), and the detail view can
-// show exactly that — including a file that is MISSING, which is what the consistency job repairs.
-type SourceSidecars struct {
-	Index interfaces.IndexRepository
-	Store interfaces.SourceStore
-}
 
 // Sidecar is one derived file of a source as the wire sees it.
 type Sidecar struct {
@@ -26,8 +15,12 @@ type Sidecar struct {
 	Bytes int64
 }
 
-// Execute returns the sidecars of one source, in the order they appear in its life.
-func (uc SourceSidecars) Execute(ctx context.Context, hash string) ([]Sidecar, error) {
+// SidecarLister lists the files a source consists of. A handler holds this value; nil means the
+// feature is not wired.
+type SidecarLister func(ctx context.Context, hash string) ([]Sidecar, error)
+
+// Sidecars lists the files a source consists of.
+func (uc Sources) Sidecars(ctx context.Context, hash string) ([]Sidecar, error) {
 	if !entities.IsSHA256Hex(hash) {
 		return nil, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash)
 	}
@@ -62,7 +55,7 @@ func (uc SourceSidecars) Execute(ctx context.Context, hash string) ([]Sidecar, e
 	return out, nil
 }
 
-func (uc SourceSidecars) sidecar(hash, suffix string, object bool) Sidecar {
+func (uc Sources) sidecar(hash, suffix string, object bool) Sidecar {
 	size := int64(-1)
 	if object {
 		if n, ok := uc.Store.StatObject(hash, suffix); ok {

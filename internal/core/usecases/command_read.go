@@ -6,20 +6,17 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// ListCommands returns the assistant's history, newest first.
-type ListCommands struct {
-	Commands interfaces.CommandStore
-}
+// CommandLister returns the assistant's history, newest first. A handler holds this value; nil means
+// the history is not wired.
+type CommandLister func(ctx context.Context, limit, offset int) ([]partialentities.PartialCommand, error)
 
-// Execute returns the bounded history. The Start lens shows a handful; nothing in the app asks for
-// the whole history at once.
-func (uc ListCommands) Execute(ctx context.Context, limit, offset int) ([]partialentities.PartialCommand, error) {
-	items, err := uc.Commands.List(ctx, limit, offset)
+// List returns the bounded history.
+func (uc Commands) List(ctx context.Context, limit, offset int) ([]partialentities.PartialCommand, error) {
+	items, err := uc.Store.List(ctx, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -30,28 +27,25 @@ func (uc ListCommands) Execute(ctx context.Context, limit, offset int) ([]partia
 	return out, nil
 }
 
-// GetCommand returns one command. It is how a lens learns what an address means.
-type GetCommand struct {
-	Commands interfaces.CommandStore
-}
+// CommandGetter returns one command. It is how a lens learns what an address means. A handler holds
+// this value; nil means the history is not wired.
+type CommandGetter func(ctx context.Context, id ulid.ULID) (partialentities.PartialCommand, error)
 
-// Execute returns one command by id.
-func (uc GetCommand) Execute(ctx context.Context, id ulid.ULID) (partialentities.PartialCommand, error) {
-	c, err := uc.Commands.Get(ctx, id)
+// Get returns one command by id.
+func (uc Commands) Get(ctx context.Context, id ulid.ULID) (partialentities.PartialCommand, error) {
+	c, err := uc.Store.Get(ctx, id)
 	if err != nil {
 		return partialentities.PartialCommand{}, err
 	}
 	return PartialFromCommand(c), nil
 }
 
-// DeleteCommand removes one command from the history (into the vault trash).
-type DeleteCommand struct {
-	Commands interfaces.CommandStore
-}
+// CommandDeleter removes one command from the history (into the vault trash).
+type CommandDeleter func(ctx context.Context, id ulid.ULID) error
 
-// Execute deletes one command.
-func (uc DeleteCommand) Execute(ctx context.Context, id ulid.ULID) error {
-	return uc.Commands.Delete(ctx, id)
+// Delete deletes one command.
+func (uc Commands) Delete(ctx context.Context, id ulid.ULID) error {
+	return uc.Store.Delete(ctx, id)
 }
 
 // CommandWindow is what a materialized set knows about itself: how many of its members still
@@ -62,19 +56,13 @@ type CommandWindow struct {
 	Missing int
 }
 
-// CommandSources reads the sources of a command's set, in the command's order.
-//
-// The set is materialized, so the list is not re-filtered: a source that arrived after the command
-// ran is not in it, and a source that was deleted simply fails to resolve. That is what makes the
-// answer stable while the vault moves on.
-type CommandSources struct {
-	Commands interfaces.CommandStore
-	Index    interfaces.IndexRepository
-}
+// CommandSourceSet resolves an assistant result (?command=<id>) into sources. A handler holds this
+// value; nil means the address is not understood here.
+type CommandSourceSet func(ctx context.Context, id ulid.ULID, limit, offset int) ([]partialentities.PartialSource, CommandWindow, error)
 
-// Execute returns one page of the set and the set's own count.
-func (uc CommandSources) Execute(ctx context.Context, id ulid.ULID, limit, offset int) ([]partialentities.PartialSource, CommandWindow, error) {
-	cmd, err := uc.Commands.Get(ctx, id)
+// Commands resolves an assistant result into sources.
+func (uc Sources) Commands(ctx context.Context, id ulid.ULID, limit, offset int) ([]partialentities.PartialSource, CommandWindow, error) {
+	cmd, err := uc.CommandStore.Get(ctx, id)
 	if err != nil {
 		return nil, CommandWindow{}, err
 	}
@@ -98,16 +86,13 @@ func (uc CommandSources) Execute(ctx context.Context, id ulid.ULID, limit, offse
 	return out, window, nil
 }
 
-// CommandAtoms reads the claims of a command's set, in the command's order.
-type CommandAtoms struct {
-	Commands interfaces.CommandStore
-	Atoms    interfaces.AtomRepository
-	Clusters interfaces.ClusterRepository
-}
+// CommandAtomSet resolves an assistant result (?command=<id>) into claims. A handler holds this value;
+// nil means the address is not understood here.
+type CommandAtomSet func(ctx context.Context, id ulid.ULID, limit, offset int) ([]partialentities.PartialAtom, CommandWindow, error)
 
-// Execute returns one page of the set and the set's own count.
-func (uc CommandAtoms) Execute(ctx context.Context, id ulid.ULID, limit, offset int) ([]partialentities.PartialAtom, CommandWindow, error) {
-	cmd, err := uc.Commands.Get(ctx, id)
+// Commands resolves an assistant result into claims.
+func (uc Claims) Commands(ctx context.Context, id ulid.ULID, limit, offset int) ([]partialentities.PartialAtom, CommandWindow, error) {
+	cmd, err := uc.CommandStore.Get(ctx, id)
 	if err != nil {
 		return nil, CommandWindow{}, err
 	}

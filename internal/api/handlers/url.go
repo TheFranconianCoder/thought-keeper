@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -13,21 +12,14 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// URLRefresher re-fetches the known URLs. Execute respects the configured cadence (a scheduled
-// pass); ExecuteAll ignores it (the manual pass behind the button); ExecuteOne refreshes a single
-// source now (the per-source Refresh button).
-type URLRefresher interface {
-	Execute(ctx context.Context) (usecases.RefreshResult, error)
-	ExecuteAll(ctx context.Context) (usecases.RefreshResult, error)
-	ExecuteOne(ctx context.Context, hash string) (usecases.RefreshResult, error)
-	// ExecuteOneForce fetches one URL even when its snapshot was attached by hand.
-	ExecuteOneForce(ctx context.Context, hash string) (usecases.RefreshResult, error)
-}
-
 // URLHandler serves the URL maintenance endpoints.
 type URLHandler struct {
-	Refresh URLRefresher
-	Bulk    URLBulkScheduler
+	Refresh usecases.URLRefresher
+	// RefreshAll, RefreshOne and RefreshOneForce are the manual passes beside the cadence.
+	RefreshAll      usecases.URLRefresherAll
+	RefreshOne      usecases.URLRefresherOne
+	RefreshOneForce usecases.URLRefresherOneForce
+	Bulk            URLBulkScheduler
 	// OnChanged is called for every URL whose content changed, so the app can
 	// build trees, schedule the document steps and emit an SSE event.
 	OnChanged func(hash string)
@@ -38,7 +30,7 @@ type URLHandler struct {
 	// without fetching would list sources that never arrive.
 	OnDiscovered func(children []usecases.DiscoveredChildren)
 	// Addresses is the cleanup task that moves URL sources onto their URL's address.
-	Addresses URLAddressMigrator
+	Addresses usecases.URLAddressMigrator
 	// Mark shows a synchronous pass in the Running list while it works.
 	Mark MaintenanceMarker
 }
@@ -63,12 +55,6 @@ func (h URLHandler) PostMany(w http.ResponseWriter, r *http.Request) {
 	payloads.WriteJSON(w, http.StatusAccepted, payloads.AddURLsResult{Accepted: accepted})
 }
 
-// URLAddressMigrator moves URL sources onto their URL's address (the cleanup task for a vault written
-// when a URL source was addressed by its first snapshot's hash).
-type URLAddressMigrator interface {
-	Execute(ctx context.Context, apply bool) (usecases.MigrateURLAddressesResult, error)
-}
-
 // GetAddresses serves GET /api/v1/urls/addresses: the read-only preview, so the button can say what it
 // would do before it is pressed.
 func (h URLHandler) GetAddresses(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +62,7 @@ func (h URLHandler) GetAddresses(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("not_implemented", "url addresses are not configured", types.ErrNotImplemented))
 		return
 	}
-	res, err := h.Addresses.Execute(r.Context(), false)
+	res, err := h.Addresses(r.Context(), false)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -96,7 +82,7 @@ func (h URLHandler) PostMigrate(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("not_implemented", "url addresses are not configured", types.ErrNotImplemented))
 		return
 	}
-	res, err := h.Addresses.Execute(r.Context(), true)
+	res, err := h.Addresses(r.Context(), true)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -129,7 +115,7 @@ func (h URLHandler) Post(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("not_implemented", "url refresh is not configured", types.ErrNotImplemented))
 		return
 	}
-	res, err := h.Refresh.ExecuteAll(r.Context())
+	res, err := h.RefreshAll(r.Context())
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -177,7 +163,7 @@ func (h URLHandler) PostOne(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("not_implemented", "url refresh is not configured", types.ErrNotImplemented))
 		return
 	}
-	res, err := h.Refresh.ExecuteOne(r.Context(), hash)
+	res, err := h.RefreshOne(r.Context(), hash)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return
@@ -228,7 +214,7 @@ func (h URLHandler) Refetch(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, types.New("not_implemented", "url refetch is not configured", types.ErrNotImplemented))
 		return
 	}
-	res, err := h.Refresh.ExecuteOneForce(r.Context(), hash)
+	res, err := h.RefreshOneForce(r.Context(), hash)
 	if err != nil {
 		payloads.WriteError(w, err)
 		return

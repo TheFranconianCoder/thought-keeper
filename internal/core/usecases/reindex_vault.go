@@ -13,11 +13,9 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
-// ReindexVault rebuilds the whole index from the vault: sources from the content-addressed store
-// (refreshing derived columns only, so ids/titles/provenance survive), the claims from their Markdown
-// files, and the association layer from the cluster records under clusters/. The vault is the source
-// of truth, so this is both the documented rebuild guarantee and the repair for an index that drifted.
-type ReindexVault struct {
+// Maintenance is the use case of the vault upkeep: the index rebuild, the reconcile that checks the
+// records against the bytes, and the cleanup that prunes what the derived layer kept too long.
+type Maintenance struct {
 	Store     interfaces.SourceStore
 	Index     interfaces.IndexRepository
 	Atoms     interfaces.AtomRepository
@@ -29,8 +27,11 @@ type ReindexVault struct {
 	Trees interfaces.TreeStore
 	Clock interfaces.Clock
 	Log   *slog.Logger
-	// Maintenance prunes child rows whose parent vanished.
-	Maintenance interfaces.Maintenance
+	// MaintenanceRepo prunes child rows whose parent vanished.
+	MaintenanceRepo interfaces.Maintenance
+	// Clean removes a source derivation when it has to be rebuilt.
+	Clean SourceCleaner
+	Lint  interfaces.LintRepository
 	// SourceLog receives a line for every vault file that could not be indexed, with the reason.
 	SourceLog interfaces.SourceLog
 	// Steps rebuilds the index's mirror of the document-step state from the vault's .meta files.
@@ -43,6 +44,12 @@ type ReindexVault struct {
 	// The association layer: its records are the truth, its rows the cache.
 	ClusterStore interfaces.ClusterStore
 	ClusterRepo  interfaces.ClusterRepository
+	// Languages backfills the language of sources written before the field existed.
+	Languages interfaces.LanguageDetector
+	// Limit and Offset let a huge vault be checked in slices; DryRun only reports what it would repair.
+	Limit  int
+	Offset int
+	DryRun bool
 }
 
 // ReindexResult reports what a reindex did. Skipped counts vault files that could not be indexed.
@@ -71,13 +78,17 @@ type ReindexResult struct {
 	ClustersRemoved int
 }
 
-// Execute walks the store and reconciles the index.
-func (uc ReindexVault) Execute(ctx context.Context) (ReindexResult, error) {
+// ReindexService rebuilds the index from the vault. A handler holds this value; nil means the feature
+// is not wired.
+type ReindexService func(ctx context.Context) (ReindexResult, error)
+
+// Reindex rebuilds the index from the vault.
+func (uc Maintenance) Reindex(ctx context.Context) (ReindexResult, error) {
 	// Referential repair first: an index written while foreign keys were off carries child
 	// rows without parents.
 	var orphans int64
-	if uc.Maintenance != nil {
-		n, err := uc.Maintenance.PruneOrphans(ctx)
+	if uc.MaintenanceRepo != nil {
+		n, err := uc.MaintenanceRepo.PruneOrphans(ctx)
 		if err != nil && uc.Log != nil {
 			uc.Log.Warn("reindex: prune orphans", "err", err)
 		}
@@ -114,7 +125,7 @@ func (uc ReindexVault) Execute(ctx context.Context) (ReindexResult, error) {
 // A part recorded `done` whose node no atom cites is not done: it is marked incomplete with reason
 // `missing_atoms` (and the distill step is put back to pending) BEFORE the scheduler reads the record.
 // A `source_relative` part is the exception: it is metadata and correctly has no atom.
-func (uc ReindexVault) reconcileMeta(ctx context.Context, res ReindexResult, records map[string]entities.SourceRecord) ReindexResult {
+func (uc Maintenance) reconcileMeta(ctx context.Context, res ReindexResult, records map[string]entities.SourceRecord) ReindexResult {
 	if uc.Steps == nil || uc.Atoms == nil || len(records) == 0 {
 		return res
 	}
@@ -150,7 +161,7 @@ func (uc ReindexVault) reconcileMeta(ctx context.Context, res ReindexResult, rec
 			if src, sErr := uc.Index.GetSourceByHash(ctx, hash); sErr == nil {
 				for node, part := range changed {
 					if pErr := uc.Parts.SetPartState(ctx, src.ID, entities.PartState{
-						NodeID: node, State: entities.PartStateValue(part.State), Reason: part.Reason,
+						NodeID: node, State: part.State, Reason: part.Reason,
 						Atoms: part.Atoms, UpdatedAt: part.At,
 					}); pErr != nil && uc.Log != nil {
 						uc.Log.Warn("reindex: part record not reset", "hash", hash, "node", node, "err", pErr)
@@ -186,7 +197,7 @@ func (uc ReindexVault) reconcileMeta(ctx context.Context, res ReindexResult, rec
 // leftovers of a tree rebuild (the synthetic root, a removed section) and would otherwise keep a
 // done light over a part that does not exist. A source with no node rows at all is left alone: its
 // outline may simply not be restored yet.
-func (uc ReindexVault) prunePartRecords(ctx context.Context, res ReindexResult) ReindexResult {
+func (uc Maintenance) prunePartRecords(ctx context.Context, res ReindexResult) ReindexResult {
 	if uc.Parts == nil {
 		return res
 	}
@@ -205,7 +216,7 @@ func (uc ReindexVault) prunePartRecords(ctx context.Context, res ReindexResult) 
 }
 
 // records reads every source's <hash>.meta record, keyed by hash.
-func (uc ReindexVault) records() map[string]entities.SourceRecord {
+func (uc Maintenance) records() map[string]entities.SourceRecord {
 	if uc.Steps == nil {
 		return nil
 	}
@@ -221,7 +232,7 @@ func (uc ReindexVault) records() map[string]entities.SourceRecord {
 
 // steps mirrors the document-step state of every source from its .meta file into the index, and the
 // TITLE with it: the title is determined in step 1 and lives in that file.
-func (uc ReindexVault) steps(ctx context.Context, res ReindexResult, records map[string]entities.SourceRecord) ReindexResult {
+func (uc Maintenance) steps(ctx context.Context, res ReindexResult, records map[string]entities.SourceRecord) ReindexResult {
 	if uc.Steps == nil || uc.Index == nil || records == nil {
 		return res
 	}
@@ -267,7 +278,7 @@ func (uc ReindexVault) steps(ctx context.Context, res ReindexResult, records map
 }
 
 // derived rebuilds the claims from their files.
-func (uc ReindexVault) derived(ctx context.Context, res ReindexResult) (ReindexResult, error) {
+func (uc Maintenance) derived(ctx context.Context, res ReindexResult) (ReindexResult, error) {
 	if uc.AtomStore == nil || uc.Atoms == nil {
 		return res, nil
 	}
@@ -358,7 +369,7 @@ func (uc ReindexVault) derived(ctx context.Context, res ReindexResult) (ReindexR
 // clusters rebuilds the association layer FROM ITS RECORDS. The record is the truth of a cluster (its
 // id and members), the row is the queryable mirror; a record that lost every member is removed, and a
 // row whose record is gone is deleted. There is no dirty/successor machinery: the layer is a cache.
-func (uc ReindexVault) clusters(ctx context.Context, res ReindexResult) (ReindexResult, error) {
+func (uc Maintenance) clusters(ctx context.Context, res ReindexResult) (ReindexResult, error) {
 	if uc.ClusterStore == nil || uc.ClusterRepo == nil {
 		return res, nil
 	}
@@ -394,7 +405,7 @@ func (uc ReindexVault) clusters(ctx context.Context, res ReindexResult) (Reindex
 			if err := uc.ClusterStore.RemoveMeta(ctx, rec.ID); err != nil && uc.Log != nil {
 				uc.Log.Warn("reindex: empty cluster record not removed", "cluster", rec.ID.String(), "err", err)
 			}
-			_ = uc.ClusterRepo.DeleteCluster(ctx, rec.ID)
+			_ = uc.ClusterRepo.DeleteCluster(ctx, rec.ID) //nolint:errcheck // a trash move is best effort; a missing file is the goal
 			res.ClustersRemoved++
 			continue
 		}
@@ -468,7 +479,7 @@ func atomsByID(atoms []entities.Atom) map[string]entities.Atom {
 }
 
 // logSources writes one event to every source a file belongs to.
-func (uc ReindexVault) logSources(ctx context.Context, sources []entities.AtomSource, level, msg string, fields map[string]any) {
+func (uc Maintenance) logSources(ctx context.Context, sources []entities.AtomSource, level, msg string, fields map[string]any) {
 	if uc.SourceLog == nil {
 		return
 	}
@@ -509,7 +520,7 @@ func cleanNavigationNodes(nodes []entities.SourceNode) bool {
 }
 
 // sources reconciles the source index with the content-addressed store.
-func (uc ReindexVault) sources(ctx context.Context, records map[string]entities.SourceRecord) (ReindexResult, error) {
+func (uc Maintenance) sources(ctx context.Context, records map[string]entities.SourceRecord) (ReindexResult, error) {
 	objs, err := uc.Store.Scan(ctx)
 	if err != nil {
 		return ReindexResult{}, err
@@ -596,7 +607,7 @@ func (uc ReindexVault) sources(ctx context.Context, records map[string]entities.
 		if uc.Trees != nil {
 			if nodes, nErr := uc.Trees.Read(ctx, o.Hash); nErr == nil && len(nodes) > 0 {
 				if cleanNavigationNodes(nodes) {
-					_ = uc.Trees.Write(ctx, o.Hash, nodes)
+					_ = uc.Trees.Write(ctx, o.Hash, nodes) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 				}
 				if stored, sErr := uc.Index.GetSourceByHash(ctx, o.Hash); sErr == nil {
 					if err := uc.Index.ReplaceSourceNodes(ctx, stored.ID, nodes); err != nil {

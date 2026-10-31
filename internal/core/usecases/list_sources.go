@@ -2,7 +2,9 @@ package usecases
 
 import (
 	"context"
+	"log/slog"
 	"sort"
+	"time"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
@@ -10,13 +12,43 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// ListSources lists indexed sources, optionally filtered by kind.
-type ListSources struct {
-	Index interfaces.IndexRepository
+// Sources is the use case of the source layer: intake, the lists and the facets, the readable
+// content, and the delete that cascades into everything derived from a source.
+type Sources struct {
+	Store        interfaces.SourceStore
+	Index        interfaces.IndexRepository
+	Atoms        interfaces.AtomRepository
+	AtomStore    interfaces.AtomStore
+	CommandStore interfaces.CommandStore
+	Tags         interfaces.SourceTagStore
+	Shelf        interfaces.ShelfCounter
+	Favicons     interfaces.FaviconStore
+	Declared     interfaces.SourceFrontmatter
+	Trees        interfaces.TreeStore
+	Convert      interfaces.HTMLConverter
+	Extractor    interfaces.Extractor
+	Gateway      interfaces.AgentGateway
+	SourceLog    interfaces.SourceLog
+	Steps        interfaces.StepTracker
+	Languages    interfaces.LanguageDetector
+	Runs         interfaces.RunRepository
+	Reset        SourceResetter
+	Clock        interfaces.Clock
+	Log          *slog.Logger
+	Model        string
+	Language     string
+	MaxBytes     int64
+	MaxClaims    int
+	MaxChars     int
+	CallTimeout  time.Duration
 }
 
-// Execute returns sources ordered by import time (newest first), narrowed by filter.
-func (uc ListSources) Execute(ctx context.Context, filter entities.SourceFilter, limit, offset int) ([]partialentities.PartialSource, error) {
+// SourceLister lists one page of sources and the filtered total. A handler holds this value; nil
+// means the feature is not wired.
+type SourceLister func(ctx context.Context, filter entities.SourceFilter, limit, offset int) ([]partialentities.PartialSource, error)
+
+// List returns one page of sources, ordered by import time (newest first), narrowed by filter.
+func (uc Sources) List(ctx context.Context, filter entities.SourceFilter, limit, offset int) ([]partialentities.PartialSource, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
@@ -34,19 +66,13 @@ func (uc ListSources) Execute(ctx context.Context, filter entities.SourceFilter,
 	return out, nil
 }
 
-// Count is how many sources the FILTERED list has in total: a page needs it to know whether it is
-// the whole list, and a windowed scroller needs it for its height.
-func (uc ListSources) Count(ctx context.Context, filter entities.SourceFilter) (int, error) {
-	return uc.Index.CountSources(ctx, filter)
-}
+// SourceCounter counts the sources a filter matches — the total behind one page. A handler holds this
+// value; nil means the list shows only what it loaded.
+type SourceCounter func(ctx context.Context, filter entities.SourceFilter) (int, error)
 
-// ListSourceFacets is the tag cloud's data: how often each human or derived source tag occurs, and
-// how many sources have a human-attached snapshot. It is a facet over the vault, not over the window
-// the list happens to have loaded.
-type ListSourceFacets struct {
-	Index interfaces.IndexRepository
-	// Shelf answers the star and queue counts. Nil (a test, a bare app) leaves them zero.
-	Shelf interfaces.ShelfCounter
+// Count returns how many sources the filter matches.
+func (uc Sources) Count(ctx context.Context, filter entities.SourceFilter) (int, error) {
+	return uc.Index.CountSources(ctx, filter)
 }
 
 // SourceFacetsResult is the facet payload.
@@ -59,8 +85,12 @@ type SourceFacetsResult struct {
 	ReadLaterInterests int
 }
 
-// Execute counts the tags, the attached snapshots and the reader's marks.
-func (uc ListSourceFacets) Execute(ctx context.Context) (SourceFacetsResult, error) {
+// SourceFacetLister returns the tag cloud and the attached count. A handler holds this value; nil
+// means there are no facets.
+type SourceFacetLister func(ctx context.Context) (SourceFacetsResult, error)
+
+// Facets returns the tag cloud and the attached count.
+func (uc Sources) Facets(ctx context.Context) (SourceFacetsResult, error) {
 	counts, err := uc.Index.SourceTagCounts(ctx)
 	if err != nil {
 		return SourceFacetsResult{}, err
@@ -94,13 +124,12 @@ func (uc ListSourceFacets) Execute(ctx context.Context) (SourceFacetsResult, err
 	return res, nil
 }
 
-// GetSource returns one source by its content hash.
-type GetSource struct {
-	Index interfaces.IndexRepository
-}
+// SourceGetter returns one source as the detail view shows it. A handler holds this value; nil means
+// the feature is not wired.
+type SourceGetter func(ctx context.Context, hash string) (partialentities.PartialSource, error)
 
-// Execute returns the source with the given SHA-256 hash.
-func (uc GetSource) Execute(ctx context.Context, hash string) (partialentities.PartialSource, error) {
+// Get returns one source.
+func (uc Sources) Get(ctx context.Context, hash string) (partialentities.PartialSource, error) {
 	if !entities.IsSHA256Hex(hash) {
 		return partialentities.PartialSource{}, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash)
 	}
@@ -116,20 +145,18 @@ func (uc GetSource) Execute(ctx context.Context, hash string) (partialentities.P
 	return out, nil
 }
 
-// SourceChildren lists the sources one source OWNS: the pages of a sitemap, or the URLs a wiki page
-// brought into the vault. It is the data behind the detail view's Sub-sources tab.
-type SourceChildren struct {
-	Index interfaces.IndexRepository
-}
-
 // SourceChildrenResult is a source's sub-sources as the wire sees them.
 type SourceChildrenResult struct {
 	Sources []partialentities.PartialSource
 	Total   int
 }
 
-// Execute returns the sub-sources of the source with this hash.
-func (uc SourceChildren) Execute(ctx context.Context, hash string) (SourceChildrenResult, error) {
+// SourceChildLister lists the sources one source owns. A handler holds this value; nil means the
+// feature is not wired.
+type SourceChildLister func(ctx context.Context, hash string) (SourceChildrenResult, error)
+
+// Children lists the sources one source owns.
+func (uc Sources) Children(ctx context.Context, hash string) (SourceChildrenResult, error) {
 	if !entities.IsSHA256Hex(hash) {
 		return SourceChildrenResult{}, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash)
 	}
@@ -148,26 +175,16 @@ func (uc SourceChildren) Execute(ctx context.Context, hash string) (SourceChildr
 	return SourceChildrenResult{Sources: out, Total: len(out)}, nil
 }
 
-// SourceHasAtoms reports whether a source has been distilled already.
-type SourceHasAtoms struct {
-	Index interfaces.IndexRepository
-}
-
-// Execute returns true when at least one atom cites the source.
-func (uc SourceHasAtoms) Execute(ctx context.Context, hash string) (bool, error) {
+// HasAtoms reports whether a source produced any claim.
+func (uc Sources) HasAtoms(ctx context.Context, hash string) (bool, error) {
 	if !entities.IsSHA256Hex(hash) {
 		return false, types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash)
 	}
 	return uc.Index.SourceHasAtoms(ctx, hash)
 }
 
-// SourcesWithoutTree lists sources whose tree was never built.
-type SourcesWithoutTree struct {
-	Index interfaces.IndexRepository
-}
-
-// Execute returns sources with tree_state "none".
-func (uc SourcesWithoutTree) Execute(ctx context.Context) ([]partialentities.PartialSource, error) {
+// WithoutTree lists the sources whose outline is missing.
+func (uc Sources) WithoutTree(ctx context.Context) ([]partialentities.PartialSource, error) {
 	srcs, err := uc.Index.SourcesWithNoTree(ctx)
 	if err != nil {
 		return nil, err
@@ -179,21 +196,8 @@ func (uc SourcesWithoutTree) Execute(ctx context.Context) ([]partialentities.Par
 	return out, nil
 }
 
-// SourcesWithoutAtoms lists sources with a built tree but no atoms yet (the
-// derived "pending distill" document status).
-type SourcesWithoutAtoms struct {
-	Index interfaces.IndexRepository
-}
-
-// Execute returns the sources with a built tree but no atoms.
-// SourcesWithOpenParts lists sources whose derivation is not finished: a book that has moved
-// through some of its parts still has parts without a claim. This is how a long document resumes
-// after a restart — the sweep needs the state, not a flag.
-type SourcesWithOpenParts struct {
-	Index interfaces.IndexRepository
-}
-
-func (uc SourcesWithOpenParts) Execute(ctx context.Context) ([]partialentities.PartialSource, error) {
+// WithOpenParts lists the sources with undistilled parts.
+func (uc Sources) WithOpenParts(ctx context.Context) ([]partialentities.PartialSource, error) {
 	srcs, err := uc.Index.SourcesWithOpenParts(ctx)
 	if err != nil {
 		return nil, err
@@ -205,13 +209,8 @@ func (uc SourcesWithOpenParts) Execute(ctx context.Context) ([]partialentities.P
 	return out, nil
 }
 
-// SourcesWithUnclustered lists sources that have claims no cluster owns yet. It is what makes a
-// failed association pass resumable: the next run picks up exactly these claims.
-type SourcesWithUnclustered struct {
-	Index interfaces.IndexRepository
-}
-
-func (uc SourcesWithUnclustered) Execute(ctx context.Context) ([]partialentities.PartialSource, error) {
+// WithUnclustered lists the sources with unclustered claims.
+func (uc Sources) WithUnclustered(ctx context.Context) ([]partialentities.PartialSource, error) {
 	srcs, err := uc.Index.SourcesWithUnclustered(ctx)
 	if err != nil {
 		return nil, err
@@ -223,7 +222,8 @@ func (uc SourcesWithUnclustered) Execute(ctx context.Context) ([]partialentities
 	return out, nil
 }
 
-func (uc SourcesWithoutAtoms) Execute(ctx context.Context) ([]partialentities.PartialSource, error) {
+// WithoutAtoms lists the sources that produced no claim.
+func (uc Sources) WithoutAtoms(ctx context.Context) ([]partialentities.PartialSource, error) {
 	srcs, err := uc.Index.SourcesWithoutAtoms(ctx)
 	if err != nil {
 		return nil, err

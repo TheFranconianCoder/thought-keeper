@@ -1,21 +1,15 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/payloads"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
 )
 
-// ReindexService rebuilds the source index from the store.
-type ReindexService interface {
-	Execute(ctx context.Context) (usecases.ReindexResult, error)
-}
-
 // ReindexHandler serves POST /api/v1/reindex.
 type ReindexHandler struct {
-	Reindex ReindexService
+	Reindex usecases.ReindexService
 	Mark    MaintenanceMarker
 }
 
@@ -24,7 +18,7 @@ func (h ReindexHandler) Post(w http.ResponseWriter, r *http.Request) {
 	if h.Mark != nil {
 		defer h.Mark.MarkMaintenance("reindex", "")()
 	}
-	res, err := h.Reindex.Execute(r.Context())
+	res, err := h.Reindex(r.Context())
 	if err != nil {
 		payloads.WriteError(w, err)
 		return

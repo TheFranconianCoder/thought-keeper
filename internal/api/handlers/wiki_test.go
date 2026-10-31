@@ -30,7 +30,7 @@ func TestWikiSaveSchedulesCleanupInsteadOfDeleting(t *testing.T) {
 	}}
 	var gotPage, gotStale string
 	h := WikiHandler{
-		Save: saver,
+		Save: saver.Execute,
 		OnCleanup: func(pageID, staleHash string) {
 			gotPage, gotStale = pageID, staleHash
 		},
@@ -60,7 +60,7 @@ func TestWikiSaveAlwaysSchedulesTheConvergencePass(t *testing.T) {
 	}}
 	var gotPage, gotStale string
 	h := WikiHandler{
-		Save: saver,
+		Save: saver.Execute,
 		OnCleanup: func(pageID, staleHash string) {
 			gotPage, gotStale = pageID, staleHash
 		},

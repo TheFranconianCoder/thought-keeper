@@ -18,11 +18,12 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
-// QueryKnowledge answers a question from the claims and source overviews, with citations.
-type QueryKnowledge struct {
+// Query is the use case of questions: the lexical search behind the search box, and the agent that
+// answers a question over the claims, the wiki and the sources.
+type Query struct {
 	Atoms    interfaces.AtomRepository
 	Clusters interfaces.ClusterRepository
-	Search   interfaces.SearchRepository
+	Lexical  interfaces.SearchRepository
 	// Index answers the recency window (`list_sources`) and the source-tag fallback; Store reads a
 	// source's overview sidecar (`read_source_summary`). Both are optional so a unit test can run
 	// without a vault; the tools then report that the source side is not configured.
@@ -60,14 +61,13 @@ const (
 	sourceClaimListLimit = 30
 )
 
-// Execute answers a vault-wide question.
-func (uc QueryKnowledge) Execute(ctx context.Context, runID ulid.ULID, question string) (QueryResult, error) {
-	return uc.ExecuteScoped(ctx, runID, question, "")
+// Ask answers one question over the vault.
+func (uc Query) Ask(ctx context.Context, runID ulid.ULID, question string) (QueryResult, error) {
+	return uc.AskScoped(ctx, runID, question, "")
 }
 
-// ExecuteScoped answers a question, optionally from ONE source only. A non-empty source is a
-// boundary, not a hint: every tool is restricted to that source and its claims.
-func (uc QueryKnowledge) ExecuteScoped(ctx context.Context, runID ulid.ULID, question, sourceHash string) (QueryResult, error) {
+// AskScoped answers one question, restricted to a single source when scope is set.
+func (uc Query) AskScoped(ctx context.Context, runID ulid.ULID, question, sourceHash string) (QueryResult, error) {
 	scope := strings.TrimSpace(sourceHash)
 	if scope != "" && !entities.IsSHA256Hex(scope) {
 		return QueryResult{}, fmt.Errorf("query: invalid source hash %q", scope)
@@ -98,7 +98,10 @@ func (uc QueryKnowledge) ExecuteScoped(ctx context.Context, runID ulid.ULID, que
 				for _, t := range topics {
 					m = append(m, map[string]any{"topic": t.Topic, "claims": t.Count})
 				}
-				out, _ := json.Marshal(m)
+				out, marshalErr := json.Marshal(m)
+				if marshalErr != nil {
+					return "", marshalErr
+				}
 				return string(out), nil
 			},
 		},
@@ -140,7 +143,10 @@ func (uc QueryKnowledge) ExecuteScoped(ctx context.Context, runID ulid.ULID, que
 					}
 					m = append(m, hit)
 				}
-				out, _ := json.Marshal(m)
+				out, marshalErr := json.Marshal(m)
+				if marshalErr != nil {
+					return "", marshalErr
+				}
 				return string(out), nil
 			},
 		},
@@ -179,7 +185,10 @@ func (uc QueryKnowledge) ExecuteScoped(ctx context.Context, runID ulid.ULID, que
 					}
 					res["cluster_peers"] = peers
 				}
-				out, _ := json.Marshal(res)
+				out, marshalErr := json.Marshal(res) //nolint:errcheck // a malformed value falls back to the zero value
+				if marshalErr != nil {
+					return "", marshalErr
+				}
 				return string(out), nil
 			},
 		},
@@ -196,7 +205,8 @@ func (uc QueryKnowledge) ExecuteScoped(ctx context.Context, runID ulid.ULID, que
 					Topic  string `json:"topic"`
 					Source string `json:"source"`
 				}
-				_ = json.Unmarshal(args, &in)
+				// A malformed argument leaves the zero value: the tool then reports what it can find.
+				_ = json.Unmarshal(args, &in) //nolint:errcheck // see above
 				// A scoped question may list this source's claims, whatever the model asked for.
 				if scoped {
 					in.Source = scope
@@ -227,7 +237,10 @@ func (uc QueryKnowledge) ExecuteScoped(ctx context.Context, runID ulid.ULID, que
 						"type": string(a.Type), "status": string(a.Status),
 					})
 				}
-				out, _ := json.Marshal(m)
+				out, marshalErr := json.Marshal(m)
+				if marshalErr != nil {
+					return "", marshalErr
+				}
 				return string(out), nil
 			},
 		},
@@ -409,7 +422,7 @@ func (uc QueryKnowledge) ExecuteScoped(ctx context.Context, runID ulid.ULID, que
 	}
 
 	var languages []string
-	if finder, ok := uc.Search.(interface {
+	if finder, ok := uc.Lexical.(interface {
 		Languages(context.Context) ([]string, error)
 	}); ok {
 		if found, err := finder.Languages(ctx); err == nil {
@@ -439,10 +452,10 @@ func (uc QueryKnowledge) ExecuteScoped(ctx context.Context, runID ulid.ULID, que
 		PromptTokens: res.Usage.PromptTokens, CompletionTokens: res.Usage.CompletionTokens,
 		TotalTokens: res.Usage.TotalTokens, Iterations: res.Iterations, EndedAt: uc.Clock.Now(),
 	}
-	if runErr != nil {
+	if runErr != nil { //nolint:errcheck // the run row is an audit trail; the work already ended
 		run.Status = entities.RunFailed
 		run.Error = runErr.Error()
-		_ = uc.Runs.FinishRun(ctx, run)
+		_ = uc.Runs.FinishRun(ctx, run) //nolint:errcheck // the run row is an audit trail; the work already ended
 		return QueryResult{Iterations: res.Iterations, TotalTokens: res.Usage.TotalTokens}, runErr
 	}
 	if res.Truncated && uc.Log != nil {
@@ -452,10 +465,10 @@ func (uc QueryKnowledge) ExecuteScoped(ctx context.Context, runID ulid.ULID, que
 	}
 	run.Status = entities.RunSucceeded
 	// The saved file must already contain ordinary Markdown links; the [[claim:...]] and
-	// [[source:...]] syntax is only the model's intermediate citation form.
+	// [[source:...]] syntax is only the model's intermediate citation form. //nolint:errcheck // the run row is an audit trail; the work already ended
 	answer := coremarkdown.NormalizeAskAnswer(res.Content)
 	run.Answer = answer
-	_ = uc.Runs.FinishRun(ctx, run)
+	_ = uc.Runs.FinishRun(ctx, run) //nolint:errcheck // the run row is an audit trail; the work already ended
 	// EVERY successful Ask is saved; there is no separate "file" action any more. The run id is the
 	// record's id, so the saved answer stays traceable to the run that produced it.
 	if uc.Asks != nil {
@@ -472,24 +485,21 @@ func (uc QueryKnowledge) ExecuteScoped(ctx context.Context, runID ulid.ULID, que
 
 // searchExcerpts is how many of a search's hits carry their text, and how much of it: enough to
 // answer from, small enough that one tool result stays a tool result (the transcript is capped too).
-const (
-	searchExcerpts     = 3
-	searchExcerptChars = 1200
-)
+const ()
 
 // searchForScope searches claims, restricted to the source when one is selected. The index's
 // scoped search is preferred; the fallback filters global hits by provenance, so even a repository
 // without the scoped method cannot leak another source's claims.
-func (uc QueryKnowledge) searchForScope(ctx context.Context, query, scope string, limit int) ([]interfaces.SearchHit, error) {
+func (uc Query) searchForScope(ctx context.Context, query, scope string, limit int) ([]interfaces.SearchHit, error) {
 	if scope == "" {
-		return uc.Search.Search(ctx, query, "atoms", limit)
+		return uc.Lexical.Search(ctx, query, "atoms", limit)
 	}
-	if scoped, ok := uc.Search.(interface {
+	if scoped, ok := uc.Lexical.(interface {
 		SearchInSource(context.Context, string, string, int) ([]interfaces.SearchHit, error)
 	}); ok {
 		return scoped.SearchInSource(ctx, query, scope, limit)
 	}
-	hits, err := uc.Search.Search(ctx, query, "atoms", limit)
+	hits, err := uc.Lexical.Search(ctx, query, "atoms", limit)
 	if err != nil {
 		return nil, err
 	}
@@ -525,7 +535,7 @@ func atomFromSource(a entities.Atom, hash string) bool {
 
 // clusterPeers returns the other claims of the claim's clusters, bounded: the answer may use them as
 // context, and the ids let the model read one in full if it needs the body.
-func (uc QueryKnowledge) clusterPeers(ctx context.Context, id ulid.ULID) []ulid.ULID {
+func (uc Query) clusterPeers(ctx context.Context, id ulid.ULID) []ulid.ULID {
 	if uc.Clusters == nil {
 		return nil
 	}
@@ -607,12 +617,4 @@ func parseID(args json.RawMessage) (ulid.ULID, error) {
 		return ulid.ULID{}, fmt.Errorf("invalid id %q", in.ID)
 	}
 	return id, nil
-}
-
-func idsOf(ids []ulid.ULID) []string {
-	out := make([]string, 0, len(ids))
-	for _, id := range ids {
-		out = append(out, id.String())
-	}
-	return out
 }

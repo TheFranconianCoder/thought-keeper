@@ -31,7 +31,7 @@ func TestAskChunkRetriesAnAnswerWithoutJSON(t *testing.T) {
 		"I kept every name as it is.",
 		`{"canonical":[],"mapping":{"cache-invalidation":"caching"}}`,
 	}}
-	uc := CurateVocabulary{Gateway: gw, Model: "test"}
+	uc := Vocabulary{Gateway: gw, Model: "test"}
 	got := uc.askChunk(context.Background(), []nameCount{{name: "cache-invalidation", uses: 2}})
 	if got.err != nil {
 		t.Fatalf("askChunk: %v", got.err)
@@ -47,7 +47,7 @@ func TestAskChunkRetriesAnAnswerWithoutJSON(t *testing.T) {
 // TestChunkByFamilyNeverExceedsTheLimit: a family larger than one prompt is split, while different
 // families are still kept together where they fit.
 func TestChunkByFamilyNeverExceedsTheLimit(t *testing.T) {
-	var chosen []nameCount
+	chosen := make([]nameCount, 0, 2500)
 	for i := range 2500 {
 		chosen = append(chosen, nameCount{name: fmt.Sprintf("same-%d", i), uses: 1, fam: "same"})
 	}

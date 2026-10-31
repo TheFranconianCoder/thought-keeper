@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -15,24 +14,6 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/agents"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
-
-// TagSource derives a source's AUTO tags from its claims: the coarse shelves a reader files and filters
-// the Sources list by. It is the source-side twin of TagWikiPage: the agent proposes, the app writes,
-// and the human's own tags stay untouched and authoritative.
-type TagSource struct {
-	Index   interfaces.IndexRepository
-	Atoms   interfaces.AtomRepository
-	Tags    interfaces.SourceTagStore
-	Gateway interfaces.AgentGateway
-	Model   string
-	// Vocab supplies the canonical source-tag names and the aliases a curation absorbed.
-	Vocab     interfaces.VocabularyStore
-	Runs      interfaces.RunRepository
-	SourceLog interfaces.SourceLog
-	Clock     interfaces.Clock
-	Log       *slog.Logger
-	Max       int
-}
 
 // TagSourceResult reports what the derivation produced.
 type TagSourceResult struct {
@@ -46,8 +27,8 @@ type TagSourceResult struct {
 // ceiling a wiki page's tag sample uses.
 const maxSourceTagSample = 6000
 
-// Execute derives and stores one source's auto tags and finishes its run row.
-func (uc TagSource) Execute(ctx context.Context, runID ulid.ULID, hash string) (TagSourceResult, error) {
+// TagSource derives the automatic tags of one source.
+func (uc Vocabulary) TagSource(ctx context.Context, runID ulid.ULID, hash string) (TagSourceResult, error) {
 	res := TagSourceResult{Hash: hash}
 	run := entities.Run{
 		ID: runID, Op: entities.RunTag, Model: uc.Model, TargetID: hash,
@@ -164,9 +145,9 @@ func sourceTagSample(atoms []entities.Atom) string {
 
 // normalizeSourceAutoTags cleans a model answer: a valid source tag, deduplicated, mapped through what
 // the vocabulary already merged away, and bounded.
-func normalizeSourceAutoTags(raw []string, max int, absorbed map[string]string) []string {
-	if max <= 0 {
-		max = 6
+func normalizeSourceAutoTags(raw []string, limit int, absorbed map[string]string) []string {
+	if limit <= 0 {
+		limit = 6
 	}
 	out := make([]string, 0, len(raw))
 	seen := map[string]bool{}
@@ -183,14 +164,14 @@ func normalizeSourceAutoTags(raw []string, max int, absorbed map[string]string) 
 		}
 		seen[tag] = true
 		out = append(out, tag)
-		if len(out) >= max {
+		if len(out) >= limit {
 			break
 		}
 	}
 	return out
 }
 
-func (uc TagSource) fail(ctx context.Context, run entities.Run, msg string) error {
+func (uc Vocabulary) fail(ctx context.Context, run entities.Run, msg string) error {
 	run.Status = entities.RunFailed
 	run.Error = msg
 	run.EndedAt = uc.Clock.Now()
@@ -206,7 +187,7 @@ func (uc TagSource) fail(ctx context.Context, run entities.Run, msg string) erro
 	return errors.New(msg)
 }
 
-func (uc TagSource) log(ctx context.Context, hash string, runID ulid.ULID, level, msg string, fields map[string]any) {
+func (uc Vocabulary) log(ctx context.Context, hash string, runID ulid.ULID, level, msg string, fields map[string]any) {
 	if uc.SourceLog == nil {
 		return
 	}

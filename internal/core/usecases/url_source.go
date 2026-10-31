@@ -62,22 +62,6 @@ type faviconMeta struct {
 // a bookmark instead of being indexed.
 const defaultMinTextChars = 400
 
-// QueueURLs claims a wiki page's NEW links. Nothing is fetched here: saving a page must stay a local
-// write, so each new link becomes a source row with a record and a pending capture light, and the
-// fetch happens in the background (the app's URL queue). That has two consequences, and both are the
-// point:
-//
-//   - the link is visible in Sources from the moment the page is saved: pending, then green when the
-//     page arrives, or red with the reason when it does not;
-//   - a URL that already has a source is only ASSOCIATED, never fetched again — the row it already
-//     owns is the answer, whatever state it is in.
-type QueueURLs struct {
-	Index interfaces.IndexRepository
-	Steps interfaces.StepTracker
-	Clock interfaces.Clock
-	Log   *slog.Logger
-}
-
 // urlOwnership is who controls a dependent URL source. A wiki page and a sitemap are the two
 // owners: deleting the owner removes the URLs it brought into the vault.
 type urlOwnership struct {
@@ -86,25 +70,24 @@ type urlOwnership struct {
 	ParentHash string
 }
 
-// Execute records every URL that has no source yet and returns exactly those: they are the links the
-// caller has to fetch. URLs a source already owns are left alone.
-func (uc QueueURLs) Execute(ctx context.Context, pageID string, urls []string) ([]string, error) {
+// Queue records the links one owner declared and returns the ones no source knows yet.
+func (uc URLs) Queue(ctx context.Context, pageID string, urls []string) ([]string, error) {
 	return uc.queue(ctx, urlOwnership{Origin: entities.WikiLinkOrigin, WikiPage: pageID}, urls)
 }
 
-// ExecuteSitemap claims the pages a sitemap declared. Their owner is the sitemap source itself, so
+// QueueSitemap claims the pages a sitemap declared. Their owner is the sitemap source itself, so
 // removing the sitemap removes every page that exists only because of it.
-func (uc QueueURLs) ExecuteSitemap(ctx context.Context, parentHash string, urls []string) ([]string, error) {
+func (uc URLs) QueueSitemap(ctx context.Context, parentHash string, urls []string) ([]string, error) {
 	return uc.queue(ctx, urlOwnership{Origin: entities.SitemapOrigin, ParentHash: parentHash}, urls)
 }
 
-// ExecuteFeed claims the pages a feed declared. The feed owns them the same way a sitemap does; the
+// QueueFeed claims the pages a feed declared. The feed owns them the same way a sitemap does; the
 // difference is the REFRESH, which keeps a page that disappears from a feed.
-func (uc QueueURLs) ExecuteFeed(ctx context.Context, parentHash string, urls []string) ([]string, error) {
+func (uc URLs) QueueFeed(ctx context.Context, parentHash string, urls []string) ([]string, error) {
 	return uc.queue(ctx, urlOwnership{Origin: entities.RSSOrigin, ParentHash: parentHash}, urls)
 }
 
-func (uc QueueURLs) queue(ctx context.Context, owner urlOwnership, urls []string) ([]string, error) {
+func (uc URLs) queue(ctx context.Context, owner urlOwnership, urls []string) ([]string, error) {
 	// One list query for the whole page: the 150 links of one save must not each walk the URL table.
 	// The key ignores a trailing slash, so "/article" and "/article/" are one source — the stored
 	// address stays the URL as it was given first.
@@ -157,50 +140,38 @@ func claimLink(ctx context.Context, index interfaces.IndexRepository, steps inte
 	if steps == nil {
 		return nil
 	}
-	_ = steps.SetIdentity(hash, entities.SourceIdentity{
+	_ = steps.SetIdentity(hash, entities.SourceIdentity{ //nolint:errcheck // the error is deliberately not actionable here
 		Kind: entities.SourceKindURL, URL: rawURL, OriginalName: rawURL,
 		Origin: owner.Origin, WikiPage: owner.WikiPage, ParentHash: owner.ParentHash,
 	})
-	_ = steps.Record(ctx, hash, entities.StepCapture, entities.StepStatus{
+	_ = steps.Record(ctx, hash, entities.StepCapture, entities.StepStatus{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		State: entities.StepPending, At: now, Detail: "queued: the link is fetched in the background",
 	})
 	for _, step := range []entities.Step{entities.StepOutline, entities.StepDistill} {
-		_ = steps.Record(ctx, hash, step, entities.StepStatus{
+		_ = steps.Record(ctx, hash, step, entities.StepStatus{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			State: entities.StepSkipped, At: now, Detail: "the link has not been fetched yet",
 		})
 	}
 	return nil
 }
 
-// MarkURLFailed records a link whose fetch did not happen. A dead link stays LISTED — it is part of
-// what the page claims — with a red capture light and the reason in its record, its metadata and its
-// own log, instead of disappearing into the process log the reader never opens.
-type MarkURLFailed struct {
-	Index     interfaces.IndexRepository
-	Steps     interfaces.StepTracker
-	SourceLog interfaces.SourceLog
-	Clock     interfaces.Clock
-	Log       *slog.Logger
+// MarkFailed records that a link could not be fetched.
+func (uc URLs) MarkFailed(ctx context.Context, rawURL, pageID string, cause error) (string, error) {
+	return uc.MarkFailedOwned(ctx, rawURL, urlOwnership{Origin: entities.WikiLinkOrigin, WikiPage: pageID}, cause)
 }
 
-// Execute marks the URL's source failed and returns its hash.
-func (uc MarkURLFailed) Execute(ctx context.Context, rawURL, pageID string, cause error) (string, error) {
-	return uc.ExecuteOwned(ctx, rawURL, urlOwnership{Origin: entities.WikiLinkOrigin, WikiPage: pageID}, cause)
+// MarkFailedSitemap records a failure for a page that a sitemap owns.
+func (uc URLs) MarkFailedSitemap(ctx context.Context, rawURL, parentHash string, cause error) (string, error) {
+	return uc.MarkFailedOwned(ctx, rawURL, urlOwnership{Origin: entities.SitemapOrigin, ParentHash: parentHash}, cause)
 }
 
-// ExecuteSitemap records a failure for a page that a sitemap owns.
-func (uc MarkURLFailed) ExecuteSitemap(ctx context.Context, rawURL, parentHash string, cause error) (string, error) {
-	return uc.ExecuteOwned(ctx, rawURL, urlOwnership{Origin: entities.SitemapOrigin, ParentHash: parentHash}, cause)
+// MarkFailedFeed records a failure for a page that a feed owns.
+func (uc URLs) MarkFailedFeed(ctx context.Context, rawURL, parentHash string, cause error) (string, error) {
+	return uc.MarkFailedOwned(ctx, rawURL, urlOwnership{Origin: entities.RSSOrigin, ParentHash: parentHash}, cause)
 }
 
-// ExecuteFeed records a failure for a page that a feed owns.
-func (uc MarkURLFailed) ExecuteFeed(ctx context.Context, rawURL, parentHash string, cause error) (string, error) {
-	return uc.ExecuteOwned(ctx, rawURL, urlOwnership{Origin: entities.RSSOrigin, ParentHash: parentHash}, cause)
-}
-
-// ExecuteOwned records a failure for a URL with an explicit owner (a sitemap uses this; a wiki page
-// uses Execute above).
-func (uc MarkURLFailed) ExecuteOwned(ctx context.Context, rawURL string, owner urlOwnership, cause error) (string, error) {
+// MarkFailedOwned records a failure for a URL with an explicit owner.
+func (uc URLs) MarkFailedOwned(ctx context.Context, rawURL string, owner urlOwnership, cause error) (string, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
 		return "", types.New("invalid_url", "url is required", types.ErrInvalidURL)
@@ -219,10 +190,10 @@ func (uc MarkURLFailed) ExecuteOwned(ctx context.Context, rawURL string, owner u
 	}
 	now := uc.Clock.Now()
 	reason := failureText(cause)
-	_ = uc.Index.SetSourceURLState(ctx, hash, 0, now)
-	_ = uc.Index.SetSourceMeta(ctx, hash, metaWithError(src.Meta, rawURL, reason))
+	_ = uc.Index.SetSourceURLState(ctx, hash, 0, now)                              //nolint:errcheck // the index and the step records are a light; the vault is the truth
+	_ = uc.Index.SetSourceMeta(ctx, hash, metaWithError(src.Meta, rawURL, reason)) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	if uc.Steps != nil {
-		_ = uc.Steps.Record(ctx, hash, entities.StepCapture, entities.StepStatus{
+		_ = uc.Steps.Record(ctx, hash, entities.StepCapture, entities.StepStatus{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			State: entities.StepFailed, At: now, Detail: "the link could not be fetched", Error: reason,
 		})
 	}
@@ -268,7 +239,7 @@ func metaWithError(raw, url, msg string) string {
 func metaWith(raw string, set map[string]any) string {
 	m := map[string]any{}
 	if strings.TrimSpace(raw) != "" {
-		_ = json.Unmarshal([]byte(raw), &m)
+		_ = json.Unmarshal([]byte(raw), &m) //nolint:errcheck // a malformed value falls back to the zero value
 	}
 	if m == nil {
 		m = map[string]any{}
@@ -327,42 +298,47 @@ func metaWithIdentity(raw string, src entities.Source) string {
 	return metaWith(raw, set)
 }
 
-// AddURL fetches a URL and stores it as an indexed Markdown snapshot, or — when the
-// page cannot be read (video, paywall, JS app) — as a **bookmark**: metadata only,
-// never distilled. Both live in the same content-addressed store, so the collection
-// stays one.
-type AddURL struct {
-	Fetch    interfaces.Fetcher
-	Convert  interfaces.HTMLConverter
-	Store    interfaces.SourceStore
-	Index    interfaces.IndexRepository
-	Favicons interfaces.FaviconStore
-	// MinTextChars overrides defaultMinTextChars.
-	MinTextChars int
+// URLs is the use case of the URL sources: adding a link (page, sitemap or feed), refreshing what
+// the cadence finds due, and recording a fetch that failed.
+type URLs struct {
+	Fetch        interfaces.Fetcher
+	Convert      interfaces.HTMLConverter
+	Store        interfaces.SourceStore
+	Index        interfaces.IndexRepository
+	Atoms        interfaces.AtomRepository
+	AtomStore    interfaces.AtomStore
+	Favicons     interfaces.FaviconStore
+	Steps        interfaces.StepTracker
+	Languages    interfaces.LanguageDetector
+	SourceLog    interfaces.SourceLog
+	Delete       SourceOwnedDeleter
+	Reset        SourceResetter
 	Clock        interfaces.Clock
 	Log          *slog.Logger
-	// Steps records the CAPTURE step (and, for a bookmark, that outline and distill do not apply).
-	Steps interfaces.StepTracker
-	// SourceLog receives the one line that says a sitemap expanded to N pages.
-	SourceLog interfaces.SourceLog
-	// Languages recognises the page's language. Nil means no detection.
-	Languages interfaces.LanguageDetector
+	MinAge       time.Duration
+	FeedMinAge   time.Duration
+	MinTextChars int
 }
 
-// Execute fetches and stores one URL that a wiki page, sitemap or feed claimed. It never takes a
-// source away from its owner. force=true stores a bookmark regardless of how much text the page has.
-func (uc AddURL) Execute(ctx context.Context, rawURL string, force bool) (partialentities.PartialSource, error) {
+// URLAdder adds one URL source. A handler holds this value; nil means the feature is not wired.
+type URLAdder func(ctx context.Context, rawURL string, force bool) (partialentities.PartialSource, error)
+
+// Add fetches and stores one URL that a wiki page, sitemap or feed claimed. It never takes a source
+// away from its owner. force=true stores a bookmark regardless of how much text the page has.
+func (uc URLs) Add(ctx context.Context, rawURL string, force bool) (partialentities.PartialSource, error) {
 	return uc.execute(ctx, rawURL, force, false)
 }
 
-// ExecuteManual fetches a URL the HUMAN added by hand. A manual addition WINS: if the URL was already
-// in the vault as a sub-source of a wiki page, a sitemap or a feed, it is released from that owner, so
-// deleting the page or the sitemap no longer deletes it. The source itself (snapshot, claims) stays.
-func (uc AddURL) ExecuteManual(ctx context.Context, rawURL string, force bool) (partialentities.PartialSource, error) {
+// URLManualAdder adds a URL source the human entered by hand. A handler holds this value; nil means
+// the feature is not wired.
+type URLManualAdder func(ctx context.Context, rawURL string, force bool) (partialentities.PartialSource, error)
+
+// AddManual adds a URL the human entered.
+func (uc URLs) AddManual(ctx context.Context, rawURL string, force bool) (partialentities.PartialSource, error) {
 	return uc.execute(ctx, rawURL, force, true)
 }
 
-func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool) (partialentities.PartialSource, error) {
+func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool) (partialentities.PartialSource, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
 		return partialentities.PartialSource{}, types.New("invalid_url", "url is required", types.ErrInvalidURL)
@@ -447,11 +423,11 @@ func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool)
 			reason = "the page carried less text"
 		}
 		if reason != "" {
-			_ = uc.Index.SetSourceURLState(ctx, existing.Hash, page.Status, now)
-			_ = uc.Index.SetSourceMeta(ctx, existing.Hash, metaWith(existing.Meta, map[string]any{
+			_ = uc.Index.SetSourceURLState(ctx, existing.Hash, page.Status, now)                   //nolint:errcheck // the index and the step records are a light; the vault is the truth
+			_ = uc.Index.SetSourceMeta(ctx, existing.Hash, metaWith(existing.Meta, map[string]any{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 				"wall": nil, "last_error": nil,
 			}))
-			appendSourceLog(ctx, uc.SourceLog, uc.Clock, existing.Hash, "capture", "info",
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, existing.Hash, "info",
 				"the page was tried — the feed copy is kept", map[string]any{
 					"chars": bodyChars, "copy_chars": copyChars, "reason": reason,
 				})
@@ -516,19 +492,19 @@ func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool)
 		if err := uc.Index.UpsertSource(ctx, existing); err != nil {
 			return partialentities.PartialSource{}, err
 		}
-		_ = uc.Index.SetSourceTitle(ctx, existing.Hash, title)
-		_ = uc.Index.SetSourceMeta(ctx, existing.Hash, existing.Meta)
-		_ = uc.Index.SetSourceURLState(ctx, existing.Hash, page.Status, now)
+		_ = uc.Index.SetSourceTitle(ctx, existing.Hash, title)               //nolint:errcheck // the index and the step records are a light; the vault is the truth
+		_ = uc.Index.SetSourceMeta(ctx, existing.Hash, existing.Meta)        //nolint:errcheck // the index and the step records are a light; the vault is the truth
+		_ = uc.Index.SetSourceURLState(ctx, existing.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		if language != "" {
-			_ = uc.Index.SetSourceLanguage(ctx, existing.Hash, language)
+			_ = uc.Index.SetSourceLanguage(ctx, existing.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if uc.Steps != nil {
-				_ = uc.Steps.SetLanguage(existing.Hash, language)
+				_ = uc.Steps.SetLanguage(existing.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			}
 		}
 		recordStep(ctx, uc.Steps, uc.Clock, existing.Hash, entities.StepCapture, entities.StepOK,
 			fmt.Sprintf("HTTP %d · refetched", page.Status), nil)
 		if uc.Steps != nil {
-			_ = uc.Steps.SetIdentity(existing.Hash, entities.SourceIdentity{
+			_ = uc.Steps.SetIdentity(existing.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 				Kind: entities.SourceKindURL, URL: rawURL, Bookmark: bookmark, Language: language,
 				OriginalName: rawURL, ContentHash: contentHash, FaviconHash: faviconHash(favicon),
 				FaviconExt: faviconExt(favicon), Origin: existing.Origin, WikiPage: existing.WikiPage,
@@ -576,7 +552,7 @@ func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool)
 		if uc.Steps != nil {
 			// The queued row carried two skipped lights ("not fetched yet"). Reset keeps the capture
 			// record and clears them, so the pipeline derives the page that has just arrived.
-			_ = uc.Steps.Reset(src.Hash)
+			_ = uc.Steps.Reset(src.Hash) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		}
 	}
 	if known {
@@ -589,9 +565,9 @@ func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool)
 		return partialentities.PartialSource{}, err
 	}
 	if language != "" {
-		_ = uc.Index.SetSourceLanguage(ctx, src.Hash, language)
+		_ = uc.Index.SetSourceLanguage(ctx, src.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		if uc.Steps != nil {
-			_ = uc.Steps.SetLanguage(src.Hash, language)
+			_ = uc.Steps.SetLanguage(src.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		}
 	}
 	if err := uc.Index.SetSourceURLState(ctx, src.Hash, page.Status, now); err != nil {
@@ -600,7 +576,7 @@ func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool)
 	if bookmark {
 		// One outline node gives the bookmark a title and excerpt on its own page; the search
 		// palette finds it by its title, URL or tags. The sweep keeps ignoring it (sources.bookmark = 1).
-		_ = uc.Index.ReplaceSourceNodes(ctx, src.ID, []entities.SourceNode{{
+		_ = uc.Index.ReplaceSourceNodes(ctx, src.ID, []entities.SourceNode{{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			NodeID: "0", Depth: 0, Ord: 0, Title: title, Summary: conv.Excerpt,
 		}})
 	}
@@ -622,7 +598,7 @@ func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool)
 	// What the source IS therefore lives in its record: without it a reindex would call this source
 	// Markdown and lose the address it came from.
 	if uc.Steps != nil {
-		_ = uc.Steps.SetIdentity(src.Hash, entities.SourceIdentity{
+		_ = uc.Steps.SetIdentity(src.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			Kind: entities.SourceKindURL, URL: rawURL, Bookmark: bookmark, Language: language,
 			OriginalName: rawURL, ContentHash: contentHash, FaviconHash: faviconHash(favicon),
 			FaviconExt: faviconExt(favicon), Origin: src.Origin, WikiPage: src.WikiPage,
@@ -643,7 +619,7 @@ func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool)
 //
 // A sitemap is not a bookmark: it is the parent of the pages it lists. It is not distilled either
 // (its body is a URL list), so outline and distill are recorded as skipped with that reason.
-func (uc AddURL) storeSitemap(ctx context.Context, rawURL string, page interfaces.FetchedPage, entries []string) (partialentities.PartialSource, error) {
+func (uc URLs) storeSitemap(ctx context.Context, rawURL string, page interfaces.FetchedPage, entries []string) (partialentities.PartialSource, error) {
 	now := uc.Clock.Now()
 	title := sitemapTitle(rawURL)
 	snapshot := renderSitemapSnapshot(rawURL, title, page.Status, now, entries)
@@ -675,7 +651,7 @@ func (uc AddURL) storeSitemap(ctx context.Context, rawURL string, page interface
 			src.Ext, src.Path, src.Bytes = moved.Ext, moved.Path, moved.Bytes
 		}
 		if uc.Steps != nil {
-			_ = uc.Steps.Reset(src.Hash)
+			_ = uc.Steps.Reset(src.Hash) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		}
 	}
 	if known {
@@ -685,13 +661,13 @@ func (uc AddURL) storeSitemap(ctx context.Context, rawURL string, page interface
 	} else if err := uc.Index.UpsertSource(ctx, src); err != nil {
 		return partialentities.PartialSource{}, err
 	}
-	_ = uc.Index.SetSourceURLState(ctx, src.Hash, page.Status, now)
+	_ = uc.Index.SetSourceURLState(ctx, src.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepCapture, entities.StepOK,
 		fmt.Sprintf("HTTP %d · sitemap · %d URLs", page.Status, len(entries)), nil)
 	recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepOutline, entities.StepSkipped, "sitemap", nil)
 	recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepDistill, entities.StepSkipped, "sitemap", nil)
 	if uc.Steps != nil {
-		_ = uc.Steps.SetIdentity(src.Hash, entities.SourceIdentity{
+		_ = uc.Steps.SetIdentity(src.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			Kind: entities.SourceKindURL, URL: rawURL, OriginalName: rawURL,
 			Origin: src.Origin, WikiPage: src.WikiPage, ParentHash: src.ParentHash,
 			Sitemap: true, ContentHash: contentHash,
@@ -717,7 +693,7 @@ func (uc AddURL) storeSitemap(ctx context.Context, rawURL string, page interface
 //
 // A feed is not a page and not a bookmark: it is the parent of the pages it announces. It is not
 // distilled either (its body is an item list), so outline and distill are recorded as skipped.
-func (uc AddURL) storeFeed(ctx context.Context, rawURL string, page interfaces.FetchedPage, doc feedDocument) (partialentities.PartialSource, error) {
+func (uc URLs) storeFeed(ctx context.Context, rawURL string, page interfaces.FetchedPage, doc feedDocument) (partialentities.PartialSource, error) {
 	now := uc.Clock.Now()
 	title := feedTitle(rawURL, doc.Title)
 	snapshot := renderFeedSnapshot(rawURL, title, page.Status, now, doc.Items)
@@ -749,7 +725,7 @@ func (uc AddURL) storeFeed(ctx context.Context, rawURL string, page interfaces.F
 			src.Ext, src.Path, src.Bytes = moved.Ext, moved.Path, moved.Bytes
 		}
 		if uc.Steps != nil {
-			_ = uc.Steps.Reset(src.Hash)
+			_ = uc.Steps.Reset(src.Hash) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		}
 	}
 	if known {
@@ -759,19 +735,19 @@ func (uc AddURL) storeFeed(ctx context.Context, rawURL string, page interfaces.F
 	} else if err := uc.Index.UpsertSource(ctx, src); err != nil {
 		return partialentities.PartialSource{}, err
 	}
-	_ = uc.Index.SetSourceURLState(ctx, src.Hash, page.Status, now)
+	_ = uc.Index.SetSourceURLState(ctx, src.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepCapture, entities.StepOK,
 		fmt.Sprintf("HTTP %d · feed · %d items", page.Status, len(doc.Items)), nil)
 	recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepOutline, entities.StepSkipped, "feed", nil)
 	recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepDistill, entities.StepSkipped, "feed", nil)
 	if uc.Steps != nil {
-		_ = uc.Steps.SetIdentity(src.Hash, entities.SourceIdentity{
+		_ = uc.Steps.SetIdentity(src.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			Kind: entities.SourceKindURL, URL: rawURL, OriginalName: rawURL,
 			Origin: src.Origin, WikiPage: src.WikiPage, ParentHash: src.ParentHash,
 			RSS: true, ContentHash: contentHash,
 		})
 	}
-	appendSourceLog(ctx, uc.SourceLog, uc.Clock, src.Hash, "capture", "info", "feed expanded",
+	appendSourceLog(ctx, uc.SourceLog, uc.Clock, src.Hash, "info", "feed expanded",
 		map[string]any{"url": rawURL, "items": len(doc.Items)})
 	// The items are claimed and, where the feed carries the post, filled from that copy. Only the
 	// rest need a page fetch — a JavaScript page would otherwise stay a bookmark forever.
@@ -780,11 +756,8 @@ func (uc AddURL) storeFeed(ctx context.Context, rawURL string, page interfaces.F
 		SourceLog: uc.SourceLog, Languages: uc.Languages, Clock: uc.Clock, Log: uc.Log,
 		MinChars: uc.MinTextChars,
 	}
-	toFetch, fromFeed, expandErr := materializer.expand(ctx, src, doc.Items)
-	if expandErr != nil {
-		return partialentities.PartialSource{}, expandErr
-	}
-	appendSourceLog(ctx, uc.SourceLog, uc.Clock, src.Hash, "capture", "info", "feed items handled",
+	toFetch, fromFeed := materializer.expand(ctx, src, doc.Items)
+	appendSourceLog(ctx, uc.SourceLog, uc.Clock, src.Hash, "info", "feed items handled",
 		map[string]any{"items": len(doc.Items), "from_feed": fromFeed, "to_fetch": len(toFetch)})
 	stored, err := uc.Index.GetSourceByHash(ctx, src.Hash)
 	if err != nil {
@@ -814,15 +787,15 @@ func feedLinks(items []feedItem) []string {
 //     outline/distill SKIPPED. That last part is the point: for a URL source the capture is the intake,
 //     so without it the outline would happily build a tree out of a login page and the distill step
 //     would invent claims about the gate.
-func (uc AddURL) recordWall(ctx context.Context, rawURL string, page interfaces.FetchedPage) (partialentities.PartialSource, error) {
+func (uc URLs) recordWall(ctx context.Context, rawURL string, page interfaces.FetchedPage) (partialentities.PartialSource, error) {
 	now := uc.Clock.Now()
 	existing, known := uc.sourceByURL(ctx, rawURL)
 	if known && existing.Path != "" && wallOf(existing.Meta) == entities.WallNone {
-		_ = uc.Index.SetSourceURLState(ctx, existing.Hash, page.Status, now)
-		_ = uc.Index.SetSourceMeta(ctx, existing.Hash, metaWithIdentity(metaWith(existing.Meta, map[string]any{
+		_ = uc.Index.SetSourceURLState(ctx, existing.Hash, page.Status, now)                                    //nolint:errcheck // the index and the step records are a light; the vault is the truth
+		_ = uc.Index.SetSourceMeta(ctx, existing.Hash, metaWithIdentity(metaWith(existing.Meta, map[string]any{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			"url": rawURL, "wall": string(page.Wall), "last_error": page.Wall.Reason(),
 		}), existing))
-		appendSourceLog(ctx, uc.SourceLog, uc.Clock, existing.Hash, "capture", "warn",
+		appendSourceLog(ctx, uc.SourceLog, uc.Clock, existing.Hash, "warn",
 			"the page is walled — the stored snapshot is kept", map[string]any{
 				"url": rawURL, "wall": string(page.Wall), "status": page.Status, "final_url": page.FinalURL,
 			})
@@ -854,13 +827,13 @@ func (uc AddURL) recordWall(ctx context.Context, rawURL string, page interfaces.
 	} else if err := uc.Index.UpsertSource(ctx, written); err != nil {
 		return partialentities.PartialSource{}, err
 	}
-	_ = uc.Index.SetSourceTitle(ctx, written.Hash, written.Title)
-	_ = uc.Index.SetSourceMeta(ctx, written.Hash, written.Meta)
+	_ = uc.Index.SetSourceTitle(ctx, written.Hash, written.Title) //nolint:errcheck // the index and the step records are a light; the vault is the truth
+	_ = uc.Index.SetSourceMeta(ctx, written.Hash, written.Meta)   //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	if err := uc.Index.SetSourceURLState(ctx, written.Hash, page.Status, now); err != nil {
 		return partialentities.PartialSource{}, err
 	}
 	if uc.Steps != nil {
-		_ = uc.Steps.SetIdentity(written.Hash, entities.SourceIdentity{
+		_ = uc.Steps.SetIdentity(written.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			Kind: entities.SourceKindURL, URL: rawURL, OriginalName: rawURL,
 			Origin: written.Origin, WikiPage: written.WikiPage, ParentHash: written.ParentHash,
 			Sitemap: written.Sitemap, RSS: written.RSS,
@@ -897,16 +870,16 @@ func (w wallWriter) write(ctx context.Context, src entities.Source, page interfa
 	// keys, or a walled link from a wiki page would lose its page on the way in.
 	src.Meta = metaWithIdentity(wallMeta(src.Meta, src.URL, page.Wall), src)
 	if w.Steps != nil {
-		_ = w.Steps.Record(ctx, src.Hash, entities.StepCapture, entities.StepStatus{
+		_ = w.Steps.Record(ctx, src.Hash, entities.StepCapture, entities.StepStatus{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			State: entities.StepFailed, At: now, Detail: page.Wall.Label(), Error: page.Wall.Reason(),
 		})
 		for _, step := range []entities.Step{entities.StepOutline, entities.StepDistill} {
-			_ = w.Steps.Record(ctx, src.Hash, step, entities.StepStatus{
+			_ = w.Steps.Record(ctx, src.Hash, step, entities.StepStatus{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 				State: entities.StepSkipped, At: now, Detail: "blocked: " + page.Wall.Label(),
 			})
 		}
 	}
-	appendSourceLog(ctx, w.SourceLog, w.Clock, src.Hash, "capture", "warn", "the page is walled",
+	appendSourceLog(ctx, w.SourceLog, w.Clock, src.Hash, "warn", "the page is walled",
 		map[string]any{
 			"url": src.URL, "wall": string(page.Wall), "status": page.Status, "final_url": page.FinalURL,
 		})
@@ -975,12 +948,12 @@ func isFromFeed(meta string) bool {
 }
 
 // appendSourceLog writes one line into a source's own log (best-effort: a log never fails a write).
-func appendSourceLog(ctx context.Context, log interfaces.SourceLog, clock interfaces.Clock, hash, phase, level, msg string, fields map[string]any) {
+func appendSourceLog(ctx context.Context, log interfaces.SourceLog, clock interfaces.Clock, hash, level, msg string, fields map[string]any) {
 	if log == nil {
 		return
 	}
 	log.Append(ctx, hash, interfaces.SourceLogEvent{
-		At: clock.Now(), Phase: phase, Level: level, Message: msg, Fields: fields,
+		At: clock.Now(), Phase: "capture", Level: level, Message: msg, Fields: fields,
 	})
 }
 
@@ -1072,46 +1045,18 @@ func resolveIconURL(pageURL, declared string) string {
 	return (&url.URL{Scheme: base.Scheme, Host: base.Host, Path: "/favicon.ico"}).String()
 }
 
-// RefreshURLs re-fetches every known URL once. An unchanged page only gets its
-// status refreshed; a changed page becomes a new snapshot and source (the old
-// snapshot stays — history is immutable), which the next document run distills.
-// Atoms that cite the replaced snapshot are marked superseded, so stale claims are
-// visible rather than silently duplicated.
-type RefreshURLs struct {
-	Fetch   interfaces.Fetcher
-	Convert interfaces.HTMLConverter
-	Store   interfaces.SourceStore
-	Index   interfaces.IndexRepository
-	// Favicons is where a URL source's icon lives. A refresh of a changed page carries it over (and
-	// refreshes it when the site offers one): an icon is not something a re-fetch may lose.
-	Favicons interfaces.FaviconStore
-	Atoms    interfaces.AtomRepository
-	Clock    interfaces.Clock
-	Log      *slog.Logger
-	// Steps records the CAPTURE step and the identity of a CHANGED page's new snapshot: it is a new
-	// source, and it must be as recognizable as the one it replaces.
-	Steps interfaces.StepTracker
-	// SourceLog receives the line that says a page was walled (a login, a paywall) instead of read.
-	SourceLog interfaces.SourceLog
-	// Languages refreshes the language hint when a page changes.
-	Languages interfaces.LanguageDetector
-	// MinTextChars is the amount of text below which a fetch is not allowed to replace a snapshot
-	// that came from a feed's copy (see feedMaterializer). Zero means defaultMinTextChars.
-	MinTextChars int
-	// Delete removes a page that disappeared from a SITEMAP (which is a complete list). A feed is not:
-	// its items are a window, so a page that leaves it is kept. Zero value = no deletion (tests).
-	Delete DeleteSource
-	// Reset is the derivation reset used when a forced fetch REPLACES an attached snapshot. The old
-	// claims were derived from bytes that are gone; the snapshot and its claims start over. Nil skips
-	// the reset (tests that only check the fetch).
-	Reset SourceResetter
-	// MinAge is the minimum time since a PAGE or SITEMAP's last check before a scheduled pass
-	// re-fetches it. The cadence belongs to the SOURCE (`url_checked_at`), not to the process's
-	// uptime. A scheduled pass skips a kind whose interval is zero; manual passes ignore both.
-	MinAge time.Duration
-	// FeedMinAge is the same for a FEED source (its item list). A feed moves daily, a page weekly.
-	FeedMinAge time.Duration
-}
+// URLRefresher refreshes every URL source the cadence finds due. A handler holds this value; nil
+// means the feature is not wired.
+type URLRefresher func(ctx context.Context) (RefreshResult, error)
+
+// URLRefresherAll refreshes every URL source, due or not.
+type URLRefresherAll func(ctx context.Context) (RefreshResult, error)
+
+// URLRefresherOne refreshes one URL source.
+type URLRefresherOne func(ctx context.Context, hash string) (RefreshResult, error)
+
+// URLRefresherOneForce refreshes one URL source even if it is not due.
+type URLRefresherOneForce func(ctx context.Context, hash string) (RefreshResult, error)
 
 // DiscoveredChildren are the NEW pages an owner declared in this pass (already claimed as sources).
 // The caller fetches them in the background; `Origin` says who owns them.
@@ -1155,21 +1100,18 @@ type SnapshotReplacement struct {
 	Reason string
 }
 
-// Execute refreshes the URL sources that are DUE (a scheduled pass: the per-kind intervals decide).
-func (uc RefreshURLs) Execute(ctx context.Context) (RefreshResult, error) {
-	return uc.execute(ctx, true)
+// Refresh refreshes the URL sources that are DUE (a scheduled pass: the per-kind intervals decide).
+func (uc URLs) Refresh(ctx context.Context) (RefreshResult, error) {
+	return uc.refreshPass(ctx, true)
 }
 
-// ExecuteAll refreshes every known URL now, whatever its age. It is the manual pass — the Status
-// button — and the only caller that is allowed to ignore the cadence.
-func (uc RefreshURLs) ExecuteAll(ctx context.Context) (RefreshResult, error) {
-	return uc.execute(ctx, false)
+// RefreshAll refreshes every URL source.
+func (uc URLs) RefreshAll(ctx context.Context) (RefreshResult, error) {
+	return uc.refreshPass(ctx, false)
 }
 
-// ExecuteOne refreshes ONE URL source now, whatever its age. It is the per-source Refresh button: a
-// feed or a sitemap is a list that only changes when it is fetched again, and a page may be checked
-// without waiting for its configured cadence.
-func (uc RefreshURLs) ExecuteOne(ctx context.Context, hash string) (RefreshResult, error) {
+// RefreshOne refreshes one URL source.
+func (uc URLs) RefreshOne(ctx context.Context, hash string) (RefreshResult, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
 		return RefreshResult{}, err
@@ -1181,10 +1123,8 @@ func (uc RefreshURLs) ExecuteOne(ctx context.Context, hash string) (RefreshResul
 	return uc.executeRows(ctx, []entities.Source{src}, false, false)
 }
 
-// ExecuteOneForce fetches ONE URL source now even when its snapshot was attached by hand. It is the
-// explicit way out of an attachment: a readable page replaces the snapshot and clears the marker; a
-// wall, a dead host or an empty page leaves the attachment (and its bytes) exactly where it is.
-func (uc RefreshURLs) ExecuteOneForce(ctx context.Context, hash string) (RefreshResult, error) {
+// RefreshOneForce refreshes one URL source even when it is not due.
+func (uc URLs) RefreshOneForce(ctx context.Context, hash string) (RefreshResult, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
 		return RefreshResult{}, err
@@ -1204,7 +1144,7 @@ func (uc RefreshURLs) ExecuteOneForce(ctx context.Context, hash string) (Refresh
 	return uc.executeRows(ctx, []entities.Source{src}, false, true)
 }
 
-func (uc RefreshURLs) execute(ctx context.Context, scheduled bool) (RefreshResult, error) {
+func (uc URLs) refreshPass(ctx context.Context, scheduled bool) (RefreshResult, error) {
 	rows, err := uc.Index.ListURLSources(ctx)
 	if err != nil {
 		return RefreshResult{}, err
@@ -1212,7 +1152,7 @@ func (uc RefreshURLs) execute(ctx context.Context, scheduled bool) (RefreshResul
 	return uc.executeRows(ctx, rows, scheduled, false)
 }
 
-func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, scheduled, ignoreAttached bool) (RefreshResult, error) {
+func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, scheduled, ignoreAttached bool) (RefreshResult, error) {
 	var res RefreshResult
 	seen := make(map[string]bool)
 	for _, s := range rows {
@@ -1254,16 +1194,16 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 		if fetchErr != nil {
 			res.Failed++
 			res.LastError = fetchErr.Error()
-			_ = uc.Index.SetSourceURLState(ctx, s.Hash, 0, now)
+			_ = uc.Index.SetSourceURLState(ctx, s.Hash, 0, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if attached {
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "warn",
 					"the URL was tried again — the fetch failed; the attached snapshot was kept",
 					map[string]any{"error": fetchErr.Error()})
 			}
 			if fromFeed {
 				// The feed's copy is still the readable form of this post. A failed page attempt is
 				// not a failed source: the copy stays, the attempt is written down.
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "warn",
 					"the page could not be fetched — the feed copy is kept",
 					map[string]any{"error": fetchErr.Error()})
 				recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK,
@@ -1290,36 +1230,36 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 						res.LastError = err.Error()
 						continue
 					}
-					_ = uc.Index.SetSourceTitle(ctx, s.Hash, written.Title)
-					_ = uc.Index.SetSourceMeta(ctx, s.Hash, written.Meta)
+					_ = uc.Index.SetSourceTitle(ctx, s.Hash, written.Title) //nolint:errcheck // the index and the step records are a light; the vault is the truth
+					_ = uc.Index.SetSourceMeta(ctx, s.Hash, written.Meta)   //nolint:errcheck // the index and the step records are a light; the vault is the truth
 					if uc.Steps != nil {
-						_ = uc.Steps.SetIdentity(s.Hash, entities.SourceIdentity{
+						_ = uc.Steps.SetIdentity(s.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 							Kind: entities.SourceKindURL, URL: s.URL, OriginalName: s.URL,
 							Origin: s.Origin, WikiPage: s.WikiPage, ParentHash: s.ParentHash,
 						})
 					}
 				}
 			} else {
-				_ = uc.Index.SetSourceMeta(ctx, s.Hash, metaWithIdentity(metaWith(s.Meta, map[string]any{
+				_ = uc.Index.SetSourceMeta(ctx, s.Hash, metaWithIdentity(metaWith(s.Meta, map[string]any{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 					"url": s.URL, "wall": string(page.Wall), "last_error": page.Wall.Reason(),
 				}), s))
 			}
-			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if attached {
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "warn",
 					"the URL was tried again — still blocked; the attached snapshot was kept",
 					map[string]any{"wall": string(page.Wall), "http_status": page.Status})
 			}
 			if fromFeed && s.Path != "" {
 				// The wall describes the fetch, not the bytes. The copy remains readable and the
 				// capture light stays green; the attempt and its reason are visible in the log.
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "warn",
 					"the page is still walled — the feed copy is kept",
 					map[string]any{"wall": string(page.Wall), "http_status": page.Status})
 				recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK,
 					"feed copy · page walled", nil)
 			} else if s.Path != "" && !attached {
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "warn",
 					"the page is still walled — the stored snapshot is kept",
 					map[string]any{"wall": string(page.Wall), "http_status": page.Status})
 			}
@@ -1331,14 +1271,14 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 		if page.Status < 200 || page.Status >= 300 {
 			res.Failed++
 			res.LastError = fmt.Sprintf("HTTP %d", page.Status)
-			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if attached {
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "warn",
 					fmt.Sprintf("the URL was tried again — HTTP %d; the attached snapshot was kept", page.Status),
 					nil)
 			}
 			if fromFeed {
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "warn",
 					fmt.Sprintf("the page answered HTTP %d — the feed copy is kept", page.Status),
 					map[string]any{"http_status": page.Status})
 				recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK,
@@ -1357,7 +1297,7 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 			if parentErr != nil {
 				res.Failed++
 				res.LastError = parentErr.Error()
-				_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+				_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 				if uc.Log != nil {
 					uc.Log.Warn("url refresh: parent not expanded", "url", s.URL, "err", parentErr)
 				}
@@ -1381,14 +1321,14 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 		if convErr != nil {
 			res.Failed++
 			res.LastError = convErr.Error()
-			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if attached {
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "warn",
 					"the URL was tried again — the page could not be converted; the attached snapshot was kept",
 					map[string]any{"error": convErr.Error()})
 			}
 			if fromFeed {
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "warn",
 					"the page could not be converted — the feed copy is kept",
 					map[string]any{"error": convErr.Error()})
 				recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK,
@@ -1412,8 +1352,8 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 			if bodyChars < minChars {
 				res.Failed++
 				res.LastError = "the page gave no readable text"
-				_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+				_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "warn",
 					"the URL was tried again — no readable text; the attached snapshot was kept",
 					map[string]any{"chars": bodyChars, "min": minChars})
 				continue
@@ -1424,8 +1364,8 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 		// snapshot that is readable. A feed copy has its own rule below (it compares lengths); a
 		// queued row has no snapshot to keep.
 		if s.Path != "" && !attached && !fromFeed && bodyChars < minChars {
-			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
-			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "warn",
 				"the page gave no readable text — the stored snapshot was kept",
 				map[string]any{"chars": bodyChars, "min": minChars, "http_status": page.Status})
 			if !wasWalled {
@@ -1453,11 +1393,11 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 				reason = "the page carried less text"
 			}
 			if reason != "" {
-				_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
-				_ = uc.Index.SetSourceMeta(ctx, s.Hash, metaWith(s.Meta, map[string]any{
+				_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)            //nolint:errcheck // the index and the step records are a light; the vault is the truth
+				_ = uc.Index.SetSourceMeta(ctx, s.Hash, metaWith(s.Meta, map[string]any{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 					"wall": nil, "last_error": nil,
 				}))
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "info",
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "info",
 					"the page was tried — the feed copy is kept", map[string]any{
 						"chars": bodyChars, "copy_chars": copyChars, "min": minChars, "reason": reason,
 					})
@@ -1473,7 +1413,7 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 
 		// A bookmark stays a bookmark: only its status is refreshed.
 		if s.Bookmark {
-			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if uc.Log != nil {
 				uc.Log.Debug("bookmark refreshed", "url", s.URL, "status", page.Status)
 			}
@@ -1482,9 +1422,9 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 		if body == "" {
 			res.Failed++
 			res.LastError = "the page gave no readable text"
-			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if attached {
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "warn",
 					"the URL was tried again — no readable text; the attached snapshot was kept", nil)
 			}
 			continue
@@ -1496,9 +1436,9 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 		}
 		if language != "" {
 			s.Language = language
-			_ = uc.Index.SetSourceLanguage(ctx, s.Hash, language)
+			_ = uc.Index.SetSourceLanguage(ctx, s.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if uc.Steps != nil {
-				_ = uc.Steps.SetLanguage(s.Hash, language)
+				_ = uc.Steps.SetLanguage(s.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			}
 		}
 
@@ -1515,12 +1455,12 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 			favicon = fetchFavicon(ctx, uc.Fetch, uc.Favicons, uc.Log, s.URL, conv.Favicon)
 			if favicon != nil {
 				s.Meta = metaWithFavicon(s.Meta, s.URL, contentHash, favicon)
-				_ = uc.Index.SetSourceMeta(ctx, s.Hash, s.Meta)
+				_ = uc.Index.SetSourceMeta(ctx, s.Hash, s.Meta) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 				if language != "" {
-					_ = uc.Index.SetSourceLanguage(ctx, s.Hash, language)
+					_ = uc.Index.SetSourceLanguage(ctx, s.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 				}
 				if uc.Steps != nil {
-					_ = uc.Steps.SetIdentity(s.Hash, entities.SourceIdentity{
+					_ = uc.Steps.SetIdentity(s.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 						Kind: entities.SourceKindURL, URL: s.URL, Bookmark: s.Bookmark, Language: language,
 						OriginalName: s.OriginalName, ContentHash: contentHash,
 						FaviconHash: faviconHash(favicon), FaviconExt: faviconExt(favicon),
@@ -1534,7 +1474,7 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 			// Same content: just record that we checked and the page still answers. A feed copy or a
 			// source whose last fetch was walled falls through: the provenance must change even when
 			// the text did not (the page WAS read).
-			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if uc.Log != nil {
 				uc.Log.Debug("url unchanged", "url", s.URL, "status", page.Status)
 			}
@@ -1590,7 +1530,7 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 			uc.Log.Warn("url refresh: meta", "url", s.URL, "err", err)
 		}
 		if language != "" {
-			_ = uc.Index.SetSourceLanguage(ctx, s.Hash, language)
+			_ = uc.Index.SetSourceLanguage(ctx, s.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		}
 		if err := uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now); err != nil {
 			if uc.Log != nil {
@@ -1601,12 +1541,12 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 		// had NO object until now was a queued (or failed) link: its skipped outline and distill lights
 		// have to be re-armed, or the page that finally arrived would never be derived.
 		if s.Path == "" && uc.Steps != nil {
-			_ = uc.Steps.Reset(s.Hash)
+			_ = uc.Steps.Reset(s.Hash) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		}
 		recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK,
 			fmt.Sprintf("HTTP %d · refetched", page.Status), nil)
 		if uc.Steps != nil {
-			_ = uc.Steps.SetIdentity(s.Hash, entities.SourceIdentity{
+			_ = uc.Steps.SetIdentity(s.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 				Kind: entities.SourceKindURL, URL: s.URL, Language: language, OriginalName: s.URL,
 				ContentHash: contentHash, FaviconHash: faviconHash(favicon), FaviconExt: faviconExt(favicon),
 			})
@@ -1617,7 +1557,7 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 			reset := false
 			if !sameContent && uc.Reset != nil {
 				reset = true
-				if _, rErr := uc.Reset.Execute(ctx, s.Hash); rErr != nil {
+				if _, rErr := uc.Reset(ctx, s.Hash); rErr != nil {
 					reset = false
 					if uc.Log != nil {
 						uc.Log.Warn("url refetch: attached snapshot replaced, derivation not reset",
@@ -1625,7 +1565,7 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 					}
 				}
 			}
-			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "info",
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "info",
 				"attached snapshot replaced by a fetch", map[string]any{
 					"file": s.AttachedFrom, "http_status": page.Status, "reset": reset,
 				})
@@ -1648,16 +1588,16 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 		// finally read, and a wall that cleared, are facts about the source, not about its length.
 		switch {
 		case fromFeed && sameContent:
-			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "info",
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "info",
 				"the page was read — the same text as the feed copy; the feed marker was cleared",
 				map[string]any{"chars": bodyChars, "http_status": page.Status})
 		case fromFeed:
-			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "info",
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "info",
 				"the page replaced the feed copy", map[string]any{
 					"chars": bodyChars, "copy_chars": copyChars, "http_status": page.Status,
 				})
 		case wasWalled:
-			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "info",
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "info",
 				"the page is readable again — the wall cleared",
 				map[string]any{"chars": bodyChars, "http_status": page.Status})
 		}
@@ -1678,8 +1618,8 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 // is what the list PROMISES: a sitemap says "these are the pages", so a page that left it is deleted
 // (a 1:1 reconciliation); a feed says "these are the newest items", so a page that left it is kept —
 // the archive of what the feed announced is the point. Only deleting the owner removes them.
-func (uc RefreshURLs) refreshParent(ctx context.Context, s entities.Source, page interfaces.FetchedPage, now time.Time) (partialentities.PartialSource, []string, int, error) {
-	queue := QueueURLs{Index: uc.Index, Steps: uc.Steps, Clock: uc.Clock, Log: uc.Log}
+func (uc URLs) refreshParent(ctx context.Context, s entities.Source, page interfaces.FetchedPage, now time.Time) (partialentities.PartialSource, []string, int, error) {
+	queue := uc
 	var (
 		title       string
 		snapshot    string
@@ -1698,7 +1638,7 @@ func (uc RefreshURLs) refreshParent(ctx context.Context, s entities.Source, page
 		snapshot = renderSitemapSnapshot(s.URL, title, page.Status, now, entries)
 		contentHash = contentHashOf(title, snapshot)
 		detail = fmt.Sprintf("HTTP %d · sitemap · %d URLs", page.Status, len(entries))
-		if queued, err = queue.ExecuteSitemap(ctx, s.Hash, entries); err != nil {
+		if queued, err = queue.QueueSitemap(ctx, s.Hash, entries); err != nil {
 			return partialentities.PartialSource{}, nil, 0, err
 		}
 		if removed, err = uc.removeGoneChildren(ctx, s, entries); err != nil {
@@ -1718,9 +1658,7 @@ func (uc RefreshURLs) refreshParent(ctx context.Context, s entities.Source, page
 			MinChars: uc.MinTextChars,
 		}
 		var fromFeed int
-		if queued, fromFeed, err = materializer.expand(ctx, s, doc.Items); err != nil {
-			return partialentities.PartialSource{}, nil, 0, err
-		}
+		queued, fromFeed = materializer.expand(ctx, s, doc.Items)
 		detail = fmt.Sprintf("HTTP %d · feed · %d items · %d feed copies · %d pages queued",
 			page.Status, len(doc.Items), fromFeed, len(queued))
 	}
@@ -1738,12 +1676,12 @@ func (uc RefreshURLs) refreshParent(ctx context.Context, s entities.Source, page
 	if err := uc.Index.FillURLSource(ctx, updated); err != nil {
 		return partialentities.PartialSource{}, nil, 0, err
 	}
-	_ = uc.Index.SetSourceTitle(ctx, s.Hash, title)
-	_ = uc.Index.SetSourceMeta(ctx, s.Hash, updated.Meta)
-	_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+	_ = uc.Index.SetSourceTitle(ctx, s.Hash, title)               //nolint:errcheck // the index and the step records are a light; the vault is the truth
+	_ = uc.Index.SetSourceMeta(ctx, s.Hash, updated.Meta)         //nolint:errcheck // the index and the step records are a light; the vault is the truth
+	_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	if uc.Steps != nil {
 		icon := faviconFromMeta(updated.Meta)
-		_ = uc.Steps.SetIdentity(s.Hash, entities.SourceIdentity{
+		_ = uc.Steps.SetIdentity(s.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			Kind: entities.SourceKindURL, URL: s.URL, Language: s.Language, OriginalName: s.URL,
 			ContentHash: contentHash, FaviconHash: faviconHash(icon), FaviconExt: faviconExt(icon),
 			Origin: s.Origin, WikiPage: s.WikiPage, ParentHash: s.ParentHash,
@@ -1759,7 +1697,7 @@ func (uc RefreshURLs) refreshParent(ctx context.Context, s entities.Source, page
 	}
 	recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepOutline, entities.StepSkipped, parentDetail, nil)
 	recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepDistill, entities.StepSkipped, parentDetail, nil)
-	appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "info", "expanded again", map[string]any{
+	appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "info", "expanded again", map[string]any{
 		"url": s.URL, "new": len(queued), "removed": removed, "title": title,
 	})
 	stored, err := uc.Index.GetSourceByHash(ctx, s.Hash)
@@ -1772,8 +1710,8 @@ func (uc RefreshURLs) refreshParent(ctx context.Context, s entities.Source, page
 // removeGoneChildren deletes the pages a SITEMAP no longer lists. A feed never gets here: its items
 // are a window, not an inventory. A child the human released is no longer a child (the release clears
 // ParentHash), so a manual addition always survives.
-func (uc RefreshURLs) removeGoneChildren(ctx context.Context, parent entities.Source, entries []string) (int, error) {
-	if uc.Delete.Index == nil {
+func (uc URLs) removeGoneChildren(ctx context.Context, parent entities.Source, entries []string) (int, error) {
+	if uc.Delete == nil {
 		return 0, nil
 	}
 	keep := make(map[string]bool, len(entries))
@@ -1792,7 +1730,7 @@ func (uc RefreshURLs) removeGoneChildren(ctx context.Context, parent entities.So
 		if child.URL != "" && keep[entities.URLKey(child.URL)] {
 			continue
 		}
-		if _, err := uc.Delete.ExecuteOwned(ctx, child.Hash); err != nil {
+		if _, err := uc.Delete(ctx, child.Hash); err != nil {
 			if uc.Log != nil {
 				uc.Log.Warn("sitemap refresh: page not removed", "sitemap", parent.Hash,
 					"page", child.Hash, "err", err)
@@ -1860,14 +1798,14 @@ func FindURLSource(ctx context.Context, index interfaces.IndexRepository, rawURL
 }
 
 // sourceByURL is FindURLSource with this use case's index.
-func (uc AddURL) sourceByURL(ctx context.Context, rawURL string) (entities.Source, bool) {
+func (uc URLs) sourceByURL(ctx context.Context, rawURL string) (entities.Source, bool) {
 	return FindURLSource(ctx, uc.Index, rawURL)
 }
 
 // releaseOwnership takes a URL out of the page/sitemap/feed that had claimed it, because the human
 // added it themselves. The record is written first (the truth), the index mirrors it; a nil tracker
 // still clears the mirror, so the source is independent either way.
-func (uc AddURL) releaseOwnership(ctx context.Context, rawURL string) {
+func (uc URLs) releaseOwnership(ctx context.Context, rawURL string) {
 	existing, known := uc.sourceByURL(ctx, rawURL)
 	if !known {
 		return
@@ -1882,7 +1820,7 @@ func (uc AddURL) releaseOwnership(ctx context.Context, rawURL string) {
 	} else if err := uc.Index.ClearSourceOrigin(ctx, existing.Hash); err != nil && uc.Log != nil {
 		uc.Log.Warn("url: the manual addition could not release the source", "url", rawURL, "err", err)
 	}
-	appendSourceLog(ctx, uc.SourceLog, uc.Clock, existing.Hash, "capture", "info",
+	appendSourceLog(ctx, uc.SourceLog, uc.Clock, existing.Hash, "info",
 		"added by hand — released from its owner", map[string]any{
 			"url": rawURL, "origin": existing.Origin, "wiki_page": existing.WikiPage,
 			"parent_hash": existing.ParentHash,
@@ -1929,7 +1867,7 @@ func textCharsFromMeta(meta string) int {
 // feedCopyTextChars is how much readable text a feed copy carries. New copies record `text_chars`
 // in their meta; a copy written before that field existed is measured from its snapshot. Zero means
 // "unknown" and lets the page win when it is readable at all.
-func feedCopyTextChars(ctx context.Context, store interfaces.SourceStore, src entities.Source) int {
+func feedCopyTextChars(_ context.Context, store interfaces.SourceStore, src entities.Source) int {
 	if n := textCharsFromMeta(src.Meta); n > 0 {
 		return n
 	}
@@ -1957,8 +1895,8 @@ func snapshotBody(b []byte) []byte {
 		return b
 	}
 	rest := s[len(open):]
-	if i := strings.Index(rest, "\n---\n"); i >= 0 {
-		return []byte(rest[i+len("\n---\n"):])
+	if _, after, ok := strings.Cut(rest, "\n---\n"); ok {
+		return []byte(after)
 	}
 	return b
 }

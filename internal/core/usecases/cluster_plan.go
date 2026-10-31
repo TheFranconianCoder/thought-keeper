@@ -67,10 +67,6 @@ func uniqueULIDs(ids []ulid.ULID) []ulid.ULID {
 	return out
 }
 
-func unionULIDs(existing []ulid.ULID, added []ulid.ULID) []ulid.ULID {
-	return uniqueULIDs(append(append([]ulid.ULID(nil), existing...), added...))
-}
-
 func atomsFor(ids []ulid.ULID, byID map[string]entities.Atom) []entities.Atom {
 	out := make([]entities.Atom, 0, len(ids))
 	for _, id := range ids {

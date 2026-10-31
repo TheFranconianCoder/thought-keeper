@@ -7,19 +7,15 @@ import (
 	"io/fs"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// SourceContent opens a source's raw bytes for inline viewing (PDF, Markdown, text).
-// The bytes are the immutable snapshot from the content-addressed store.
-type SourceContent struct {
-	Index interfaces.IndexRepository
-	Store interfaces.SourceStore
-}
+// SourceOpener returns the reader plus the source's extension and title. A handler holds this value;
+// nil means the feature is not wired.
+type SourceOpener func(ctx context.Context, hash string) (io.ReadCloser, string, string, error)
 
-// Execute returns the reader plus the source's extension and title.
-func (uc SourceContent) Execute(ctx context.Context, hash string) (io.ReadCloser, string, string, error) {
+// Content serves the content view.
+func (uc Sources) Content(ctx context.Context, hash string) (io.ReadCloser, string, string, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
 		return nil, "", "", err
@@ -31,11 +27,12 @@ func (uc SourceContent) Execute(ctx context.Context, hash string) (io.ReadCloser
 	return rc, src.Ext, src.Title, nil
 }
 
-// Sidecar opens one DERIVED file of a source for inline viewing: its step record, its outline or its
-// log. The caller passes one of the fixed suffixes the Files view shows (entities.Sidecar*) — never a
-// path, and nothing outside this source's folder can be named: the store resolves the name next to the
-// object, and the switch below is the whitelist.
-func (uc SourceContent) Sidecar(ctx context.Context, hash, suffix string) (io.ReadCloser, string, string, error) {
+// SourceSidecarOpener returns one sidecar file of a source. A handler holds this value; nil means the
+// feature is not wired.
+type SourceSidecarOpener func(ctx context.Context, hash, suffix string) (io.ReadCloser, string, string, error)
+
+// Sidecar serves one sidecar file.
+func (uc Sources) Sidecar(ctx context.Context, hash, suffix string) (io.ReadCloser, string, string, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
 		return nil, "", "", err
@@ -57,14 +54,12 @@ func (uc SourceContent) Sidecar(ctx context.Context, hash, suffix string) (io.Re
 	return rc, suffix, src.Title, nil
 }
 
-// Rendered opens a source's READABLE rendering: the Markdown that step 1 wrote next to a source
-// whose bytes are not readable as they are (a PDF, an EPUB).
-//
-// It exists for the reader. A PDF is shown in the overlay, and loading a 50 MB document into a frame
-// is not instant — the rendering is the text the pipeline itself read (the outline parses exactly
-// this file), so showing it is both honest about what the system saw and immediate. A kind whose
-// bytes ARE readable has no rendering: there the object is the text.
-func (uc SourceContent) Rendered(ctx context.Context, hash string) (io.ReadCloser, string, string, error) {
+// SourceRenderer returns the rendered text of a PDF or an EPUB. A handler holds this value; nil means
+// the feature is not wired.
+type SourceRenderer func(ctx context.Context, hash string) (io.ReadCloser, string, string, error)
+
+// Rendered serves the rendered view.
+func (uc Sources) Rendered(ctx context.Context, hash string) (io.ReadCloser, string, string, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
 		return nil, "", "", err

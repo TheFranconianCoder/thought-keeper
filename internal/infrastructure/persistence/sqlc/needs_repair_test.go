@@ -54,7 +54,7 @@ func TestNeedsRepairDetectsEachInconsistency(t *testing.T) {
 	}
 	check := func(t *testing.T, atoms *AtomRepository, repo *ClusterRepository, store *clusters.Store) (bool, string) {
 		t.Helper()
-		uc := usecases.ReindexVault{Atoms: atoms, ClusterRepo: repo, ClusterStore: store}
+		uc := usecases.Maintenance{Atoms: atoms, ClusterRepo: repo, ClusterStore: store}
 		needs, reason, err := uc.NeedsRepair(ctx)
 		if err != nil {
 			t.Fatalf("needs repair: %v", err)

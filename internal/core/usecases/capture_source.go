@@ -12,27 +12,38 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
-// CaptureSource is step 1 for a source whose BYTES are not readable as they are: it extracts the
-// text (poppler for a PDF, OCR for a scanned page) and writes the local, static rendering next to
-// the object — sources/<ab>/<cd>/<hash>.md.
-//
-// Why a step of its own: what a document says must be readable again and again, and the outline must
-// not have to extract anything. Parsing the rendering cannot disagree with the bytes, so a rebuild
-// produces the same tree the derivation was built on instead of invalidating it. Markdown and text
-// sources need no capture of their own: the object IS the readable form, and a URL snapshot is
-// already Markdown.
-type CaptureSource struct {
-	Store     interfaces.SourceStore
-	Index     interfaces.IndexRepository
-	Extractor interfaces.Extractor
-	// Steps records the CAPTURE step (running/ok/failed) for the source's lights.
-	Steps interfaces.StepTracker
-	// Languages recognises the language of the extracted text. Nil means no detection.
-	Languages interfaces.LanguageDetector
-	SourceLog interfaces.SourceLog
-	Clock     interfaces.Clock
-	Log       *slog.Logger
+// Derivation is the use case of the document pipeline: capture makes a source readable, outline and
+// distill derive its claims, and reset and clean take a derivation away again.
+type Derivation struct {
+	Store           interfaces.SourceStore
+	Index           interfaces.IndexRepository
+	Extractor       interfaces.Extractor
+	Steps           interfaces.StepTracker
+	Languages       interfaces.LanguageDetector
+	SourceLog       interfaces.SourceLog
+	Trees           interfaces.TreeStore
+	PartRepo        interfaces.PartRepository
+	Atoms           interfaces.AtomRepository
+	AtomStore       interfaces.AtomStore
+	Vocab           interfaces.VocabularyStore
+	Gateway         interfaces.AgentGateway
+	Runs            interfaces.RunRepository
+	Tags            interfaces.SourceTagStore
+	Clock           interfaces.Clock
+	Log             *slog.Logger
+	Parallel        int
+	PartsPerRun     int
+	MaxIterations   int
+	Model           string
+	Language        string
+	ReasoningEffort string
+	// KeepTitle preserves the source's current title across a reset. A wiki page save writes the new
+	// title first and resets the old derivation afterwards.
+	KeepTitle bool
 }
+
+// SourceCapturer makes one source readable (step 1).
+type SourceCapturer func(ctx context.Context, hash string) (CaptureResult, error)
 
 // CaptureResult summarizes a capture.
 type CaptureResult struct {
@@ -49,8 +60,8 @@ type CaptureResult struct {
 // named after the step that writes it, a plain Markdown document (see entities.SidecarRender).
 const RenderExt = entities.SidecarRender
 
-// Execute captures one source: extract, write the rendering, record the step.
-func (uc CaptureSource) Execute(ctx context.Context, hash string) (CaptureResult, error) {
+// Capture makes one source readable.
+func (uc Derivation) Capture(ctx context.Context, hash string) (CaptureResult, error) {
 	recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepCapture, entities.StepRunning, "", nil)
 	res, err := uc.capture(ctx, hash)
 	if err != nil {
@@ -73,7 +84,7 @@ func (uc CaptureSource) Execute(ctx context.Context, hash string) (CaptureResult
 	return res, nil
 }
 
-func (uc CaptureSource) capture(ctx context.Context, hash string) (CaptureResult, error) {
+func (uc Derivation) capture(ctx context.Context, hash string) (CaptureResult, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
 		return CaptureResult{}, err
@@ -205,7 +216,7 @@ func (uc CaptureSource) capture(ctx context.Context, hash string) (CaptureResult
 	return out, nil
 }
 
-func (uc CaptureSource) kindOf(ctx context.Context, hash string) entities.SourceKind {
+func (uc Derivation) kindOf(ctx context.Context, hash string) entities.SourceKind {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
 		return ""
@@ -215,14 +226,14 @@ func (uc CaptureSource) kindOf(ctx context.Context, hash string) entities.Source
 
 // setLanguage records a language hint on both the record and the index. The record is the truth (a
 // reindex restores it); the index is what the list and the search read.
-func (uc CaptureSource) setLanguage(ctx context.Context, hash, language string) {
+func (uc Derivation) setLanguage(ctx context.Context, hash, language string) {
 	if language == "" {
 		return
 	}
 	if uc.Steps != nil {
-		_ = uc.Steps.SetLanguage(hash, language)
+		_ = uc.Steps.SetLanguage(hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	} else if uc.Index != nil {
-		_ = uc.Index.SetSourceLanguage(ctx, hash, language)
+		_ = uc.Index.SetSourceLanguage(ctx, hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	}
 	uc.logSource(ctx, hash, "info", "language", "source language detected", map[string]any{"language": language})
 }
@@ -236,7 +247,7 @@ func unitWord(kind entities.SourceKind) string {
 	return "pages"
 }
 
-func (uc CaptureSource) logSource(ctx context.Context, hash, level, phase, msg string, fields map[string]any) {
+func (uc Derivation) logSource(ctx context.Context, hash, level, phase, msg string, fields map[string]any) {
 	if uc.SourceLog == nil {
 		return
 	}

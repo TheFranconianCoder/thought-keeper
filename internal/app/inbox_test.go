@@ -37,7 +37,7 @@ func TestPolledInboxStillTakesADroppedFile(t *testing.T) {
 	a := &App{
 		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		cfg: config.Config{Pipeline: config.PipelineConfig{Debounce: "10ms"}},
-		intake: usecases.IntakeSource{
+		intake: usecases.Sources{
 			Store: objects.New(filepath.Join(root, "sources")), Index: index, Clock: systemClock{},
 		},
 		dropsInflight: map[string]bool{},

@@ -52,7 +52,7 @@ type feedPageFixture struct {
 	idx     *fakeIndex
 	store   *objects.Store
 	steps   *fakeSteps
-	refresh usecases.RefreshURLs
+	refresh usecases.URLs
 	oneHash string
 }
 
@@ -66,13 +66,13 @@ func newFeedPageFixture(t *testing.T, conv feedPageConverter) feedPageFixture {
 	oneURL := "https://example.com/one"
 	page := interfaces.FetchedPage{Status: 200, Body: []byte("<html>page</html>"), ContentType: "text/html"}
 
-	add := usecases.AddURL{
+	add := usecases.URLs{
 		Fetch: routeFetcher{
 			feedURL: {Status: 200, Body: []byte(feedWithCopyItem), ContentType: "application/rss+xml"},
 		},
 		Convert: conv, Store: store, Index: idx, Steps: steps, Clock: fixedClock{}, MinTextChars: 40,
 	}
-	if _, err := add.ExecuteManual(ctx, feedURL, false); err != nil {
+	if _, err := add.AddManual(ctx, feedURL, false); err != nil {
 		t.Fatalf("feed: %v", err)
 	}
 	oneHash := entities.URLHash(oneURL)
@@ -82,7 +82,7 @@ func newFeedPageFixture(t *testing.T, conv feedPageConverter) feedPageFixture {
 	}
 	return feedPageFixture{
 		ctx: ctx, idx: idx, store: store, steps: steps,
-		refresh: usecases.RefreshURLs{
+		refresh: usecases.URLs{
 			Fetch: routeFetcher{oneURL: page}, Convert: conv,
 			Store: store, Index: idx, Steps: steps, Clock: fixedClock{}, MinTextChars: 40,
 		},
@@ -128,7 +128,7 @@ func TestFeedCopyIsProvisionalAndTheRicherPageReplacesIt(t *testing.T) {
 		t.Fatalf("the copy did not record its text length: %s", total.Meta)
 	}
 
-	res, err := f.refresh.ExecuteOne(f.ctx, f.oneHash)
+	res, err := f.refresh.RefreshOne(f.ctx, f.oneHash)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestFeedCopyStaysWhenThePageIsPoorer(t *testing.T) {
 		copyTitle: "Copy", copyBody: strings.Repeat("copy text ", 20),
 		pageTitle: "Page", pageBody: strings.Repeat("page text ", 10),
 	})
-	res, err := f.refresh.ExecuteOne(f.ctx, f.oneHash)
+	res, err := f.refresh.RefreshOne(f.ctx, f.oneHash)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestAddUrlDoesNotClobberAFeedCopyWithAShell(t *testing.T) {
 		copyTitle: "Copy", copyBody: copyBody,
 		pageTitle: "Shell", pageBody: "",
 	})
-	add := usecases.AddURL{
+	add := usecases.URLs{
 		Fetch: routeFetcher{
 			"https://example.com/one": {Status: 200, Body: []byte("<html>page</html>"), ContentType: "text/html"},
 		},
@@ -195,7 +195,7 @@ func TestAddUrlDoesNotClobberAFeedCopyWithAShell(t *testing.T) {
 		},
 		Store: f.store, Index: f.idx, Steps: f.steps, Clock: fixedClock{}, MinTextChars: 40,
 	}
-	src, err := add.ExecuteManual(f.ctx, "https://example.com/one", false)
+	src, err := add.AddManual(f.ctx, "https://example.com/one", false)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestAddUrlReportsAResetWhenItReplacesAFeedCopy(t *testing.T) {
 		copyTitle: "Copy", copyBody: strings.Repeat("copy text ", 20),
 		pageTitle: "Page", pageBody: strings.Repeat("page text ", 40),
 	})
-	add := usecases.AddURL{
+	add := usecases.URLs{
 		Fetch: routeFetcher{
 			"https://example.com/one": {Status: 200, Body: []byte("<html>page</html>"), ContentType: "text/html"},
 		},
@@ -225,7 +225,7 @@ func TestAddUrlReportsAResetWhenItReplacesAFeedCopy(t *testing.T) {
 		},
 		Store: f.store, Index: f.idx, Steps: f.steps, Clock: fixedClock{}, MinTextChars: 40,
 	}
-	src, err := add.ExecuteManual(f.ctx, "https://example.com/one", false)
+	src, err := add.AddManual(f.ctx, "https://example.com/one", false)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestFeedCopyMarkerIsClearedWhenThePageHasTheSameText(t *testing.T) {
 		copyTitle: "Copy", copyBody: body,
 		pageTitle: "Copy", pageBody: body,
 	})
-	res, err := f.refresh.ExecuteOne(f.ctx, f.oneHash)
+	res, err := f.refresh.RefreshOne(f.ctx, f.oneHash)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}

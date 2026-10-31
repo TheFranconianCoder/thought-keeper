@@ -43,8 +43,7 @@ func TestDeletingASourceDeletesItsWholeStory(t *testing.T) {
 	store := objects.New(sourcesDir)
 	idx := newFakeIndex()
 
-	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Caching\ncaching is subtle\n")})
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx, usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Caching\ncaching is subtle\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
@@ -53,8 +52,8 @@ func TestDeletingASourceDeletesItsWholeStory(t *testing.T) {
 	// The outline (step 2), the step record (steps 1..3) and the log: all next to the source.
 	trees := treestore.New(sourcesDir)
 	extractor := extract.New(gateways.ExecRunner{}, extract.Config{})
-	if _, err := (usecases.BuildTree{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).
-		Execute(ctx, hash); err != nil {
+	if _, err := (usecases.Trees{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).
+		Build(ctx, hash); err != nil {
 		t.Fatalf("outline: %v", err)
 	}
 	steps := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), idx, nil)
@@ -80,11 +79,11 @@ func TestDeletingASourceDeletesItsWholeStory(t *testing.T) {
 		}
 	}
 
-	del := usecases.DeleteSource{
-		Store: store, Index: idx, Atoms: atomstore.New(t.TempDir()), AtomRepo: &fakeAtomRepo{},
+	del := usecases.Sources{
+		Store: store, Index: idx, AtomStore: atomstore.New(t.TempDir()), Atoms: &fakeAtomRepo{},
 		SourceLog: log, Steps: steps, Clock: fixedClock{},
 	}
-	if _, err := del.Execute(ctx, hash); err != nil {
+	if _, err := del.Delete(ctx, hash); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
@@ -96,7 +95,7 @@ func TestDeletingASourceDeletesItsWholeStory(t *testing.T) {
 	left := []string{}
 	_ = filepath.WalkDir(sourcesDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
-			return nil
+			return nil //nolint:nilerr // the test asserts the empty result
 		}
 		if strings.Contains(d.Name(), hash) {
 			left = append(left, path)
@@ -123,10 +122,10 @@ func TestDeleteSourceDoesNotWalkTheAtomVault(t *testing.T) {
 		t.Fatalf("source: %v", err)
 	}
 	spy := &noVaultWalkAtomStore{AtomStore: atomstore.New(t.TempDir())}
-	del := usecases.DeleteSource{
-		Store: store, Index: idx, Atoms: spy, AtomRepo: &fakeAtomRepo{}, Clock: fixedClock{},
+	del := usecases.Sources{
+		Store: store, Index: idx, AtomStore: spy, Atoms: &fakeAtomRepo{}, Clock: fixedClock{},
 	}
-	if _, err := del.Execute(ctx, hash); err != nil {
+	if _, err := del.Delete(ctx, hash); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	if spy.scans != 0 {

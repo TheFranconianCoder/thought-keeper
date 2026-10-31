@@ -2,38 +2,12 @@ package usecases
 
 import (
 	"context"
-	"log/slog"
 	"path/filepath"
 	"strings"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
-
-// ResetSource throws away everything that was DERIVED from a source and leaves the source
-// itself untouched: same id, same bytes, same title and metadata. The tree (rows and sidecar),
-// the claims, the pages they compiled and the record of finished parts all go, and the tree
-// state returns to `none` — so the next run builds the document up from scratch, exactly as if
-// it had just been dropped in.
-//
-// It is the "start over" button: for testing a pipeline change (a new prompt, a new extractor,
-// the boilerplate filter) and for repairing a derivation that an older version produced. Nothing
-// is invented and nothing is lost — the bytes are the truth, the derivation is a cache.
-type ResetSource struct {
-	Index     interfaces.IndexRepository
-	Trees     interfaces.TreeStore
-	Clean     CleanSource
-	SourceLog interfaces.SourceLog
-	// Steps clears the derived steps: after a reset, outline and distill are pending again —
-	// capture survives, because the source itself does.
-	Steps interfaces.StepTracker
-	// KeepTitle preserves the source's current title across the reset. A wiki page save writes the
-	// new title first and resets the old derivation afterwards; the reset must not put the intake
-	// name back over the human's title.
-	KeepTitle bool
-	Clock     interfaces.Clock
-	Log       *slog.Logger
-}
 
 // intakeTitle is the title a source had right after intake (step 1). For a file that is its name
 // without the extension; for a URL it is the title the PAGE declared — the address is not a title and
@@ -60,14 +34,12 @@ type ResetResult struct {
 	Bookmark bool
 }
 
-// SourceResetter is the narrow shape of a derivation reset. A replacement snapshot (an attach or a
-// forced URL fetch) needs exactly this: the old claims and tree go, the source bytes stay.
-type SourceResetter interface {
-	Execute(ctx context.Context, hash string) (ResetResult, error)
-}
+// SourceResetter throws a source's derivation away and keeps the bytes — the shape a replacement
+// snapshot (an attach or a forced URL fetch) holds.
+type SourceResetter func(ctx context.Context, hash string) (ResetResult, error)
 
-// Execute resets one source's derivation.
-func (uc ResetSource) Execute(ctx context.Context, hash string) (ResetResult, error) {
+// Reset throws one source's derivation away.
+func (uc Derivation) Reset(ctx context.Context, hash string) (ResetResult, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
 		return ResetResult{}, err
@@ -75,7 +47,7 @@ func (uc ResetSource) Execute(ctx context.Context, hash string) (ResetResult, er
 	res := ResetResult{Bookmark: src.Bookmark}
 
 	// Claims, the pages that drew on them, and the part records.
-	cleaned, err := uc.Clean.Execute(ctx, hash)
+	cleaned, err := uc.Clean(ctx, hash)
 	if err != nil {
 		return res, err
 	}

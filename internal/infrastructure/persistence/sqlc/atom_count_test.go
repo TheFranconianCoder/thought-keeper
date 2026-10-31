@@ -32,8 +32,7 @@ func TestManyAtomsResolveAndCount(t *testing.T) {
 	store := objects.New(t.TempDir())
 	index := NewSourceRepository(db)
 	atomsRepo := NewAtomRepository(db)
-	src, err := usecases.IntakeSource{Store: store, Index: index, Clock: testClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "book.md", Reader: strings.NewReader("# Book\nbody\n")})
+	src, err := usecases.Sources{Store: store, Index: index, Clock: testClock{}}.Intake(ctx, usecases.IntakeInput{Name: "book.md", Reader: strings.NewReader("# Book\nbody\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
@@ -88,8 +87,7 @@ func TestAClaimCountsOnceEvenWhenItCitesSeveralNodes(t *testing.T) {
 	store := objects.New(t.TempDir())
 	index := NewSourceRepository(db)
 	atomsRepo := NewAtomRepository(db)
-	src, err := usecases.IntakeSource{Store: store, Index: index, Clock: testClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "d.md", Reader: strings.NewReader("# D\nbody\n")})
+	src, err := usecases.Sources{Store: store, Index: index, Clock: testClock{}}.Intake(ctx, usecases.IntakeInput{Name: "d.md", Reader: strings.NewReader("# D\nbody\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}
@@ -144,8 +142,7 @@ func TestTheDetailViewReportsTheSameDerivedStateAsTheList(t *testing.T) {
 	clustersRepo := NewClusterRepository(db)
 	parts := NewPartRepository(db)
 
-	src, err := usecases.IntakeSource{Store: store, Index: index, Clock: testClock{}}.
-		Execute(ctx, usecases.IntakeInput{Name: "book.md", Reader: strings.NewReader("# Book\nbody\n")})
+	src, err := usecases.Sources{Store: store, Index: index, Clock: testClock{}}.Intake(ctx, usecases.IntakeInput{Name: "book.md", Reader: strings.NewReader("# Book\nbody\n")})
 	if err != nil {
 		t.Fatalf("intake: %v", err)
 	}

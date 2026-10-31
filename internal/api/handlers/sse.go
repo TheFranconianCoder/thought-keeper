@@ -27,7 +27,7 @@ func (h SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	header.Set("Connection", "keep-alive")
 	header.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprint(w, ": connected\n\n")
+	_, _ = fmt.Fprint(w, ": connected\n\n") //nolint:errcheck // the client is gone; there is nothing to do
 	flusher.Flush()
 
 	sub := h.Hub.Subscribe()
@@ -59,13 +59,13 @@ func (h SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-heartbeat.C:
-			_, _ = fmt.Fprint(w, ": ping\n\n")
+			_, _ = fmt.Fprint(w, ": ping\n\n") //nolint:errcheck // the client is gone; there is nothing to do
 			flusher.Flush()
 		case msg, open := <-msgs:
 			if !open {
 				return
 			}
-			_, _ = fmt.Fprintf(w, "data: %s\n\n", msg)
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", msg) //nolint:errcheck // the client is gone; there is nothing to do
 			flusher.Flush()
 		}
 	}

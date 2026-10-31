@@ -63,9 +63,9 @@ type App struct {
 	db        *sql.DB
 	lock      *flock.Flock
 	runner    interfaces.ToolRunner
-	intake    usecases.IntakeSource
-	capture   usecases.CaptureSource
-	buildTree usecases.BuildTree
+	intake    usecases.Sources
+	capture   usecases.Derivation
+	buildTree usecases.Trees
 	// captureQueue holds sources whose bytes are not readable (a PDF, an EPUB): step 1 extracts the
 	// text and writes the rendering, and only then is the outline queued. One worker: extraction is
 	// CPU-bound (and OCR is very much so), and the queue is drained in order.
@@ -78,20 +78,20 @@ type App struct {
 	// distillFirst is the queue a USER asked for (button, CLI, reset follow-up). A pressed run
 	// must not wait behind sixty auto-continue runs, so the workers look here first.
 	distillFirst chan runJob
-	startRun     usecases.StartRun
-	documentRun  usecases.DocumentRun
+	startRun     usecases.Runs
+	documentRun  usecases.Derivation
 	// clusterPass is step 4 and clusterQueue its single worker's queue: the cluster step is
 	// considered over the whole vault, so there is exactly one of it.
-	clusterPass  usecases.ClusterPass
-	cleanup      usecases.Cleanup
-	reindex      usecases.ReindexVault
+	clusterPass  usecases.Clusters
+	cleanup      usecases.Maintenance
+	reindex      usecases.Maintenance
 	clusterQueue chan runJob
 	// reconcilePass is the consistency job; reconcileOffset is where its next slice starts.
-	reconcilePass   usecases.ReconcileVault
+	reconcilePass   usecases.Maintenance
 	reconcileOffset int
 	// pruneCommands enforces the assistant's retention. The pass walks commands/, so it runs on its
 	// own (daily) cadence — not on every consistency tick.
-	pruneCommands usecases.PruneCommands
+	pruneCommands usecases.Commands
 	pruneInterval time.Duration
 	nextPrune     time.Time
 	// clusterBacklog/clusterStalled bound the automatic cluster passes: two passes in a row without
@@ -108,17 +108,17 @@ type App struct {
 	// pipe carries what the app is doing right now (per step, per source); the pump requests themselves
 	// are coalesced through pumpWake.
 	pipe           pipeCounters
-	query          usecases.QueryKnowledge
-	lint           usecases.LintKnowledge
-	getSource      usecases.GetSource
-	sourceHasAtoms usecases.SourceHasAtoms
-	missingAtoms   usecases.SourcesWithoutAtoms
-	pendingCluster usecases.SourcesWithUnclustered
-	missingTrees   usecases.SourcesWithoutTree
+	query          usecases.Query
+	lint           usecases.Lint
+	getSource      usecases.Sources
+	sourceHasAtoms usecases.Sources
+	missingAtoms   usecases.Sources
+	pendingCluster usecases.Sources
+	missingTrees   usecases.Sources
 	// steps is the source step tracker (the <hash>.meta records). The app corrects a record that says
 	// a step is running when no run is behind it any more.
 	steps     interfaces.StepTracker
-	openParts usecases.SourcesWithOpenParts
+	openParts usecases.Sources
 	// retries counts transient failures per source, so a broken endpoint cannot become a hot loop.
 	retryMu sync.Mutex
 	retries map[string]int
@@ -132,25 +132,25 @@ type App struct {
 	// progress is no longer re-derived by itself.
 	stalled       map[string]int
 	progress      map[string]runProgress
-	refreshURLs   usecases.RefreshURLs
-	addURL        usecases.AddURL
-	queueURLs     usecases.QueueURLs
-	markURLFailed usecases.MarkURLFailed
+	refreshURLs   usecases.URLs
+	addURL        usecases.URLs
+	queueURLs     usecases.URLs
+	markURLFailed usecases.URLs
 	// tagPage derives a wiki page's tags; tagQueue hands that work to one worker off the request path.
-	tagPage  usecases.TagWikiPage
+	tagPage  usecases.Vocabulary
 	tagQueue chan runJob
 	// summary writes a source's overview; summaryQueue gives that one worker of its own, and
 	// summaryActive dedupes schedules so a finished document run and a consistency pass cannot queue
 	// the same source twice.
-	summary       usecases.SourceSummary
-	tagSource     usecases.TagSource
+	summary       usecases.Sources
+	tagSource     usecases.Vocabulary
 	summaryQueue  chan runJob
 	summaryMu     sync.Mutex
 	summaryActive map[string]bool
 	// The interest matcher has no model and a tiny cost, but it reads a source's claims: it runs on
 	// its own small worker so a click never waits for it. interestQueue is a set (a source is queued
 	// at most once at a time) and interestMu guards it.
-	matchInterests usecases.MatchSourceInterests
+	matchInterests usecases.ReadLater
 	interestQueue  chan string
 	interestMu     sync.Mutex
 	interestActive map[string]bool
@@ -176,8 +176,8 @@ type App struct {
 	// minutes (and made it quadratic in the size of the vault).
 	pumpWake chan string
 	// curate is the name-vocabulary curation: it asks the model and applies the answer.
-	curate          usecases.CurateVocabulary
-	rebranch        usecases.RebranchClaims
+	curate          usecases.Vocabulary
+	rebranch        usecases.Claims
 	vocabularyQueue chan runJob
 	// The automatic vocabulary pass: at most one at a time, at most every vocabularyCooldown.
 	vocabMu     sync.Mutex
@@ -201,7 +201,7 @@ type App struct {
 	clusterPhase     string
 	// vocabularyReconcile adopts the baseline (the names that exist) before a curation asks the
 	// model: the vault is the truth about which names there are, so that is not a decision.
-	vocabularyReconcile usecases.ReconcileVocabulary
+	vocabularyReconcile usecases.Vocabulary
 
 	hub *stream.Hub
 
@@ -252,8 +252,8 @@ type App struct {
 	capturesInflight map[string]bool
 	captureMu        sync.Mutex
 	maintenance      interfaces.Maintenance
-	resetSource      usecases.ResetSource
-	pruneWikiLinks   usecases.PruneWikiLinks
+	resetSource      usecases.Derivation
+	pruneWikiLinks   usecases.Wiki
 
 	quitOnce sync.Once
 	quit     chan struct{}
@@ -306,12 +306,12 @@ func New(opts Options) (*App, error) {
 
 	db, err := persistence.Open(cfg.IndexDB())
 	if err != nil {
-		_ = fl.Unlock()
+		_ = fl.Unlock() //nolint:errcheck // a close or an unlock has nothing left to report
 		return nil, err
 	}
 	if err := persistence.Migrate(db); err != nil {
-		_ = db.Close()
-		_ = fl.Unlock()
+		_ = db.Close()  //nolint:errcheck // a close or an unlock has nothing left to report
+		_ = fl.Unlock() //nolint:errcheck // a close or an unlock has nothing left to report
 		return nil, err
 	}
 	// The shape of the index, checked and REPORTED. goose cannot notice a database written by an older
@@ -489,7 +489,7 @@ func (a *App) Reset(hash string) (usecases.ResetResult, error) {
 			time.Sleep(50 * time.Millisecond)
 		}
 	}
-	res, err := a.resetSource.Execute(context.Background(), hash)
+	res, err := a.resetSource.Reset(context.Background(), hash)
 	if err != nil {
 		return res, err
 	}
@@ -527,15 +527,6 @@ func (a *App) enqueuePipeline(hash string) {
 	// the log), but the barrier is global by design.
 	_ = hash
 	a.pumpPipeline("enqueue pipeline")
-}
-
-// needsCapture reports whether step 1 still has to read this source's bytes.
-func (a *App) needsCapture(hash string) bool {
-	src, err := a.getSource.Execute(context.Background(), hash)
-	if err != nil {
-		return false
-	}
-	return src.ToEntity().NeedsCapture()
 }
 
 // stepBarrierAllows reports whether EVERY source has completed every earlier document step.
@@ -585,13 +576,13 @@ func (a *App) stepComplete(hash string, rec entities.SourceRecord, step entities
 	}
 	kind := rec.Identity.Kind
 	if kind == "" && a.getSource.Index != nil {
-		if src, err := a.getSource.Execute(context.Background(), hash); err == nil {
+		if src, err := a.getSource.Get(context.Background(), hash); err == nil {
 			kind = entities.SourceKind(src.Kind)
 		}
 	}
 	if step == entities.StepCapture {
 		if kind == "" {
-			if src, err := a.getSource.Execute(context.Background(), hash); err == nil {
+			if src, err := a.getSource.Get(context.Background(), hash); err == nil {
 				kind = entities.SourceKind(src.Kind)
 				if src.ToEntity().NeedsCapture() {
 					goto captureRecorded
@@ -620,7 +611,7 @@ captureRecorded:
 		// The step record survived, but its RESULT may not: a vault that kept sources/ and
 		// deleted atoms/ has a `.meta` that says "distilled" with no claims on disk. The record is
 		// not allowed to claim a derivation that left nothing — treat it as open and derive again.
-		if has, err := a.sourceHasAtoms.Execute(context.Background(), hash); err == nil && !has {
+		if has, err := a.sourceHasAtoms.HasAtoms(context.Background(), hash); err == nil && !has {
 			// A part that carried only document metadata was finished as source_relative and correctly
 			// produced no atom. If every recorded part is such a part, the derivation is complete.
 			if len(rec.Parts) > 0 {
@@ -830,7 +821,7 @@ func (a *App) captureWorker() {
 			release := a.enterDocStep(entities.StepCapture, hash)
 			ctx, cancel := context.WithTimeout(context.Background(), a.captureTimeout())
 			var res usecases.CaptureResult
-			res, err := a.capture.Execute(ctx, hash)
+			res, err := a.capture.Capture(ctx, hash)
 			cancel()
 			release()
 			a.releaseCapture(hash)
@@ -888,7 +879,8 @@ func (a *App) Run() error {
 	// Consistency is a precondition of serving, not a background chore: a stale page is a lie the
 	// reader cannot distinguish from a real one.
 	a.startupRepair()
-	ln, err := net.Listen("tcp", a.cfg.Server.Addr)
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", a.cfg.Server.Addr)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", a.cfg.Server.Addr, err)
 	}
@@ -1161,13 +1153,13 @@ func (a *App) shutdown() {
 		if a.srv != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			_ = a.srv.Shutdown(ctx)
+			_ = a.srv.Shutdown(ctx) //nolint:errcheck // a close or an unlock has nothing left to report
 		}
 		if a.db != nil {
-			_ = a.db.Close()
+			_ = a.db.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		}
 		if a.lock != nil {
-			_ = a.lock.Unlock()
+			_ = a.lock.Unlock() //nolint:errcheck // a close or an unlock has nothing left to report
 		}
 		removeEndpoint()
 	})
@@ -1206,7 +1198,7 @@ func (a *App) addInboxWatch(dir string) (*fsnotify.Watcher, error) {
 		return nil, err
 	}
 	if err := w.Add(dir); err != nil {
-		_ = w.Close()
+		_ = w.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		return nil, err
 	}
 	return w, nil
@@ -1214,7 +1206,7 @@ func (a *App) addInboxWatch(dir string) (*fsnotify.Watcher, error) {
 
 // watchInboxEvents is the inotify path. It returns when the watch is gone or the app quits.
 func (a *App) watchInboxEvents(w *fsnotify.Watcher) {
-	defer func() { _ = w.Close() }()
+	defer func() { _ = w.Close() }() //nolint:errcheck // a close or an unlock has nothing left to report
 	for {
 		select {
 		case ev, ok := <-w.Events:
@@ -1345,9 +1337,9 @@ func (a *App) handleDrop(path string) {
 		// Intake writes a source object and its row: shared gate. It may run beside a document step;
 		// the cluster step waits for it.
 		a.gate.RLock()
-		src, err := a.intake.Execute(context.Background(), usecases.IntakeInput{Name: filepath.Base(path), Reader: f})
+		src, err := a.intake.Intake(context.Background(), usecases.IntakeInput{Name: filepath.Base(path), Reader: f})
 		a.gate.RUnlock()
-		_ = f.Close()
+		_ = f.Close() //nolint:errcheck // a close or an unlock has nothing left to report
 		if err != nil {
 			a.log.Warn("intake failed", "path", path, "err", err)
 			return
@@ -1382,17 +1374,6 @@ func (a *App) releaseDrop(path string) {
 	a.dropMu.Lock()
 	delete(a.dropsInflight, path)
 	a.dropMu.Unlock()
-}
-
-// enqueueTree schedules a tree build off the request path (non-blocking). A source is never
-// queued twice: the add path and the start-up sweep can both see "no tree yet", and building
-// the same document twice is wasted work that also leaves the row flapping between states.
-func (a *App) enqueueTree(hash string) {
-	if !a.stepBarrierAllows(entities.StepOutline) {
-		a.log.Debug("outline waits for every source to finish capture", "hash", hash)
-		return
-	}
-	a.queueTree(hash)
 }
 
 // queueTree hands one source to the outline worker. It does NOT re-check the global barrier: the pump
@@ -1464,7 +1445,7 @@ func (a *App) treeWorker() {
 			// gate, which is exactly the overlap the four steps forbid.
 			release := a.enterDocStep(entities.StepOutline, hash)
 			var res usecases.TreeResult
-			res, err := a.buildTree.Execute(context.Background(), hash)
+			res, err := a.buildTree.Build(context.Background(), hash)
 			release()
 			a.releaseTree(hash)
 			if err != nil {
@@ -1509,7 +1490,6 @@ type runJob struct {
 	step     entities.Step
 	hash     string
 	question string
-	url      string
 	// page is the wiki page a tagging run works on.
 	page ulid.ULID
 	// namespace is which name vocabulary a curation run works on (claim topics/claim topics).
@@ -1534,7 +1514,7 @@ func (a *App) ScheduleDistill(hash string, reset bool) (string, error) {
 		return "", types.New("conflict", "distill waits until every source has finished the outline step", types.ErrConflict)
 	}
 	ctx := context.Background()
-	src, err := a.getSource.Execute(ctx, hash)
+	src, err := a.getSource.Get(ctx, hash)
 	if err != nil {
 		return "", err
 	}
@@ -1546,7 +1526,7 @@ func (a *App) ScheduleDistill(hash string, reset bool) (string, error) {
 	if !a.claimDistill(hash) {
 		return "", types.New("conflict", "a run for this source is already queued or running", types.ErrConflict)
 	}
-	runID, err := a.startRun.Execute(ctx, entities.RunPipeline, a.cfg.OpenAI.ModelCompile, entities.StepDistill, hash)
+	runID, err := a.startRun.Start(ctx, entities.RunPipeline, a.cfg.OpenAI.ModelCompile, entities.StepDistill, hash)
 	if err != nil {
 		a.releaseDistill(hash)
 		return "", err
@@ -1581,13 +1561,13 @@ func (a *App) ScheduleSummary(hash string) (string, error) {
 		return "", agentNotConfigured()
 	}
 	ctx := context.Background()
-	if _, err := a.getSource.Execute(ctx, hash); err != nil {
+	if _, err := a.getSource.Get(ctx, hash); err != nil {
 		return "", err
 	}
 	if !a.claimSummary(hash) {
 		return "", types.New("conflict", "a summary run for this source is already queued or running", types.ErrConflict)
 	}
-	runID, err := a.startRun.Execute(ctx, entities.RunSummary, a.cfg.OpenAI.ModelCompile, "", hash)
+	runID, err := a.startRun.Start(ctx, entities.RunSummary, a.cfg.OpenAI.ModelCompile, "", hash)
 	if err != nil {
 		a.releaseSummary(hash)
 		return "", err
@@ -1597,7 +1577,7 @@ func (a *App) ScheduleSummary(hash string) (string, error) {
 	case a.summaryQueue <- runJob{runID: runID, op: entities.RunSummary, hash: hash}:
 	default:
 		a.releaseSummary(hash)
-		_ = a.startRun.Abandon(ctx, runID, "the summary queue was full")
+		_ = a.startRun.Abandon(ctx, runID, "the summary queue was full") //nolint:errcheck // the run row is an audit trail; the work already ended
 		a.clearRun(runID)
 		return "", types.New("conflict", "the summary queue is full", types.ErrConflict)
 	}
@@ -1728,13 +1708,13 @@ func (a *App) ScheduleSourceTag(hash string) (string, error) {
 		return "", agentNotConfigured()
 	}
 	ctx := context.Background()
-	if _, err := a.getSource.Execute(ctx, hash); err != nil {
+	if _, err := a.getSource.Get(ctx, hash); err != nil {
 		return "", err
 	}
 	if !a.claimSourceTag(hash) {
 		return "", types.New("conflict", "a tag run for this source is already queued or running", types.ErrConflict)
 	}
-	runID, err := a.startRun.Execute(ctx, entities.RunTag, a.cfg.OpenAI.ModelCompile, "", hash)
+	runID, err := a.startRun.Start(ctx, entities.RunTag, a.cfg.OpenAI.ModelCompile, "", hash)
 	if err != nil {
 		a.releaseSourceTag(hash)
 		return "", err
@@ -1744,7 +1724,7 @@ func (a *App) ScheduleSourceTag(hash string) (string, error) {
 	case a.tagQueue <- runJob{runID: runID, op: entities.RunTag, hash: hash}:
 	default:
 		a.releaseSourceTag(hash)
-		_ = a.startRun.Abandon(ctx, runID, "the tag queue was full")
+		_ = a.startRun.Abandon(ctx, runID, "the tag queue was full") //nolint:errcheck // the run row is an audit trail; the work already ended
 		a.clearRun(runID)
 		return "", types.New("conflict", "the tag queue is full", types.ErrConflict)
 	}
@@ -1786,7 +1766,7 @@ func (a *App) interestWorker() {
 		case <-a.quit:
 			return
 		case hash := <-a.interestQueue:
-			res, err := a.matchInterests.Execute(context.Background(), hash)
+			res, err := a.matchInterests.Match(context.Background(), hash)
 			a.interestMu.Lock()
 			delete(a.interestActive, hash)
 			again := a.interestAgain[hash]
@@ -1866,7 +1846,7 @@ func (a *App) ScheduleQuery(question, source string) (string, error) {
 			return "", err
 		}
 	}
-	runID, err := a.startRun.ExecuteQuery(context.Background(), a.cfg.OpenAI.ModelReason, question, source)
+	runID, err := a.startRun.StartQuery(context.Background(), a.cfg.OpenAI.ModelReason, question, source)
 	if err != nil {
 		return "", err
 	}
@@ -1880,7 +1860,7 @@ func (a *App) ScheduleQuery(question, source string) (string, error) {
 
 // ScheduleLint creates a lint run and enqueues it.
 func (a *App) ScheduleLint(scope string) (string, error) {
-	runID, err := a.startRun.Execute(context.Background(), entities.RunLint, a.cfg.OpenAI.ModelReason, entities.StepCluster, scope)
+	runID, err := a.startRun.Start(context.Background(), entities.RunLint, a.cfg.OpenAI.ModelReason, entities.StepCluster, scope)
 	if err != nil {
 		return "", err
 	}
@@ -2176,7 +2156,7 @@ func (a *App) requestVocabularyIfDue(reason string) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), vocabularyReportTimeout)
 	defer cancel()
-	report, err := a.curate.Report.Execute(ctx)
+	report, err := a.curate.Report(ctx)
 	if err != nil {
 		return
 	}
@@ -2210,7 +2190,7 @@ func (a *App) requestVocabularyIfDue(reason string) {
 	a.log.Info("vocabulary: automatic pass queued", "reason", reason, "new_names", fresh)
 }
 
-// ScheduleRebranch queues the topic-label repair: the claims are re-labelled from their own text, in
+// ScheduleVocabularyRebranch queues the topic-label repair: the claims are re-labelled from their own text, in
 // a bounded batch, and the rest follows on the next press (oldest first).
 func (a *App) ScheduleVocabularyRebranch() (string, error) {
 	if !a.agentAvailable {
@@ -2222,7 +2202,7 @@ func (a *App) ScheduleVocabularyRebranch() (string, error) {
 	if a.rebranch.Gateway == nil || a.rebranch.Atoms == nil {
 		return "", types.New("not_implemented", "re-topic is not configured", types.ErrNotImplemented)
 	}
-	runID, err := a.startRun.Execute(context.Background(), entities.RunVocabulary,
+	runID, err := a.startRun.Start(context.Background(), entities.RunVocabulary,
 		a.cfg.OpenAI.ModelCompile, entities.Step(""), "retopic")
 	if err != nil {
 		return "", err
@@ -2244,7 +2224,7 @@ func (a *App) ScheduleVocabularyCurate(ns entities.VocabularyNamespace) (string,
 	if ns != "" {
 		target = "vocabulary:" + string(ns)
 	}
-	runID, err := a.startRun.Execute(context.Background(), entities.RunVocabulary,
+	runID, err := a.startRun.Start(context.Background(), entities.RunVocabulary,
 		a.cfg.OpenAI.ModelCompile, entities.StepCluster, target)
 	if err != nil {
 		return "", err
@@ -2264,7 +2244,7 @@ func (a *App) ScheduleVocabularyCurate(ns entities.VocabularyNamespace) (string,
 // there is the title, which is derived from the object again.
 func (a *App) ScheduleCapture(hash string) (bool, string, error) {
 	ctx := context.Background()
-	src, err := a.getSource.Execute(ctx, hash)
+	src, err := a.getSource.Get(ctx, hash)
 	if err != nil {
 		return false, "", err
 	}
@@ -2288,7 +2268,7 @@ func (a *App) ReconcileNow() (usecases.ReconcileResult, error) {
 	defer cancel()
 	pass := a.reconcilePass
 	pass.Offset = 0
-	res, err := pass.Execute(ctx)
+	res, err := pass.Reconcile(ctx)
 	if err != nil {
 		return res, err
 	}
@@ -2690,7 +2670,7 @@ func (a *App) takeDistill() (runJob, bool) {
 // worker stalls that worker (the pipeline deadlocks when the queue is full and every worker waits),
 // and a blocking send from the tree worker stops every tree behind it. If the queue is full, the
 // hand-over happens in the background instead — the work is not lost and nobody waits.
-func (a *App) queueDistill(queue chan runJob, job runJob) bool {
+func (a *App) queueDistill(queue chan runJob, job runJob) {
 	waiting := len(queue)
 	if queue == a.distillFirst {
 		waiting = 0
@@ -2698,7 +2678,7 @@ func (a *App) queueDistill(queue chan runJob, job runJob) bool {
 	select {
 	case queue <- job:
 		a.markQueued(job.hash, waiting)
-		return true
+		return
 	default:
 	}
 	a.log.Warn("run queue is full, handing the run over in the background",
@@ -2713,7 +2693,6 @@ func (a *App) queueDistill(queue chan runJob, job runJob) bool {
 			a.releaseDistill(job.hash)
 		}
 	}()
-	return true
 }
 
 func (a *App) runOne(job runJob) {
@@ -2750,7 +2729,7 @@ func (a *App) runOne(job runJob) {
 		if !job.reset && !a.stepBarrierAllows(entities.StepDistill) {
 			// The source moved behind a newly added one. The run row exists, but the strict barrier
 			// wins; abandon it and let the pump start it again when the outline stage is complete.
-			_ = a.startRun.Abandon(context.Background(), job.runID, "waiting for every source to reach the outline step")
+			_ = a.startRun.Abandon(context.Background(), job.runID, "waiting for every source to reach the outline step") //nolint:errcheck // the run row is an audit trail; the work already ended
 			a.releaseDistill(job.hash)
 			a.log.Info("document run deferred: the global outline barrier is not complete", "hash", job.hash)
 			return
@@ -2759,7 +2738,7 @@ func (a *App) runOne(job runJob) {
 		release := a.enterDocStep(entities.StepDistill, job.hash)
 		runCtx, runCancel := a.runContext()
 		a.publish("run", map[string]any{"run_id": run, "op": string(job.op), "step": string(job.step), "status": "running"})
-		r, err := a.documentRun.Execute(runCtx, job.runID, job.hash, job.reset)
+		r, err := a.documentRun.Run(runCtx, job.runID, job.hash, job.reset)
 		res = r
 		runCancel()
 		release()
@@ -2829,7 +2808,7 @@ func (a *App) runOne(job runJob) {
 		var sres usecases.SourceSummaryResult
 		err := a.sharedWrite(ctx, func(ctx context.Context) error {
 			var sErr error
-			sres, sErr = a.summary.Execute(ctx, job.runID, job.hash)
+			sres, sErr = a.summary.Summary(ctx, job.runID, job.hash)
 			return sErr
 		})
 		a.markSummaryRunning(job.hash, false)
@@ -2845,7 +2824,7 @@ func (a *App) runOne(job runJob) {
 	case entities.RunQuery:
 		a.publish("run", map[string]any{"run_id": run, "op": string(job.op), "step": string(job.step), "status": "running"})
 		a.enterAsk()
-		res, err := a.query.ExecuteScoped(ctx, job.runID, job.question, job.hash)
+		res, err := a.query.AskScoped(ctx, job.runID, job.question, job.hash)
 		a.leaveAsk()
 		if err != nil {
 			status = "failed"
@@ -2856,7 +2835,7 @@ func (a *App) runOne(job runJob) {
 		a.log.Info("query done", "run", run, "iterations", res.Iterations, "tokens", res.TotalTokens)
 	case entities.RunLint:
 		a.publish("run", map[string]any{"run_id": run, "op": string(job.op), "step": string(job.step), "status": "running"})
-		res, err := a.lint.Execute(ctx, job.runID)
+		res, err := a.lint.Check(ctx, job.runID)
 		if err != nil {
 			status = "failed"
 			failure = err.Error()
@@ -2875,7 +2854,7 @@ func (a *App) runOne(job runJob) {
 			var sres usecases.TagSourceResult
 			err := a.sharedWrite(ctx, func(ctx context.Context) error {
 				var tErr error
-				sres, tErr = a.tagSource.Execute(ctx, job.runID, job.hash)
+				sres, tErr = a.tagSource.TagSource(ctx, job.runID, job.hash)
 				return tErr
 			})
 			a.releaseSourceTag(job.hash)
@@ -2891,7 +2870,7 @@ func (a *App) runOne(job runJob) {
 		var res usecases.TagResult
 		err := a.sharedWrite(ctx, func(ctx context.Context) error {
 			var tErr error
-			res, tErr = a.tagPage.Execute(ctx, job.page)
+			res, tErr = a.tagPage.TagPage(ctx, job.page)
 			return tErr
 		})
 		if err != nil {
@@ -2917,7 +2896,7 @@ func (a *App) runOne(job runJob) {
 			a.setMaintDetail(job.runID, "labelling the claims")
 			runCtx, runCancel := a.runContext()
 			a.publish("run", map[string]any{"run_id": run, "op": string(job.op), "step": string(job.step), "status": "running"})
-			res, err := a.rebranch.Execute(runCtx, job.runID)
+			res, err := a.rebranch.Rebranch(runCtx, job.runID)
 			runCancel()
 			a.gate.Unlock()
 			if err != nil {
@@ -2961,7 +2940,7 @@ func (a *App) runOne(job runJob) {
 		unitCtx, cancelUnit := context.WithTimeout(ctx, vocabularyUnitTimeout)
 		defer cancelUnit()
 		ctx = unitCtx
-		if _, rErr := a.vocabularyReconcile.Execute(ctx); rErr != nil {
+		if _, rErr := a.vocabularyReconcile.Reconcile(ctx); rErr != nil {
 			a.log.Warn("vocabulary: the baseline could not be adopted", "err", rErr)
 		}
 		var err error
@@ -2977,7 +2956,7 @@ func (a *App) runOne(job runJob) {
 			uc.ApplyGate = func(ctx context.Context, fn func(context.Context) error) error {
 				return fn(ctx)
 			}
-			r, e := uc.Execute(ctx, job.runID)
+			r, e := uc.Curate(ctx, job.runID)
 			// The partial result counts too: a chunk that merged names before the failure changed
 			// the vault, and the summary the reader sees has to say so.
 			results = append(results, r)
@@ -3070,7 +3049,7 @@ func (a *App) ScheduleSitemapURLs(parentHash string, urls []string) {
 			a.gate.RUnlock()
 			return
 		}
-		queued, err := a.queueURLs.ExecuteSitemap(ctx, parentHash, urls)
+		queued, err := a.queueURLs.QueueSitemap(ctx, parentHash, urls)
 		a.gate.RUnlock()
 		if err != nil {
 			a.log.Warn("sitemap: pages not queued", "hash", parentHash, "err", err)
@@ -3133,7 +3112,7 @@ func (a *App) ScheduleWikiURLs(pageID string, urls []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		a.gate.RLock()
-		queued, err := a.queueURLs.Execute(ctx, pageID, urls)
+		queued, err := a.queueURLs.Queue(ctx, pageID, urls)
 		a.gate.RUnlock()
 		if err != nil {
 			a.log.Warn("wiki: links not queued", "page", pageID, "err", err)
@@ -3159,14 +3138,14 @@ func (a *App) ScheduleWikiURLs(pageID string, urls []string) {
 // ScheduleWikiTag derives a page's tags from its own title and prose. It runs OFF the request path: a
 // save must not wait for a model call, and the tags arrive as a wiki event when they are there.
 func (a *App) ScheduleWikiTag(pageID string) {
-	if !a.agentAvailable || a.tagPage.Pages == nil {
+	if !a.agentAvailable || a.tagPage.Wiki == nil {
 		return
 	}
 	id, err := ulid.ParseStrict(pageID)
 	if err != nil {
 		return
 	}
-	runID, err := a.startRun.Execute(context.Background(), entities.RunTag,
+	runID, err := a.startRun.Start(context.Background(), entities.RunTag,
 		a.cfg.OpenAI.ModelCompile, "", pageID)
 	if err != nil {
 		a.log.Warn("tagging: cannot start run", "page", pageID, "err", err)
@@ -3179,7 +3158,7 @@ func (a *App) ScheduleWikiTag(pageID string) {
 		// The queue is small and the runs are short: a page saved faster than the model answers waits
 		// for the next save, and "tags are missing" is not a reason to grow goroutines.
 		a.log.Info("tagging: queue is full, the page keeps its tags", "page", pageID)
-		_ = a.startRun.Abandon(context.Background(), runID, "the tag queue was full")
+		_ = a.startRun.Abandon(context.Background(), runID, "the tag queue was full") //nolint:errcheck // the run row is an audit trail; the work already ended
 		a.clearRun(runID)
 	}
 }
@@ -3195,7 +3174,7 @@ func (a *App) ScheduleWikiReprocess(hash string) {
 		err := a.ExclusiveWrite(context.Background(), "wiki reprocess", func(ctx context.Context) error {
 			reset := a.resetSource
 			reset.KeepTitle = true
-			_, rErr := reset.Execute(ctx, hash)
+			_, rErr := reset.Reset(ctx, hash)
 			return rErr
 		})
 		if err != nil {
@@ -3227,7 +3206,7 @@ func (a *App) ScheduleWikiCleanup(pageID, staleHash string) {
 		var res usecases.PruneWikiLinksResult
 		err := a.ExclusiveWrite(context.Background(), "wiki cleanup", func(ctx context.Context) error {
 			var pErr error
-			res, pErr = a.pruneWikiLinks.Execute(ctx, id, staleHash)
+			res, pErr = a.pruneWikiLinks.PruneLinks(ctx, id, staleHash)
 			return pErr
 		})
 		if err != nil {
@@ -3280,7 +3259,7 @@ func (a *App) urlWorker() {
 			// tried, the copy is kept when the page is walled/unreadable/less rich, and a page that
 			// wins reports the reset the app must run. AddURL is for a page that has no copy yet.
 			if job.Origin == entities.RSSOrigin && child.FromFeed {
-				res, rErr := a.refreshURLs.ExecuteOne(ctx, entities.URLHash(job.URL))
+				res, rErr := a.refreshURLs.RefreshOne(ctx, entities.URLHash(job.URL))
 				a.gate.RUnlock()
 				cancel()
 				if rErr != nil {
@@ -3293,9 +3272,9 @@ func (a *App) urlWorker() {
 			}
 			// The human's own addition WINS over a wiki/sitemap/feed claim (job.Origin is empty for
 			// both the single add and a pasted batch). A job with an owner stays a sub-source.
-			fetch := a.addURL.Execute
+			fetch := a.addURL.Add
 			if job.Origin == "" {
-				fetch = a.addURL.ExecuteManual
+				fetch = a.addURL.AddManual
 			}
 			src, err := fetch(ctx, job.URL, false)
 			a.gate.RUnlock()
@@ -3337,12 +3316,13 @@ func (a *App) reportLinkFailure(job urlJob, cause error) {
 		hash string
 		err  error
 	)
-	if job.Origin == entities.SitemapOrigin {
-		hash, err = a.markURLFailed.ExecuteSitemap(ctx, job.URL, job.ParentHash, cause)
-	} else if job.Origin == entities.RSSOrigin {
-		hash, err = a.markURLFailed.ExecuteFeed(ctx, job.URL, job.ParentHash, cause)
-	} else {
-		hash, err = a.markURLFailed.Execute(ctx, job.URL, job.WikiPage, cause)
+	switch job.Origin {
+	case entities.SitemapOrigin:
+		hash, err = a.markURLFailed.MarkFailedSitemap(ctx, job.URL, job.ParentHash, cause)
+	case entities.RSSOrigin:
+		hash, err = a.markURLFailed.MarkFailedFeed(ctx, job.URL, job.ParentHash, cause)
+	default:
+		hash, err = a.markURLFailed.MarkFailed(ctx, job.URL, job.WikiPage, cause)
 	}
 	a.gate.RUnlock()
 	if err != nil {
@@ -3429,7 +3409,7 @@ func (a *App) applyRefreshResult(res usecases.RefreshResult, focus string) {
 		a.ScheduleDiscoveredChildren(res.Discovered)
 	}
 	if res.Changed > 0 {
-		_, _ = a.requestCluster("url changed")
+		_, _ = a.requestCluster("url changed") //nolint:errcheck // the run row is an audit trail; the work already ended
 	}
 }
 
@@ -3472,7 +3452,7 @@ func (a *App) refreshNow(reason string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	a.gate.RLock()
-	res, err := a.refreshURLs.Execute(ctx)
+	res, err := a.refreshURLs.Refresh(ctx)
 	a.gate.RUnlock()
 	if err != nil {
 		a.log.Warn("url refresh failed", "reason", reason, "err", err)
@@ -3507,22 +3487,11 @@ func (a *App) ScheduleDiscoveredChildren(children []usecases.DiscoveredChildren)
 	}
 }
 
-// runContext bounds one run (document or cluster pass) so it can never hang forever.
 // runningDistills counts the sources a document run is in flight for.
 func (a *App) runningDistills() int {
 	a.distillMu.Lock()
 	defer a.distillMu.Unlock()
 	return len(a.distillActive)
-}
-
-// runBudget caps the whole retry ladder of one model call: without it, a per-call timeout of 300 s
-// times four attempts is twenty minutes for a single call — which, behind a serialised worker, looks
-// exactly like "the app hangs". The gateway stops retrying when the budget is used up.
-func runBudget(cfg config.Config) time.Duration {
-	if d, err := time.ParseDuration(cfg.OpenAI.Timeout); err == nil && d > 0 {
-		return d
-	}
-	return 120 * time.Second
 }
 
 // runContextFor is the run's own ceiling. A document run is bounded by pipeline.run_timeout; a name
@@ -3549,31 +3518,6 @@ func (a *App) runContext() (context.Context, context.CancelFunc) {
 		return ctx, func() {}
 	}
 	return context.WithTimeout(ctx, timeout)
-}
-
-// maybeDistill runs the document steps for a source that has a tree but no atoms.
-func (a *App) maybeDistill(hash string) {
-	if !a.cfg.Pipeline.AutoDistill || !a.agentAvailable {
-		return
-	}
-	has, err := a.sourceHasAtoms.Execute(context.Background(), hash)
-	if err != nil {
-		a.log.Warn("auto-distill: cannot read the source state", "hash", hash, "err", err)
-		return
-	}
-	if has {
-		// A reset can sweep the derivation away while a run is still writing; that run's own end
-		// re-checks the source, so this is not a dead end — but say that it was skipped.
-		a.log.Info("auto-distill skipped: the source has claims", "hash", hash)
-		return
-	}
-	if !a.claimDistill(hash) {
-		// A run for this source is queued or running. It re-checks on its way out, so the source
-		// is not left behind — the old code stayed silent here, which looked like a hang.
-		a.log.Info("auto-distill deferred: a run for this source is already in flight", "hash", hash)
-		return
-	}
-	a.startDistill(hash)
 }
 
 // markPendingDerivation remembers that a source needs a fresh derivation once its running run ends.
@@ -3605,7 +3549,7 @@ func (a *App) distillFree(hash string) bool {
 
 // startDistill creates and queues the run for a source whose claim is already taken.
 func (a *App) startDistill(hash string) {
-	runID, err := a.startRun.Execute(context.Background(), entities.RunPipeline, a.cfg.OpenAI.ModelCompile, entities.StepDistill, hash)
+	runID, err := a.startRun.Start(context.Background(), entities.RunPipeline, a.cfg.OpenAI.ModelCompile, entities.StepDistill, hash)
 	if err != nil {
 		a.releaseDistill(hash)
 		a.log.Warn("auto-distill: cannot start run", "hash", hash, "err", err)
@@ -3643,7 +3587,7 @@ func (a *App) startupRepair() {
 	runReindex := func(why string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		a.gate.Lock()
-		res, err := a.reindex.Execute(ctx)
+		res, err := a.reindex.Reindex(ctx)
 		a.gate.Unlock()
 		cancel()
 		if err != nil {
@@ -3727,49 +3671,6 @@ func (a *App) startupSweep() {
 	a.pumpPipeline("startup")
 }
 
-// sweepMissingAtoms distills sources that have a built tree but no atoms.
-func (a *App) sweepMissingAtoms() {
-	srcs, err := a.missingAtoms.Execute(context.Background())
-	if err != nil {
-		a.log.Warn("auto-distill sweep failed", "err", err)
-		return
-	}
-	if len(srcs) == 0 {
-		return
-	}
-	a.log.Info("auto-distill sweep", "sources", len(srcs))
-	for _, s := range srcs {
-		select {
-		case <-a.quit:
-			return
-		default:
-		}
-		a.requestDistill(s.Hash)
-	}
-}
-
-// sweepOpenDerivations resumes a derivation that is not finished: text parts without a recorded
-// done. This is a 500-page book between runs, and the reason a restart continues it.
-func (a *App) sweepOpenDerivations() {
-	srcs, err := a.openParts.Execute(context.Background())
-	if err != nil {
-		a.log.Warn("open-derivation sweep failed", "err", err)
-		return
-	}
-	if len(srcs) == 0 {
-		return
-	}
-	a.log.Info("open-derivation sweep", "sources", len(srcs))
-	for _, s := range srcs {
-		select {
-		case <-a.quit:
-			return
-		default:
-		}
-		a.requestDistill(s.Hash)
-	}
-}
-
 // requestDistill claims a source and queues its run (the sweeps and the retry use this).
 func (a *App) requestDistill(hash string) {
 	if !a.stepBarrierAllows(entities.StepDistill) {
@@ -3817,7 +3718,7 @@ func checkWritable(dir string) bool {
 		return false
 	}
 	name := f.Name()
-	_ = f.Close()
-	_ = os.Remove(name)
+	_ = f.Close()       //nolint:errcheck // a close or an unlock has nothing left to report
+	_ = os.Remove(name) //nolint:errcheck // a trash move is best effort; a missing file is the goal
 	return true
 }

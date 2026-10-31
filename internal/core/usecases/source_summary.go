@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -15,36 +14,6 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
-// SourceSummary writes a source's OVERVIEW: the prose the detail view shows on its Summary tab.
-//
-// The summary is DERIVED, like the outline: it is written from the claims (and the outline's shape),
-// never from the source's raw text, so it cannot say more than the vault actually knows. It is a
-// sidecar (<hash>.summary.md), so a missing one is a visible file the consistency job can fill in and
-// deleting the source deletes it with everything else.
-//
-// The summary follows a COMPLETE derivation. A source whose parts are still open would get an
-// overview of a moving set of claims, so the run refuses until distill is `ok`; a full reset removes
-// the old file, and the next complete distill writes a new one.
-type SourceSummary struct {
-	Index interfaces.IndexRepository
-	Atoms interfaces.AtomRepository
-	Trees interfaces.TreeStore
-	Store interfaces.SourceStore
-	// Gateway is the model; a source with claims needs it. A source that produced NO claims still
-	// gets a one-line summary, without a model call: that is a fact, not an overview to invent.
-	Gateway interfaces.AgentGateway
-	Model   string
-	// Language is the language the overview is written in (ISO 639-1, empty = English).
-	Language    string
-	Runs        interfaces.RunRepository
-	SourceLog   interfaces.SourceLog
-	Clock       interfaces.Clock
-	Log         *slog.Logger
-	MaxClaims   int
-	MaxChars    int
-	CallTimeout time.Duration
-}
-
 // SourceSummaryResult reports what the run wrote.
 type SourceSummaryResult struct {
 	Hash   string
@@ -53,8 +22,8 @@ type SourceSummaryResult struct {
 	Tokens int
 }
 
-// Execute writes the summary of one source and finishes its run row.
-func (uc SourceSummary) Execute(ctx context.Context, runID ulid.ULID, hash string) (SourceSummaryResult, error) {
+// Summary writes the source page's overview (a background run, never a request path).
+func (uc Sources) Summary(ctx context.Context, runID ulid.ULID, hash string) (SourceSummaryResult, error) {
 	res := SourceSummaryResult{Hash: hash}
 	run := entities.Run{
 		ID: runID, Op: entities.RunSummary, Model: uc.Model, TargetID: hash,
@@ -152,7 +121,7 @@ func (uc SourceSummary) Execute(ctx context.Context, runID ulid.ULID, hash strin
 // claimLines renders the claims the summary may use: the claim itself, its topic and its body. The
 // cap is a prompt-size guard, not a ranking — a book with 600 claims is summarised from a broad,
 // document-ordered slice, and the through-line is what the prompt asks for.
-func (uc SourceSummary) claimLines(atoms []entities.Atom) string {
+func (uc Sources) claimLines(atoms []entities.Atom) string {
 	maxClaims := uc.MaxClaims
 	if maxClaims <= 0 {
 		maxClaims = 250
@@ -218,7 +187,7 @@ func stripCodeFence(s string) string {
 
 // fail records the failed run and returns the error. The caller (the worker) publishes it; the row is
 // finished here so a failed summary never hangs as "running".
-func (uc SourceSummary) fail(ctx context.Context, run entities.Run, msg string) error {
+func (uc Sources) fail(ctx context.Context, run entities.Run, msg string) error {
 	run.Status = entities.RunFailed
 	run.Error = msg
 	run.EndedAt = uc.Clock.Now()
@@ -234,7 +203,7 @@ func (uc SourceSummary) fail(ctx context.Context, run entities.Run, msg string) 
 	return errors.New(msg)
 }
 
-func (uc SourceSummary) log(ctx context.Context, hash string, runID ulid.ULID, level, msg string, fields map[string]any) {
+func (uc Sources) log(ctx context.Context, hash string, runID ulid.ULID, level, msg string, fields map[string]any) {
 	if uc.SourceLog == nil {
 		return
 	}

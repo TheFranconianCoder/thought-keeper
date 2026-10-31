@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/oklog/ulid/v2"
 
@@ -9,23 +10,38 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
-// ListAtoms lists atoms, optionally filtered by topic.
-type ListAtoms struct {
-	AtomRepo interfaces.AtomRepository
-	// Clusters hydrates each claim's membership: the list row says how many clusters a claim
-	// travels in, and a count that is always zero would be a lie.
-	Clusters interfaces.ClusterRepository
+// Claims is the use case of the claim corpus: the atoms as files, the index rows that list them, and
+// the repairs that keep the two in step.
+type Claims struct {
+	Atoms        interfaces.AtomRepository
+	AtomStore    interfaces.AtomStore
+	Clusters     interfaces.ClusterRepository
+	CommandStore interfaces.CommandStore
+	Vocab        interfaces.VocabularyStore
+	Gateway      interfaces.AgentGateway
+	Model        string
+	Runs         interfaces.RunRepository
+	Clock        interfaces.Clock
+	Log          *slog.Logger
+	OnPhase      func(phase string)
+	MaxClaims    int
+	Parallel     int
+	Apply        bool
 }
 
-// Execute returns atoms (newest first).
-func (uc ListAtoms) Execute(ctx context.Context, branch string, limit, offset int) ([]partialentities.PartialAtom, error) {
+// AtomLister lists the claims of one topic. A handler holds this value; nil means the feature is not
+// wired.
+type AtomLister func(ctx context.Context, topic string, limit, offset int) ([]partialentities.PartialAtom, error)
+
+// List returns one page of claims (newest first), each with its memberships.
+func (uc Claims) List(ctx context.Context, branch string, limit, offset int) ([]partialentities.PartialAtom, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	atoms, err := uc.AtomRepo.ListAtoms(ctx, branch, limit, offset)
+	atoms, err := uc.Atoms.ListAtoms(ctx, branch, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -52,14 +68,13 @@ func (uc ListAtoms) Execute(ctx context.Context, branch string, limit, offset in
 	return out, nil
 }
 
-// ListClaimTopics lists claim topics with atom counts.
-type ListClaimTopics struct {
-	AtomRepo interfaces.AtomRepository
-}
+// ClaimTopicLister lists the topics the corpus uses, with their counts. A handler holds this value;
+// nil means the feature is not wired.
+type ClaimTopicLister func(ctx context.Context) ([]partialentities.PartialBranch, error)
 
-// Execute returns the claim topics.
-func (uc ListClaimTopics) Execute(ctx context.Context) ([]partialentities.PartialBranch, error) {
-	branches, err := uc.AtomRepo.ListClaimTopics(ctx)
+// Topics returns the topics the corpus uses.
+func (uc Claims) Topics(ctx context.Context) ([]partialentities.PartialBranch, error) {
+	branches, err := uc.Atoms.ListClaimTopics(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -70,16 +85,13 @@ func (uc ListClaimTopics) Execute(ctx context.Context) ([]partialentities.Partia
 	return out, nil
 }
 
-// GetAtom returns one atom with its provenance and the clusters it belongs to. The cluster ids are
-// not navigation of their own: the Claims detail view uses them to show the claim's PEERS.
-type GetAtom struct {
-	AtomRepo interfaces.AtomRepository
-	Clusters interfaces.ClusterRepository
-}
+// AtomGetter returns one claim, with its peers and its memberships. A handler holds this value; nil
+// means the feature is not wired.
+type AtomGetter func(ctx context.Context, id ulid.ULID) (partialentities.PartialAtom, error)
 
-// Execute looks up an atom by id.
-func (uc GetAtom) Execute(ctx context.Context, id ulid.ULID) (partialentities.PartialAtom, error) {
-	a, err := uc.AtomRepo.GetAtom(ctx, id)
+// Get returns one claim by id.
+func (uc Claims) Get(ctx context.Context, id ulid.ULID) (partialentities.PartialAtom, error) {
+	a, err := uc.Atoms.GetAtom(ctx, id)
 	if err != nil {
 		return partialentities.PartialAtom{}, err
 	}
@@ -92,14 +104,12 @@ func (uc GetAtom) Execute(ctx context.Context, id ulid.ULID) (partialentities.Pa
 	return out, nil
 }
 
-// GetRun returns one agent run.
-type GetRun struct {
-	Runs interfaces.RunRepository
-}
+// RunGetter looks up one run by id. A handler holds this value; nil means the feature is not wired.
+type RunGetter func(ctx context.Context, id ulid.ULID) (partialentities.PartialRun, error)
 
-// Execute looks up a run by id.
-func (uc GetRun) Execute(ctx context.Context, id ulid.ULID) (partialentities.PartialRun, error) {
-	r, err := uc.Runs.GetRun(ctx, id)
+// Get looks up a run by id.
+func (uc Runs) Get(ctx context.Context, id ulid.ULID) (partialentities.PartialRun, error) {
+	r, err := uc.Store.GetRun(ctx, id)
 	if err != nil {
 		return partialentities.PartialRun{}, err
 	}
@@ -119,7 +129,7 @@ func (uc GetRun) Execute(ctx context.Context, id ulid.ULID) (partialentities.Par
 		StartedAt:        r.StartedAt,
 		EndedAt:          r.EndedAt,
 	}
-	if steps, err := uc.Runs.ListSteps(ctx, id); err == nil {
+	if steps, err := uc.Store.ListSteps(ctx, id); err == nil {
 		for _, s := range steps {
 			out.Steps = append(out.Steps, partialentities.PartialRunStep{
 				Seq: s.Seq, Tool: s.Tool, IsError: s.IsError, DurationMS: s.DurationMS,

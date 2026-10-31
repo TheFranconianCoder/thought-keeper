@@ -46,12 +46,12 @@ func TestURLAddressMigrationMovesTheSourceAndItsClaims(t *testing.T) {
 	atoms := &fakeAtomRepo{saved: []entities.Atom{atom}}
 	atomStore := &fakeAtomStore{m: map[string]entities.Atom{}}
 
-	migrate := usecases.MigrateURLAddresses{
+	migrate := usecases.URLs{
 		Index: idx, Store: store, Atoms: atoms, AtomStore: atomStore,
 	}
 
 	// The preview says what is pending and touches nothing.
-	res, err := migrate.Execute(ctx, false)
+	res, err := migrate.Migrate(ctx, false)
 	if err != nil {
 		t.Fatalf("preview: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestURLAddressMigrationMovesTheSourceAndItsClaims(t *testing.T) {
 		t.Fatalf("preview = %+v, want one pending URL and no move", res)
 	}
 
-	res, err = migrate.Execute(ctx, true)
+	res, err = migrate.Migrate(ctx, true)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestURLAddressMigrationMovesTheSourceAndItsClaims(t *testing.T) {
 	}
 
 	// Idempotent: a second pass has nothing to do.
-	res, err = migrate.Execute(ctx, true)
+	res, err = migrate.Migrate(ctx, true)
 	if err != nil {
 		t.Fatalf("second pass: %v", err)
 	}
