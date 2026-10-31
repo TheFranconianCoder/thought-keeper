@@ -67,6 +67,7 @@ src/
     confirm.svelte.ts        in-app questions, never native dialogs
     toast.svelte.ts          bounded transient messages
     scroll-memory.ts         scroll position per history entry
+    scroll-top.svelte.ts     which list scrolled furthest; the shared scroll-to-top button
     single-window.ts         BroadcastChannel election
   components/
     layout/                  Sidebar, Topbar

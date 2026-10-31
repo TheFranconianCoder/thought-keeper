@@ -39,6 +39,11 @@ lens's extra filters follow (Sources: kind and attached) and then its chip cloud
 tags, Claims topics). Bookmarks and Attention have neither filters nor a cloud. No list describes
 itself in prose; only Claims keeps a caption, its “newest 50 of …”.
 
+**A list that has scrolled past about one screen offers a scroll-to-top button** in the lower right of
+the content area. It follows whichever container the reader moved — the page, or the list pane of a
+split view — so the wide and narrow layouts need no separate case, and on the narrow layout it sits
+above the footer navigation. A short list never shows it.
+
 A cluster is **never** a lens and never listed. The Claims detail shows the claim's cluster peers and
 the claims under the same topic **as two separate sections**;
 that is the only place the association becomes visible. The bundled status views are calm and

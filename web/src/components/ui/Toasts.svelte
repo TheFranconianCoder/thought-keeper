@@ -21,7 +21,10 @@
   .toasts {
     position: fixed;
     right: 20px;
-    bottom: 20px;
+    /* The scroll-to-top button owns the content corner below the stack; a toast never covers it.
+       The inset keeps the stack above the narrow layout's footer navigation on a device with a
+       home indicator. */
+    bottom: calc(74px + env(safe-area-inset-bottom, 0px));
     z-index: 80;
     display: flex;
     flex-direction: column;

@@ -26,6 +26,7 @@ export const commonDe: Record<string, string> = {
   'common.clearField': 'Feld leeren',
   'common.loading': 'Wird geladen…',
   'common.none': '—',
+  'common.scrollTop': 'Nach oben scrollen',
 
   'connection.title': 'Die Oberfläche aktualisiert sich über einen Ereignisstrom',
   'connection.live': 'Online',

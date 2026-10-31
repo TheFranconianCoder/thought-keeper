@@ -35,6 +35,7 @@
     chevronRight: 'M8 4.5 13.5 10 8 15.5',
     chevronDown: 'M5 8l5 5 5-5',
     arrowLeft: 'M16 10H4 M9 5l-5 5 5 5',
+    arrowUp: 'M10 16V4 M5 9l5-5 5 5',
     arrowUpRight: 'M5.5 14.5 14.5 5.5 M7 5.5h7.5V13',
     external: 'M11 3.5h5.5V9 M16.5 3.5 9.5 10.5 M8 5H4.5v10.5H15V12',
     filter: 'M3 5h14 M6 10h8 M8.5 15h3',

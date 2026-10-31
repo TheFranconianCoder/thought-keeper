@@ -9,6 +9,7 @@
   import type { AskSummary } from '../../lib/api/types';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
+  import { scrollTopTarget } from '../../lib/scroll-top.svelte';
   import { asks, type PendingAsk } from '../../lib/stores/asks.svelte';
   import { claims } from '../../lib/stores/claims.svelte';
   import CopyId from '../ui/CopyId.svelte';
@@ -149,7 +150,7 @@
       </button>
     </div>
   {/if}
-  <div class="saved-asks" use:scrollFade use:rememberScroll={'ask-list'}>
+  <div class="saved-asks" use:scrollFade use:rememberScroll={'ask-list'} use:scrollTopTarget>
     {#if asks.error && rows.length === 0}
       <p class="notice notice--error">{asks.error}</p>
     {:else if !asks.loaded && rows.length === 0}

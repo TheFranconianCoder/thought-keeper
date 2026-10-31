@@ -8,6 +8,7 @@
   import { claimPath, claimTopicPath, navigate, router, sourcePath } from '../../lib/router.svelte';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
+  import { scrollTopTarget } from '../../lib/scroll-top.svelte';
   import { CLAIM_PAGE_SIZE, claims } from '../../lib/stores/claims.svelte';
   import { connection } from '../../lib/stores/connection.svelte';
   import { system } from '../../lib/stores/system.svelte';
@@ -194,7 +195,7 @@
       <div class="list-caption">{caption}</div>
     </ListHead>
 
-    <div class="claim-rows" use:scrollFade use:rememberScroll={'claims-list'}>
+    <div class="claim-rows" use:scrollFade use:rememberScroll={'claims-list'} use:scrollTopTarget>
       {#if searchMode}
         {#if searchError}
           <p class="notice notice--error">{searchError}</p>

@@ -8,6 +8,7 @@
   import AssistantBanner from '../assistant/AssistantBanner.svelte';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
+  import { scrollTopTarget } from '../../lib/scroll-top.svelte';
   import { wiki } from '../../lib/stores/wiki.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -225,7 +226,13 @@
       {/if}
     </ListHead>
 
-    <div class="page-rows" bind:this={listEl} use:scrollFade use:rememberScroll={'wiki-list'}>
+    <div
+      class="page-rows"
+      bind:this={listEl}
+      use:scrollFade
+      use:rememberScroll={'wiki-list'}
+      use:scrollTopTarget
+    >
       {#if wiki.error}
         <p class="notice notice--error">{wiki.error}</p>
       {:else if !wiki.loaded}

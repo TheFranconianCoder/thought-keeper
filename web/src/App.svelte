@@ -9,6 +9,7 @@
   import FooterNav from './components/layout/FooterNav.svelte';
   import Sidebar from './components/layout/Sidebar.svelte';
   import Topbar from './components/layout/Topbar.svelte';
+  import ScrollTop from './components/ui/ScrollTop.svelte';
   import AskView from './components/views/AskView.svelte';
   import AttentionView from './components/views/AttentionView.svelte';
   import BookmarksView from './components/views/BookmarksView.svelte';
@@ -23,6 +24,7 @@
   import { openAssistant, openSearch } from './lib/overlays';
   import { navigate, router, startRouter } from './lib/router.svelte';
   import { rememberScroll, restoreScroll } from './lib/scroll-memory';
+  import { scrollTopTarget } from './lib/scroll-top.svelte';
   import { claimWindow } from './lib/single-window';
   import { recent } from './lib/recent.svelte';
   import { connection } from './lib/stores/connection.svelte';
@@ -149,28 +151,31 @@
       </div>
     {/if}
 
-    <div class="content-scroll" bind:this={scroller}>
-      {#if router.current.view === 'home'}
-        <HomeView />
-      {:else if router.current.view === 'claims'}
-        <ClaimsView />
-      {:else if router.current.view === 'wiki'}
-        <WikiView />
-      {:else if router.current.view === 'sources'}
-        <SourcesView />
-      {:else if router.current.view === 'source'}
-        <SourceView />
-      {:else if router.current.view === 'attention'}
-        <AttentionView />
-      {:else if router.current.view === 'bookmarks'}
-        <BookmarksView />
-      {:else if router.current.view === 'ask'}
-        <AskView />
-      {:else if router.current.view === 'status'}
-        <StatusView />
-      {:else}
-        <HomeView />
-      {/if}
+    <div class="content-shell">
+      <div class="content-scroll" bind:this={scroller} use:scrollTopTarget>
+        {#if router.current.view === 'home'}
+          <HomeView />
+        {:else if router.current.view === 'claims'}
+          <ClaimsView />
+        {:else if router.current.view === 'wiki'}
+          <WikiView />
+        {:else if router.current.view === 'sources'}
+          <SourcesView />
+        {:else if router.current.view === 'source'}
+          <SourceView />
+        {:else if router.current.view === 'attention'}
+          <AttentionView />
+        {:else if router.current.view === 'bookmarks'}
+          <BookmarksView />
+        {:else if router.current.view === 'ask'}
+          <AskView />
+        {:else if router.current.view === 'status'}
+          <StatusView />
+        {:else}
+          <HomeView />
+        {/if}
+      </div>
+      <ScrollTop />
     </div>
 
     <FooterNav />

@@ -30,6 +30,7 @@ export const commonEn: Record<string, string> = {
   'common.clearField': 'Clear field',
   'common.loading': 'Loading…',
   'common.none': '—',
+  'common.scrollTop': 'Scroll to top',
 
   'connection.title': 'The UI updates through one event stream',
   'connection.live': 'Online',
