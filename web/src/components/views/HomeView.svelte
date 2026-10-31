@@ -218,7 +218,10 @@
   <section class="home-card sources-card">
     <div class="card-head">
       <h2>{t('home.newSources')}</h2>
-      <a class="card-link" href="#/sources">{t('home.allSources')} →</a>
+      <a class="card-link" href="#/sources">
+        {t('home.allSources')}
+        <Icon name="chevronRight" size={13} />
+      </a>
     </div>
     {#if newestError}
       <p class="notice notice--error">{newestError}</p>
@@ -356,7 +359,7 @@
 
   .card-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
     margin-bottom: 8px;
   }
@@ -375,12 +378,23 @@
   }
 
   .card-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     margin-left: auto;
     color: var(--muted);
     font-size: 11.5px;
+    line-height: 1;
+    transition: color 0.14s var(--ease);
   }
 
-  .card-link:hover {
+  .card-link :global(.ico) {
+    color: var(--faint);
+    transition: color 0.14s var(--ease);
+  }
+
+  .card-link:hover,
+  .card-link:hover :global(.ico) {
     color: var(--accent);
   }
 
