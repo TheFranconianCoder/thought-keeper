@@ -91,6 +91,10 @@ type SourceFilter struct {
 	// Interest narrows the queue to the sources one interest queued (a slug). It is a named filter
 	// like a tag, so its address means the same thing forever.
 	Interest string
+	// RootsOnly keeps the sources no other source DECLARED: a sitemap's pages, a feed's items and a
+	// wiki page's linked URLs carry a parent hash, the source the human added does not. It is what
+	// "recently arrived" means — a crawl is one addition, not fifty.
+	RootsOnly bool
 }
 
 type Source struct {

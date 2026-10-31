@@ -326,6 +326,10 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
        OR (read_later_at IS NOT NULL AND read_later_done_at IS NULL))
   AND (sqlc.arg(interest) = ''
        OR instr(read_later_via, '"' || sqlc.arg(interest) || '"') > 0)
+  -- Roots only: the sources no sitemap, feed or wiki page declared. An owned page is a child, not
+  -- an arrival; "recently arrived" asks this question so a crawl cannot flood it.
+  AND (sqlc.arg(roots) = 0
+       OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
 ORDER BY imported_at DESC
 LIMIT sqlc.arg(limit) OFFSET sqlc.arg(offset);
 
@@ -354,6 +358,8 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
   AND read_later_at IS NOT NULL AND read_later_done_at IS NULL
   AND (sqlc.arg(interest) = ''
        OR instr(read_later_via, '"' || sqlc.arg(interest) || '"') > 0)
+  AND (sqlc.arg(roots) = 0
+       OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
 ORDER BY read_later_at ASC, imported_at DESC
 LIMIT sqlc.arg(limit) OFFSET sqlc.arg(offset);
 
@@ -379,7 +385,9 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
   AND (sqlc.arg(read_later) = 0
        OR (read_later_at IS NOT NULL AND read_later_done_at IS NULL))
   AND (sqlc.arg(interest) = ''
-       OR instr(read_later_via, '"' || sqlc.arg(interest) || '"') > 0);
+       OR instr(read_later_via, '"' || sqlc.arg(interest) || '"') > 0)
+  AND (sqlc.arg(roots) = 0
+       OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL));
 
 -- name: SetSourceFavorite :exec
 UPDATE sources SET favorite_at = sqlc.arg(favorite_at) WHERE hash = sqlc.arg(hash);

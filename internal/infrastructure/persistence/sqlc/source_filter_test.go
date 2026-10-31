@@ -120,3 +120,64 @@ func TestSourceListWindowFiltersTheCount(t *testing.T) {
 		t.Fatalf("attached = %d (%v), want 1", attached, err)
 	}
 }
+
+// TestSourceListRoots: "recently arrived" asks for ROOTS. A page a sitemap declared is a child of
+// that addition, not an addition of its own — otherwise one crawl floods the front door. The queue
+// applies the same filter, so the two statements cannot disagree.
+func TestSourceListRoots(t *testing.T) {
+	ctx := context.Background()
+	db, err := persistence.Open(filepath.Join(t.TempDir(), "index.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := persistence.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewSourceRepository(db)
+	now := time.UnixMilli(1_700_000_000_000).UTC()
+	insert := func(hash, title, meta string) {
+		t.Helper()
+		if err := repo.UpsertSource(ctx, entities.Source{
+			ID: ulid.Make(), Hash: hash, Kind: entities.SourceKindURL, Ext: ".url",
+			Path: hash + ".url", Title: title, Bytes: 1, TreeState: entities.TreeNone,
+			ImportedAt: now, Meta: meta,
+		}); err != nil {
+			t.Fatalf("source %s: %v", title, err)
+		}
+	}
+
+	sitemap := strings.Repeat("a1", 32)
+	child := strings.Repeat("a2", 32)
+	hand := strings.Repeat("a3", 32)
+	insert(sitemap, "A sitemap", `{"url":"https://example.com","sitemap":true}`)
+	insert(child, "A declared page", `{"url":"https://example.com/a","parent_hash":"`+sitemap+`"}`)
+	insert(hand, "A dropped note", `{"url":"https://example.org"}`)
+	// The queue filters identically: a child in the queue is still not an arrival.
+	if err := repo.SetSourceReadLater(ctx, child, now, time.Time{}, true, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	check := func(name string, filter entities.SourceFilter, want int) {
+		t.Helper()
+		rows, err := repo.ListSources(ctx, filter, 100, 0)
+		if err != nil {
+			t.Fatalf("%s: list: %v", name, err)
+		}
+		if len(rows) != want {
+			t.Errorf("%s: rows = %d, want %d", name, len(rows), want)
+		}
+		n, err := repo.CountSources(ctx, filter)
+		if err != nil {
+			t.Fatalf("%s: count: %v", name, err)
+		}
+		if n != want {
+			t.Errorf("%s: count = %d, want %d", name, n, want)
+		}
+	}
+
+	check("all", entities.SourceFilter{}, 3)
+	check("roots", entities.SourceFilter{RootsOnly: true}, 2)
+	check("roots in the queue", entities.SourceFilter{RootsOnly: true, ReadLaterOnly: true}, 0)
+	check("child in the queue", entities.SourceFilter{ReadLaterOnly: true}, 1)
+}

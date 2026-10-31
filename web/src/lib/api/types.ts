@@ -191,6 +191,8 @@ export interface SourceListFilter {
   readLaterOnly?: boolean;
   /** One interest's share of the queue (a named filter, like a tag). */
   interest?: string;
+  /** Keep only sources no sitemap, feed or wiki page declared: what "recently arrived" means. */
+  rootsOnly?: boolean;
   /**
    * command is an assistant result: the server reads the materialized set from the record instead
    * of filtering. It is one filter dimension, so the window (count, pages, scroll height) works

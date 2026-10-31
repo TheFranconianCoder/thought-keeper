@@ -41,6 +41,11 @@ class AsksStore {
   /** Questions in flight, newest first. A failed run stays until it is dismissed or retried. */
   pending = $state<PendingAsk[]>([]);
 
+  /** The three latest saved questions, for the Start lens. The Ask lens owns the full list; the
+   *  front door must not read a page of fifty to show three. */
+  recent = $state<AskSummary[]>([]);
+  private recentLoaded = false;
+
   private listSeq = 0;
   private detailSeq = 0;
   private localSeq = 0;
@@ -64,6 +69,18 @@ class AsksStore {
       if (seq !== this.listSeq) return;
       this.loaded = true;
       this.error = humanError(error);
+    }
+  }
+
+  /** loadRecent reads only the questions the Start lens shows. A failed read leaves the last three
+   *  in place: the box still asks, and the list is not the point. */
+  async loadRecent(): Promise<void> {
+    try {
+      const result = await api.asks(3);
+      this.recent = result.asks ?? [];
+      this.recentLoaded = true;
+    } catch {
+      /* the front door stays as it was */
     }
   }
 
@@ -240,6 +257,7 @@ class AsksStore {
 
   async refresh(): Promise<void> {
     await this.load();
+    if (this.recentLoaded) await this.loadRecent();
     if (this.selectedId) await this.open(this.selectedId);
   }
 }

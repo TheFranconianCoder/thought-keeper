@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick, untrack } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import AddSourceDialog from './components/overlays/AddSourceDialog.svelte';
   import AssistantDialog from './components/overlays/AssistantDialog.svelte';
   import DuplicateWindow from './components/overlays/DuplicateWindow.svelte';
@@ -27,7 +27,6 @@
   import { rememberScroll, restoreScroll } from './lib/scroll-memory';
   import { scrollTopTarget } from './lib/scroll-top.svelte';
   import { claimWindow } from './lib/single-window';
-  import { recent } from './lib/recent.svelte';
   import { connection } from './lib/stores/connection.svelte';
   import { claims } from './lib/stores/claims.svelte';
   import { sources } from './lib/stores/sources.svelte';
@@ -66,25 +65,6 @@
   $effect(() => {
     const configured = system.status?.language?.ui;
     if (configured) adoptServerDefault(configured);
-  });
-
-  $effect(() => {
-    // The detail that is actually open is the one this route names — never a stale selection from
-    // the lens behind it. The visit itself is untracked: it writes the list this effect would
-    // otherwise depend on.
-    const route = router.current;
-    const source = route.view === 'source' ? sources.selected : null;
-    const claim = route.view === 'claims' && route.id ? claims.selected : null;
-    const page = route.view === 'wiki' && route.id && route.id !== 'new' ? wiki.selected : null;
-    const ask = route.view === 'ask' && route.id ? asks.selected : null;
-    untrack(() => {
-      if (source && source.hash === route.id) {
-        recent.visit('source', source.hash, source.title || source.hash.slice(0, 12));
-      }
-      if (claim && claim.id === route.id) recent.visit('claim', claim.id, claim.claim);
-      if (page && page.id === route.id) recent.visit('wiki', page.id, page.title);
-      if (ask && ask.id === route.id) recent.visit('ask', ask.id, ask.question);
-    });
   });
 
   $effect(() => {

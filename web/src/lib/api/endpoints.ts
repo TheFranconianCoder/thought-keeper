@@ -73,6 +73,7 @@ export const api = {
         favorite: filter.favoriteOnly ? 1 : undefined,
         readlater: filter.readLaterOnly ? 1 : undefined,
         interest: filter.interest,
+        roots: filter.rootsOnly ? 1 : undefined,
         limit,
         offset,
       }),
@@ -182,7 +183,7 @@ export const api = {
     request<AtomRelated>(withQuery(`/atoms/${enc(id)}/related`, { limit })),
 
   // ── Ask ────────────────────────────────────────────────────────────────
-  asks: () => request<AskList>('/asks'),
+  asks: (limit = 50) => request<AskList>(withQuery('/asks', { limit })),
   ask: (id: string) => request<SavedAsk>(`/asks/${enc(id)}`),
   deleteAsk: (id: string) => request<{ id: string }>(`/asks/${enc(id)}`, { method: 'DELETE' }),
   query: (question: string, source = '') =>

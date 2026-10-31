@@ -225,6 +225,8 @@ WHERE (?1 = '' OR kind = ?1)
        OR (read_later_at IS NOT NULL AND read_later_done_at IS NULL))
   AND (?9 = ''
        OR instr(read_later_via, '"' || ?9 || '"') > 0)
+  AND (?10 = 0
+       OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
 `
 
 type CountSourcesFilteredParams struct {
@@ -237,6 +239,7 @@ type CountSourcesFilteredParams struct {
 	Favorite  interface{} `json:"favorite"`
 	ReadLater interface{} `json:"read_later"`
 	Interest  interface{} `json:"interest"`
+	Roots     interface{} `json:"roots"`
 }
 
 func (q *Queries) CountSourcesFiltered(ctx context.Context, arg CountSourcesFilteredParams) (int64, error) {
@@ -250,6 +253,7 @@ func (q *Queries) CountSourcesFiltered(ctx context.Context, arg CountSourcesFilt
 		arg.Favorite,
 		arg.ReadLater,
 		arg.Interest,
+		arg.Roots,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -799,8 +803,12 @@ WHERE (?1 = '' OR kind = ?1)
        OR (read_later_at IS NOT NULL AND read_later_done_at IS NULL))
   AND (?9 = ''
        OR instr(read_later_via, '"' || ?9 || '"') > 0)
+  -- Roots only: the sources no sitemap, feed or wiki page declared. An owned page is a child, not
+  -- an arrival; "recently arrived" asks this question so a crawl cannot flood it.
+  AND (?10 = 0
+       OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
 ORDER BY imported_at DESC
-LIMIT ?11 OFFSET ?10
+LIMIT ?12 OFFSET ?11
 `
 
 type ListSourcesFilteredParams struct {
@@ -813,6 +821,7 @@ type ListSourcesFilteredParams struct {
 	Favorite  interface{} `json:"favorite"`
 	ReadLater interface{} `json:"read_later"`
 	Interest  interface{} `json:"interest"`
+	Roots     interface{} `json:"roots"`
 	Offset    int64       `json:"offset"`
 	Limit     int64       `json:"limit"`
 }
@@ -828,6 +837,7 @@ func (q *Queries) ListSourcesFiltered(ctx context.Context, arg ListSourcesFilter
 		arg.Favorite,
 		arg.ReadLater,
 		arg.Interest,
+		arg.Roots,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -900,8 +910,10 @@ WHERE (?1 = '' OR kind = ?1)
   AND read_later_at IS NOT NULL AND read_later_done_at IS NULL
   AND (?8 = ''
        OR instr(read_later_via, '"' || ?8 || '"') > 0)
+  AND (?9 = 0
+       OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
 ORDER BY read_later_at ASC, imported_at DESC
-LIMIT ?10 OFFSET ?9
+LIMIT ?11 OFFSET ?10
 `
 
 type ListSourcesQueueParams struct {
@@ -913,6 +925,7 @@ type ListSourcesQueueParams struct {
 	Failed    interface{} `json:"failed"`
 	Favorite  interface{} `json:"favorite"`
 	Interest  interface{} `json:"interest"`
+	Roots     interface{} `json:"roots"`
 	Offset    int64       `json:"offset"`
 	Limit     int64       `json:"limit"`
 }
@@ -930,6 +943,7 @@ func (q *Queries) ListSourcesQueue(ctx context.Context, arg ListSourcesQueuePara
 		arg.Failed,
 		arg.Favorite,
 		arg.Interest,
+		arg.Roots,
 		arg.Offset,
 		arg.Limit,
 	)

@@ -49,10 +49,11 @@ is a finite set of lenses — **Start, Sources, Wiki, Bookmarks, Claims, Ask, At
 sidebar on the wide layout and in a **footer navigation** when the window is narrow (no drawer, no menu
 button), with an Attention badge and a connection mark on Status. **The assistant sits in the top bar**
 and is not one of the lenses: it is how the app is driven from outside a click. A command resolves to
-a lens, a filter and a materialized set, and every open window follows the address it hands out. **Start** is the front door: an Ask
-box, **Read later** (the oldest open queue entries with the interest that queued each), Continue
-(the last opened details, local memory), Needs you, the newest sources and one vault-pulse line —
-never the newest-claims wall. A **wiki
+a lens, a filter and a materialized set, and every open window follows the address it hands out. **Start** is the front door: a
+vault-pulse line, an Ask box, two thin signals for what runs and what needs you (absent when quiet),
+**Read later** (the oldest open queue entries with the interest that queued each) and the newest
+**roots** — owned pages never count as arrivals — each with its claim count; never a session-restore
+card and never the newest-claims wall. A **wiki
 page** is user-authored Markdown with tags; saving it writes a source representation and runs the
 document pipeline from capture. The app also tags a page and a source
 (auto tags, kept apart from the human's tags) and curates the three name vocabularies (`topics`,
@@ -70,7 +71,7 @@ filtered count is the scroll height. A cluster is
 
 The reader's own marks are **not** lenses either. A **favorite** is a star on a source or a wiki page
 and a filter in that lens; the **read-later queue** is a filter of the Sources list (`?readlater=1`,
-oldest entry first), a card on Start and a banner on the list. **Interests** are standing rules in
+oldest entry first), a list on Start and a banner on the list. **Interests** are standing rules in
 `interests/`: a strong lexical match puts a NEW source into the queue, a weak one stays a suggestion
 in the source's rail. They are managed in an overlay, and their matches are computed on demand — no
 index table, no model, no second grouping.

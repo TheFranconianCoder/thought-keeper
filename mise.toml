@@ -1,20 +1,26 @@
 [tools]
-go = "1.27"
-node = "26"                # PWA toolchain (Vite + Svelte); Node >=22.12 required
-pnpm = "12.15.0"          # the PWA package manager
-"golangci-lint" = "2.15"  # 2.12 is built on Go 1.26 and cannot read a Go 1.27 module
-gofumpt = "0.11"
-sqlc = "1.31"
-goose = "3.27"
-lefthook = "1.13"
-task = "3.53"
-"github-cli" = "latest"   # releases: .opencode/skills/release/scripts/release.sh
-syft = "1.54.0"
-grype = "0.119.0"
+go = "1.27.3"
+node = "26.13.0"                # PWA toolchain (Vite + Svelte); Node >=22.12 required
+pnpm = "12.16.1"          # the PWA package manager
+golangci-lint = "2.15.0"  # 2.12 is built on Go 1.26 and cannot read a Go 1.27 module
+gofumpt = "0.12.0"
+sqlc = "1.31.1"
+goose = "3.29.0"
+lefthook = "2.2.2"
+task = "3.54.0"
+github-cli = "2.103.3"   # releases: .opencode/skills/release/scripts/release.sh
+syft = "1.55.0"
+grype = "0.121.0"
 grant = "0.6.8"
 
 # External tools for PDF text extraction and OCR. Invoked ad-hoc via stdin/stdout
 # (no daemon, no CGO). They are optional at runtime: the service capability-checks
 # them at startup; in production they must be installed for PDF/OCR to work.
-poppler = "latest"            # conda-forge: provides pdftotext, pdftoppm
-"conda:tesseract" = "latest"  # conda-forge: provides tesseract
+poppler = "26.10.0"            # conda-forge: provides pdftotext, pdftoppm
+"conda:tesseract" = "5.5.3"  # conda-forge: provides tesseract
+
+[tool_alias]
+"golangci-lint" = "go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
+"gofumpt" = "go:mvdan.cc/gofumpt"
+"sqlc" = "github:sqlc-dev/sqlc"
+"goose" = "go:github.com/pressly/goose/v3/cmd/goose"

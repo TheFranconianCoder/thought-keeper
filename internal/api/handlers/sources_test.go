@@ -86,7 +86,7 @@ func TestSourceListParsesTheWindowFilter(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		context.Background(),
 		"GET",
-		"/api/v1/sources?kind=pdf&q=rust&tag=systems&attached=1&bookmarks=1&failed=1&limit=50&offset=100",
+		"/api/v1/sources?kind=pdf&q=rust&tag=systems&attached=1&bookmarks=1&failed=1&roots=1&limit=50&offset=100",
 		nil,
 	)
 	rec := httptest.NewRecorder()
@@ -96,7 +96,7 @@ func TestSourceListParsesTheWindowFilter(t *testing.T) {
 	}
 	want := entities.SourceFilter{
 		Kind: "pdf", Query: "rust", Tag: "systems",
-		AttachedOnly: true, BookmarksOnly: true, FailedOnly: true,
+		AttachedOnly: true, BookmarksOnly: true, FailedOnly: true, RootsOnly: true,
 	}
 	if lister.lastFilter != want {
 		t.Errorf("filter = %+v, want %+v", lister.lastFilter, want)

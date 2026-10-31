@@ -225,6 +225,7 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 		FavoriteOnly:  truthy(q.Get("favorite")),
 		ReadLaterOnly: truthy(q.Get("readlater")),
 		Interest:      strings.TrimSpace(q.Get("interest")),
+		RootsOnly:     truthy(q.Get("roots")),
 	}
 	srcs, err := h.Lister(r.Context(), filter, limit, offset)
 	if err != nil {

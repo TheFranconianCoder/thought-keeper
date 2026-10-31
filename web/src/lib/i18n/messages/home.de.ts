@@ -1,7 +1,6 @@
-/** Die Linse „Start“: die Haustür, keine Datenbankausgabe. Fragen, weiterlesen, aufräumen. */
+/** Die Linse „Start“: die Haustür, keine Datenbankausgabe. Fragen, laufende Arbeit, Ankunft. */
 export const homeDe: Record<string, string> = {
   'home.title': 'Start',
-  'home.sub': 'Fragen, weiterlesen, aufräumen.',
 
   'home.ask': 'Den Wissensbestand fragen',
   'home.askPlaceholder': 'Was sagen die Aussagen über …',
@@ -9,15 +8,9 @@ export const homeDe: Record<string, string> = {
   'home.askNote': 'Jede Antwort wird mit ihren Belegen gespeichert.',
   'home.recentQuestions': 'Zuletzt gefragt',
 
-  'home.continue': 'Weitermachen',
-  'home.continueEmpty': 'Noch nichts geöffnet.',
-  'home.kind.source': 'Quelle',
-  'home.kind.claim': 'Aussage',
-  'home.kind.wiki': 'Wiki-Seite',
-  'home.kind.ask': 'Frage',
-
-  'home.needs': 'Braucht dich',
-  'home.allQuiet': 'Nichts zu tun. Der Tresor ist ruhig.',
+  // Die zwei Signalzeilen unter der Frage: was läuft, was wartet. Beide fehlen, wenn nichts ist.
+  'home.working': 'Läuft: {what}',
+  'home.needsYou': 'Braucht dich',
   'home.needsFailed.one': '{count} Quelle mit fehlgeschlagenem Schritt',
   'home.needsFailed.many': '{count} Quellen mit fehlgeschlagenem Schritt',
   'home.needsFindings.one': '{count} Befund',
@@ -26,10 +19,14 @@ export const homeDe: Record<string, string> = {
   'home.needsUnclustered.many': '{count} Aussagen ohne Cluster',
 
   'home.newSources': 'Neu im Tresor',
+  'home.newSourcesEmpty': 'Noch nichts angekommen.',
   'home.allSources': 'Alle Quellen',
+  'home.claimsCount.one': '{count} Aussage',
+  'home.claimsCount.many': '{count} Aussagen',
   'home.emptySourcesTitle': 'Noch keine Quelle',
   'home.emptySourcesText':
     'Füge eine Markdown-Datei, ein PDF, ein EPUB, reinen Text oder einen Link hinzu — oder stelle eine Frage; der Tresor darf antworten, dass er noch leer ist.',
+  'home.emptyInbox': 'Dateien im Ordner inbox/ werden automatisch übernommen.',
   'home.emptySourcesAction': 'Erste Quelle hinzufügen',
 
   'home.pulse.sources.one': '{count} Quelle',
@@ -38,14 +35,11 @@ export const homeDe: Record<string, string> = {
   'home.pulse.claims.many': '{count} Aussagen',
   'home.pulse.clusters.one': '{count} Cluster',
   'home.pulse.clusters.many': '{count} Cluster',
-  'home.pulse.unclustered.one': '{count} ungeclustert',
-  'home.pulse.unclustered.many': '{count} ungeclustert',
 
   // Die Warteschlange auf der Haustür.
   'home.readLater': 'Später lesen',
   'home.allReadLater': 'Alle',
-  'home.readLaterEmpty': 'Nichts vorgemerkt. Ein Interesse kann diese Warteschlange füllen.',
+  'home.readLaterEmpty': 'Nichts vorgemerkt.',
   'home.readLaterEmptyAction': 'Interessen anlegen',
   'home.readLaterDone': 'Erledigt',
-
 };

@@ -591,7 +591,7 @@
     margin-bottom: 24px;
     padding: 13px 14px;
     border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius);
     background: var(--bg-elevated);
     box-shadow: var(--shadow-1);
   }

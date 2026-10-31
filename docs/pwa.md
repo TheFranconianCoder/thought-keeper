@@ -23,7 +23,7 @@ feed row keeps its title.
 
 | Lens | What it shows |
 | --- | --- |
-| **Start** | the front door, not a data dump: an **Ask** box with the three latest questions, **Read later** (the three OLDEST open queue entries with the interest that queued each, “done” per row and the way into the interests manager — its empty state is a quiet line, never a guilt box), **Continue** (the last sources, claims, wiki pages and questions opened; local memory, not a vault record), **Needs you** (failed sources, findings, unclustered claims — quiet when there is nothing), the five newest sources with their live step state, and one calm vault-pulse line; a new vault gets “add the first source” here |
+| **Start** | the front door, not a data dump: one head line with the vault pulse (sources, claims, clusters) instead of a tagline, an **Ask** box with the three latest questions, then at most two thin **signal lines** that are simply absent when quiet — what **runs** right now (`Working: distill · 12 sources`, the same sentence as the top bar, from the pipeline) and what **needs you** (failed steps, findings, unclustered claims, each naming its count and opening the lens that fixes it). Below them two lists: **Read later** (the three OLDEST open queue entries with the interest that queued each, “done” per row, and **one quiet line** with the way into the interests manager when empty — never a guilt box) and **Recently arrived** (the five newest ROOTS — a sitemap's pages and a feed's items are children of one addition, never five arrivals — each with its age, its claim count and one lamp for the derivation). There is no continued-session card: “where I was” is the browser's own history, which already restores the scroll position; a vault with nothing in it gets one onboarding card (“add the first source”, or ask anyway) instead of a page of empty lists |
 | **Sources** | list with a persistent search/type/tag filter — tags appear as chips in every row and as a tag cloud above the list (human and derived, counted once per source) — the reader's two marks as filters: **Read later** (the open queue, oldest entry first, with a banner naming how much came from interests and the per-interest chips) and **★ Favorites**, plus the **Interests** button; a row carries a filled star, a filled clock and — while it is queued — one interest chip with the rule's name. Add (a path or an upload of a Markdown, PDF, TXT or **EPUB** file, a URL, an RSS feed; the overlay names those kinds and its picker offers exactly them), one source page with content/PDF/live/log/files, summary, sub-sources and a **Tags** editor in the rail; the head carries **Favorite** and **Read later** beside **Ask**, and the head's **Ask** action opens Ask with the composer scoped to this one source; the rail has an **Interests** block with the evidence and the two corrections (`✓ passt`, `× nicht dieses Interesse`); a URL whose capture is blocked (a login, a paywall) **or that became a bookmark** (a page that only renders with JavaScript) offers **Attach snapshot…** there — save it in the browser, print it to PDF for a JS page, and attach it; an attached snapshot offers **Replace snapshot…** and **Try the URL again** (a readable page replaces it, a wall keeps it) and carries a paperclip **attached** tag in the list, where the **Attached** chip filters exactly those sources; a page whose snapshot came from a feed's copy shows a **feed copy** tag and the copy's origin in the rail, and — like a source whose last fetch was walled — offers **Refresh** in place of Capture (the page is tried; the richer text wins; a wall, a failure or a poorer page keeps the copy). Every other URL page is refreshed by the background cadence and has no manual Refresh; a sitemap or feed and its pages show their relation — a child links back to its parent in the rail — and an owned page has no Delete action. A **feed or a sitemap is a list**: its page shows capture green and the other three lights grey ("does not apply"), offers **Refresh** instead of Capture/Outline/Distill/Reset, and names itself `feed · the items are sources` / `sitemap · the pages are sources`. **Deleting returns to the list at once**: the row leaves optimistically while the server finishes (a delete waits for running document/cluster work), and a failure reloads the list |
 | **Wiki** | user-authored pages, their tag cloud and tag filter; a **★ Favorites** filter and a star in every row and in the page head; create, edit, delete |
 | **Bookmarks** | collected links: URL sources that exist as metadata only; newest first, each row names its host (the list is a window, not a host-grouped dump) |
@@ -51,7 +51,7 @@ the content area. It follows whichever container the reader moved — the page, 
 split view — so the wide and narrow layouts need no separate case, and on the narrow layout it sits
 above the footer navigation. A short list never shows it.
 
-The reader's own marks are **not lenses**: a favorite is a star and a lens filter, the read-later queue is a filter of the Sources list with a banner and a Start card, and interests are standing rules managed in an overlay (`?interests=1`) — one source's evidence sits in its rail, the queue rows say which rule queued them, and a source can seed a draft from its topics and labels (`&seed=<hash>`; a source address, never free text). There is no “Saved” lens and no “Interests” lens.
+The reader's own marks are **not lenses**: a favorite is a star and a lens filter, the read-later queue is a filter of the Sources list with a banner and a Start list, and interests are standing rules managed in an overlay (`?interests=1`) — one source's evidence sits in its rail, the queue rows say which rule queued them, and a source can seed a draft from its topics and labels (`&seed=<hash>`; a source address, never free text). There is no “Saved” lens and no “Interests” lens.
 
 A cluster is **never** a lens and never listed. The Claims detail shows the claim's cluster peers and
 the claims under the same topic **as two separate sections**;
@@ -63,7 +63,7 @@ viewport (± overscan); every filter (`q`, `kind`, `tag`, `attached`, `bookmarks
 of the server query, and the filtered **count** comes with the page, so the scroller spans the whole
 list without loading the rows in between. Rows that have not arrived render as placeholders at the
 right height. The Sources tag cloud is a **facet** over the vault (`/sources/facets`), never a count
-over the loaded window. Home reads only the five newest sources.
+over the loaded window. Home reads only the five newest roots and the three oldest queue entries.
 
 The top bar is a **tool bar, not a breadcrumb**: pages carry their own title, and the bar holds the
 global search over claims and sources (a compact command button in the browser, a full-height
@@ -94,8 +94,9 @@ another window or the CLI sent it. A list that is an assistant result carries a 
 rows: the utterance, the criteria the request was actually read as (`tag cloud · added ≤ 7 days ·
 not finished`), the count, "run again", "keep as a filter" (only when the reading has named facets)
 and a close button. The same banner appears when an old request is opened again — it is the same
-address, so it is the same view. The Start lens lists the last few commands; there is no history
-lens, and no command is kept forever.
+address, so it is the same view. There is no history lens, and no command is kept forever — the
+assistant's field lists the recent commands while it is open, and the Start lens lists the three
+latest QUESTIONS, which are answers the reader owns.
 
 ## 2. Routes and state
 

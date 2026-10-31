@@ -488,6 +488,7 @@ func (r *SourceRepository) CountSources(ctx context.Context, filter entities.Sou
 		Favorite:  boolParam(filter.FavoriteOnly),
 		ReadLater: boolParam(filter.ReadLaterOnly),
 		Interest:  filter.Interest,
+		Roots:     boolParam(filter.RootsOnly),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("count sources: %w", err)
@@ -601,6 +602,7 @@ func (r *SourceRepository) ListSources(ctx context.Context, filter entities.Sour
 			Failed:    boolParam(filter.FailedOnly),
 			Favorite:  boolParam(filter.FavoriteOnly),
 			Interest:  filter.Interest,
+			Roots:     boolParam(filter.RootsOnly),
 			Limit:     int64(limit),
 			Offset:    int64(offset),
 		})
@@ -615,6 +617,7 @@ func (r *SourceRepository) ListSources(ctx context.Context, filter entities.Sour
 			Favorite:  boolParam(filter.FavoriteOnly),
 			ReadLater: boolParam(filter.ReadLaterOnly),
 			Interest:  filter.Interest,
+			Roots:     boolParam(filter.RootsOnly),
 			Limit:     int64(limit),
 			Offset:    int64(offset),
 		})
