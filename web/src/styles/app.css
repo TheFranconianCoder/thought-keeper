@@ -1542,6 +1542,7 @@ button.chip:hover {
 .clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -1798,8 +1799,10 @@ html[data-wco="1"] .brand {
 
 html[data-wco="1"] .topbar,
 html[data-wco="1"] .brand {
+  /* Chromium, which is what the PWA runs in, honours the prefixed property. The unprefixed
+     `app-region` is not in the editor's CSS data yet and produced a false "unknown property"
+     warning; keeping only the prefix changes nothing at runtime. */
   -webkit-app-region: drag;
-  app-region: drag;
 }
 
 html[data-wco="1"] .topbar button,
@@ -1808,7 +1811,6 @@ html[data-wco="1"] .topbar input,
 html[data-wco="1"] .brand button,
 html[data-wco="1"] .brand a {
   -webkit-app-region: no-drag;
-  app-region: no-drag;
 }
 
 /* ── Responsive ────────────────────────────────────────────────────────── */
