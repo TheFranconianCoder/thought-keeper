@@ -32,6 +32,7 @@
   import { wiki } from './lib/stores/wiki.svelte';
   import { asks } from './lib/stores/asks.svelte';
   import { initTheme } from './lib/theme.svelte';
+  import { startUpdateWatch } from './lib/update.svelte';
   import { ui } from './lib/ui.svelte';
 
   const viewLabel = (view: string): string => {
@@ -43,6 +44,7 @@
   let scroller: HTMLDivElement | undefined = $state();
   let stopSync: (() => void) | undefined;
   let stopRouter: (() => void) | undefined;
+  let stopUpdates: (() => void) | undefined;
   let pageScroll: ReturnType<typeof rememberScroll> | undefined;
 
   const title = $derived.by(() => {
@@ -94,6 +96,7 @@
     initTheme();
     stopRouter = startRouter();
     stopSync = startSync();
+    stopUpdates = startUpdateWatch();
     // The stream is connected before the first reads: an event that arrives while they are in
     // flight is then never missed, and the stores' generation guards make a slow response lose.
     void resyncAll(true);
@@ -124,6 +127,7 @@
       window.removeEventListener('keydown', onKey);
       stopSync?.();
       stopRouter?.();
+      stopUpdates?.();
       pageScroll?.destroy();
     };
   });

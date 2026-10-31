@@ -12,6 +12,10 @@
 // cache-first, so a new icon would otherwise only appear after the cache is cleared. A new BUILD needs no
 // bump — the document is network-first and its hashed assets are cached under names that change with the
 // build.
+//
+// This worker is deliberately NOT the update signal. It changes no file between builds, so an open window
+// would never hear about a new one; the build writes /build.json instead, and the window compares the
+// entry chunk its document loaded with the one that file names (see web/src/lib/update.svelte.ts).
 const CACHE = 'thought-keeper-v2';
 
 // SHELL is the part of the app that must be there before anything is asked of the network: the document

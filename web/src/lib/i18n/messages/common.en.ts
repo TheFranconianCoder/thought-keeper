@@ -37,6 +37,9 @@ export const commonEn: Record<string, string> = {
   'connection.reconnecting': 'Reconnecting',
   'connection.connecting': 'Connecting',
 
+  'update.ready': 'Update ready',
+  'update.title': 'A new version is served. Reload to use it.',
+
   'theme.titleAuto': 'Theme: follow the system',
   'theme.titleLight': 'Theme: light',
   'theme.titleDark': 'Theme: dark',

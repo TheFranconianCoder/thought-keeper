@@ -692,6 +692,33 @@ html[data-wco="1"] .assistant-fab {
   border-width: 1.5px;
 }
 
+/* A new build is served. It reads as an action, unlike the activity chip, because clicking it is
+   the whole point — and it only appears when a reload would cost the reader nothing they can see. */
+.update-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 27px;
+  padding: 0 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.update-chip:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.update-chip .ico {
+  display: block;
+  flex: none;
+}
+
 .offline-banner {
   display: flex;
   align-items: center;
@@ -1882,6 +1909,16 @@ html[data-wco="1"] .brand a {
   }
 
   .activity-chip .truncate {
+    display: none;
+  }
+
+  .update-chip {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .update-chip .truncate {
     display: none;
   }
 

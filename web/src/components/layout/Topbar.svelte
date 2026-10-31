@@ -6,6 +6,7 @@
   import { cycleTheme, themeIcon, themeLabel } from '../../lib/theme.svelte';
   import { openAssistant, openSearch } from '../../lib/overlays';
   import { assistant } from '../../lib/stores/assistant.svelte';
+  import { reloadNow, update } from '../../lib/update.svelte';
   import Icon from '../ui/Icon.svelte';
 
   const activity = $derived(
@@ -44,6 +45,19 @@
   </button>
 
   <div class="topbar-actions">
+    {#if update.pending}
+      <!-- A new build is served. The window says so instead of reloading under the reader's hands;
+           a hidden window reloads on its own. -->
+      <button
+        class="update-chip"
+        title={t('update.title')}
+        aria-label={t('update.title')}
+        onclick={reloadNow}
+      >
+        <Icon name="refresh" size={13} />
+        <span class="truncate">{t('update.ready')}</span>
+      </button>
+    {/if}
     {#if activity}
       <button
         class="activity-chip"

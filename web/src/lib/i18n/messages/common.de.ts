@@ -33,6 +33,9 @@ export const commonDe: Record<string, string> = {
   'connection.reconnecting': 'Verbindet neu',
   'connection.connecting': 'Verbinde',
 
+  'update.ready': 'Update bereit',
+  'update.title': 'Eine neue Version wird ausgeliefert. Neu laden, um sie zu verwenden.',
+
   'theme.titleAuto': 'Design: dem System folgen',
   'theme.titleLight': 'Design: hell',
   'theme.titleDark': 'Design: dunkel',

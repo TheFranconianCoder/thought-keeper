@@ -22,7 +22,7 @@ questions; the agent writes and maintains the claims.
 | **`docs/retrieval.md`** | vectorless retrieval, multilingual search, citations, neighbours |
 | **`docs/agent.md`** | the agent: operations, tools, prompts, part outcomes, models, audit |
 | **`docs/api.md`** | the HTTP API, async work, events, error format |
-| **`docs/pwa.md`** | the UI: lenses, routes, SSE state, empty states, assets |
+| **`docs/pwa.md`** | the UI: lenses, routes, SSE state, empty states, assets, updates |
 | **`docs/operations.md`** | running the app, config, CLI, tasks, operating rules, maintenance, backup |
 | **`TODO.md`** | open work and open questions — nothing here describes the present |
 

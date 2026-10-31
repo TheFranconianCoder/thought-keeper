@@ -59,6 +59,8 @@ src/
     actions/                 user commands, grouped by domain
     router.svelte.ts         hash routes, deep links, query helpers
     source-state.ts          pure derivation-state logic (lights, progress, labels)
+    update.ts                pure build-comparison logic (is this window stale?)
+    update.svelte.ts         the update watch: manifest check, reload or notice
     markdown.ts              wikilinks + sanitized Markdown
     theme.svelte.ts          auto/light/dark, persisted before first paint
     overlays.ts              search/add as URL parameters
@@ -128,6 +130,9 @@ the server's pipeline or run event supersedes it.
 The build is wired into the Go binary:
 
 - `web/vite.config.ts` writes to `../internal/web/dist`.
+- The same build emits `dist/build.json` — the entry chunk it produced. An open window compares that
+  with the entry chunk its document loaded and reloads when the two differ; without it an installed
+  PWA would keep its bundle until the reader restarted it. `docs/pwa.md` owns the rule.
 - `internal/web/embed.go` embeds `dist` with `//go:embed all:dist`.
 - `Taskfile.yml` points `web:install`, `web:build`, `web:dev`, `web:check` and `web:test` at
   `web/`, and `run`, `run:open` and `run:headless` depend on `web:build`.

@@ -644,7 +644,7 @@ documented in the document that owns it, in the same change.
 | [`docs/retrieval.md`](docs/retrieval.md) | vectorless retrieval, multilingual search, citations |
 | [`docs/agent.md`](docs/agent.md) | operations, tools, prompts, models, audit |
 | [`docs/api.md`](docs/api.md) | the HTTP API, async work, events, error format |
-| [`docs/pwa.md`](docs/pwa.md) | lenses, routes, SSE state, empty states |
+| [`docs/pwa.md`](docs/pwa.md) | lenses, routes, SSE state, empty states, updates |
 | [`docs/operations.md`](docs/operations.md) | running, config, CLI, tasks, maintenance, backup |
 
 ---

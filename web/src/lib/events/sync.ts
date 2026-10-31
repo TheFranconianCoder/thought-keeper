@@ -9,6 +9,7 @@ import { claims } from '../stores/claims.svelte';
 import { wiki } from '../stores/wiki.svelte';
 import { asks } from '../stores/asks.svelte';
 import { assistant } from '../stores/assistant.svelte';
+import { checkForUpdate } from '../update.svelte';
 
 /**
  * The event pipeline.
@@ -407,6 +408,10 @@ export function startSync(): () => void {
     },
     onState: (state) => setConnectionState(state),
     onOpen: (reconnected) => {
+      // A stream that opens again is an app that restarted — and a binary update is exactly that.
+      // Check the served build before the catch-up reads, so a stale window is told before it
+      // paints the new vault into the old UI.
+      void checkForUpdate();
       if (reconnected) void resyncAll(true);
     },
   });

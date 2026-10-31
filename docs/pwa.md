@@ -218,7 +218,24 @@ One SSE connection (`GET /api/v1/events`) replaces polling. Event types:
 - Bumping a precached asset means bumping the cache name in `web/public/sw.js`; a new build needs no
   bump (hashed assets change names).
 
-## 7. Development
+## 7. Updates
+
+- **An open window notices a new build.** Every build writes `internal/web/dist/build.json` with the
+  entry chunk it produced; a window compares that with the entry chunk its document loaded. The
+  check runs at every catch-up point — the event stream opening again (an app restart is exactly a
+  binary update), a return to the window, `online`, a page restored from the back/forward cache —
+  and once every five minutes while the window is visible.
+- **A hidden window reloads, a visible one is told.** Hidden, the window reloads at once: on a phone
+  that is the moment the app goes to the background, and the reader returns to the new version.
+  Visible, the top bar shows **Update ready** instead, because a reload under the reader's hands
+  would throw away an unsaved wiki page or a half-typed question; leaving the window then reloads it.
+- **No reload loop.** The entry a window reloaded for is remembered in `sessionStorage`; if the
+  build still looks stale after that (a stale cache), the window says so instead of reloading again.
+- **The service worker is not the signal.** `sw.js` changes no file between builds on purpose, so
+  no worker update would fire; the shell is network-first and the check above is what moves a
+  window on. The API is never part of any of this.
+
+## 8. Development
 
 ```bash
 task web:install   # pnpm install the PWA toolchain
