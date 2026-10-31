@@ -21,6 +21,9 @@ type Source struct {
 	// JavaScript shell); FeedHash is the feed it came from.
 	FromFeed bool   `json:"from_feed,omitempty"`
 	FeedHash string `json:"feed_hash,omitempty"`
+	// Wall is the last wall the URL answered with (login_required, paywalled, consent_required).
+	// Readable bytes can survive a later wall; the reader offers a manual Refresh for the source.
+	Wall string `json:"wall,omitempty"`
 	// Attached marks a snapshot the human supplied (a login, a paywall, a JavaScript page). The
 	// source page offers "replace snapshot" and "try the URL again" for it; the automatic refresh
 	// still leaves it alone.

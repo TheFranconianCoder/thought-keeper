@@ -20,6 +20,9 @@ type FetcherConfig struct {
 	MaxBytes     int64
 	UserAgent    string
 	AllowPrivate bool
+	// MinTextChars is the amount of readable article text below which a page carrying a login
+	// form or a paywall marker is treated as a gate. Zero means the capture default (400).
+	MinTextChars int
 }
 
 // Fetcher fetches URLs with the guards the spec requires: only http/https, a real
@@ -40,6 +43,9 @@ func NewFetcher(cfg FetcherConfig) *Fetcher {
 	}
 	if cfg.MaxBytes <= 0 {
 		cfg.MaxBytes = 5 << 20
+	}
+	if cfg.MinTextChars <= 0 {
+		cfg.MinTextChars = 400
 	}
 	return &Fetcher{
 		cfg:    cfg,
@@ -91,7 +97,7 @@ func (f *Fetcher) Fetch(ctx context.Context, rawURL string) (interfaces.FetchedP
 		ETag:         resp.Header.Get("ETag"),
 		LastModified: resp.Header.Get("Last-Modified"),
 		FinalURL:     finalURL,
-		Wall:         detectWall(resp.StatusCode, finalURL, resp.Header.Get("Content-Type"), body),
+		Wall:         detectWall(resp.StatusCode, finalURL, resp.Header.Get("Content-Type"), body, f.cfg.MinTextChars),
 	}, nil
 }
 

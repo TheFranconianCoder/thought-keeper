@@ -31,6 +31,9 @@ type URLHandler struct {
 	// OnChanged is called for every URL whose content changed, so the app can
 	// build trees, schedule the document steps and emit an SSE event.
 	OnChanged func(hash string)
+	// OnReplaced is called for a source whose snapshot changed by DIFFERENT text. The app resets the
+	// old derivation exclusively and derives again; the handler must not also call OnChanged for it.
+	OnReplaced func(hash, reason string)
 	// OnDiscovered hands the NEW pages a feed or a sitemap declared to the fetch queue. Claiming them
 	// without fetching would list sources that never arrive.
 	OnDiscovered func(children []usecases.DiscoveredChildren)
@@ -131,9 +134,18 @@ func (h URLHandler) Post(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, err)
 		return
 	}
+	resets := make(map[string]bool, len(res.Resets))
+	for _, r := range res.Resets {
+		resets[r.Hash] = true
+		if h.OnReplaced != nil {
+			h.OnReplaced(r.Hash, r.Reason)
+		}
+	}
 	if h.OnChanged != nil {
 		for _, s := range res.Sources {
-			h.OnChanged(s.Hash)
+			if !resets[s.Hash] {
+				h.OnChanged(s.Hash)
+			}
 		}
 	}
 	if h.OnDiscovered != nil && len(res.Discovered) > 0 {
@@ -170,9 +182,18 @@ func (h URLHandler) PostOne(w http.ResponseWriter, r *http.Request) {
 		payloads.WriteError(w, err)
 		return
 	}
+	resets := make(map[string]bool, len(res.Resets))
+	for _, r := range res.Resets {
+		resets[r.Hash] = true
+		if h.OnReplaced != nil {
+			h.OnReplaced(r.Hash, r.Reason)
+		}
+	}
 	if h.OnChanged != nil {
 		for _, s := range res.Sources {
-			h.OnChanged(s.Hash)
+			if !resets[s.Hash] {
+				h.OnChanged(s.Hash)
+			}
 		}
 	}
 	if h.OnDiscovered != nil && len(res.Discovered) > 0 {

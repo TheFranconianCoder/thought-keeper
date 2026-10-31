@@ -26,8 +26,9 @@ const feedWithCopy = `<?xml version="1.0"?>
 </channel></rss>`
 
 // TestFeedCopyMakesAJavaScriptPageReadable: a feed that carries the post solves the page that only
-// resolves with JavaScript. The item's copy becomes the page's snapshot, marked with where it came
-// from, and the page is NOT fetched — the fetch would only return the shell.
+// resolves with JavaScript. The item's copy becomes the page's provisional snapshot, marked with
+// where it came from, AND the page is queued: the worker tries it, and the copy stays when the page
+// is a shell (the refresh path keeps the richer snapshot).
 func TestFeedCopyMakesAJavaScriptPageReadable(t *testing.T) {
 	ctx := context.Background()
 	idx := newFakeIndex()
@@ -46,8 +47,10 @@ func TestFeedCopyMakesAJavaScriptPageReadable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("feed: %v", err)
 	}
-	if src.RSSURLs == nil || len(src.RSSURLs) != 1 || src.RSSURLs[0] != "https://example.com/two" {
-		t.Fatalf("to fetch = %v, want only the item without a copy", src.RSSURLs)
+	// Every new item is queued: the one with a copy is a provisional snapshot, the other has nothing.
+	if len(src.RSSURLs) != 2 ||
+		src.RSSURLs[0] != "https://example.com/one" || src.RSSURLs[1] != "https://example.com/two" {
+		t.Fatalf("to fetch = %v, want both items (the copy is provisional)", src.RSSURLs)
 	}
 
 	oneHash := entities.URLHash("https://example.com/one")

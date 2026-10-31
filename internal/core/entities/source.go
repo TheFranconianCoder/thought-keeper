@@ -111,6 +111,11 @@ type Source struct {
 	// readable page may replace the copy; while it cannot, the copy is what the vault knows.
 	FromFeed bool
 	FeedHash string
+	// Wall is the last wall the page answered with (login_required, paywalled, consent_required),
+	// mirrored from the record's meta. A source with readable bytes can still carry a wall: the bytes
+	// are the last readable version, the wall describes the last fetch. The reader offers a manual
+	// Refresh for it.
+	Wall string
 	// Attached marks a URL snapshot the human supplied because the app could not read the page. It
 	// is an identity fact (it survives a reindex), mirrored here from the record's meta so a reader
 	// can offer "replace snapshot" and "try the URL again" without parsing JSON. The automatic

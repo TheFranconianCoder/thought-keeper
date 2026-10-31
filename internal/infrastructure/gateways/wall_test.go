@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
@@ -26,6 +27,27 @@ func TestDetectWall(t *testing.T) {
 			<input type="password" name="password">
 		</form>
 	</body></html>`)
+	// LWN (and many forums) put a login form in the header of every page while the article below
+	// is fully readable. That is navigation, not a gate.
+	articleWithHeaderLogin := []byte(`<!doctype html><html><body>
+		<div id="menu"><form action="https://example.com/Login/" method="post">
+			<input type="text" name="uname"><input type="password" name="pword">
+			<input type="submit" value="Log in">
+		</form></div>
+		<main><h1>A fully readable article</h1>
+		<p>` + strings.Repeat("This is the article text, and it is available. ", 20) + `</p>
+		<form action="/comment" method="post"><input type="submit" value="Log in to post comments"></form>
+		</main>
+	</body></html>`)
+	// Long navigation and footer text must not make a login page look like an article: the text
+	// outside the chrome is still just the sign-in heading.
+	loginWithLongChrome := []byte(`<!doctype html><html><body>
+		<nav>` + strings.Repeat("menu item ", 100) + `</nav>
+		<main><h1>Sign in</h1><form action="/session" method="post">
+			<input type="password" name="password">
+		</form></main>
+		<footer>` + strings.Repeat("footer text ", 100) + `</footer>
+	</body></html>`)
 	paywall := []byte(`<!doctype html><html><body>
 		<h1>The article</h1><p>The first paragraph is free.</p>
 		<p>Subscribe to continue reading.</p>
@@ -46,6 +68,8 @@ func TestDetectWall(t *testing.T) {
 		{name: "redirect to login path", status: 200, finalURL: "https://example.com/login", contentType: html, body: article, want: entities.WallLogin},
 		{name: "redirect to accounts host", status: 200, finalURL: "https://accounts.example.com/session", contentType: html, body: article, want: entities.WallLogin},
 		{name: "password field", status: 200, finalURL: "https://example.com/a", contentType: html, body: loginPage, want: entities.WallLogin},
+		{name: "password field in a readable article", status: 200, finalURL: "https://example.com/a", contentType: html, body: articleWithHeaderLogin, want: entities.WallNone},
+		{name: "long chrome around a login page", status: 200, finalURL: "https://example.com/a", contentType: html, body: loginWithLongChrome, want: entities.WallLogin},
 		{name: "paywall teaser", status: 200, finalURL: "https://example.com/a", contentType: html, body: paywall, want: entities.WallPaywall},
 		{name: "consent host", status: 200, finalURL: "https://consent.google.com/ml?continue=x", contentType: html, body: article, want: entities.WallConsent},
 		// A 404 is not a wall: the page is gone, which is a different report.
@@ -55,7 +79,7 @@ func TestDetectWall(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := detectWall(tt.status, tt.finalURL, tt.contentType, tt.body); got != tt.want {
+			if got := detectWall(tt.status, tt.finalURL, tt.contentType, tt.body, 400); got != tt.want {
 				t.Errorf("detectWall = %q, want %q", got, tt.want)
 			}
 		})

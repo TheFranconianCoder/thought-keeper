@@ -34,7 +34,8 @@ type feedMaterializer struct {
 // expand handles a feed's whole item list:
 //   - an item that already has a readable page is left alone;
 //   - an item with a usable content copy (new or an unreadable bookmark) gets that copy as its
-//     snapshot — no page fetch;
+//     provisional snapshot AND is returned for fetching — the page is always tried, and the richer
+//     text wins;
 //   - a new item without a usable copy is claimed and returned for fetching.
 //
 // A KNOWN, unreadable item without a usable copy is not returned: the weekly refresh of that source
@@ -76,6 +77,9 @@ func (m feedMaterializer) expand(ctx context.Context, feed entities.Source, item
 				}
 			} else if written {
 				fromFeed++
+				// The copy is provisional. Queue the page too: the worker will read it, and the
+				// richer text (the page) replaces the copy; an unreadable page leaves it in place.
+				toFetch = append(toFetch, link)
 				continue
 			}
 		}
@@ -127,15 +131,18 @@ func (m feedMaterializer) write(ctx context.Context, src entities.Source, feed e
 	src.FromFeed, src.FeedHash = true, feed.Hash
 	src.Meta = metaWithIdentity(metaWith(src.Meta, map[string]any{
 		"url": pageURL, "from_feed": true, "feed_hash": feed.Hash,
-		"content_hash": contentHashOf(title, body), "last_error": nil, "wall": nil,
+		"content_hash": contentHashOf(title, body), "text_chars": utf8.RuneCountInString(body),
+		"last_error": nil, "wall": nil,
 	}), src)
 	if err := m.Index.FillURLSource(ctx, src); err != nil {
 		return false, err
 	}
 	_ = m.Index.SetSourceTitle(ctx, src.Hash, title)
 	_ = m.Index.SetSourceMeta(ctx, src.Hash, src.Meta)
-	// There was no HTTP answer for THESE bytes: the copy came from the feed.
-	_ = m.Index.SetSourceURLState(ctx, src.Hash, 0, now)
+	// There was no HTTP answer for THESE bytes: the copy came from the feed, and the page has not
+	// been checked. Leaving url_checked_at empty keeps the source due for the next refresh, so a
+	// queue job lost to a restart is retried by the hourly sweep instead of waiting a week.
+	_ = m.Index.SetSourceURLState(ctx, src.Hash, 0, time.Time{})
 	if language != "" {
 		_ = m.Index.SetSourceLanguage(ctx, src.Hash, language)
 	}

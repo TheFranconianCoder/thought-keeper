@@ -95,6 +95,7 @@ func Build(
 	onTag func(pageID string),
 	onReprocess func(hash string),
 	onCleanup func(pageID, staleHash string),
+	onReset func(hash, reason string),
 	onDiscovered func([]usecases.DiscoveredChildren),
 	scheduler handlers.Runner,
 	pipeline handlers.PipelineProvider,
@@ -133,6 +134,7 @@ func Build(
 		MaxBytes:     cfg.Fetch.MaxBytes,
 		UserAgent:    cfg.Fetch.UserAgent,
 		AllowPrivate: cfg.Fetch.AllowPrivate,
+		MinTextChars: cfg.Capture.MinTextChars,
 	})
 	converter := gateways.ReadabilityConverter{}
 
@@ -415,11 +417,12 @@ func Build(
 			Mark:       scheduler,
 			Commands:   commandSources,
 		},
-		Add: handlers.AddHandler{Intake: intake, URL: addURL, OnAdded: onAdded, Children: scheduler},
+		Add: handlers.AddHandler{Intake: intake, URL: addURL, OnAdded: onAdded, OnReplaced: onReset, Children: scheduler},
 		URL: handlers.URLHandler{
 			Refresh:      refreshURLs,
 			Bulk:         scheduler,
 			OnChanged:    onAdded,
+			OnReplaced:   onReset,
 			OnDiscovered: onDiscovered,
 			Addresses:    migrateURLAddresses, Mark: scheduler,
 		},

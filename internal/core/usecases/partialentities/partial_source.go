@@ -27,6 +27,7 @@ type PartialSource struct {
 	RSS            bool
 	FromFeed       bool
 	FeedHash       string
+	Wall           string
 	Attached       bool
 	AttachedFrom   string
 	Bytes          int64
@@ -51,6 +52,10 @@ type PartialSource struct {
 	// Children is how many sub-sources this source owns (a sitemap's pages, a wiki page's linked
 	// URLs). It is filled by the SINGLE-source read only: a list row has no use for it.
 	Children int
+	// NeedsReset marks a source whose snapshot THIS operation replaced with different text. The
+	// caller must rebuild the derivation (exclusive) instead of merely pumping. It is a property of
+	// the call, not of the source, and the wire payload ignores it.
+	NeedsReset bool
 	// SitemapURLs is the expansion a sitemap fetch produced. It is not part of the source entity:
 	// the caller claims and fetches these pages with the parent's hash as their owner.
 	SitemapURLs []string
@@ -88,6 +93,7 @@ func (p PartialSource) ToEntity() entities.Source {
 		RSS:          p.RSS,
 		FromFeed:     p.FromFeed,
 		FeedHash:     p.FeedHash,
+		Wall:         p.Wall,
 		Attached:     p.Attached,
 		AttachedFrom: p.AttachedFrom,
 	}
@@ -111,6 +117,7 @@ func PartialFromSource(s entities.Source) PartialSource {
 		RSS:            s.RSS,
 		FromFeed:       s.FromFeed,
 		FeedHash:       s.FeedHash,
+		Wall:           s.Wall,
 		Attached:       s.Attached,
 		AttachedFrom:   s.AttachedFrom,
 		Bytes:          s.Bytes,

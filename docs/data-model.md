@@ -123,7 +123,8 @@ index keeps **one** connection — every connection to `:memory:` is a separate 
 
 - **sources** from the content-addressed store, with identity from `<hash>.meta` (kind, URL,
   bookmark, original name, title, language, origin, wiki page, sitemap parent, sitemap marker, feed
-  marker, from-feed copy marker, attachment: `attached`/`attached_from`/`attached_hash`);
+  marker, from-feed copy marker and its `text_chars`, wall, attachment:
+  `attached`/`attached_from`/`attached_hash`);
 - **atoms** from their Markdown files; a claim whose every source is gone is trashed, a partial
   provenance is pruned and the file rewritten;
 - **clusters** from their records; a member that no longer exists is dropped, an empty record is

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Pipeline, Source } from './api/types';
 import {
   canAttachSnapshot,
+  canRefreshSource,
   countsOf,
   matchesSourceFilter,
   overallPercent,
@@ -152,6 +153,17 @@ describe('source state', () => {
     expect(canAttachSnapshot(source({ kind: 'pdf' }))).toBe(false);
     expect(canAttachSnapshot(source({ kind: 'url', sitemap: true }))).toBe(false);
     expect(canAttachSnapshot(source({ kind: 'url', rss: true }))).toBe(false);
+  });
+
+  it('offers a manual refresh only for a feed copy or a walled page', () => {
+    expect(canRefreshSource(source({ kind: 'url', from_feed: true }))).toBe(true);
+    expect(canRefreshSource(source({ kind: 'url', wall: 'login_required' }))).toBe(true);
+    expect(canRefreshSource(source({ kind: 'url' }))).toBe(false);
+    expect(canRefreshSource(source({ kind: 'url', bookmark: true }))).toBe(false);
+    expect(canRefreshSource(source({ kind: 'url', attached: true, wall: 'login_required' }))).toBe(false);
+    expect(canRefreshSource(source({ kind: 'md' }))).toBe(false);
+    expect(canRefreshSource(source({ kind: 'url', rss: true }))).toBe(false);
+    expect(canRefreshSource(source({ kind: 'url', sitemap: true }))).toBe(false);
   });
 
   it('filters sources by the attachment marker alone and together with the other filters', () => {

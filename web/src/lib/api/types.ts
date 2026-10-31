@@ -121,6 +121,9 @@ export interface Source {
   // JavaScript); feed_hash is the feed it came from.
   from_feed?: boolean;
   feed_hash?: string;
+  // wall is the last wall the page answered with (login_required, paywalled, consent_required).
+  // Readable bytes can survive a later wall; the source page offers a manual Refresh for it.
+  wall?: string;
   /** A snapshot the human supplied (a login, a paywall, a JavaScript page). */
   attached?: boolean;
   /** The file the snapshot came from; the receipt, not a path. */

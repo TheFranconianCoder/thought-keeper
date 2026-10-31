@@ -814,6 +814,7 @@ func toEntity(row dal.Source) entities.Source {
 		RSS:          metaField(row.Meta, "rss") == "true",
 		FromFeed:     metaField(row.Meta, "from_feed") == "true",
 		FeedHash:     metaField(row.Meta, "feed_hash"),
+		Wall:         metaField(row.Meta, "wall"),
 		OriginalName: row.OriginalName,
 		Bytes:        row.Bytes,
 		TreeState:    entities.TreeState(row.TreeState),

@@ -42,6 +42,9 @@ type AddHandler struct {
 	// OnAdded is called after a successful intake so the app can schedule tree
 	// building off the request path.
 	OnAdded func(hash string)
+	// OnReplaced is called when this add replaced a source's snapshot with different text. The app
+	// rebuilds the derivation (exclusive); OnAdded must not also run for it.
+	OnReplaced func(hash, reason string)
 	// Children claims and fetches the pages a sitemap or a feed declared. It is background work: the
 	// parent source is already stored when this is called.
 	Children ChildScheduler
@@ -135,7 +138,11 @@ func (h AddHandler) upload(w http.ResponseWriter, r *http.Request) {
 
 func (h AddHandler) finish(w http.ResponseWriter, src partialentities.PartialSource) {
 	w.Header().Set("Location", "/api/v1/sources/"+src.Hash)
-	if h.OnAdded != nil {
+	if src.NeedsReset {
+		if h.OnReplaced != nil {
+			h.OnReplaced(src.Hash, "the page replaced the stored snapshot — the derivation was rebuilt")
+		}
+	} else if h.OnAdded != nil {
 		h.OnAdded(src.Hash)
 	}
 	if h.Children != nil {

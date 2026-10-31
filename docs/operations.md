@@ -257,11 +257,13 @@ commit and the build time into `internal/version` via `-ldflags`, builds
 ## 8. Network and URLs
 
 - **URL sources are local snapshots.** A changed page is written **through the source that is
-  already there** (one source per URL); its derivation is corrected, not repeated.
+  already there** (one source per URL); its old derivation is thrown away and derived again from the
+  new bytes (capture survives).
 - **A save never fetches.** Writing a page (or adding a source) ends at the vault: links go to a
   queue.
 - **Fetch guards.** Only http/https, a User-Agent, timeouts, max bytes, an SSRF guard
-  (`fetch.allow_private`, off by default).
+  (`fetch.allow_private`, off by default). A login form is a wall only when the page carries no
+  substantial article text of its own: a header login form on a readable article is navigation.
 - **No crawling.** The agent fetches the URLs you give it, one at a time (plus refresh).
 - **Pages and sitemaps are refreshed weekly, feeds daily.** `capture.refresh_interval: '168h'` is the
   cadence one page or sitemap may be revisited; `capture.feed_refresh_interval: '24h'` is the cadence
@@ -276,8 +278,8 @@ commit and the build time into `internal/version` via `-ldflags`, builds
 - **A refresh keeps parents honest.** A sitemap is reconciled 1:1 (new pages claimed, pages it no
   longer lists removed with their claims); an RSS/Atom feed only ever extends (new items claimed,
   items that left kept). A page the human added by hand is never removed by either — it was released
-  from its owner. A page whose snapshot came from the feed's copy keeps that copy while the page itself
-  yields no readable text.
+  from its owner. A page whose snapshot came from the feed's copy keeps that copy while the page
+  yields no readable text or carries less of it; a readable page that is at least as rich replaces it.
 - **A confirmed delete finishes.** The delete detaches from the request context, so a browser that
   navigates away cannot leave a half-deleted feed or sitemap behind. The atom lookup is the INDEX's
   answer (`ListAtomsBySource`), never a walk of `atoms/`: that walk is O(vault) — 8–30 seconds per

@@ -383,7 +383,7 @@ func New(opts Options) (*App, error) {
 	a.pdfOK = a.runner.Available(cfg.PDF.TextTool)
 	a.ocrOK = a.runner.Available(cfg.OCR.Rasterizer) && a.runner.Available(cfg.OCR.Tesseract)
 
-	reg := registry.Build(cfg, db, a, a.onAdded, a.onRemoved, a.ScheduleWikiTag, a.ScheduleWikiReprocess, a.ScheduleWikiCleanup, a.ScheduleDiscoveredChildren, a, a, a, a, a, a.hub, a.log)
+	reg := registry.Build(cfg, db, a, a.onAdded, a.onRemoved, a.ScheduleWikiTag, a.ScheduleWikiReprocess, a.ScheduleWikiCleanup, a.ScheduleSourceReset, a.ScheduleDiscoveredChildren, a, a, a, a, a, a.hub, a.log)
 	a.handler = reg.Handler
 	a.intake = reg.Intake
 	a.capture = reg.Capture
@@ -3002,8 +3002,10 @@ func (a *App) ScheduleSitemapURLs(parentHash string, urls []string) {
 }
 
 // ScheduleFeedURLs hands the pages a feed declared to the fetch queue. They are ALREADY CLAIMED (the
-// feed expansion claimed them, and stored the ones whose copy the feed carried), so this only
-// enqueues — claiming again would find them known and queue nothing.
+// feed expansion claimed them; an item whose copy the feed carried already has a provisional
+// snapshot), so this only enqueues — claiming again would find them known and queue nothing. The
+// worker routes a copied item through the refresh path, which keeps the copy when the page is
+// poorer and replaces it when the page wins.
 func (a *App) ScheduleFeedURLs(parentHash string, urls []string) {
 	if parentHash == "" || len(urls) == 0 || a.addURL.Index == nil {
 		return
@@ -3170,8 +3172,10 @@ func (a *App) urlWorker() {
 			// fetch was still owed). Do not resurrect it as an independent source: the owner and the
 			// claimed row are both gone, so the job is over. The check sits inside the shared gate:
 			// deletion takes the exclusive side and cannot slip between it and the fetch.
+			var child entities.Source
 			if job.Origin != "" {
-				_, childErr := a.addURL.Index.GetSourceByHash(ctx, entities.URLHash(job.URL))
+				var childErr error
+				child, childErr = a.addURL.Index.GetSourceByHash(ctx, entities.URLHash(job.URL))
 				var parentErr error
 				if job.ParentHash != "" {
 					_, parentErr = a.addURL.Index.GetSourceByHash(ctx, job.ParentHash)
@@ -3181,6 +3185,21 @@ func (a *App) urlWorker() {
 					cancel()
 					continue
 				}
+			}
+			// A page that a feed supplied as a copy is checked THROUGH THE REFRESH PATH: the page is
+			// tried, the copy is kept when the page is walled/unreadable/less rich, and a page that
+			// wins reports the reset the app must run. AddURL is for a page that has no copy yet.
+			if job.Origin == entities.RSSOrigin && child.FromFeed {
+				res, rErr := a.refreshURLs.ExecuteOne(ctx, entities.URLHash(job.URL))
+				a.gate.RUnlock()
+				cancel()
+				if rErr != nil {
+					a.log.Warn("feed page: refresh failed", "url", job.URL, "err", rErr)
+					a.publish("source", map[string]any{"hash": child.Hash})
+					continue
+				}
+				a.applyRefreshResult(res, child.Hash)
+				continue
 			}
 			// The human's own addition WINS over a wiki/sitemap/feed claim (job.Origin is empty for
 			// both the single add and a pasted batch). A job with an owner stays a sub-source.
@@ -3202,7 +3221,11 @@ func (a *App) urlWorker() {
 			if len(src.RSSURLs) > 0 {
 				a.ScheduleFeedURLs(src.Hash, src.RSSURLs)
 			}
-			a.onAdded(src.Hash)
+			if src.NeedsReset {
+				a.ScheduleSourceReset(src.Hash, "the page replaced the stored snapshot — the derivation was rebuilt")
+			} else {
+				a.onAdded(src.Hash)
+			}
 		}
 	}
 }
@@ -3293,6 +3316,67 @@ func (a *App) refreshWorker() {
 	}
 }
 
+// applyRefreshResult turns one refresh pass into the two app-level actions it owes: a derivation
+// reset for every source whose bytes changed (exclusive, after any running run) and a pump for the
+// rest. A source that is being reset must NOT be pumped first: the old claims would be derived again
+// only to be thrown away a moment later.
+func (a *App) applyRefreshResult(res usecases.RefreshResult, focus string) {
+	resets := make(map[string]bool, len(res.Resets))
+	for _, r := range res.Resets {
+		resets[r.Hash] = true
+		a.ScheduleSourceReset(r.Hash, r.Reason)
+	}
+	for _, s := range res.Sources {
+		if !resets[s.Hash] {
+			a.onAdded(s.Hash)
+		}
+	}
+	if focus != "" && len(res.Sources) == 0 && len(res.Resets) == 0 {
+		// A kept feed copy changed no bytes, but its log and capture detail did.
+		a.publish("source", map[string]any{"hash": focus})
+	}
+	if len(res.Discovered) > 0 {
+		a.ScheduleDiscoveredChildren(res.Discovered)
+	}
+	if res.Changed > 0 {
+		_, _ = a.requestCluster("url changed")
+	}
+}
+
+// ScheduleSourceReset rebuilds a source's derivation after its snapshot was replaced. It runs in the
+// background and takes the EXCLUSIVE gate: the refresh that found the change ran under the shared
+// gate, and a document run may still be using the old text. The reset keeps capture and the bytes,
+// throws away tree/claims/steps, and the pump derives the new text. The reason is appended after the
+// reset (a reset clears the old log).
+func (a *App) ScheduleSourceReset(hash, reason string) {
+	if hash == "" {
+		return
+	}
+	go func() {
+		err := a.ExclusiveWrite(context.Background(), "source reset", func(ctx context.Context) error {
+			if _, rErr := a.Reset(hash); rErr != nil {
+				return rErr
+			}
+			if reason != "" && a.SourceLog != nil {
+				a.SourceLog.Append(ctx, hash, interfaces.SourceLogEvent{
+					At:      time.Now().UTC(),
+					Phase:   "capture",
+					Level:   "info",
+					Message: reason,
+				})
+			}
+			return nil
+		})
+		if err != nil {
+			a.log.Warn("source reset after a changed snapshot failed", "hash", hash, "err", err)
+			a.publish("source", map[string]any{"hash": hash})
+			return
+		}
+		a.publish("source", map[string]any{"hash": hash})
+		a.pumpPipeline("source reset after a changed snapshot")
+	}()
+}
+
 // refreshNow runs one refresh pass and schedules the changed snapshots.
 func (a *App) refreshNow(reason string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -3308,18 +3392,7 @@ func (a *App) refreshNow(reason string) {
 		"checked", res.Checked, "changed", res.Changed, "failed", res.Failed,
 		"blocked", res.Blocked, "attached", res.Attached,
 		"discovered", len(res.Discovered), "removed", res.Removed)
-	for _, s := range res.Sources {
-		a.onAdded(s.Hash)
-	}
-	// A sitemap or a feed that declared new pages has already CLAIMED them (the refresh did that);
-	// here they only need fetching. They arrive through the same queue as any other link, with their
-	// owner set, so a failed fetch is recorded against that owner.
-	a.ScheduleDiscoveredChildren(res.Discovered)
-	// A changed page is a changed source: its old claims were corrected, so the association layer
-	// has claims to regroup. Step 4 does that when the document steps are quiet.
-	if len(res.ChangedURLs) > 0 {
-		_, _ = a.requestCluster("url changed")
-	}
+	a.applyRefreshResult(res, "")
 	a.publish("urls", map[string]any{
 		"checked": res.Checked, "changed": res.Changed, "failed": res.Failed,
 		"discovered": len(res.Discovered), "removed": res.Removed,

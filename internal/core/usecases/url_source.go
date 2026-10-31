@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/url"
 	"strconv"
@@ -43,8 +44,12 @@ type urlMeta struct {
 	AttachedFrom string `json:"attached_from,omitempty"`
 	AttachedHash string `json:"attached_hash,omitempty"`
 	// FromFeed marks a snapshot taken from the feed's copy of the post, with the feed it came from.
-	FromFeed bool   `json:"from_feed,omitempty"`
+	// It is written as the string "true" by metaWithIdentity (the index reads meta fields as
+	// strings), so readers must use isFromFeed, not a bool field on this struct.
 	FeedHash string `json:"feed_hash,omitempty"`
+	// TextChars is the rune count of a feed copy's readable body. It lets a later page attempt
+	// compare the page's text with the copy: the richer text wins.
+	TextChars int `json:"text_chars,omitempty"`
 }
 
 // faviconMeta locates a source's stored icon.
@@ -423,7 +428,47 @@ func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool)
 		minChars = defaultMinTextChars
 	}
 	body := strings.TrimSpace(conv.Markdown)
-	bookmark := force || utf8.RuneCountInString(body) < minChars
+	bodyChars := utf8.RuneCountInString(body)
+	bookmark := force || bodyChars < minChars
+	now := uc.Clock.Now()
+
+	// The source's bytes are the feed's copy until the page is actually read. If this add is that
+	// page attempt and it is not readable, or carries less text than the copy, the copy stays — and
+	// it stays on disk: the guard must run BEFORE the snapshot write, or a JavaScript shell would
+	// overwrite the readable copy while the row still claimed to be one.
+	existing, known := uc.sourceByURL(ctx, rawURL)
+	if known && isFromFeed(existing.Meta) {
+		copyChars := feedCopyTextChars(ctx, uc.Store, existing)
+		reason := ""
+		switch {
+		case bookmark:
+			reason = "the page is not readable"
+		case copyChars > 0 && bodyChars < copyChars:
+			reason = "the page carried less text"
+		}
+		if reason != "" {
+			_ = uc.Index.SetSourceURLState(ctx, existing.Hash, page.Status, now)
+			_ = uc.Index.SetSourceMeta(ctx, existing.Hash, metaWith(existing.Meta, map[string]any{
+				"wall": nil, "last_error": nil,
+			}))
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, existing.Hash, "capture", "info",
+				"the page was tried — the feed copy is kept", map[string]any{
+					"chars": bodyChars, "copy_chars": copyChars, "reason": reason,
+				})
+			recordStep(ctx, uc.Steps, uc.Clock, existing.Hash, entities.StepCapture, entities.StepOK,
+				"feed copy · "+reason, nil)
+			if uc.Log != nil {
+				uc.Log.Info("url: the feed's copy is kept", "url", rawURL,
+					"reason", reason, "chars", bodyChars, "copy_chars", copyChars)
+			}
+			stored, err := uc.Index.GetSourceByHash(ctx, existing.Hash)
+			if err != nil {
+				stored = existing
+			}
+			return partialentities.PartialFromSource(stored), nil
+		}
+	}
+
 	language := ""
 	if uc.Languages != nil {
 		language = uc.Languages.Detect(body)
@@ -432,7 +477,6 @@ func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool)
 		}
 	}
 
-	now := uc.Clock.Now()
 	favicon := fetchFavicon(ctx, uc.Fetch, uc.Favicons, uc.Log, rawURL, conv.Favicon)
 	var snapshot, contentHash string
 	if bookmark {
@@ -453,28 +497,18 @@ func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool)
 	// URL, whatever happens to the page. Without this a re-added page that changed became a second
 	// source beside the first (and a second derivation of it); with it, the address a URL source was
 	// created with is the address every later fetch writes through.
-	existing, known := uc.sourceByURL(ctx, rawURL)
-	// A page that still does not read must not overwrite the readable copy the FEED supplied (the
-	// page is a JavaScript shell, a bot wall); the weekly refresh keeps trying it.
-	if bookmark && known && isFromFeed(existing.Meta) {
-		_ = uc.Index.SetSourceURLState(ctx, existing.Hash, page.Status, now)
-		if uc.Log != nil {
-			uc.Log.Info("url: the page is still not readable — the feed's copy is kept", "url", rawURL)
-		}
-		stored, err := uc.Index.GetSourceByHash(ctx, existing.Hash)
-		if err != nil {
-			stored = existing
-		}
-		return partialentities.PartialFromSource(stored), nil
-	}
 	if known && existing.Path != "" {
+		// Did this fetch actually change the text? A page that only replaces the PROVENANCE (the
+		// same text as a feed copy, a cleared wall) needs no derivation rebuild; a page with new
+		// bytes does.
+		needsReset := contentHash != contentHashFromMeta(existing.Meta)
 		if _, err := uc.Store.PutAt(existing.Hash, ".md", []byte(snapshot)); err != nil {
 			return partialentities.PartialSource{}, err
 		}
 		existing.Ext, existing.Path, existing.Bytes = obj.Ext, obj.Path, obj.Bytes
 		existing.Language = language
-		// A readable page replaces the feed's copy: the marker goes with it.
-		existing.FromFeed, existing.FeedHash = false, ""
+		// A readable page replaces the feed's copy: the marker goes with it, and so does a stale wall.
+		existing.FromFeed, existing.FeedHash, existing.Wall = false, "", ""
 		existing.Title, existing.Meta = title, metaWithIdentity(metaJSON(urlMeta{
 			ContentHash: contentHash, Bookmark: bookmark, Excerpt: conv.Excerpt,
 			Site: conv.SiteName, URL: rawURL, Favicon: favicon,
@@ -505,7 +539,9 @@ func (uc AddURL) execute(ctx context.Context, rawURL string, force, manual bool)
 		if err != nil {
 			stored = existing
 		}
-		return partialentities.PartialFromSource(stored), nil
+		out := partialentities.PartialFromSource(stored)
+		out.NeedsReset = needsReset
+		return out, nil
 	}
 	src := entities.Source{
 		ID: ulid.Make(), Hash: obj.Hash, Kind: entities.SourceKindURL, Ext: obj.Ext, Path: obj.Path,
@@ -921,13 +957,21 @@ func isAttached(meta string) bool {
 	return m.Attached
 }
 
-// isFromFeed reports whether the snapshot came from the feed's copy of the post.
+// isFromFeed reports whether the snapshot came from the feed's copy of the post. The record stores
+// the marker as the STRING "true" (the index reads meta fields as strings), so a bool-only parse
+// would silently miss every real feed copy.
 func isFromFeed(meta string) bool {
-	var m urlMeta
+	var m map[string]any
 	if err := json.Unmarshal([]byte(meta), &m); err != nil {
 		return false
 	}
-	return m.FromFeed
+	switch v := m["from_feed"].(type) {
+	case bool:
+		return v
+	case string:
+		return v == "true"
+	}
+	return false
 }
 
 // appendSourceLog writes one line into a source's own log (best-effort: a log never fails a write).
@@ -1095,9 +1139,20 @@ type RefreshResult struct {
 	// ChangedURLs are the pages that actually changed, so the caller knows whether the association
 	// layer has something to regroup.
 	ChangedURLs []string
+	// Resets are the sources whose snapshot was replaced by DIFFERENT text. The refresh runs under
+	// the shared gate, so it must not throw a derivation away itself: a document run may be in
+	// flight. The caller schedules the app's exclusive reset for each entry and derives again.
+	Resets []SnapshotReplacement
 	// LastError is why the last source that failed did so. The counts are enough for a pass; the
 	// per-source Refresh button has one row to explain, and "1 failed" alone is not an explanation.
 	LastError string
+}
+
+// SnapshotReplacement names one source whose bytes changed and the reason a reader should see in
+// its log after the old derivation was rebuilt.
+type SnapshotReplacement struct {
+	Hash   string
+	Reason string
 }
 
 // Execute refreshes the URL sources that are DUE (a scheduled pass: the per-kind intervals decide).
@@ -1165,6 +1220,10 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 			continue
 		}
 		seen[entities.URLKey(s.URL)] = true
+		// The meta is the truth about where the bytes came from and why the last fetch was refused.
+		// Capture both BEFORE a successful page write clears them.
+		fromFeed := isFromFeed(s.Meta)
+		wasWalled := wallOf(s.Meta) != entities.WallNone
 		// A snapshot the human attached is not checked at all. It exists BECAUSE the page cannot be
 		// fetched; asking the site every week would only write a 403 onto an article that is fine.
 		// A FORCED fetch (the explicit "try the URL again") asks anyway, and keeps the attachment if
@@ -1200,6 +1259,15 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
 					"the URL was tried again — the fetch failed; the attached snapshot was kept",
 					map[string]any{"error": fetchErr.Error()})
+			}
+			if fromFeed {
+				// The feed's copy is still the readable form of this post. A failed page attempt is
+				// not a failed source: the copy stays, the attempt is written down.
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+					"the page could not be fetched — the feed copy is kept",
+					map[string]any{"error": fetchErr.Error()})
+				recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK,
+					"feed copy · page unreachable", nil)
 			}
 			if uc.Log != nil {
 				uc.Log.Warn("url refresh failed", "url", s.URL, "err", fetchErr)
@@ -1242,6 +1310,19 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 					"the URL was tried again — still blocked; the attached snapshot was kept",
 					map[string]any{"wall": string(page.Wall), "http_status": page.Status})
 			}
+			if fromFeed && s.Path != "" {
+				// The wall describes the fetch, not the bytes. The copy remains readable and the
+				// capture light stays green; the attempt and its reason are visible in the log.
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+					"the page is still walled — the feed copy is kept",
+					map[string]any{"wall": string(page.Wall), "http_status": page.Status})
+				recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK,
+					"feed copy · page walled", nil)
+			} else if s.Path != "" && !attached {
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+					"the page is still walled — the stored snapshot is kept",
+					map[string]any{"wall": string(page.Wall), "http_status": page.Status})
+			}
 			if uc.Log != nil {
 				uc.Log.Info("url refresh: blocked", "url", s.URL, "wall", string(page.Wall), "status", page.Status)
 			}
@@ -1255,6 +1336,13 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
 					fmt.Sprintf("the URL was tried again — HTTP %d; the attached snapshot was kept", page.Status),
 					nil)
+			}
+			if fromFeed {
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+					fmt.Sprintf("the page answered HTTP %d — the feed copy is kept", page.Status),
+					map[string]any{"http_status": page.Status})
+				recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK,
+					fmt.Sprintf("feed copy · HTTP %d", page.Status), nil)
 			}
 			if uc.Log != nil {
 				uc.Log.Info("url refresh: not ok", "url", s.URL, "status", page.Status)
@@ -1299,9 +1387,21 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 					"the URL was tried again — the page could not be converted; the attached snapshot was kept",
 					map[string]any{"error": convErr.Error()})
 			}
+			if fromFeed {
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+					"the page could not be converted — the feed copy is kept",
+					map[string]any{"error": convErr.Error()})
+				recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK,
+					"feed copy · page unreadable", nil)
+			}
 			continue
 		}
 		body := strings.TrimSpace(conv.Markdown)
+		bodyChars := utf8.RuneCountInString(body)
+		minChars := uc.MinTextChars
+		if minChars <= 0 {
+			minChars = defaultMinTextChars
+		}
 		title := conv.Title
 		if title == "" {
 			title = s.URL
@@ -1309,34 +1409,63 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 		// A retried attachment is only replaced by a page that is actually readable. A JavaScript
 		// shell or a teaser that carries a little navigation text must not overwrite the human's copy.
 		if attached && ignoreAttached {
-			minChars := uc.MinTextChars
-			if minChars <= 0 {
-				minChars = defaultMinTextChars
-			}
-			if utf8.RuneCountInString(body) < minChars {
+			if bodyChars < minChars {
 				res.Failed++
 				res.LastError = "the page gave no readable text"
 				_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
 				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
 					"the URL was tried again — no readable text; the attached snapshot was kept",
-					map[string]any{"chars": utf8.RuneCountInString(body), "min": minChars})
+					map[string]any{"chars": bodyChars, "min": minChars})
 				continue
 			}
 		}
 
-		// A copy taken from a FEED must not be replaced by a page that still does not read (a
-		// JavaScript shell, a bot wall): the feed's copy is the readable form of the same post. The
-		// weekly pass tries the page again; when it does yield a readable page, that page wins.
-		if isFromFeed(s.Meta) {
-			minChars := uc.MinTextChars
-			if minChars <= 0 {
-				minChars = defaultMinTextChars
+		// A page that answers with too little text (a JavaScript shell, a stub) must not overwrite a
+		// snapshot that is readable. A feed copy has its own rule below (it compares lengths); a
+		// queued row has no snapshot to keep.
+		if s.Path != "" && !attached && !fromFeed && bodyChars < minChars {
+			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "warn",
+				"the page gave no readable text — the stored snapshot was kept",
+				map[string]any{"chars": bodyChars, "min": minChars, "http_status": page.Status})
+			if !wasWalled {
+				recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK,
+					"stored snapshot · page not readable", nil)
 			}
-			if utf8.RuneCountInString(body) < minChars {
+			if uc.Log != nil {
+				uc.Log.Info("url refresh: no readable text — the stored snapshot is kept",
+					"url", s.URL, "chars", bodyChars, "min", minChars)
+			}
+			continue
+		}
+
+		// A copy taken from a FEED is a provisional snapshot: the page is always tried, and the
+		// richer text wins. A page that is not readable, or carries less text than the copy, leaves
+		// the copy in place — the same rule the weekly pass applies.
+		copyChars := 0
+		if fromFeed {
+			copyChars = feedCopyTextChars(ctx, uc.Store, s)
+			reason := ""
+			switch {
+			case bodyChars < minChars:
+				reason = "the page is not readable"
+			case copyChars > 0 && bodyChars < copyChars:
+				reason = "the page carried less text"
+			}
+			if reason != "" {
 				_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
+				_ = uc.Index.SetSourceMeta(ctx, s.Hash, metaWith(s.Meta, map[string]any{
+					"wall": nil, "last_error": nil,
+				}))
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "info",
+					"the page was tried — the feed copy is kept", map[string]any{
+						"chars": bodyChars, "copy_chars": copyChars, "min": minChars, "reason": reason,
+					})
+				recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK,
+					"feed copy · "+reason, nil)
 				if uc.Log != nil {
-					uc.Log.Info("url refresh: the page is still not readable — the feed's copy is kept",
-						"url", s.URL, "chars", utf8.RuneCountInString(body))
+					uc.Log.Info("url refresh: the feed's copy is kept", "url", s.URL,
+						"reason", reason, "chars", bodyChars, "copy_chars", copyChars)
 				}
 				continue
 			}
@@ -1374,6 +1503,10 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 		}
 
 		contentHash := contentHashOf(title, body)
+		// What the SOURCE said before this fetch. The favicon repair below writes the new hash into
+		// s.Meta; comparing after it would call every changed page "unchanged" on a source whose
+		// icon was missing (LWN was exactly that case).
+		previousContentHash := contentHashFromMeta(s.Meta)
 		// A URL record written before the identity carried the icon has no favicon reference. A
 		// refresh is the natural repair: fetch it, write it into the index AND the source record,
 		// then the next reindex cannot lose it again.
@@ -1396,9 +1529,11 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 				}
 			}
 		}
-		sameContent := contentHash == contentHashFromMeta(s.Meta)
-		if sameContent && !attached {
-			// Same content: just record that we checked and the page still answers.
+		sameContent := contentHash == previousContentHash
+		if sameContent && !attached && !fromFeed && !wasWalled {
+			// Same content: just record that we checked and the page still answers. A feed copy or a
+			// source whose last fetch was walled falls through: the provenance must change even when
+			// the text did not (the page WAS read).
 			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now)
 			if uc.Log != nil {
 				uc.Log.Debug("url unchanged", "url", s.URL, "status", page.Status)
@@ -1422,8 +1557,11 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 		// missing icon; if it was still unavailable, keep the reference we had rather than writing a
 		// meta without one.
 		meta := metaWithFavicon(s.Meta, s.URL, contentHash, favicon)
-		// A readable page replaces the feed's copy: the snapshot is now the page's, so the marker goes.
-		meta = metaWith(meta, map[string]any{"from_feed": nil, "feed_hash": nil})
+		// A readable page replaces the feed's copy: the snapshot is now the page's, so the marker
+		// goes. The wall describes the LAST fetch, not the bytes: a successful read clears it too.
+		meta = metaWith(meta, map[string]any{
+			"from_feed": nil, "feed_hash": nil, "wall": nil, "last_error": nil, "text_chars": nil,
+		})
 		if attached {
 			// The fetched page is the source now, not the human's workaround. Clearing the marker is
 			// what lets the weekly refresh treat it as an ordinary URL again.
@@ -1436,6 +1574,8 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 		updated.Title, updated.Meta = title, meta
 		updated.Language = language
 		updated.Attached, updated.AttachedFrom = false, ""
+		// The page is the source now: neither the feed marker nor the wall survives a successful read.
+		updated.FromFeed, updated.FeedHash, updated.Wall = false, "", ""
 		if err := uc.Index.UpsertSource(ctx, updated); err != nil {
 			res.Failed++
 			res.LastError = err.Error()
@@ -1490,6 +1630,36 @@ func (uc RefreshURLs) executeRows(ctx context.Context, rows []entities.Source, s
 					"file": s.AttachedFrom, "http_status": page.Status, "reset": reset,
 				})
 			res.Replaced++
+		}
+		// The source's bytes changed. The old derivation belongs to other text, and a document run
+		// may be in flight: the caller must rebuild it through the app's exclusive reset. A queued
+		// row (Path == "") needs no app reset — it only re-arms its skipped steps below.
+		if !sameContent && s.Path != "" && !attached {
+			reason := "the page changed — the derivation was rebuilt"
+			switch {
+			case fromFeed:
+				reason = "the page replaced the feed copy — the derivation was rebuilt"
+			case wasWalled:
+				reason = "the wall cleared and the page was read — the derivation was rebuilt"
+			}
+			res.Resets = append(res.Resets, SnapshotReplacement{Hash: s.Hash, Reason: reason})
+		}
+		// The provenance change is written down even when the text is identical: a feed copy that was
+		// finally read, and a wall that cleared, are facts about the source, not about its length.
+		switch {
+		case fromFeed && sameContent:
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "info",
+				"the page was read — the same text as the feed copy; the feed marker was cleared",
+				map[string]any{"chars": bodyChars, "http_status": page.Status})
+		case fromFeed:
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "info",
+				"the page replaced the feed copy", map[string]any{
+					"chars": bodyChars, "copy_chars": copyChars, "http_status": page.Status,
+				})
+		case wasWalled:
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "capture", "info",
+				"the page is readable again — the wall cleared",
+				map[string]any{"chars": bodyChars, "http_status": page.Status})
 		}
 		if !sameContent {
 			res.Changed++
@@ -1551,7 +1721,8 @@ func (uc RefreshURLs) refreshParent(ctx context.Context, s entities.Source, page
 		if queued, fromFeed, err = materializer.expand(ctx, s, doc.Items); err != nil {
 			return partialentities.PartialSource{}, nil, 0, err
 		}
-		detail = fmt.Sprintf("HTTP %d · feed · %d items · %d from feed", page.Status, len(doc.Items), fromFeed)
+		detail = fmt.Sprintf("HTTP %d · feed · %d items · %d feed copies · %d pages queued",
+			page.Status, len(doc.Items), fromFeed, len(queued))
 	}
 
 	obj, err := uc.Store.PutAt(s.Hash, s.Ext, []byte(snapshot))
@@ -1745,6 +1916,51 @@ func contentHashFromMeta(meta string) string {
 		return ""
 	}
 	return m.ContentHash
+}
+
+func textCharsFromMeta(meta string) int {
+	var m urlMeta
+	if err := json.Unmarshal([]byte(meta), &m); err != nil {
+		return 0
+	}
+	return m.TextChars
+}
+
+// feedCopyTextChars is how much readable text a feed copy carries. New copies record `text_chars`
+// in their meta; a copy written before that field existed is measured from its snapshot. Zero means
+// "unknown" and lets the page win when it is readable at all.
+func feedCopyTextChars(ctx context.Context, store interfaces.SourceStore, src entities.Source) int {
+	if n := textCharsFromMeta(src.Meta); n > 0 {
+		return n
+	}
+	if store == nil || src.Hash == "" || src.Ext == "" {
+		return 0
+	}
+	rc, err := store.Open(src.Hash, src.Ext)
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = rc.Close() }()
+	b, err := io.ReadAll(rc)
+	if err != nil {
+		return 0
+	}
+	return utf8.RuneCountInString(strings.TrimSpace(string(snapshotBody(b))))
+}
+
+// snapshotBody strips the YAML frontmatter renderFeedCopySnapshot writes. It is deliberately a
+// delimiter scan, not a YAML parser: the use case only needs the length of the text behind it.
+func snapshotBody(b []byte) []byte {
+	const open = "---\n"
+	s := string(b)
+	if !strings.HasPrefix(s, open) {
+		return b
+	}
+	rest := s[len(open):]
+	if i := strings.Index(rest, "\n---\n"); i >= 0 {
+		return []byte(rest[i+len("\n---\n"):])
+	}
+	return b
 }
 
 func metaJSON(m urlMeta) string {

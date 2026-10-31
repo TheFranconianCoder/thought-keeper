@@ -122,23 +122,27 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
   - A URL whose page yields enough text becomes an indexed **document**.
   - One that does not (a video, a JS app) becomes a **bookmark**: metadata only, never distilled.
     `add --bookmark` forces this class.
-  - One that answers with a **wall** — a login (`401`/`403`, a sign-in redirect, a password form), a
-    paywall (a teaser), a consent gate — becomes **blocked**: a snapshot that says what happened
-    (`wall: login_required|paywalled|consent_required`), a red capture light with the reason, and
-    outline/distill recorded `skipped`. A wall is never content. A source that was readable once
-    **keeps its snapshot** when a later fetch is walled.
+  - One that answers with a **wall** — a login (`401`/`403`, a sign-in redirect, a password form **on
+    a page without substantial article text**), a paywall (a teaser), a consent gate — becomes
+    **blocked**: a snapshot that says what happened (`wall: login_required|paywalled|consent_required`),
+    a red capture light with the reason, and outline/distill recorded `skipped`. A login form in the
+    header of a readable article is navigation, not a wall. A wall is never content. A source that was
+    readable once **keeps its snapshot** when a later fetch is walled or yields no readable text. The
+    wall describes the last fetch (a fact of the index metadata, re-derived by the next refresh), not
+    the source's identity.
 - **A sitemap and a feed are PARENTS, not pages.** Their snapshot is the list they declared (`sitemap:
   true` / `rss: true`); their children are ordinary URL sources with `origin: sitemap|rss` and
   `parent_hash`. A sitemap is a complete list (a refresh reconciles it 1:1 and deletes what left); a
   feed is a window on the newest items (a refresh only adds — a page that left it stays until the feed
   is deleted).
 - **A feed may carry the post itself.** When an item has usable content (`content:encoded`, Atom
-  `content`, or a description long enough), that copy becomes the page's snapshot: frontmatter
-  `from_feed: true`, `feed`, `feed_hash`, `captured_at` (no `fetched_at`/`http_status` — the page was
-  not fetched), and the source's record carries `from_feed`/`feed_hash` (identity, so a reindex keeps
-  it). This is how a page that only resolves with JavaScript is readable without a browser. The page
-  is still tried on the weekly refresh; a readable page replaces the copy and clears the marker, an
-  unreadable one leaves it.
+  `content`, or a description long enough), that copy becomes the page's **provisional** snapshot:
+  frontmatter `from_feed: true`, `feed`, `feed_hash`, `captured_at` (no `fetched_at`/`http_status` —
+  the page was not fetched yet), `text_chars` in the source's meta is the copy's readable length, and
+  the source's record carries `from_feed`/`feed_hash` (identity, so a reindex keeps it). The page is
+  queued immediately; a readable page that carries at least as much text replaces the copy and clears
+  the marker (a changed text resets the derivation), a page that is walled, fails or carries less
+  text leaves the copy. The same rule applies on the weekly pass.
 - **Ownership can be released.** A URL the human adds by hand wins over the page/sitemap/feed that
   claimed it first: the record's `origin`, `wiki_page` and `parent_hash` are cleared, the source stays
   as it is, and the owner's next reconciliation no longer touches it.
@@ -159,6 +163,10 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
   record/index/identity (a changed text also resets the derivation); a wall, a dead host or an empty
   page keeps the attached bytes and marker exactly as they are. `Reset` remains derivation-only and
   never replaces an attachment.
+- **A changed page is a changed source.** A refresh that writes DIFFERENT text reports the source for
+  a derivation rebuild; the app resets tree/claims/steps under the exclusive gate (capture survives)
+  and derives the new bytes again. The source log records why the derivation was rebuilt. The same
+  applies when a feed copy is replaced by its page or a wall clears.
 - **Favicons.** A URL source stores the site's icon content-addressed under
   `.thought-keeper/favicons/`, served at `GET /api/v1/sources/{hash}/favicon`.
 - **Name = SHA-256 of the bytes**, sharded `sources/<ab>/<cd>/<full-hash>.<ext>`. Identical bytes

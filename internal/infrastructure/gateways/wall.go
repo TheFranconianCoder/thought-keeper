@@ -1,8 +1,12 @@
 package gateways
 
 import (
+	"bytes"
 	"net/url"
 	"strings"
+	"unicode/utf8"
+
+	"golang.org/x/net/html"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 )
@@ -12,9 +16,10 @@ import (
 // "sign in" into a blocked source.
 //
 // The order is the strength of the evidence: an HTTP status or a redirect to a sign-in is proof; a
-// password field is near-proof (a login form in the returned document); the paywall markers are the
-// weakest, so they are checked last and only on a readable page.
-func detectWall(status int, finalURL, contentType string, body []byte) entities.WallKind {
+// password field is near-proof, BUT only when the document does not carry a real article (many sites
+// put a login form in the header of every page — LWN does); the paywall markers are the weakest, so
+// they are checked last and only when the page has no substantial article text.
+func detectWall(status int, finalURL, contentType string, body []byte, minChars int) entities.WallKind {
 	if status == 401 || status == 403 {
 		return entities.WallLogin
 	}
@@ -36,15 +41,24 @@ func detectWall(status int, finalURL, contentType string, body []byte) entities.
 		head = head[:headBytes]
 	}
 	lower := strings.ToLower(string(head))
-	if hasPasswordField(lower) {
+	hasPassword := hasPasswordField(lower)
+	hasPaywall := hasPaywallMarker(lower)
+	if !hasPassword && !hasPaywall {
+		return entities.WallNone
+	}
+	if minChars <= 0 {
+		minChars = 400
+	}
+	// A login form in the header of a real article is navigation, not a gate. So is a "subscribe"
+	// footer. The page is a wall only when the document does not carry a readable article of its
+	// own: a false positive (blocking a page that answers with its article) is worse than a miss.
+	if articleTextChars(head, minChars) >= minChars {
+		return entities.WallNone
+	}
+	if hasPassword {
 		return entities.WallLogin
 	}
-	for _, marker := range paywallMarkers {
-		if strings.Contains(lower, marker) {
-			return entities.WallPaywall
-		}
-	}
-	return entities.WallNone
+	return entities.WallPaywall
 }
 
 // paywallMarkers are phrases a gated article's teaser carries and an open article does not.
@@ -58,8 +72,18 @@ var paywallMarkers = []string{
 	"subscribe now to read",
 }
 
-// hasPasswordField reports whether the document carries a password input. A login form is the one
-// reliable sign that the page we got is a gate: articles do not ask for a password.
+func hasPaywallMarker(lowerHTML string) bool {
+	for _, marker := range paywallMarkers {
+		if strings.Contains(lowerHTML, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasPasswordField reports whether the document carries a password input. On its own this is not a
+// wall: the header of an ordinary article often has a login form. It only counts together with a
+// document that has no substantial article text of its own (see detectWall).
 func hasPasswordField(lowerHTML string) bool {
 	for _, attr := range []string{`type="password"`, `type='password'`, `type=password`} {
 		if strings.Contains(lowerHTML, attr) {
@@ -67,6 +91,44 @@ func hasPasswordField(lowerHTML string) bool {
 		}
 	}
 	return false
+}
+
+// wallBoilerplate are the elements whose text is chrome, not article: a login form, a menu, a
+// footer, a consent strip. Their text must not make a login page look like an article.
+var wallBoilerplate = map[string]bool{
+	"script": true, "style": true, "noscript": true, "template": true,
+	"nav": true, "header": true, "footer": true, "aside": true, "form": true,
+}
+
+// articleTextChars measures the readable text of a document OUTSIDE navigation, forms and scripts.
+// It stops as soon as limit is reached: the only question is "is there substantial article text?".
+// A parse failure reports zero, which keeps the conservative wall decision.
+func articleTextChars(body []byte, limit int) int {
+	root, err := html.Parse(bytes.NewReader(body))
+	if err != nil {
+		return 0
+	}
+	count := 0
+	var walk func(*html.Node, bool)
+	walk = func(n *html.Node, skip bool) {
+		if count >= limit || n == nil {
+			return
+		}
+		if n.Type == html.ElementNode && wallBoilerplate[n.Data] {
+			skip = true
+		}
+		if n.Type == html.TextNode && !skip {
+			text := strings.TrimSpace(n.Data)
+			if text != "" {
+				count += utf8.RuneCountInString(text)
+			}
+		}
+		for c := n.FirstChild; c != nil && count < limit; c = c.NextSibling {
+			walk(c, skip)
+		}
+	}
+	walk(root, false)
+	return count
 }
 
 // isLoginLocation reports whether a URL is a sign-in page: its host or path says so.

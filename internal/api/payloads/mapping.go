@@ -26,6 +26,7 @@ func SourceFromPartial(p partialentities.PartialSource) Source {
 		RSS:            p.RSS,
 		FromFeed:       p.FromFeed,
 		FeedHash:       p.FeedHash,
+		Wall:           p.Wall,
 		Attached:       p.Attached,
 		AttachedFrom:   p.AttachedFrom,
 		OriginalName:   p.OriginalName,

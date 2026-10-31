@@ -51,10 +51,12 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   and no claims of its own. The source page offers **Refresh** in place of Capture/Outline/Distill/
   Reset, and the API refuses a document run with `conflict`. Its children carry the prose.
 - **A feed that carries the post solves the JavaScript page.** Many feeds include the article itself
-  (`content:encoded`, Atom `content`). The item's copy becomes the page's snapshot — marked
-  `from_feed` with the feed it came from — so a page that only resolves in a browser is still
-  readable, without a browser. The page is still tried weekly: a fetch that yields a readable page
-  replaces the copy and clears the marker; while it yields nothing, the copy stays.
+  (`content:encoded`, Atom `content`). The item's copy becomes the page's **provisional** snapshot —
+  marked `from_feed` with the feed it came from — so the source is readable immediately. The page is
+  still fetched once in the background (the queue job is never lost: a copy's `url_checked_at` is
+  empty, so the hourly pass retries it). A readable page that carries at least as much text replaces
+  the copy and clears the marker; a page that is unreadable, walled, fails, or carries less text
+  leaves the copy. The same rule applies on the weekly pass.
 - **A sitemap is complete; a feed is a window.** A refresh is a 1:1 reconciliation for a sitemap and
   for a wiki page's links: a page that disappeared from the list is removed from Sources. A feed only
   ever EXTENDS: a page that disappeared from it stays — and only deleting the feed removes its pages.
@@ -67,14 +69,17 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   sitemap/feed claim, re-add) compare `entities.URLKey` — path trailing slash and fragment ignored. The
   stored address stays the URL as it was given.
 - **A URL that does not answer with itself is `blocked`, not a failure and never content.** A login
-  wall (`401`/`403`, a redirect to a sign-in, a password form), a paywall (a teaser instead of the
-  article) and a consent gate are named as such (`login_required`, `paywalled`,
-  `consent_required`) and recorded where the reader sees them: a red capture light with the reason,
-  the `wall` key in the snapshot's frontmatter and in the source's metadata, a line in the source's
-  log. Outline and distill are recorded **skipped** — for a URL source the intake IS the capture, so
-  without that the outline would build a tree out of a login form and distill would write claims
-  about the gate. A page that was readable once **keeps its snapshot** when a later fetch is walled:
-  the wall describes the fetch, not the bytes.
+  wall (`401`/`403`, a redirect to a sign-in, a password form **on a page without substantial article
+  text**), a paywall (a teaser instead of the article) and a consent gate are named as such
+  (`login_required`, `paywalled`, `consent_required`) and recorded where the reader sees them: a red
+  capture light with the reason, the `wall` key in the snapshot's frontmatter and in the source's
+  metadata, a line in the source's log. A login form in the header of a readable article is
+  navigation, not a wall: the detector measures the article text outside navigation and forms before
+  it calls a password field a gate. Outline and distill are recorded **skipped** — for a URL source
+  the intake IS the capture, so without that the outline would build a tree out of a login form and
+  distill would write claims about the gate. A page that was readable once **keeps its snapshot**
+  when a later fetch is walled or yields no readable text: the fetch describes the check, not the
+  bytes.
 - **The human may attach the page.** The app does not authenticate and does not read your cookies;
   the human is already logged in, in their browser. Saving the page (HTML or PDF) and attaching it to
   the URL source (`POST /api/v1/sources/{hash}/attach`, `thought-keeper attach`) stores it as that
@@ -89,6 +94,10 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   source (`url_checked_at`), not to the process. Attached sources are not fetched by the cadence; an
   explicit refetch may try one, and a walled normal source is attempted again on the same cadence,
   because it may become readable.
+- **A changed page is a changed source.** When a refresh writes different text — a normal page, a
+  feed copy replaced by its page, or a wall that cleared — the old derivation is thrown away and
+  built again from the new bytes (capture survives). The refresh reports the source for a reset; the
+  app runs it under the exclusive gate, so a document run cannot mix old claims with new text.
 - PDF: extract the text layer with poppler; OCR a page that has none (`pdftocairo` + `tesseract`).
   Write the readable rendering to `sources/<ab>/<cd>/<hash>.capture.md`, with one
   `<!--part …-->` marker per part.

@@ -18,7 +18,7 @@
   import { setPagePosition } from '../../lib/scroll-memory';
   import { sourcesTop } from '../../lib/sources-scroll';
   import { sources } from '../../lib/stores/sources.svelte';
-  import { countsOf, canAttachSnapshot, progressOf, statusLabel } from '../../lib/source-state';
+  import { countsOf, canAttachSnapshot, canRefreshSource, progressOf, statusLabel } from '../../lib/source-state';
   import type { SourceNode, SourceTopic } from '../../lib/api/types';
   import CopyId from '../ui/CopyId.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -374,13 +374,23 @@
               <Icon name="refresh" size={13} /> <span class="btn-label">{t('source.refresh')}</span>
             </button>
           {:else}
-            <button
-              class="btn btn--secondary btn--sm btn--action"
-              title={t('source.capture')}
-              onclick={() => void captureSource(selected!.hash)}
-            >
-              <Icon name="capture" size={13} /> <span class="btn-label">{t('source.capture')}</span>
-            </button>
+            {#if canRefreshSource(selected)}
+              <button
+                class="btn btn--secondary btn--sm btn--action"
+                title={t('source.refreshPage')}
+                onclick={() => void refreshSource(selected!.hash)}
+              >
+                <Icon name="refresh" size={13} /> <span class="btn-label">{t('source.refresh')}</span>
+              </button>
+            {:else}
+              <button
+                class="btn btn--secondary btn--sm btn--action"
+                title={t('source.capture')}
+                onclick={() => void captureSource(selected!.hash)}
+              >
+                <Icon name="capture" size={13} /> <span class="btn-label">{t('source.capture')}</span>
+              </button>
+            {/if}
             <button
               class="btn btn--secondary btn--sm btn--action"
               title={t('source.outline')}
@@ -819,6 +829,13 @@
                 <span class="k">{t('source.copyLabel')}</span>
                 <span class="v">{t('source.copyFromFeed')}</span>
               </div>
+              <button
+                type="button"
+                class="rail-action"
+                onclick={() => void refreshSource(selected!.hash)}
+              >
+                {t('source.tryPage')}
+              </button>
             {/if}
             {#if selected.original_name?.startsWith('wiki:')}
               <div class="kv">
@@ -1094,6 +1111,18 @@
 
   .rail-link {
     color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .rail-action {
+    margin-top: 2px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
     text-decoration: underline;
     text-underline-offset: 2px;
   }

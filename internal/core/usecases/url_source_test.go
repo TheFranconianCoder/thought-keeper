@@ -122,6 +122,9 @@ func TestRefreshURLsDetectsChange(t *testing.T) {
 	if res.Checked != 1 || res.Changed != 0 {
 		t.Fatalf("unchanged refresh = %+v, want checked 1 changed 0", res)
 	}
+	if len(res.Resets) != 0 {
+		t.Fatalf("an unchanged page asked for a derivation reset: %+v", res.Resets)
+	}
 
 	conv.markdown = strings.Repeat("same text ", 60) + " but the page changed"
 	res, err = refresh.ExecuteAll(ctx)
@@ -131,8 +134,42 @@ func TestRefreshURLsDetectsChange(t *testing.T) {
 	if res.Changed != 1 || len(res.Sources) != 1 {
 		t.Fatalf("changed refresh = %+v, want changed 1", res)
 	}
+	if len(res.Resets) != 1 || res.Resets[0].Hash != entities.URLHash("https://example.com/x") {
+		t.Fatalf("a changed page did not report its derivation reset: %+v", res.Resets)
+	}
 	if !strings.Contains(res.Sources[0].Meta, "content_hash") {
 		t.Errorf("new snapshot lacks content hash meta: %s", res.Sources[0].Meta)
+	}
+}
+
+func TestRefreshClearsAWallAndReportsTheReset(t *testing.T) {
+	ctx := context.Background()
+	idx := newFakeIndex()
+	store := objects.New(t.TempDir())
+	raw := "https://example.com/walled"
+	hash := entities.URLHash(raw)
+	idx.m[hash] = entities.Source{
+		ID: ulid.Make(), Hash: hash, Kind: entities.SourceKindURL, Ext: ".md",
+		Path: "aa/bb/" + hash + ".md", URL: raw, Title: "Old", ImportedAt: fixedClock{}.Now(),
+		Meta: `{"url":"` + raw + `","wall":"login_required","last_error":"login required"}`,
+	}
+	conv := &fakeConverter{title: "Readable", markdown: strings.Repeat("the article is available ", 20)}
+	refresh := usecases.RefreshURLs{
+		Fetch:   &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("<html>article</html>")}},
+		Convert: conv, Store: store, Index: idx, Steps: &fakeSteps{}, Clock: fixedClock{},
+	}
+	res, err := refresh.ExecuteOne(ctx, hash)
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if res.Blocked != 0 || res.Changed != 1 {
+		t.Fatalf("refresh = %+v, want the wall cleared and a changed page", res)
+	}
+	if len(res.Resets) != 1 || res.Resets[0].Hash != hash {
+		t.Fatalf("a cleared wall did not report its derivation reset: %+v", res.Resets)
+	}
+	if one := idx.m[hash]; one.Wall != "" || strings.Contains(one.Meta, `"wall"`) {
+		t.Errorf("the wall survived a readable page: %+v", one)
 	}
 }
 
@@ -266,6 +303,44 @@ func TestRefreshRepairsAMissingFaviconOnAnUnchangedPage(t *testing.T) {
 	}
 	if id := steps.identities[src.Hash]; id.FaviconHash == "" || id.ContentHash == "" {
 		t.Fatalf("identity was not repaired: %+v", id)
+	}
+}
+
+func TestRefreshRepairsAMissingFaviconAndStillDetectsAChange(t *testing.T) {
+	ctx := context.Background()
+	idx := newFakeIndex()
+	store := objects.New(t.TempDir())
+	icons := favicons.New(t.TempDir())
+	steps := &fakeSteps{}
+	fetcher := &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("x")}}
+	oldBody := strings.Repeat("same text ", 60)
+	conv := &fakeConverter{title: "T", markdown: oldBody, favicon: "/icon.png"}
+	add := usecases.AddURL{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Steps: steps, Clock: fixedClock{}}
+	src, err := add.Execute(ctx, "https://example.com/repair-change", false)
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	// The old record knows the content hash but has no icon. The repair must not make the NEW body
+	// look like the old one just because it writes the new hash into the meta first.
+	row := idx.m[src.Hash]
+	row.Meta = `{"content_hash":"` + contentHashForTest("T", oldBody) + `","url":"https://example.com/repair-change"}`
+	idx.m[src.Hash] = row
+	delete(steps.identities, src.Hash)
+
+	conv.markdown = oldBody + " changed"
+	refresh := usecases.RefreshURLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Favicons: icons, Steps: steps, Clock: fixedClock{}}
+	res, err := refresh.ExecuteAll(ctx)
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if res.Changed != 1 {
+		t.Fatalf("a changed page with a missing favicon was reported unchanged: %+v", res)
+	}
+	if len(res.Resets) != 1 || res.Resets[0].Hash != src.Hash {
+		t.Fatalf("the changed page did not report its derivation reset: %+v", res.Resets)
+	}
+	if got := idx.m[src.Hash]; !strings.Contains(got.Meta, `"favicon"`) {
+		t.Fatalf("missing favicon was not repaired: %s", got.Meta)
 	}
 }
 

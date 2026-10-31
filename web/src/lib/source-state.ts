@@ -127,6 +127,16 @@ export function canAttachSnapshot(source: Source): boolean {
   return source.steps?.capture?.state === 'failed';
 }
 
+/** canRefreshSource reports whether a manual Refresh is offered for this URL source. A normal page
+ *  is refreshed by the background cadence; only a source the app could not read (a wall, including
+ *  one whose readable snapshot survived it) and a feed copy need the explicit action. */
+export function canRefreshSource(source: Source): boolean {
+  if (source.kind !== 'url' || source.sitemap === true || source.rss === true || source.attached === true) {
+    return false;
+  }
+  return source.from_feed === true || !!source.wall;
+}
+
 /** SourceFilter is the source lens's client-side filter: the search term, the kind selector, one
  *  tag and the "attached snapshots only" switch. The list is loaded whole, so the same predicate
  *  serves every page. */
