@@ -29,7 +29,7 @@ export const homeEn: Record<string, string> = {
   'home.allSources': 'All sources',
   'home.emptySourcesTitle': 'No sources yet',
   'home.emptySourcesText':
-    'Add a Markdown file, a PDF, plain text or a link — or ask a question; the vault can answer that it is still empty.',
+    'Add a Markdown file, a PDF, an EPUB, plain text or a link — or ask a question; the vault can answer that it is still empty.',
   'home.emptySourcesAction': 'Add the first source',
 
   'home.pulse.sources.one': '{count} source',

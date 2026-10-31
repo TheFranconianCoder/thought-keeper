@@ -101,6 +101,13 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
 - PDF: extract the text layer with poppler; OCR a page that has none (`pdftocairo` + `tesseract`).
   Write the readable rendering to `sources/<ab>/<cd>/<hash>.capture.md`, with one
   `<!--part …-->` marker per part.
+- EPUB: read the container in pure Go — `META-INF/container.xml` → the OPF package → the **spine**.
+  Each spine document is one **chapter** (level 1, its own page number); its headings hang under it
+  (level 2 and deeper), and its title comes from the book's table of contents (`nav`/NCX) or its first
+  heading. `dc:title` and `dc:language` are the document's declared title and language — they beat the
+  file name and the detector. Images and navigation are dropped, and the count of dropped images is
+  written into the source's log. A DRM-encrypted book, a book with no readable text and a container
+  that is not an EPUB are `unsupported_source`, never silently empty. Font obfuscation is not DRM.
 - **The extractor takes the object whole** (`[]byte`, not a reader): every format needs all of it
   anyway — a PDF goes to poppler on stdin, text is split into parts — and a reader only ever
   invited a second private buffer. The Markdown parser accumulates part bodies in a builder, not
@@ -201,7 +208,7 @@ merge, not a target. **Identity is the claim, never a title.**
 ## 3. Where the step state lives
 
 - **`sources/<ab>/<cd>/<hash>.capture.md`** is what step 1 leaves behind for a source whose bytes
-  are not readable (a PDF). Only such a source has one.
+  are not readable (a PDF, an EPUB). Only such a source has one.
 - **`sources/<ab>/<cd>/<hash>.meta`** (JSON) records what one source IS (`kind`, `url`, `bookmark`,
   `language`, `origin`, `wiki_page`, `original_name`, title, favicon/content references, `attached`
   with the file it was attached from) and what it has been through: capture/outline/distill (state,

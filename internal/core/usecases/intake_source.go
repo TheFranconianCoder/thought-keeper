@@ -82,7 +82,7 @@ func (uc IntakeSource) Execute(ctx context.Context, in IntakeInput) (partialenti
 	if kind == "" {
 		return partialentities.PartialSource{}, types.New(
 			"unsupported_source",
-			"only .md, .pdf and .txt sources are supported",
+			"only .md, .pdf, .txt and .epub sources are supported",
 			types.ErrUnsupportedSource,
 		)
 	}
@@ -92,8 +92,9 @@ func (uc IntakeSource) Execute(ctx context.Context, in IntakeInput) (partialenti
 	}
 	// STEP 1 DETERMINES THE TITLE. The bytes are in the store now, so for a source whose content is
 	// readable as it is (Markdown, text) the title is derived from the document itself — not left as
-	// the file name until some later step happens to run. A PDF has no readable text yet: it keeps
-	// the file name here and the capture step refines it.
+	// the file name until some later step happens to run. A PDF or an EPUB has no readable text yet:
+	// it keeps the file name here and the capture step refines it (a PDF from its heading, an EPUB
+	// from the book's own dc:title).
 	title := strings.TrimSuffix(filepath.Base(in.Name), ext)
 	titleSource := "filename"
 	if !kind.NeedsCapture() {
@@ -163,9 +164,10 @@ func (uc IntakeSource) Execute(ctx context.Context, in IntakeInput) (partialenti
 		recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepCapture, entities.StepOK,
 			fmt.Sprintf("%s · %d bytes", kind, obj.Bytes), nil)
 	} else {
-		// A PDF's bytes are not readable: step 1 has to extract the text (and OCR what has no text
-		// layer). Until that has happened the capture is OPEN — and the outline waits for it,
-		// because an outline of bytes nobody can read is not an outline.
+		// A PDF's or an EPUB's bytes are not readable: step 1 has to extract the text (poppler and
+		// OCR for a PDF, the container's XHTML for a book). Until that has happened the capture is
+		// OPEN — and the outline waits for it, because an outline of bytes nobody can read is not an
+		// outline.
 		recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepCapture, entities.StepPending,
 			fmt.Sprintf("%s · %d bytes · text extraction pending", kind, obj.Bytes), nil)
 	}

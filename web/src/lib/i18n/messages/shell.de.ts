@@ -22,12 +22,13 @@ export const shellDe: Record<string, string> = {
 
   'add.title': 'Quelle hinzufügen',
   'add.description':
-    'Eine Markdown-Datei, ein PDF, reiner Text, eine URL, ein RSS/Atom-Feed — oder viele URLs, eine pro Zeile.',
+    'Eine Markdown-Datei, ein PDF, ein EPUB, reiner Text, eine URL, ein RSS/Atom-Feed — oder viele URLs, eine pro Zeile.',
   'add.pathLabel': 'Dateipfad oder URL',
-  'add.placeholder': '/pfad/zur/datei.pdf\nhttps://example.com/artikel\nhttps://anderes.example.org/beitrag',
+  'add.placeholder':
+    '/pfad/zur/datei.pdf\n/pfad/zum/buch.epub\nhttps://example.com/artikel\nhttps://anderes.example.org/beitrag',
   'add.bookmarkTitle': 'Als Lesezeichen behalten',
   'add.bookmarkHint': 'Den Link sammeln, ohne seinen Text zu indizieren.',
-  'add.dropPrefix': 'Dateien hier ablegen oder ',
+  'add.dropPrefix': 'Eine Markdown-, PDF-, TXT- oder EPUB-Datei hier ablegen oder ',
   'add.browse': 'durchsuchen',
   'add.dropSuffix': '.',
   'add.batchPrefix': 'Eine ',

@@ -1,6 +1,7 @@
 // Package extract turns raw source bytes into ordered parts. Markdown and text
 // are pure Go; PDF uses poppler (pdftotext) with an ad-hoc OCR fallback
-// (pdftocairo + tesseract) — subprocesses over stdin/stdout, never a daemon.
+// (pdftocairo + tesseract) — subprocesses over stdin/stdout, never a daemon. An
+// EPUB is a ZIP of XHTML and is read in pure Go, like the two text formats.
 package extract
 
 import (
@@ -40,16 +41,22 @@ func New(runner interfaces.ToolRunner, cfg Config) *Extractor {
 }
 
 // Extract returns the parts for the given extension.
-func (e *Extractor) Extract(ctx context.Context, ext string, data []byte, onEvent func(entities.ExtractEvent)) ([]entities.Part, error) {
+func (e *Extractor) Extract(ctx context.Context, ext string, data []byte, onEvent func(entities.ExtractEvent)) (entities.Extraction, error) {
 	switch strings.ToLower(ext) {
 	case ".md", ".markdown":
-		return markdownSections(data)
+		parts, err := markdownSections(data)
+		return entities.Extraction{Parts: parts}, err
 	case ".txt":
-		return textSections(data)
+		parts, err := textSections(data)
+		return entities.Extraction{Parts: parts}, err
 	case ".pdf":
-		return e.pdfSections(ctx, data, onEvent)
+		parts, err := e.pdfSections(ctx, data, onEvent)
+		return entities.Extraction{Parts: parts}, err
+	case ".epub":
+		return e.epubSections(data, onEvent)
 	default:
-		return nil, types.New("unsupported_source", "only .md, .pdf and .txt sources are supported", types.ErrUnsupportedSource)
+		return entities.Extraction{}, types.New("unsupported_source",
+			"only .md, .pdf, .txt and .epub sources are supported", types.ErrUnsupportedSource)
 	}
 }
 

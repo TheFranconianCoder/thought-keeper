@@ -327,7 +327,7 @@ func apiUpload(addr, path, field, filename string, data []byte) (int, []byte, er
 
 func cmdSources(args []string) error {
 	fs := flag.NewFlagSet("sources", flag.ContinueOnError)
-	kind := fs.String("kind", "", "filter by kind: md, pdf, txt, url")
+	kind := fs.String("kind", "", "filter by kind: md, pdf, txt, epub, url")
 	limit := fs.Int("limit", 200, "max rows")
 	if err := fs.Parse(args); err != nil {
 		return err

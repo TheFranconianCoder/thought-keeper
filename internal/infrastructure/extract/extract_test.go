@@ -16,10 +16,11 @@ import (
 
 func TestMarkdownHeadingsAndFrontmatter(t *testing.T) {
 	md := "---\ntitle: x\n---\n# Alpha\nintro\n## Beta\nbody\n```\n# not a heading\n```\n"
-	secs, err := extract.New(nil, extract.Config{}).Extract(context.Background(), ".md", []byte(md), nil)
+	doc, err := extract.New(nil, extract.Config{}).Extract(context.Background(), ".md", []byte(md), nil)
 	if err != nil {
 		t.Fatalf("extract: %v", err)
 	}
+	secs := doc.Parts
 	if len(secs) != 2 {
 		t.Fatalf("parts = %d, want 2: %+v", len(secs), secs)
 	}
@@ -35,10 +36,11 @@ func TestMarkdownHeadingsAndFrontmatter(t *testing.T) {
 }
 
 func TestTextParagraphs(t *testing.T) {
-	secs, err := extract.New(nil, extract.Config{}).Extract(context.Background(), ".txt", []byte("first line\nbody\n\nsecond\n"), nil)
+	doc, err := extract.New(nil, extract.Config{}).Extract(context.Background(), ".txt", []byte("first line\nbody\n\nsecond\n"), nil)
 	if err != nil {
 		t.Fatalf("extract: %v", err)
 	}
+	secs := doc.Parts
 	if len(secs) != 2 {
 		t.Fatalf("parts = %d, want 2", len(secs))
 	}
@@ -79,10 +81,11 @@ func TestPDFPagesAndOCRFallback(t *testing.T) {
 		PDFTextTool: "pdftotext", Rasterizer: "pdftocairo", Tesseract: "tesseract",
 		Languages: []string{"eng"}, DPI: 300, MinTextCharsPerPage: 10, MaxPages: 100, OCR: true,
 	})
-	secs, err := e.Extract(context.Background(), ".pdf", []byte("%PDF"), nil)
+	doc, err := e.Extract(context.Background(), ".pdf", []byte("%PDF"), nil)
 	if err != nil {
 		t.Fatalf("extract: %v", err)
 	}
+	secs := doc.Parts
 	if len(secs) != 2 {
 		t.Fatalf("parts = %d, want 2: %+v", len(secs), secs)
 	}
@@ -147,11 +150,12 @@ func TestPDFDropsPageFurnitureAndFindsHeadings(t *testing.T) {
 	e := extract.New(runner, extract.Config{PDFTextTool: "pdftotext", MinTextCharsPerPage: 10, MaxPages: 100})
 
 	var events []entities.ExtractEvent
-	secs, err := e.Extract(context.Background(), ".pdf", []byte("%PDF"),
+	doc, err := e.Extract(context.Background(), ".pdf", []byte("%PDF"),
 		func(ev entities.ExtractEvent) { events = append(events, ev) })
 	if err != nil {
 		t.Fatalf("extract: %v", err)
 	}
+	secs := doc.Parts
 
 	for _, s := range secs {
 		if strings.Contains(s.Text, "Concurrency in Practice") {
@@ -197,10 +201,11 @@ func TestPDFRealTool(t *testing.T) {
 		t.Skip("pdftotext not installed")
 	}
 	e := extract.New(runner, extract.Config{PDFTextTool: "pdftotext", MinTextCharsPerPage: 32, MaxPages: 100})
-	secs, err := e.Extract(context.Background(), ".pdf", minimalPDF("Hello Phase Three"), nil)
+	doc, err := e.Extract(context.Background(), ".pdf", minimalPDF("Hello Phase Three"), nil)
 	if err != nil {
 		t.Fatalf("extract: %v", err)
 	}
+	secs := doc.Parts
 	if len(secs) != 1 {
 		t.Fatalf("parts = %d, want 1", len(secs))
 	}

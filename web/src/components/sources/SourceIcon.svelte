@@ -15,11 +15,13 @@
       ? 'link'
       : kind === 'pdf'
         ? 'filePdf'
-        : kind === 'txt'
-          ? 'fileText'
-          : kind === 'md'
-            ? 'file'
-            : 'file',
+        : kind === 'epub'
+          ? 'book'
+          : kind === 'txt'
+            ? 'fileText'
+            : kind === 'md'
+              ? 'file'
+              : 'file',
   );
 </script>
 

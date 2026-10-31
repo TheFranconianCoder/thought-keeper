@@ -254,7 +254,7 @@ func (uc RunCommand) interpretWithModel(ctx context.Context, text string, refs C
 		}
 	}
 	switch parsed.Criteria.Kind {
-	case "md", "pdf", "txt", "url":
+	case "md", "pdf", "txt", "epub", "url":
 	default:
 		parsed.Criteria.Kind = ""
 	}

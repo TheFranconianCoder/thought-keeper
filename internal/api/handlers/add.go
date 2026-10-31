@@ -94,7 +94,7 @@ func (h AddHandler) Post(w http.ResponseWriter, r *http.Request) {
 	if info.IsDir() {
 		payloads.WriteError(w, types.New(
 			"unsupported_source",
-			"a folder is not a source: point at individual .md, .pdf or .txt files (a source is one immutable file)",
+			"a folder is not a source: point at individual .md, .pdf, .txt or .epub files (a source is one immutable file)",
 			types.ErrUnsupportedSource,
 		))
 		return

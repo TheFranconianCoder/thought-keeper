@@ -10,6 +10,7 @@ export const sourcesDe: Record<string, string> = {
   'sources.kindAll': 'Alle',
   'sources.kindMarkdown': 'Markdown',
   'sources.kindPdf': 'PDF',
+  'sources.kindEpub': 'EPUB',
   'sources.kindText': 'Text',
   'sources.kindUrls': 'URLs',
   'sources.attachedTitle': 'Nur Quellen zeigen, deren Schnappschuss von Hand angehängt wurde',
@@ -23,7 +24,7 @@ export const sourcesDe: Record<string, string> = {
     'Thought Keeper ist nicht erreichbar; das hier ist nicht die Antwort des Tresors.',
   'sources.emptyTitle': 'Noch keine Quellen',
   'sources.emptyText':
-    'Füge eine Markdown-Datei, ein PDF, reinen Text oder eine URL hinzu. Jede Quelle bleibt als lokaler, unveränderlicher Schnappschuss erhalten.',
+    'Füge eine Markdown-Datei, ein PDF, ein EPUB, reinen Text oder eine URL hinzu. Jede Quelle bleibt als lokaler, unveränderlicher Schnappschuss erhalten.',
   'sources.addFirst': 'Erste Quelle hinzufügen',
   'sources.noMatchTitle': 'Keine Quelle passt',
   'sources.noMatchText': 'Leere die Suche oder einen der Filter.',

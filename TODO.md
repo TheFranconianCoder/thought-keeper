@@ -115,6 +115,11 @@ are.
   that paginates (`?page=2`) is read as the page it is. A feed source keeps the pages it once listed
   by design; whether a vault should offer "prune feed items older than N" is open — it would be a
   human action, never an automatic one.
+- **EPUB is text-only.** A book's figures, cover and alt text are dropped (and counted in the source's
+  log), because a claim cites text; a fixed-layout or image-only book is refused as
+  `unsupported_source`. Whether alt text should become part of a part is open. So is a URL that
+  answers with `application/epub+zip`: the fetch path stores a Markdown snapshot, so a book served
+  over HTTP is not read as a book — it would need a fetch → object → capture path of its own.
 - **The manual-addition precedence is per URL, not per host.** Adding `https://example.com/a` releases
   that page; a later sitemap refresh that no longer lists it will not delete it, but the sitemap's
   other pages stay owned. A "this site is mine, never own its URLs" rule is not implemented.

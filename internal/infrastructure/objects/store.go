@@ -307,7 +307,7 @@ func (s *Store) Scan(_ context.Context) ([]entities.Object, error) {
 // It exists for vaults written when the rendering was called <hash>.md; the current name
 // (<hash>.capture.md) needs no such guess, because it cannot pass the object test at all.
 func hasObjectSibling(dir, hash string) bool {
-	for _, ext := range []string{".pdf", ".txt", ".markdown"} {
+	for _, ext := range []string{".pdf", ".txt", ".epub", ".markdown"} {
 		if _, err := os.Stat(filepath.Join(dir, hash+ext)); err == nil {
 			return true
 		}

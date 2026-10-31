@@ -22,12 +22,13 @@ export const shellEn: Record<string, string> = {
 
   'add.title': 'Add source',
   'add.description':
-    'A Markdown file, a PDF, plain text, a URL, an RSS/Atom feed — or many URLs, one per line.',
+    'A Markdown file, a PDF, an EPUB, plain text, a URL, an RSS/Atom feed — or many URLs, one per line.',
   'add.pathLabel': 'File path or URL',
-  'add.placeholder': '/path/to/file.pdf\nhttps://example.com/article\nhttps://another.example.org/post',
+  'add.placeholder':
+    '/path/to/file.pdf\n/path/to/book.epub\nhttps://example.com/article\nhttps://another.example.org/post',
   'add.bookmarkTitle': 'Keep as a bookmark',
   'add.bookmarkHint': 'Collect the link without indexing its text.',
-  'add.dropPrefix': 'Drop files here, or ',
+  'add.dropPrefix': 'Drop a Markdown, PDF, TXT or EPUB file here, or ',
   'add.browse': 'browse',
   'add.dropSuffix': '.',
   'add.batchPrefix': 'A ',

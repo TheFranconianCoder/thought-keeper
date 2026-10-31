@@ -17,7 +17,7 @@ import (
 // them all read the same list, so the layout cannot drift apart.
 const (
 	// SidecarRender is the readable rendering of a source's content — what step 1 (capture) leaves
-	// behind for a source whose bytes are not readable as they are (a PDF).
+	// behind for a source whose bytes are not readable as they are (a PDF, an EPUB).
 	//
 	// It is named after the step that writes it, like every other sidecar (.meta, .outline, .log),
 	// and it ends in .md because that is what it IS: a Markdown document, readable in any editor. The

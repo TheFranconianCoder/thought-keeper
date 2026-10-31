@@ -60,7 +60,7 @@
     untrack(() => {
       const params = router.current.params;
       const kind = params.get('kind') ?? '';
-      sources.kind = (['md', 'pdf', 'txt', 'url'].includes(kind) ? kind : 'all') as SourceKindFilter;
+      sources.kind = (['md', 'pdf', 'txt', 'epub', 'url'].includes(kind) ? kind : 'all') as SourceKindFilter;
       sources.filter = params.get('tag') ?? '';
       sources.attachedOnly = params.get('attached') === '1';
       sources.query = '';
@@ -199,6 +199,7 @@
         <button class:on={sources.kind === 'all'} onclick={() => setKind('all')}>{t('sources.kindAll')}</button>
         <button class:on={sources.kind === 'md'} onclick={() => setKind('md')}>{t('sources.kindMarkdown')}</button>
         <button class:on={sources.kind === 'pdf'} onclick={() => setKind('pdf')}>{t('sources.kindPdf')}</button>
+        <button class:on={sources.kind === 'epub'} onclick={() => setKind('epub')}>{t('sources.kindEpub')}</button>
         <button class:on={sources.kind === 'txt'} onclick={() => setKind('txt')}>{t('sources.kindText')}</button>
         <button class:on={sources.kind === 'url'} onclick={() => setKind('url')}>{t('sources.kindUrls')}</button>
       </div>

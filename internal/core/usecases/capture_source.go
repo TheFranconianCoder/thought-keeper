@@ -57,9 +57,10 @@ func (uc CaptureSource) Execute(ctx context.Context, hash string) (CaptureResult
 		recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepCapture, entities.StepFailed, "", err)
 		return res, err
 	}
-	detail := string(uc.kindOf(ctx, hash))
+	kind := uc.kindOf(ctx, hash)
+	detail := string(kind)
 	if res.Pages > 0 {
-		detail += " · " + itoa(res.Pages) + " pages"
+		detail += " · " + itoa(res.Pages) + " " + unitWord(kind)
 	}
 	detail += " · " + itoa(res.Chars) + " chars"
 	if res.Rendered != "" {
@@ -85,11 +86,22 @@ func (uc CaptureSource) capture(ctx context.Context, hash string) (CaptureResult
 
 	// Every OCR page is slow and lossy: report it where the source lives. Page furniture (page
 	// numbers, running heads) the extractor dropped is reported there too — text leaving a source
-	// is not silent.
+	// is not silent. So is a book's figures, and a chapter the container could not be read from.
 	onExtract := func(ev entities.ExtractEvent) {
-		if ev.Kind == "furniture" {
+		switch ev.Kind {
+		case "furniture":
 			uc.logSource(ctx, hash, "info", "furniture", "dropped page furniture", map[string]any{
 				"lines": ev.Lines, "pages": ev.Pages,
+			})
+			return
+		case "images":
+			uc.logSource(ctx, hash, "info", "images", "images dropped (this vault reads text)", map[string]any{
+				"images": ev.Count,
+			})
+			return
+		case "skipped":
+			uc.logSource(ctx, hash, "warn", "epub", "chapter skipped", map[string]any{
+				"chapter": ev.Page, "err": ev.Err,
 			})
 			return
 		}
@@ -109,21 +121,26 @@ func (uc CaptureSource) capture(ctx context.Context, hash string) (CaptureResult
 
 	start := uc.Clock.Now()
 	// The extractor takes the object whole: every format needs all of it (a PDF is handed to
-	// poppler on stdin, text is split into parts), and streaming only hides a second buffering.
+	// poppler on stdin, an EPUB is a container, text is split into parts), and streaming only hides a
+	// second buffering.
 	data, err := io.ReadAll(rc)
 	if err != nil {
 		return CaptureResult{}, err
 	}
-	parts, err := uc.Extractor.Extract(ctx, src.Ext, data, onExtract)
+	doc, err := uc.Extractor.Extract(ctx, src.Ext, data, onExtract)
 	if err != nil {
 		return CaptureResult{}, err
 	}
+	parts := doc.Parts
 	chars := 0
 	for _, sec := range parts {
 		chars += len(sec.Text)
 	}
 	pages, ocr := summarize(parts)
-	if uc.Languages != nil {
+	if declared := strings.TrimSpace(doc.Language); declared != "" {
+		// The format said what language it is in: that beats a detector reading a sample.
+		uc.setLanguage(ctx, hash, declared)
+	} else if uc.Languages != nil {
 		var sample strings.Builder
 		for _, part := range parts {
 			if sample.Len() >= 128<<10 {
@@ -133,19 +150,22 @@ func (uc CaptureSource) capture(ctx context.Context, hash string) (CaptureResult
 			sample.WriteByte(' ')
 		}
 		if language := uc.Languages.Detect(sample.String()); language != "" {
-			if uc.Steps != nil {
-				_ = uc.Steps.SetLanguage(hash, language)
-			} else if uc.Index != nil {
-				_ = uc.Index.SetSourceLanguage(ctx, hash, language)
-			}
-			uc.logSource(ctx, hash, "info", "language", "source language detected", map[string]any{"language": language})
+			uc.setLanguage(ctx, hash, language)
 		}
 	}
 
-	// STEP 1 DETERMINES THE TITLE, and for a PDF this is the first moment the content is readable:
-	// the file name is replaced by the document's own heading (the outline may refine it with the
-	// model later — it has the whole outline to look at).
-	title, titleSource := DocumentTitle(src, parts, "")
+	// STEP 1 DETERMINES THE TITLE, and this is the first moment the content is readable: the file
+	// name is replaced by the document's own title (an EPUB's dc:title, a heading) — the outline may
+	// refine it with the model later, which has the whole outline to look at.
+	guess := src
+	if src.Kind == entities.SourceKindEPUB {
+		// The record still carries the intake name here; only the extraction knows the book's title.
+		guess.Title = ""
+	}
+	title, titleSource := DocumentTitle(guess, parts, "")
+	if declared := strings.TrimSpace(doc.Title); declared != "" {
+		title, titleSource = declared, "declared"
+	}
 	if uc.Steps != nil {
 		if err := uc.Steps.SetTitle(hash, title); err != nil && uc.Log != nil {
 			uc.Log.Warn("capture: could not record the title", "hash", hash, "err", err)
@@ -175,11 +195,13 @@ func (uc CaptureSource) capture(ctx context.Context, hash string) (CaptureResult
 		}
 	}
 	out.Rendered = hash + RenderExt
-	uc.logSource(ctx, hash, "info", "capture", "text extracted and rendered", map[string]any{
-		"kind": src.Kind, "pages": pages, "chars": chars, "ocr": ocr,
+	fields := map[string]any{
+		"kind": src.Kind, "chars": chars, "ocr": ocr,
 		"file": out.Rendered,
 		"dur":  uc.Clock.Now().Sub(start).Round(time.Millisecond).String(),
-	})
+	}
+	fields[unitWord(src.Kind)] = pages
+	uc.logSource(ctx, hash, "info", "capture", "text extracted and rendered", fields)
 	return out, nil
 }
 
@@ -189,6 +211,29 @@ func (uc CaptureSource) kindOf(ctx context.Context, hash string) entities.Source
 		return ""
 	}
 	return src.Kind
+}
+
+// setLanguage records a language hint on both the record and the index. The record is the truth (a
+// reindex restores it); the index is what the list and the search read.
+func (uc CaptureSource) setLanguage(ctx context.Context, hash, language string) {
+	if language == "" {
+		return
+	}
+	if uc.Steps != nil {
+		_ = uc.Steps.SetLanguage(hash, language)
+	} else if uc.Index != nil {
+		_ = uc.Index.SetSourceLanguage(ctx, hash, language)
+	}
+	uc.logSource(ctx, hash, "info", "language", "source language detected", map[string]any{"language": language})
+}
+
+// unitWord names the count a source reports: a book has chapters, a PDF has pages. It is the word the
+// step detail, the outline record and the reader all use.
+func unitWord(kind entities.SourceKind) string {
+	if kind.HasChapters() {
+		return "chapters"
+	}
+	return "pages"
 }
 
 func (uc CaptureSource) logSource(ctx context.Context, hash, level, phase, msg string, fields map[string]any) {

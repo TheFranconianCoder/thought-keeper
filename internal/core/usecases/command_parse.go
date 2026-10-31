@@ -249,6 +249,9 @@ func ParseCommand(text string, refs CommandRefs) (ParsedCommand, error) {
 		case containsAny(lower, "pdf", "pdfs"):
 			out.Criteria.Kind = "pdf"
 			recognised = true
+		case containsAny(lower, "epub", "epubs", "ebook", "ebooks"):
+			out.Criteria.Kind = "epub"
+			recognised = true
 		case containsAny(lower, "markdown", "md-datei"):
 			out.Criteria.Kind = "md"
 			recognised = true

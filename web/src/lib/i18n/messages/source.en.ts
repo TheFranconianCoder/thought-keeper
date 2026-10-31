@@ -15,6 +15,8 @@ export const sourceEn: Record<string, string> = {
   'source.sitemap': 'sitemap',
   'source.pages.one': '{count} page',
   'source.pages.many': '{count} pages',
+  'source.chapters.one': '{count} chapter',
+  'source.chapters.many': '{count} chapters',
 
   // Tabs.
   'source.viewAria': 'Source view',
@@ -51,6 +53,7 @@ export const sourceEn: Record<string, string> = {
   'source.backToFiles': 'Back to files',
   'source.openPdf': 'Open the PDF',
   'source.pdfNotText': 'A PDF is not text — open it in its own tab.',
+  'source.epubNotText': 'An EPUB is a container, not text — its text is the captured rendering in the Text tab.',
   'source.fileNotListed': 'This file is no longer listed for the source.',
   'source.fileShowingFirst': 'Showing the first {size} of {total}.',
   'source.filesIntroStart':
@@ -114,6 +117,7 @@ export const sourceEn: Record<string, string> = {
   'source.notIndexed': 'not indexed',
   'source.unknown': 'unknown',
   'source.pagesLabel': 'pages',
+  'source.chaptersLabel': 'chapters',
   'source.outlineLabel': 'outline',
   'source.addedLabel': 'added',
   'source.urlLabel': 'url',

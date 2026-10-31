@@ -1,7 +1,7 @@
 # Thought Keeper Architecture
 
 A local knowledge base that follows the **LLM-Wiki pattern**, extended with an **atom layer**:
-immutable **raw sources** (Markdown, PDF, TXT, URL) are distilled by an agent into **atoms**
+immutable **raw sources** (Markdown, PDF, TXT, EPUB, URL) are distilled by an agent into **atoms**
 (one claim per note, the Zettelkasten), the human authors **wiki pages**, and the claims are grouped
 into **titleless clusters** (the association layer). Retrieval is **vectorless** — hierarchical
 trees, the association layer and reasoning, not embeddings.
@@ -242,7 +242,7 @@ thought-keeper/
 ```
 
 Tests are `*_test.go` files next to the code they exercise. Small fixtures (a `.pdf` with a text
-layer, a scanned one-page `.pdf`, a `.md`, a `.txt`) are acceptable.
+layer, a scanned one-page `.pdf`, a `.epub`, a `.md`, a `.txt`) are acceptable.
 
 ---
 
@@ -256,8 +256,9 @@ layer, a scanned one-page `.pdf`, a `.md`, a `.txt`) are acceptable.
   directories small so the store scales to tens of thousands of objects; identical bytes collapse.
 - **Write-once.** The agent and API never write into `sources/`. A correction is a *new* source →
   new hash → re-distill the affected topic. The vault is append-only at the source layer.
-- **Kinds:** `.md`, `.pdf`, `.txt`, and URL snapshots stored as `.md` with `url`/`fetched_at`
-  frontmatter. Unsupported extensions are rejected (`unsupported_source`). A wiki page is stored
+- **Kinds:** `.md`, `.pdf`, `.txt`, `.epub`, and URL snapshots stored as `.md` with
+  `url`/`fetched_at` frontmatter. Unsupported extensions are rejected (`unsupported_source`) — and
+  so is a `.zip` or `.tar`: an EPUB is read as a book, not as an archive. A wiki page is stored
   as `.md` too; its source identity carries the `wiki:` original name and a stable `WikiHash`.
 - **Language is a source identity field.** The detected ISO 639-1/639-3 hint lives in `<hash>.meta`
   and in the index `meta` JSON. Intake/capture write it; the consistency pass backfills missing
@@ -538,7 +539,8 @@ flagged rather than silently empty.
 1. **Unit** (`internal/core/...`): fakes for every port. Covers Markdown extraction, code quoting,
    the tree shaper, hashing/sharding, the atom codec and the agent loops with a scripted gateway.
 2. **Integration** (`httptest` + `:memory:` SQLite + a temp-dir vault): router, handlers, the
-   index repositories, migrations, extraction of a small real `.pdf`, `reindex`, `rebuild-trees`.
+   index repositories, migrations, extraction of a small real `.pdf` and `.epub`, `reindex`,
+   `rebuild-trees`.
 3. **Acceptance** (`internal/registry`): the full path from an HTTP request or CLI verb to files
    on disk and rows in the index, with fetcher, OCR runner and agent replaced by fakes.
 
@@ -559,10 +561,10 @@ Sources, Attention, Bookmarks, Ask, Status**. A cluster is visible only as a cla
 2. **Sources & index** — content-addressed store (SHA-256, shard dirs, dedupe), kind detection,
    intake, the schema, FTS5 capability check, `reindex_vault`.
    *Done when dropping `.md`/`.txt`/`.pdf` files yields deduplicated sources and a rebuildable index.*
-3. **Extraction & trees** — markdown/text/PDF extractors, the external-tool OCR fallback with
+3. **Extraction & trees** — markdown/text/PDF/EPUB extractors, the external-tool OCR fallback with
    capability check, the tree builder, `rebuild-trees`.
-   *Done when a text-layer PDF becomes a navigable tree and a scanned PDF is OCR'd (or flagged when
-   tools are absent).*
+   *Done when a text-layer PDF becomes a navigable tree, an EPUB becomes its chapters, and a scanned
+   PDF is OCR'd (or flagged when tools are absent).*
 4. **Atoms** — atom store + codec, the distill agent (claims, topics, provenance, status), the
    atom graph and claim-topic catalog.
    *Done when a source becomes claims with a flat topic and provenance to their source nodes.*

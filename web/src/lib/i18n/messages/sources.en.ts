@@ -10,6 +10,7 @@ export const sourcesEn: Record<string, string> = {
   'sources.kindAll': 'All',
   'sources.kindMarkdown': 'Markdown',
   'sources.kindPdf': 'PDF',
+  'sources.kindEpub': 'EPUB',
   'sources.kindText': 'Text',
   'sources.kindUrls': 'URLs',
   'sources.attachedTitle': 'Show only sources whose snapshot was attached by hand',
@@ -22,7 +23,7 @@ export const sourcesEn: Record<string, string> = {
   'sources.nothingLoadedText': "Thought Keeper is not reachable, so this is not the vault's answer.",
   'sources.emptyTitle': 'No sources yet',
   'sources.emptyText':
-    'Add a Markdown file, a PDF, plain text or a URL. Every source stays as a local, immutable snapshot.',
+    'Add a Markdown file, a PDF, an EPUB, plain text or a URL. Every source stays as a local, immutable snapshot.',
   'sources.addFirst': 'Add the first source',
   'sources.noMatchTitle': 'No source matches',
   'sources.noMatchText': 'Clear the search or one of the filters.',

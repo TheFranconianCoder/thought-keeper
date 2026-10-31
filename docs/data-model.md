@@ -48,6 +48,7 @@ index is disposable — deleting it loses nothing but time.
 | `00006_source_auto_tags.sql` | adds `sources.auto_tags` and `auto_tags_at` (the agent's labels and the backfill marker) |
 | `00007_drop_atom_links.sql` | drops `atom_links` (a claim body has no links) and raises the shape marker |
 | `00008_sources_imported_at.sql` | an index on `sources(imported_at)` for the recency window |
+| `00009_sources_kind_epub.sql` | rebuilds `sources` so `kind` also accepts `epub` (a book's chapters are captured like a PDF's pages) |
 
 A schema change is a **new** migration; a change of vocabulary is done in the initial file with the
 database thrown away. The initial file writes the shape marker (`PRAGMA user_version`), and
@@ -61,7 +62,8 @@ sentence — which file it is and what to do ("delete it and reindex; the vault 
 
 ```sql
 sources(id, hash, kind, ext, path, url, title, original_name, bytes, pages,
-        tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta)
+        tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta,
+        tags, auto_tags, auto_tags_at)
 source_nodes(source_id, node_id, parent_id, depth, ord, title, summary,
              start_page, end_page, text_hash)
 atoms(id, topic, path, claim, body, frontmatter, type, status, body_hash,
@@ -82,6 +84,8 @@ Notes that matter:
 
 - **`source_nodes.text_hash`** is non-empty exactly for a node that carries text: one such node is
   one **part**, so this column decides "how many parts does this source have".
+- **`sources.pages` is the format's own sequence**, never a part count: a PDF's pages, an EPUB's
+  **chapters** (one spine document each). The reader labels it by kind.
 - **`sources.tags`** and **`sources.auto_tags`** are JSON arrays mirroring the human and derived
   labels in the source's `.meta` record. The record is the truth; `reindex` restores the columns from
   it, and the source-tags vocabulary reads them instead of opening one file per source.

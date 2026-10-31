@@ -84,7 +84,7 @@ func (uc BuildTree) Execute(ctx context.Context, hash string) (TreeResult, error
 		return res, err
 	}
 	recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepOutline, entities.StepOK,
-		fmt.Sprintf("%d nodes · %d pages", res.Nodes, res.Pages), nil)
+		fmt.Sprintf("%d nodes · %d %s", res.Nodes, res.Pages, unitWord(uc.kindOf(ctx, hash))), nil)
 	return res, nil
 }
 
@@ -110,10 +110,12 @@ func (uc BuildTree) execute(ctx context.Context, hash string) (TreeResult, error
 	}
 	nodes := tree.Build(parts)
 	pages, ocr := summarize(parts)
-	uc.logSource(ctx, hash, "info", "outline", "parts read", map[string]any{
-		"kind": src.Kind, "pages": pages, "chars": chars, "ocr": ocr,
+	fields := map[string]any{
+		"kind": src.Kind, "chars": chars, "ocr": ocr,
 		"from": map[bool]string{true: "capture rendering", false: "the object itself"}[fromRender],
-	})
+	}
+	fields[unitWord(src.Kind)] = pages
+	uc.logSource(ctx, hash, "info", "outline", "parts read", fields)
 	// What the tree leaves out is named: front/back matter (acknowledgements, dedication, index) and
 	// site chrome never become nodes, and "the tree has 40 nodes" alone would hide that.
 	if dropped := tree.DroppedTitles(parts); len(dropped) > 0 {
@@ -135,7 +137,7 @@ func (uc BuildTree) execute(ctx context.Context, hash string) (TreeResult, error
 		}
 	}
 	uc.logSource(ctx, hash, "info", "outline", "tree built", map[string]any{
-		"nodes": len(nodes) - 1, "depth": depth, "pages": pages,
+		"nodes": len(nodes) - 1, "depth": depth, unitWord(src.Kind): pages,
 		"dur": uc.Clock.Now().Sub(treeStart).Round(time.Millisecond).String(),
 	})
 	title, titleSource := uc.documentTitle(ctx, src, parts)
@@ -258,6 +260,16 @@ func (uc BuildTree) parts(ctx context.Context, hash string, src entities.Source)
 				"lines": ev.Lines, "pages": ev.Pages,
 			})
 			return
+		case ev.Kind == "images":
+			uc.logSource(ctx, hash, "info", "images", "images dropped (this vault reads text)", map[string]any{
+				"images": ev.Count,
+			})
+			return
+		case ev.Kind == "skipped":
+			uc.logSource(ctx, hash, "warn", "epub", "chapter skipped", map[string]any{
+				"chapter": ev.Page, "err": ev.Err,
+			})
+			return
 		case ev.Err != nil:
 			level, msg, fields["err"] = "warn", "ocr failed", ev.Err
 		case ev.Chars == 0:
@@ -265,11 +277,11 @@ func (uc BuildTree) parts(ctx context.Context, hash string, src entities.Source)
 		}
 		uc.logSource(ctx, hash, level, "ocr", msg, fields)
 	}
-	parts, err := uc.Extractor.Extract(ctx, src.Ext, objectBytes, onExtract)
+	doc, err := uc.Extractor.Extract(ctx, src.Ext, objectBytes, onExtract)
 	if err != nil {
 		return nil, false, err
 	}
-	return uc.locate(ctx, hash, objectText, parts), false, nil
+	return uc.locate(ctx, hash, objectText, doc.Parts), false, nil
 }
 
 // locate gives every part its REFERENCE into the text it was read from: the outline stores where a
@@ -427,7 +439,18 @@ func outlineOfSourceNodes(parts []entities.Part) string {
 	return b.String()
 }
 
-// firstHeading returns the first real heading (page titles excluded).
+// kindOf reads the source's kind for the step detail's unit word (chapters or pages).
+func (uc BuildTree) kindOf(ctx context.Context, hash string) entities.SourceKind {
+	if uc.Index == nil {
+		return ""
+	}
+	src, err := uc.Index.GetSourceByHash(ctx, hash)
+	if err != nil {
+		return ""
+	}
+	return src.Kind
+}
+
 // logSource records one source-scoped event (no-op when no log is configured).
 func (uc BuildTree) logSource(ctx context.Context, hash, level, phase, msg string, fields map[string]any) {
 	if uc.SourceLog == nil || hash == "" {

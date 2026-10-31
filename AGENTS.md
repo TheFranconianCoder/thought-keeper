@@ -1,7 +1,7 @@
 # Thought Keeper
 
 A local knowledge base that follows the **LLM-Wiki pattern** with an **atom layer**: immutable raw
-sources (Markdown, PDF, TXT, URL) are distilled by an agent into **atoms** (one claim per note — the
+sources (Markdown, PDF, TXT, EPUB, URL) are distilled by an agent into **atoms** (one claim per note — the
 Zettelkasten and the source of truth) and grouped into **titleless clusters** (the association
 layer). Retrieval is **vectorless** — hierarchical trees, the association layer and lexical search,
 no embeddings.
@@ -34,7 +34,7 @@ two places, one of them is wrong.
 Phases 1–8 are implemented. The binary starts as a desktop app: tray (`github.com/gogpu/systray`,
 pure Go), loopback Chi service, `go:embed` PWA, vault flock, SQLite index + goose migrations incl.
 FTS5, and a `status` report. The source store is content-addressed (SHA-256, sharded, deduped), the
-inbox is watched (with a polling fallback), and Markdown/text/PDF/URL sources run through the
+inbox is watched (with a polling fallback), and Markdown/text/PDF/EPUB/URL sources run through the
 document steps including poppler + tesseract OCR and the PageIndex tree builder. Claims are atom
 files with a flat topic and node-level provenance; clusters are deterministic and titleless. The
 cluster step walks the claim corpus as a page-by-page stream and holds its term vectors as flat
@@ -85,8 +85,8 @@ filtered count is the scroll height. A cluster is
 
 - **No embeddings and no vector database.** Retrieval is reasoning over trees, indexes, the
   association layer and lexical search. `similarity ≠ relevance`.
-- **Only three source kinds: Markdown, PDF, TXT — plus URLs.** No `.docx`, no images, no archives,
-  no audio/video.
+- **Only four source kinds: Markdown, PDF, TXT and EPUB — plus URLs.** No `.docx`, no images, no
+  audio/video, and no archive reader: an EPUB is a book we read, `.zip` and `.tar` are still refused.
 - **No credentials and no browser automation.** The app never stores a login, reads your browser's
   cookies or drives a headless browser. A URL behind a login or a paywall is reported as **blocked**,
   and the human may attach the page they can see (HTML or PDF); the URL stays the source's address.
@@ -110,7 +110,7 @@ filtered count is the scroll height. A cluster is
 
 | Term | What it is | Where it lives |
 | --- | --- | --- |
-| **source** | An immutable input: a file, a PDF, a text file, or a URL snapshot. Addressed by its `hash`. A wiki page's representation is the one in-place exception (stable `WikiHash`). | `sources/<ab>/<cd>/<hash>.<ext>` |
+| **source** | An immutable input: a file, a PDF, an EPUB, a text file, or a URL snapshot. Addressed by its `hash`. A wiki page's representation is the one in-place exception (stable `WikiHash`). | `sources/<ab>/<cd>/<hash>.<ext>` |
 | **hash** | A source's identity: the SHA-256 of its bytes (for a URL: of the URL). | the file name |
 | **object** | A source's bytes in the store. | `sources/` |
 | **wiki page** | User-authored Markdown with a title, tags and a stable ULID. Saving it writes/updates its source representation and runs the document pipeline from capture. | `wiki/<ab>/<cd>/<id>.md` |
@@ -159,7 +159,8 @@ a slow model does not hold the next one. A step may only run when every earlier 
 scheduling: `docs/pipeline.md`.
 
 - **Capture** makes the source readable locally (bytes are already readable for Markdown/text/URL;
-  a PDF gets its text layer or OCR) and leaves a static snapshot. A URL that answers with a login,
+  a PDF gets its text layer or OCR, an EPUB's chapters are read out of the container) and leaves a
+  static snapshot. A URL that answers with a login,
   a paywall or a consent gate is **blocked**: reported with the reason, never read — and the human
   may attach the page they can see (HTML or PDF), which becomes the snapshot at the same URL address.
 - **Outline** reads that snapshot and builds the hierarchical tree of parts; it never extracts.
@@ -196,6 +197,7 @@ Derived things are caches (`outline`, `index.db`, `clusters/`); records are the 
 | Outline | per-source JSON next to the source (`<hash>.outline`) | derived, rebuildable |
 | PDF text | poppler `pdftotext` | no CGO, no daemon |
 | PDF OCR | poppler `pdftocairo` + `tesseract` | local |
+| EPUB text | stdlib `archive/zip` + `x/net/html` + `html-to-markdown` | pure Go, no tool to install |
 | HTML → MD | `go-shiori/go-readability` + `html-to-markdown` + `x/net/html` | main-content extraction |
 | Config | YAML + `${ENV}` expansion | `config.example.yaml` |
 | Frontmatter | YAML decoded only in the file adapters (`markdown`, `wiki`, `asks`) | keeps YAML out of the core |

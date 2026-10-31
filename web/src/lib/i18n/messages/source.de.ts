@@ -15,6 +15,8 @@ export const sourceDe: Record<string, string> = {
   'source.sitemap': 'Sitemap',
   'source.pages.one': '{count} Seite',
   'source.pages.many': '{count} Seiten',
+  'source.chapters.one': '{count} Kapitel',
+  'source.chapters.many': '{count} Kapitel',
 
   // Tabs.
   'source.viewAria': 'Quellenansicht',
@@ -51,6 +53,7 @@ export const sourceDe: Record<string, string> = {
   'source.backToFiles': 'Zurück zu den Dateien',
   'source.openPdf': 'Das PDF öffnen',
   'source.pdfNotText': 'Ein PDF ist kein Text — öffne es in seinem eigenen Tab.',
+  'source.epubNotText': 'Ein EPUB ist ein Container, kein Text — sein Text ist die erfasste Wiedergabe im Text-Tab.',
   'source.fileNotListed': 'Diese Datei steht für die Quelle nicht mehr in der Liste.',
   'source.fileShowingFirst': 'Die ersten {size} von {total} werden angezeigt.',
   'source.filesIntroStart':
@@ -114,6 +117,7 @@ export const sourceDe: Record<string, string> = {
   'source.notIndexed': 'nicht indiziert',
   'source.unknown': 'unbekannt',
   'source.pagesLabel': 'Seiten',
+  'source.chaptersLabel': 'Kapitel',
   'source.outlineLabel': 'Gliederung',
   'source.addedLabel': 'hinzugefügt',
   'source.urlLabel': 'URL',

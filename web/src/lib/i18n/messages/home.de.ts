@@ -29,7 +29,7 @@ export const homeDe: Record<string, string> = {
   'home.allSources': 'Alle Quellen',
   'home.emptySourcesTitle': 'Noch keine Quelle',
   'home.emptySourcesText':
-    'Füge eine Markdown-Datei, ein PDF, reinen Text oder einen Link hinzu — oder stelle eine Frage; der Tresor darf antworten, dass er noch leer ist.',
+    'Füge eine Markdown-Datei, ein PDF, ein EPUB, reinen Text oder einen Link hinzu — oder stelle eine Frage; der Tresor darf antworten, dass er noch leer ist.',
   'home.emptySourcesAction': 'Erste Quelle hinzufügen',
 
   'home.pulse.sources.one': '{count} Quelle',

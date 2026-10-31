@@ -61,7 +61,7 @@ type CommandCriteria struct {
 	Text string
 	// Tag matches one human or derived source tag.
 	Tag string
-	// Kind is one source kind (md, pdf, txt, url).
+	// Kind is one source kind (md, pdf, txt, epub, url).
 	Kind string
 	// Topic is one flat claim topic.
 	Topic string

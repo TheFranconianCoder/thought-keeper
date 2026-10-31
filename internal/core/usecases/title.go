@@ -15,7 +15,8 @@ import (
 // hash-named sources. The outline may REFINE it later with the model (it has the whole outline to
 // look at); this chain is the deterministic floor underneath:
 //
-//	declared (a URL's og:title/<title>) → [a PDF's file name] → the first real heading → the file name → the hash
+//	declared (a URL's og:title/<title>, an EPUB's dc:title) → [a PDF's file name] → the first real
+//	heading → the file name → the hash
 //
 // Either parts (an extracted document) or text (raw Markdown/text) may be empty — a capture has
 // parts, an intake has text.
@@ -27,7 +28,10 @@ func DocumentTitle(src entities.Source, parts []entities.Part, text string) (str
 			return t, "wiki"
 		}
 	}
-	if src.Kind == entities.SourceKindURL {
+	// A document that DECLARES its own title keeps it: the format says what the document is called,
+	// and a heading is only a guess. For an EPUB the capture step records the book's dc:title before
+	// the outline ever runs, so the record's title is the document's, not the file name.
+	if src.Kind == entities.SourceKindURL || src.Kind == entities.SourceKindEPUB {
 		if t := strings.TrimSpace(src.Title); t != "" {
 			return t, "declared"
 		}

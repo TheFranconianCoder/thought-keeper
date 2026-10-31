@@ -160,7 +160,7 @@ it. The model's only job is the READING — which lens, which of the app's own d
 order. It never writes a URL, never invents a hash and never answers the request.
 
 - **A closed schema.** `lens` (`sources|claims|wiki|status|attention|ask`), `text`, `tag`, `topic`,
-  `kind` (`md|pdf|txt|url`), `since`, `state` (`open|failed|done`), `order`, `bookmarks`,
+  `kind` (`md|pdf|txt|epub|url`), `since`, `state` (`open|failed|done`), `order`, `bookmarks`,
   `attached`. Every field is optional; unknown fields are dropped, and an unknown clause is not
   silently accepted — the reading is validated field by field in Go.
 - **The vault's own vocabulary goes in.** The prompt carries the known source tags and claim topics

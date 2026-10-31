@@ -232,14 +232,20 @@ func (uc AttachURLSnapshot) convert(ctx context.Context, src entities.Source, na
 		if uc.Extractor == nil {
 			return attachedDocument{}, types.New("not_implemented", "PDF extraction is not configured", types.ErrNotImplemented)
 		}
-		parts, err := uc.Extractor.Extract(ctx, ".pdf", data, nil)
+		doc, err := uc.Extractor.Extract(ctx, ".pdf", data, nil)
 		if err != nil {
 			return attachedDocument{}, err
 		}
+		parts := doc.Parts
 		pages, ocr := summarize(parts)
 		return attachedDocument{
 			Body: renderAttachedParts(parts), Title: stem, Pages: pages, OCR: ocr,
 		}, nil
+	case ".epub":
+		// A snapshot is the text of ONE PAGE the human could see. A book is not a page: it is a
+		// source of its own, added as itself so its chapters, title and language come from the book.
+		return attachedDocument{}, types.New(
+			"unsupported_source", "an EPUB is a source of its own — add it instead of attaching it", types.ErrUnsupportedSource)
 	default:
 		return attachedDocument{}, types.New(
 			"unsupported_source", "attach a .html, .pdf, .md or .txt file", types.ErrUnsupportedSource)

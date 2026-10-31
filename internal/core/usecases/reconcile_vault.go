@@ -24,7 +24,7 @@ import (
 //
 //   - the OBJECT (the source itself) — if it is gone, nothing can be derived, and the source is
 //     reported failed instead of pretending;
-//   - the RENDERING when capture succeeded for a kind that has to be extracted (a PDF);
+//   - the RENDERING when capture succeeded for a kind that has to be extracted (a PDF, an EPUB);
 //   - the OUTLINE when the outline succeeded.
 //
 // A missing artefact INVALIDATES everything after it: the derivation is thrown away (the claims; the

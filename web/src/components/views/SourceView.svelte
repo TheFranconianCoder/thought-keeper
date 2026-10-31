@@ -40,6 +40,7 @@
   const sidecars = $derived(selected?.sidecars ?? []);
 
   const isPDF = $derived(selected?.ext === '.pdf');
+  const isEPUB = $derived(selected?.kind === 'epub');
   const isURLSource = $derived(selected?.kind === 'url');
   const markdownView = $derived(
     sources.contentIsRendering || selected?.ext === '.md' || selected?.ext === '.markdown' || selected?.kind === 'url',
@@ -192,7 +193,7 @@
       fileError = t('source.fileNotListed');
       return;
     }
-    if (sidecar.object && isPDF) {
+    if (sidecar.object && (isPDF || isEPUB)) {
       fileText = null;
       fileError = '';
       return;
@@ -343,7 +344,7 @@
             <span>·</span>
             <span>{relTime(selected.imported_at)}</span>
             {#if selected.language}<span>·</span><span>{selected.language}</span>{/if}
-            {#if selected.pages}<span>·</span><span>{tn('source.pages', selected.pages)}</span>{/if}
+            {#if selected.pages}<span>·</span><span>{tn(isEPUB ? 'source.chapters' : 'source.pages', selected.pages)}</span>{/if}
           </div>
         </div>
         <div class="source-head-actions">
@@ -433,7 +434,7 @@
               <button class="tab" class:on={tab === 'live'} onclick={() => setTab('live')}>{t('source.tabLive')}</button>
             {:else}
               <button class="tab" class:on={tab === 'snapshot'} onclick={() => setTab('snapshot')}>
-                {isPDF ? t('source.tabText') : t('source.tabContent')}
+                {isPDF || isEPUB ? t('source.tabText') : t('source.tabContent')}
               </button>
               {#if isPDF}
                 <button class="tab" class:on={tab === 'pdf'} onclick={() => setTab('pdf')}>PDF</button>
@@ -543,8 +544,8 @@
                 </div>
                 {#if fileError}
                   <p class="notice notice--error file-notice">{fileError}</p>
-                {:else if isPDF && openFile.object}
-                  <p class="file-notice muted">{t('source.pdfNotText')}</p>
+                {:else if (isPDF || isEPUB) && openFile.object}
+                  <p class="file-notice muted">{isEPUB ? t('source.epubNotText') : t('source.pdfNotText')}</p>
                 {:else if fileText === null}
                   <p class="file-notice muted">{t('common.loading')}</p>
                 {:else}
@@ -670,16 +671,18 @@
                   {/if}
                 {/each}
               </div>
-            {:else if sources.content === '' && isPDF}
+            {:else if sources.content === '' && (isPDF || isEPUB)}
               <p class="file-notice muted">
                 {t('source.noTextYet')}
-                <button
-                  class="btn btn--secondary btn--sm btn--action"
-                  title={t('source.openPdf')}
-                  onclick={() => setTab('pdf')}
-                >
-                  <Icon name="filePdf" size={13} /> <span class="btn-label">{t('source.openPdf')}</span>
-                </button>
+                {#if isPDF}
+                  <button
+                    class="btn btn--secondary btn--sm btn--action"
+                    title={t('source.openPdf')}
+                    onclick={() => setTab('pdf')}
+                  >
+                    <Icon name="filePdf" size={13} /> <span class="btn-label">{t('source.openPdf')}</span>
+                  </button>
+                {/if}
               </p>
             {:else}
               {#if truncated}
@@ -783,7 +786,7 @@
               >{selected.language ||
                 (selected.bookmark ? t('source.notIndexed') : t('source.unknown'))}</span>
             </div>
-            {#if selected.pages}<div class="kv"><span class="k">{t('source.pagesLabel')}</span><span class="v">{n(selected.pages)}</span></div>{/if}
+            {#if selected.pages}<div class="kv"><span class="k">{t(isEPUB ? 'source.chaptersLabel' : 'source.pagesLabel')}</span><span class="v">{n(selected.pages)}</span></div>{/if}
             {#if !selected.rss && !selected.sitemap}
               <div class="kv"><span class="k">{t('source.outlineLabel')}</span><span class="v">{selected.tree_state}</span></div>
             {/if}

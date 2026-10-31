@@ -24,7 +24,7 @@ const DETAIL_ABANDON_MS = 10_000;
 
 /** SourceKindFilter is the source-list type selector. It lives in the store, not the view, so a
  *  filter survives a trip into a source and back (and a detour through another lens). */
-export type SourceKindFilter = 'all' | 'md' | 'pdf' | 'txt' | 'url';
+export type SourceKindFilter = 'all' | 'md' | 'pdf' | 'txt' | 'epub' | 'url';
 
 class SourcesStore {
   items = $state<Source[]>([]);
@@ -314,7 +314,7 @@ class SourcesStore {
         this.logError = firstLine(readError(error));
       }
 
-      const which = meta.ext === '.pdf' ? 'render' : undefined;
+      const which = meta.kind === 'pdf' || meta.kind === 'epub' ? 'render' : undefined;
       this.contentIsRendering = which === 'render';
       try {
         const text = await api.rawText(hash, which, readSignal(DETAIL_READ_TIMEOUT));

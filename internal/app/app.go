@@ -66,9 +66,9 @@ type App struct {
 	intake    usecases.IntakeSource
 	capture   usecases.CaptureSource
 	buildTree usecases.BuildTree
-	// captureQueue holds sources whose bytes are not readable (a PDF): step 1 extracts the text and
-	// writes the rendering, and only then is the outline queued. One worker: extraction is CPU-bound
-	// (and OCR is very much so), and the queue is drained in order.
+	// captureQueue holds sources whose bytes are not readable (a PDF, an EPUB): step 1 extracts the
+	// text and writes the rendering, and only then is the outline queued. One worker: extraction is
+	// CPU-bound (and OCR is very much so), and the queue is drained in order.
 	captureQueue chan string
 	treeQueue    chan string
 	// SourceLog is where the app records what IT did with a source (queued, waiting, stale claim
@@ -500,9 +500,9 @@ func (a *App) onAdded(hash string) {
 }
 
 // enqueuePipeline starts a source's document steps at step 1: a source whose bytes are not readable
-// (a PDF) is captured first, and the capture hands over to the outline. For Markdown, text and a URL
-// snapshot the intake WAS the capture, so the outline starts right away — the steps stay in order,
-// the cheap ones just do not need a queue entry of their own.
+// (a PDF, an EPUB) is captured first, and the capture hands over to the outline. For Markdown, text
+// and a URL snapshot the intake WAS the capture, so the outline starts right away — the steps stay in
+// order, the cheap ones just do not need a queue entry of their own.
 func (a *App) enqueuePipeline(hash string) {
 	// A source does not run ahead of the vault: the global pump decides which step is current and
 	// queues every source that still owes that step. `hash` is kept for the caller's intent (and for
@@ -822,7 +822,7 @@ func (a *App) captureWorker() {
 				continue
 			}
 			a.log.Info("source captured", "hash", hash, "parts", res.Parts,
-				"pages", res.Pages, "ocr", res.OCR, "chars", res.Chars, "rendered", res.Rendered)
+				"units", res.Pages, "ocr", res.OCR, "chars", res.Chars, "rendered", res.Rendered)
 			// Step 1 is done for this source; the global pump decides whether the outline stage may
 			// now begin for EVERY source that owes it.
 			a.pumpPipeline("capture finished")
@@ -1446,7 +1446,7 @@ func (a *App) treeWorker() {
 				a.log.Warn("tree build failed", "hash", hash, "err", err)
 				continue
 			}
-			a.log.Info("tree built", "hash", hash, "nodes", res.Nodes, "pages", res.Pages, "ocr", res.OCR, "reopened", res.Reopened)
+			a.log.Info("tree built", "hash", hash, "nodes", res.Nodes, "units", res.Pages, "ocr", res.OCR, "reopened", res.Reopened)
 			// The outline is complete for this source; the pump decides whether the distill stage is
 			// now open for all sources (a reopened part is simply part of that stage).
 			a.pumpPipeline("outline finished")

@@ -41,9 +41,9 @@ func (uc SourceSidecars) Execute(ctx context.Context, hash string) ([]Sidecar, e
 	// The object first: it is the source itself, not a sidecar.
 	out = append(out, uc.sidecar(src.Hash, src.Ext, true))
 	for _, suffix := range entities.SidecarSuffixes() {
-		// Only a source whose bytes are not readable HAS a rendering (a PDF). Listing one for a
-		// Markdown source would report a missing file that is not missing — it does not exist because
-		// there is nothing to extract.
+		// Only a source whose bytes are not readable HAS a rendering (a PDF, an EPUB). Listing one
+		// for a Markdown source would report a missing file that is not missing — it does not exist
+		// because there is nothing to extract.
 		if suffix == entities.SidecarRender && !src.NeedsCapture() {
 			continue
 		}

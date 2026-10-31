@@ -14,10 +14,11 @@ import (
 type SourceKind string
 
 const (
-	SourceKindMD  SourceKind = "md"
-	SourceKindPDF SourceKind = "pdf"
-	SourceKindTXT SourceKind = "txt"
-	SourceKindURL SourceKind = "url" // a fetched URL snapshot, stored as Markdown
+	SourceKindMD   SourceKind = "md"
+	SourceKindPDF  SourceKind = "pdf"
+	SourceKindTXT  SourceKind = "txt"
+	SourceKindEPUB SourceKind = "epub"
+	SourceKindURL  SourceKind = "url" // a fetched URL snapshot, stored as Markdown
 )
 
 // TreeState tracks the per-source tree index.
@@ -55,16 +56,21 @@ type SourceTagSet struct {
 }
 
 // NeedsCapture reports whether a source's BYTES are not readable as they are, so step 1 has real
-// work to do: a PDF's text has to be extracted (poppler, OCR). Markdown, text and a URL snapshot are
-// already the readable form — their capture is the intake itself.
-func (k SourceKind) NeedsCapture() bool { return k == SourceKindPDF }
+// work to do: a PDF's text has to be extracted (poppler, OCR), an EPUB's chapters have to be read out
+// of the container. Markdown, text and a URL snapshot are already the readable form — their capture
+// is the intake itself.
+func (k SourceKind) NeedsCapture() bool { return k == SourceKindPDF || k == SourceKindEPUB }
+
+// HasChapters reports whether the format's own sequence is a sequence of CHAPTERS rather than pages.
+// It names the count for the reader: a book has chapters, a PDF has pages.
+func (k SourceKind) HasChapters() bool { return k == SourceKindEPUB }
 
 // Source is one immutable raw object in the content-addressed store.
 // SourceFilter narrows a source list. Every field is optional; the zero value means "the whole
 // vault". The repository applies the filter in SQL, so a page's COUNT is the count of the FILTERED
 // list — the number the windowed scroller needs for its height.
 type SourceFilter struct {
-	// Kind is one of md/pdf/txt/url, or empty for every kind.
+	// Kind is one of md/pdf/txt/epub/url, or empty for every kind.
 	Kind string
 	// Query matches the title, the original name, the URL and the tags (case-insensitive substring).
 	Query string
@@ -84,7 +90,7 @@ type Source struct {
 	ID    ulid.ULID
 	Hash  string // sha256 hex = the content address
 	Kind  SourceKind
-	Ext   string // ".md" | ".pdf" | ".txt"
+	Ext   string // ".md" | ".pdf" | ".txt" | ".epub"
 	Path  string // vault-relative sharded path
 	URL   string // origin, for kind=url
 	Title string
@@ -126,11 +132,13 @@ type Source struct {
 	// *additionally*, because the title belongs to the document and is chosen from its content.
 	OriginalName string
 	Bytes        int64
-	Pages        int
-	TreeState    TreeState
-	URLStatus    int       // last HTTP status for kind=url (0 = unknown / fetch failed)
-	URLChecked   time.Time // last time a URL source was checked
-	Bookmark     bool      // true = collected link, not indexed (no tree, no atoms)
+	// Pages is how many units the format's own sequence has: a PDF's pages, an EPUB's chapters (one
+	// spine document each). It is the number the reader is shown, never a part count.
+	Pages      int
+	TreeState  TreeState
+	URLStatus  int       // last HTTP status for kind=url (0 = unknown / fetch failed)
+	URLChecked time.Time // last time a URL source was checked
+	Bookmark   bool      // true = collected link, not indexed (no tree, no atoms)
 	// Tags are the HUMAN's labels for this source — the same coarse words a wiki page carries, so a
 	// reader can file and filter sources. They live in the source's <hash>.meta record (the truth) and
 	// are mirrored into the index.
@@ -187,6 +195,8 @@ func KindForExt(ext string) SourceKind {
 		return SourceKindPDF
 	case ".txt":
 		return SourceKindTXT
+	case ".epub":
+		return SourceKindEPUB
 	default:
 		return ""
 	}

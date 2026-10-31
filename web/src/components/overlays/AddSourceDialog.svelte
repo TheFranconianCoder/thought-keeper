@@ -138,6 +138,7 @@
       type="file"
       multiple
       hidden
+      accept=".md,.markdown,.txt,.pdf,.epub"
       bind:this={fileInput}
       onchange={() => void onFiles(fileInput?.files ?? null)}
     />

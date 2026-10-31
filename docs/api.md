@@ -33,7 +33,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/sources/{hash}/favicon` | The site's stored icon |
 | `POST` | `/api/v1/sources/{hash}/capture` | Step 1 again for one source (the outline follows) |
 | `POST` | `/api/v1/sources/{hash}/refresh` | Refresh ONE URL source now (a feed or a sitemap re-expands its list, a page is re-fetched). The configured cadence is ignored; attached snapshots are not fetched (use `/refetch` for those). A feed copy is replaced only by a readable page that carries at least as much text; a wall, a failure or a poorer page keeps it. A changed page's derivation is rebuilt. Answers `{checked, changed, failed, blocked, attached, discovered, removed, detail}` |
-| `POST` | `/api/v1/sources/{hash}/attach` | Give a blocked URL source or a bookmark a snapshot the human supplied (multipart `file`: `.html`, `.pdf`, `.md`, `.txt`). A sitemap or a feed is refused. Answers 200 with the source. The URL stays the address; the new file replaces an existing snapshot and resets the old derivation |
+| `POST` | `/api/v1/sources/{hash}/attach` | Give a blocked URL source or a bookmark a snapshot the human supplied (multipart `file`: `.html`, `.pdf`, `.md`, `.txt`). A sitemap or a feed is refused, and so is an `.epub` (a book is a source of its own). Answers 200 with the source. The URL stays the address; the new file replaces an existing snapshot and resets the old derivation |
 | `POST` | `/api/v1/sources/{hash}/refetch` | Try the URL again even when the snapshot was attached by hand. A readable page replaces the attachment and clears the marker (a changed text also resets the old derivation); a wall/failure keeps it. Answers `{replaced, blocked, failed, detail}` |
 | `POST` | `/api/v1/sources/{hash}/rebuild-tree` | Rebuild this source's outline |
 | `POST` | `/api/v1/sources/{hash}/distill` | Document steps for a source (`{reset:true}` starts over) |
@@ -131,7 +131,7 @@ why the event is keyed by the command's id instead of being coalesced by type.
 ## Error format
 
 ```json
-{ "error": { "code": "unsupported_source", "message": "only .md, .pdf and .txt sources are supported" } }
+{ "error": { "code": "unsupported_source", "message": "only .md, .pdf, .txt and .epub sources are supported" } }
 ```
 
 Map sentinel errors from `internal/types/errors.go` to the wire once (`internal/api/payloads`). No

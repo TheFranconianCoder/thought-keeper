@@ -58,7 +58,7 @@ func (uc SourceContent) Sidecar(ctx context.Context, hash, suffix string) (io.Re
 }
 
 // Rendered opens a source's READABLE rendering: the Markdown that step 1 wrote next to a source
-// whose bytes are not readable as they are (a PDF).
+// whose bytes are not readable as they are (a PDF, an EPUB).
 //
 // It exists for the reader. A PDF is shown in the overlay, and loading a 50 MB document into a frame
 // is not instant — the rendering is the text the pipeline itself read (the outline parses exactly

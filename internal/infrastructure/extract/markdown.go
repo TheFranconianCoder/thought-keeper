@@ -9,7 +9,12 @@ import (
 // markdownSections splits Markdown by ATX headings into nested parts. A YAML
 // frontmatter block is dropped; fenced code is never treated as headings.
 func markdownSections(data []byte) ([]entities.Part, error) {
-	lines := strings.Split(stripFrontmatter(string(data)), "\n")
+	return splitMarkdown(stripFrontmatter(string(data))), nil
+}
+
+// splitMarkdown splits plain Markdown (no frontmatter to strip) into nested parts, one per heading.
+func splitMarkdown(md string) []entities.Part {
+	lines := strings.Split(md, "\n")
 
 	var parts []entities.Part
 	cur := entities.Part{Level: 0}
@@ -48,7 +53,7 @@ func markdownSections(data []byte) ([]entities.Part, error) {
 		body.WriteByte('\n')
 	}
 	push()
-	return parts, nil
+	return parts
 }
 
 // heading returns the level and text of an ATX heading line ("## Title").

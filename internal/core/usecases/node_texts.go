@@ -55,8 +55,8 @@ func nodeTexts(ctx context.Context, index interfaces.IndexRepository, store inte
 }
 
 // readableText is the source's readable text: the capture rendering for a kind whose bytes are not
-// readable as they are (a PDF), the object itself otherwise — exactly the text step 2 parses, which is
-// what makes the outline's references point at something stable.
+// readable as they are (a PDF, an EPUB), the object itself otherwise — exactly the text step 2 parses,
+// which is what makes the outline's references point at something stable.
 func readableText(ctx context.Context, store interfaces.SourceStore, src entities.Source) (string, error) {
 	_ = ctx
 	var (

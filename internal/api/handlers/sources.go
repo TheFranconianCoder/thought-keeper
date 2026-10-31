@@ -65,8 +65,8 @@ type CommandSourceSet interface {
 }
 
 // SourceOpener opens a source's raw bytes for inline viewing, and its readable rendering — the
-// Markdown step 1 wrote next to a source whose bytes are not readable (a PDF), which is what the
-// overlay shows while the PDF itself stays one click away.
+// Markdown step 1 wrote next to a source whose bytes are not readable (a PDF, an EPUB), which is what
+// the overlay shows while the document itself stays one click away.
 type SourceOpener interface {
 	Execute(ctx context.Context, hash string) (io.ReadCloser, string, string, error)
 	Rendered(ctx context.Context, hash string) (io.ReadCloser, string, string, error)
@@ -629,6 +629,8 @@ func contentTypeFor(ext string) string {
 	switch strings.ToLower(ext) {
 	case ".pdf":
 		return "application/pdf"
+	case ".epub":
+		return "application/epub+zip"
 	case ".md", ".markdown":
 		return "text/markdown; charset=utf-8"
 	case ".txt":

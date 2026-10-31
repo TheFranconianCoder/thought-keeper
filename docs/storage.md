@@ -17,7 +17,7 @@ greppable, worth versioning and backing up. The app never treats a directory as 
 ├── sources/                    # immutable, content-addressed
 │   └── 7f/3a/
 │       ├── 7f3a…<sha256>.pdf         # the object
-│       ├── 7f3a…<sha256>.capture.md  # the readable rendering (step 1, PDFs)
+│       ├── 7f3a…<sha256>.capture.md  # the readable rendering (step 1, PDFs and EPUBs)
 │       ├── 7f3a…<sha256>.meta        # identity + title + tags + auto tags + step record + part records
 │       ├── 7f3a…<sha256>.outline     # the node tree (step 2, JSON)
 │       ├── 7f3a…<sha256>.summary.md  # the source's overview (derived from its claims)
@@ -50,7 +50,7 @@ page is a destination, because a human authored it.
 
 | Sidecar | belongs to | holds | kind |
 | --- | --- | --- | --- |
-| `<hash>.capture.md` | a source whose bytes are not readable (a PDF) or a wiki page representation | the content as readable Markdown | **cache** — re-derivable (`capture`) |
+| `<hash>.capture.md` | a source whose bytes are not readable (a PDF, an EPUB) or a wiki page representation | the content as readable Markdown | **cache** — re-derivable (`capture`) |
 | `<hash>.meta` | a source | what the source **is** (kind, language, URL, identity), its title, **human tags**, **auto tags** and when they were derived, the state of capture/outline/distill and the part records | **record** — the file IS the truth |
 | `<hash>.outline` | a source | the node tree with references into the readable text | **cache** — re-derivable (`rebuild-trees`) |
 | `<hash>.summary.md` | a source | its **overview**, written from the claims after a complete distill | **cache** — regenerated from the claims (a model writes it, so not byte-identical) |
@@ -111,8 +111,8 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
 
 ## 4. Sources
 
-- **A source is exactly one file — never a folder.** Intake takes single `.md`, `.pdf` or `.txt`
-  files (or one URL). A directory path is rejected with `unsupported_source`.
+- **A source is exactly one file — never a folder.** Intake takes single `.md`, `.pdf`, `.txt` or
+  `.epub` files (or one URL). A directory path is rejected with `unsupported_source`.
 - **The title and the original name are two different things.** The title is the document's;
   `original_name` is what the source came in under (a dropped file's name, or the URL). An empty
   `original_name` stays empty.
@@ -151,7 +151,8 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
   into a URL source's snapshot at the same address (readability, poppler/OCR, or the text as it is)
   and re-arms outline/distill. It works for a **blocked** URL and for a **bookmark** (a page that only
   renders in a browser, a video, an app). A feed or a sitemap is refused: its snapshot is a list, not
-  a page. The snapshot's frontmatter carries `attached: true`,
+  a page — and so is an `.epub`: a book is a source of its own, not a snapshot of one page. The
+  snapshot's frontmatter carries `attached: true`,
   `attached_from`, `attached_sha256` and `attached_at` instead of `fetched_at`/`http_status`; the
   source's record carries `attached` (identity, so a reindex keeps it), and its metadata carries
   `attached`/`attached_from`/`attached_hash`. **The automatic refresh never fetches an attached
@@ -176,7 +177,8 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
   with the old first-snapshot address.
 - **A captured source stays readable next to its object.** `capture` writes `<hash>.capture.md` for
   a kind that has to be extracted. It is what **outline** reads.
-- **Kinds:** `.md`, `.pdf`, `.txt`; URL snapshots are `.md` with frontmatter.
+- **Kinds:** `.md`, `.pdf`, `.txt`, `.epub`; URL snapshots are `.md` with frontmatter. An EPUB is
+  the one container we open, and only as a book: `.zip` and `.tar` are refused.
 - **Sources are never modified.** A correction is a new file → a new hash. The deliberate
   exceptions are a URL snapshot (refreshed in place, or given the page the human attached) and a
   wiki page's representation (stable `WikiHash`, written through on every edit).

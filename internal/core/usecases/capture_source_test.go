@@ -20,34 +20,37 @@ import (
 // fakeExtractor stands in for poppler/OCR: it returns scripted parts, so a capture can be tested
 // without the tools (the same boundary the extract package is tested through).
 type fakeExtractor struct {
-	parts []entities.Part
-	err   error
-	calls int
+	parts    []entities.Part
+	title    string
+	language string
+	err      error
+	calls    int
 }
 
-func (f *fakeExtractor) Extract(_ context.Context, _ string, _ []byte, onEvent func(entities.ExtractEvent)) ([]entities.Part, error) {
+func (f *fakeExtractor) Extract(_ context.Context, _ string, _ []byte, onEvent func(entities.ExtractEvent)) (entities.Extraction, error) {
 	f.calls++
 	if onEvent != nil {
 		onEvent(entities.ExtractEvent{Kind: "furniture", Lines: 3, Pages: 2})
 	}
 	if f.err != nil {
-		return nil, f.err
+		return entities.Extraction{}, f.err
 	}
-	return f.parts, nil
+	return entities.Extraction{Parts: f.parts, Title: f.title, Language: f.language}, nil
 }
 
 // explodingExtractor fails the test when it is used at all: the outline must READ, not extract.
 type explodingExtractor struct{ t *testing.T }
 
-func (e explodingExtractor) Extract(context.Context, string, []byte, func(entities.ExtractEvent)) ([]entities.Part, error) {
+func (e explodingExtractor) Extract(context.Context, string, []byte, func(entities.ExtractEvent)) (entities.Extraction, error) {
 	e.t.Fatal("the outline extracted instead of reading the rendering")
-	return nil, nil
+	return entities.Extraction{}, nil
 }
 
 // fakeSteps records the step transitions a use case makes.
 type fakeSteps struct {
 	seen       map[entities.Step][]entities.StepStatus
 	titles     map[string]string
+	languages  map[string]string
 	identities map[string]entities.SourceIdentity
 	resets     []string
 	parts      map[string]map[string]entities.PartRecord
@@ -94,7 +97,13 @@ func (f *fakeSteps) Reset(hash string) error {
 func (f *fakeSteps) Remove(string) error { return nil }
 
 // SetIdentity remembers what the source IS, keyed by hash.
-func (f *fakeSteps) SetLanguage(string, string) error       { return nil }
+func (f *fakeSteps) SetLanguage(hash, language string) error {
+	if f.languages == nil {
+		f.languages = map[string]string{}
+	}
+	f.languages[hash] = language
+	return nil
+}
 func (f *fakeSteps) SetOrigin(string, string, string) error { return nil }
 
 // Release records the manual-addition release by clearing the identity's ownership, and mirrors it
@@ -274,6 +283,64 @@ func TestIntakeLeavesCaptureOpenForAPDF(t *testing.T) {
 	pdf := steps.seen[entities.StepCapture][len(steps.seen[entities.StepCapture])-1]
 	if pdf.State != entities.StepPending {
 		t.Errorf("pdf capture = %q, want pending (step 1 has to extract)", pdf.State)
+	}
+
+	// An EPUB is a container, not text: step 1 has to read its chapters, so the capture is open here
+	// too — and the source is filed with the right kind.
+	epubSrc, err := intake.Execute(ctx, usecases.IntakeInput{Name: "book.epub", Reader: strings.NewReader("PK\x03\x04")})
+	if err != nil {
+		t.Fatalf("intake epub: %v", err)
+	}
+	if epubSrc.Kind != string(entities.SourceKindEPUB) {
+		t.Errorf("epub kind = %q, want epub", epubSrc.Kind)
+	}
+	book := steps.seen[entities.StepCapture][len(steps.seen[entities.StepCapture])-1]
+	if book.State != entities.StepPending {
+		t.Errorf("epub capture = %q, want pending (step 1 has to read the container)", book.State)
+	}
+}
+
+// TestCaptureReadsABook: a book is captured like a PDF — its bytes are not text — and the title and
+// language come from the book itself, not from the file name or a detector. Its spine documents are
+// counted as chapters.
+func TestCaptureReadsABook(t *testing.T) {
+	ctx := context.Background()
+	store := objects.New(t.TempDir())
+	idx := newFakeIndex()
+	src, err := usecases.IntakeSource{Store: store, Index: idx, Clock: fixedClock{}}.
+		Execute(ctx, usecases.IntakeInput{Name: "book.epub", Reader: strings.NewReader("PK\x03\x04")})
+	if err != nil {
+		t.Fatalf("intake: %v", err)
+	}
+
+	steps := &fakeSteps{}
+	capture := usecases.CaptureSource{
+		Store: store, Index: idx, Steps: steps, Clock: fixedClock{},
+		Extractor: &fakeExtractor{
+			parts: []entities.Part{
+				{Level: 1, Title: "Caching Basics", Text: "A cache is safe only when the key covers every input.", Page: 1},
+				{Level: 1, Title: "Invalidation", Text: "Invalidation is the hard part.", Page: 2},
+			},
+			title:    "The Cache Book",
+			language: "en",
+		},
+	}
+	res, err := capture.Execute(ctx, src.Hash)
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	if res.Pages != 2 {
+		t.Errorf("chapters = %d, want 2", res.Pages)
+	}
+	if got := steps.titles[src.Hash]; got != "The Cache Book" {
+		t.Errorf("recorded title = %q, want the book's dc:title", got)
+	}
+	if got := steps.languages[src.Hash]; got != "en" {
+		t.Errorf("recorded language = %q, want the declared one", got)
+	}
+	states := steps.seen[entities.StepCapture]
+	if len(states) != 2 || !strings.Contains(states[1].Detail, "2 chapters") {
+		t.Errorf("capture detail = %+v, want it to count chapters", states)
 	}
 }
 

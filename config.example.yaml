@@ -48,8 +48,8 @@ index:
     # location.
     #
     # Everything that belongs to ONE source lives next to that source instead — inside sources/:
-    #   <hash>.pdf|md|txt   the object (the bytes that were dropped in)
-    #   <hash>.capture.md   the readable rendering (step 1, only for a PDF — a .md source IS that)
+    #   <hash>.pdf|md|txt|epub   the object (the bytes that were dropped in)
+    #   <hash>.capture.md   the readable rendering (step 1, only for a PDF or an EPUB — a .md source IS that)
     #   <hash>.meta         the step record (capture/outline/distill)
     #   <hash>.outline      the node tree (step 2)
     #   <hash>.log          everything that was done to this source

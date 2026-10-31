@@ -58,7 +58,7 @@ navigation.
 | | |
 | --- | --- |
 | ![The Start lens](docs/screenshots/desktop-start.png) | **Start.** The front door: an Ask box with the last questions, Continue, Needs you and the newest sources with their live step state. |
-| ![The Sources lens](docs/screenshots/desktop-sources.png) | **Sources.** Markdown, PDF, text and URL snapshots in one list, with a persistent search, type and attachment filter; a hand-attached snapshot carries a paperclip badge. |
+| ![The Sources lens](docs/screenshots/desktop-sources.png) | **Sources.** Markdown, PDF, EPUB, text and URL snapshots in one list, with a persistent search, type and attachment filter; a hand-attached snapshot carries a paperclip badge. |
 | ![The assistant](docs/screenshots/desktop-assistant.png) | **The assistant.** One request resolves to a lens, a filter and a set; the result is an ordinary list with a banner that says how it was read. |
 | ![An Ask answer](docs/screenshots/desktop-ask.png) | **Ask.** Questions answered from claims, with inline citations, saved as notes with automatic tags. |
 | ![The Status lens](docs/screenshots/desktop-status.png) | **Status.** Counts, job queue, maintenance actions, vocabulary health, live and peak memory. |
@@ -81,7 +81,7 @@ Four steps, strictly separated, in this order:
 
 ```mermaid
 flowchart LR
-  S["Source<br/>Markdown · PDF · TXT · URL"] --> C[Capture]
+  S["Source<br/>Markdown · PDF · TXT · EPUB · URL"] --> C[Capture]
   C --> O[Outline]
   O --> D[Distill]
   D --> A[("Atoms<br/>one claim per file")]
@@ -92,13 +92,14 @@ flowchart LR
 ```
 
 1. **Capture** makes the source readable locally. Markdown and text already are; a PDF gets its text
-   layer (poppler) or is OCR'd page by page (poppler + tesseract); a URL is fetched and stored as a
+   layer (poppler) or is OCR'd page by page (poppler + tesseract); an EPUB's chapters are read out of
+   the container in pure Go; a URL is fetched and stored as a
    static snapshot. A URL that turns out to be a **sitemap** or an **RSS/Atom feed** is not a page at
    all: it becomes a parent source whose snapshot is the list it declared, and the pages it names are
    fetched as sources of their own. A page behind a **login or a paywall** is reported as blocked — the
    app never stores a credential and never distils a login form. Capture never guesses: if a scanned
    PDF has no text and OCR is unavailable, the source is flagged `unsupported_source`, never silently
-   empty.
+   empty — and so is a DRM-encrypted or image-only EPUB.
 2. **Outline** builds the document's hierarchical tree: titles, summaries and **references** into the
    readable text. The tree stores structure, not text.
 3. **Distill** runs the agent over **one text-bearing node at a time**: every statement becomes its
@@ -151,8 +152,8 @@ source" here.
 
 ### Sources
 
-- **Markdown, PDF, plain text and URLs** — and nothing else. Drop files into `inbox/`, add a path,
-  upload, paste links, or add an RSS/Atom feed.
+- **Markdown, PDF, EPUB, plain text and URLs** — and nothing else. Drop files into `inbox/`, add a
+  path, upload, paste links, or add an RSS/Atom feed.
 - Content-addressed storage: a file source is its SHA-256, deduplicated and write-once. A URL's
   address is a hash of the URL, so refreshing a page replaces the snapshot without creating a second
   source; a wiki page's representation is the other deliberately in-place exception.
@@ -364,7 +365,7 @@ One location, default `~/thought-keeper`. Readable, greppable, versionable, back
 ├── sources/                  # immutable, content-addressed
 │   └── 7f/3a/
 │       ├── 7f3a…<sha256>.pdf        # the object
-│       ├── 7f3a…<sha256>.capture.md # readable rendering (PDFs)
+│       ├── 7f3a…<sha256>.capture.md # readable rendering (PDFs, EPUBs)
 │       ├── 7f3a…<sha256>.meta       # identity + step record + part records
 │       ├── 7f3a…<sha256>.outline    # the node tree
 │       ├── 7f3a…<sha256>.summary.md # the overview
@@ -424,6 +425,7 @@ More: [`docs/agent.md`](docs/agent.md).
 | Queries | `sqlc` (`engine: sqlite`) → generated `dal` |
 | Lexical search | SQLite **FTS5** |
 | PDF | poppler `pdftotext`; OCR with `pdftocairo` + `tesseract` |
+| EPUB | pure Go (`archive/zip` + `x/net/html` + `html-to-markdown`) — nothing to install |
 | HTML → Markdown | `go-readability` + `html-to-markdown` |
 | IDs | ULID (16-byte `BLOB`); sources by SHA-256 |
 | Tests | `go test ./...`, DB as `:memory:`, vault as a temp dir |
@@ -493,8 +495,8 @@ The app prints its address (default `http://127.0.0.1:9210`). Open it in Chromiu
 A second launch does not start a second service: it finds the runtime endpoint, pings it and opens
 the running instance's UI.
 
-Drop a Markdown file, a PDF or a text file into `<vault>/inbox/`, add a URL or a feed from the UI, and
-the pipeline starts. Watch it in Status.
+Drop a Markdown file, a PDF, an EPUB or a text file into `<vault>/inbox/`, add a URL or a feed from
+the UI, and the pipeline starts. Watch it in Status.
 
 ### Build a static binary
 
@@ -594,7 +596,8 @@ Thought Keeper is opinionated about what it will **not** do:
 
 - **No embeddings and no vector database.** Retrieval is trees, indexes, the association layer and
   lexical search. Similarity is not relevance.
-- **Only Markdown, PDF, text and URLs.** No `.docx`, no images, no archives, no audio/video.
+- **Only Markdown, PDF, EPUB, text and URLs.** No `.docx`, no images, no audio/video, and no
+  archive reader: an EPUB is a book we read, `.zip` is still refused.
 - **No silent OCR.** If a scanned PDF has no text and OCR is unavailable, the source is flagged, never
   silently empty.
 - **No rendered claim pages and no cluster pages.** Clusters are associations, not documents. Wiki

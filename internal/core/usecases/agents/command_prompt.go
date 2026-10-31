@@ -24,7 +24,7 @@ Answer with exactly one JSON object and nothing else.
   "lens": "sources" | "claims" | "wiki" | "status" | "attention" | "ask",
   "text": "free words a lexical search should match",
   "tag": "ONE existing source tag",
-  "kind": "md" | "pdf" | "txt" | "url",
+  "kind": "md" | "pdf" | "txt" | "epub" | "url",
   "from_topic": "ONE existing claim topic, for SOURCES whose claims are about a subject",
   "topic": "ONE existing claim topic, for a CLAIM list",
   "since": "24h" | "168h" | "720h",
