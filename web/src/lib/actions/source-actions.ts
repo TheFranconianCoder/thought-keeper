@@ -6,7 +6,7 @@ import { firstLine, isURL } from '../format';
 import { t, tn } from '../i18n/index.svelte';
 import { navigate, router, sourcePath } from '../router.svelte';
 import { sources } from '../stores/sources.svelte';
-import { bookmarkWindow, failedWindow, sourceWindow } from '../stores/source-window.svelte';
+import { bookmarkWindow, failedWindow, sourceWindow, staleWindow } from '../stores/source-window.svelte';
 import { system } from '../stores/system.svelte';
 import { toast } from '../toast.svelte';
 import { waitForRun } from './runs';
@@ -32,6 +32,7 @@ async function refreshSourceViews(hash?: string): Promise<void> {
   sourceWindow.invalidate();
   bookmarkWindow.invalidate();
   failedWindow.invalidate();
+  staleWindow.invalidate();
   await system.loadStatus();
   if (hash && sources.selectedHash === hash) await sources.refresh(hash);
 }

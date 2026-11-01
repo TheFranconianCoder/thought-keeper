@@ -3,6 +3,7 @@ package usecases_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/extract"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/gateways"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/objects"
+	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
 // fakeGateway replays a scripted sequence of responses.
@@ -334,6 +336,47 @@ func (r *fakeRunRepo) ListSteps(context.Context, ulid.ULID) ([]entities.RunStep,
 
 func (r *fakeRunRepo) AbandonRunningRuns(context.Context, string, time.Time) (int64, error) {
 	return 0, nil
+}
+
+// TestDistillRefusesAnOutlineThatReferencesMissingText: a page rewritten under its outline leaves a
+// node pointing past the snapshot. Deriving the other parts and calling the source finished is what
+// left it "3 of 4 parts" for ever; the run says the outline is stale, and the app rebuilds it.
+func TestDistillRefusesAnOutlineThatReferencesMissingText(t *testing.T) {
+	ctx := context.Background()
+	store := objects.New(t.TempDir())
+	idx := newFakeIndex()
+	trees := &fakeTreeStore{m: map[string][]entities.SourceNode{}}
+	extractor := extract.New(gateways.ExecRunner{}, extract.Config{})
+
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx,
+		usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Caching\ncaching is subtle\n")})
+	if err != nil {
+		t.Fatalf("intake: %v", err)
+	}
+	if _, err := (usecases.Trees{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).Build(ctx, src.Hash); err != nil {
+		t.Fatalf("build tree: %v", err)
+	}
+
+	// The page was rewritten under the outline: the reference now points past the text.
+	nodes := trees.m[src.Hash]
+	found := false
+	for i := range nodes {
+		if nodes[i].TextHash == "" {
+			continue
+		}
+		nodes[i].Text, nodes[i].TextStart, nodes[i].TextEnd = "", 0, 1<<20
+		found = true
+		break
+	}
+	if !found {
+		t.Fatal("the fixture has no text-bearing node")
+	}
+
+	az := usecases.Derivation{Store: store, Index: idx, Trees: trees, Clock: fixedClock{}}
+	rec := usecases.NewStepRecorder(ctx, &fakeRunRepo{}, ulid.Make(), nil)
+	if _, err := az.Distill(ctx, src.Hash, rec); !errors.Is(err, types.ErrOutlineStale) {
+		t.Fatalf("distill = %v, want ErrOutlineStale", err)
+	}
 }
 
 func TestDistillWritesAtomWithProvenance(t *testing.T) {

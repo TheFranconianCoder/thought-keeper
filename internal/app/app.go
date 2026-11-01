@@ -170,7 +170,7 @@ type App struct {
 	distillQueue    chan runJob
 	queryQueue      chan runJob
 	lintQueue       chan runJob
-	urlQueue chan urlJob
+	urlQueue        chan urlJob
 	// urlPending is the set of sources whose page fetch is queued or in flight. The pipeline must not
 	// outline or distill such a source: its snapshot is about to be replaced, and a derivation built
 	// on the copy that is leaving is wrong the moment the page arrives.
@@ -2863,6 +2863,16 @@ func (a *App) runOne(job runJob) {
 			status = "failed"
 			failure = err.Error()
 			a.log.Warn("document run failed", "hash", job.hash, "run", run, "err", err)
+			if errors.Is(err, types.ErrOutlineStale) {
+				// The outline points into text the snapshot no longer has (a page rewritten under it).
+				// Re-deriving cannot fix that: the outline is rebuilt from the current bytes, which
+				// re-locates every part; the claims stay (their text hashes are unchanged), and the
+				// pump derives the parts the rebuild re-arms.
+				a.log.Warn("document run: the outline is stale — rebuilding it", "hash", job.hash)
+				a.queueTree(job.hash)
+				a.pumpPipeline("stale outline " + shortHash(job.hash))
+				return
+			}
 			a.scheduleRetry(job, err)
 			return
 		}

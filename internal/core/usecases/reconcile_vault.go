@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 
@@ -38,6 +39,37 @@ type ReconcileResult struct {
 	// Repairs counts the writes this pass made (or, in a DryRun, would make): invalidated sources,
 	// broken objects, restored identities and backfilled languages.
 	Repairs int
+}
+
+// reopenStaleDistill reopens a distill step whose record says through while the index holds fewer
+// finished parts than text-bearing nodes. A derivation that STOPPED must not look finished: the pump
+// derives the missing parts, and a run that finds the outline's references stale rebuilds it. This
+// is what heals a source on the regular consistency pass instead of leaving it stale for ever.
+func (uc Maintenance) reopenStaleDistill(ctx context.Context, src entities.Source, res *ReconcileResult) bool {
+	if src.Bookmark || uc.Steps == nil || uc.Index == nil {
+		return false
+	}
+	switch src.Steps.State(entities.StepDistill) {
+	case entities.StepOK, entities.StepPending:
+	default:
+		return false
+	}
+	full, err := uc.Index.GetSourceByHash(ctx, src.Hash)
+	if err != nil || full.PartsTotal == 0 || full.PartsDone >= full.PartsTotal {
+		return false
+	}
+	if err := uc.Steps.Record(ctx, src.Hash, entities.StepDistill, entities.StepStatus{
+		State: entities.StepPending, At: uc.Clock.Now(),
+		Detail: fmt.Sprintf("reconcile: %d of %d parts recorded — derive again", full.PartsDone, full.PartsTotal),
+	}); err != nil {
+		uc.log(ctx, src.Hash, "warn", "reconcile", "could not reopen the distill step", map[string]any{"err": err})
+		return false
+	}
+	res.Repairs++
+	uc.log(ctx, src.Hash, "warn", "reconcile", "the distill step was reopened: parts are missing", map[string]any{
+		"parts_done": full.PartsDone, "parts_total": full.PartsTotal,
+	})
+	return true
 }
 
 // Reconcile checks every record against the vault and repairs what drifted.
@@ -122,6 +154,10 @@ func (uc Maintenance) Reconcile(ctx context.Context) (ReconcileResult, error) {
 			missing = "rendering"
 		}
 		if missing == "" {
+			if uc.reopenStaleDistill(ctx, src, &res) {
+				// The derivation is not through; its summary and labels wait for the parts.
+				continue
+			}
 			if !src.Bookmark && src.Steps.State(entities.StepDistill) == entities.StepOK &&
 				!hasSidecar(uc.Store, src.Hash, entities.SidecarSummary) {
 				res.MissingSummaries = append(res.MissingSummaries, src.Hash)

@@ -208,6 +208,8 @@ export interface SourceListFilter {
   attachedOnly?: boolean;
   bookmarksOnly?: boolean;
   failedOnly?: boolean;
+  /** A derivation that STOPPED with work left (the Attention lens's second source list). */
+  staleOnly?: boolean;
   /** The reader's star. */
   favoriteOnly?: boolean;
   /** The OPEN read-later queue, ordered oldest entry first by the server. */

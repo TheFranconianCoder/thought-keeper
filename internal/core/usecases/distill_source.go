@@ -79,6 +79,15 @@ func (uc Derivation) distill(ctx context.Context, hash string, rec *StepRecorder
 	if err != nil {
 		return DistillResult{}, err
 	}
+	// A node that CARRIES a text hash whose text cannot be resolved is not an empty part: the outline
+	// points at a range the snapshot no longer has (the page was rewritten under it). Deriving the
+	// rest and calling it finished is how a source sat "3 of 4 parts" for ever; the app rebuilds the
+	// outline from this answer.
+	for _, n := range nodes {
+		if n.TextHash != "" && strings.TrimSpace(n.Text) == "" {
+			return DistillResult{}, fmt.Errorf("%w: node %s (%s)", types.ErrOutlineStale, n.NodeID, oneLine(n.Title, 60))
+		}
+	}
 
 	nodeByID := make(map[string]entities.SourceNode, len(nodes))
 	for _, n := range nodes {

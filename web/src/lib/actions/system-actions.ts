@@ -4,7 +4,7 @@ import { confirm } from '../confirm.svelte';
 import { firstLine } from '../format';
 import { t, tn } from '../i18n/index.svelte';
 import { claims } from '../stores/claims.svelte';
-import { bookmarkWindow, failedWindow, sourceWindow } from '../stores/source-window.svelte';
+import { bookmarkWindow, failedWindow, sourceWindow, staleWindow } from '../stores/source-window.svelte';
 import { system } from '../stores/system.svelte';
 import { toast } from '../toast.svelte';
 
@@ -14,6 +14,7 @@ function refreshSourceData(): Promise<void> {
   sourceWindow.invalidate();
   bookmarkWindow.invalidate();
   failedWindow.invalidate();
+  staleWindow.invalidate();
   return Promise.resolve();
 }
 

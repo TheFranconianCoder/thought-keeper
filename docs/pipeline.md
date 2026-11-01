@@ -254,6 +254,13 @@ that is leaving points into text the page no longer has. The source is skipped b
 not hold the barrier for the others; the worker clears the mark when the fetch ends — the page
 arrived, was walled, or failed — and the source is derived from whatever the snapshot is then.
 
+**A derivation that stopped heals itself on the regular pass.** The consistency job reopens a distill
+step whose record says through while the index holds fewer finished parts than text-bearing nodes;
+the pump then derives the missing parts. A run that finds an outline reference the snapshot no longer
+has (the page was rewritten under it) answers with `ErrOutlineStale`, and the app rebuilds the outline
+from the current bytes: the claims survive (their text hashes are unchanged) and every part is
+re-located. Nothing stays stale without work being owed.
+
 ## 4. Status: four lights and two bars
 
 Each source carries the state of the four steps as a traffic light:

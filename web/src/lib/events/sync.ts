@@ -5,7 +5,7 @@ import { noteFrame, setConnectionState, connection } from '../stores/connection.
 import { system } from '../stores/system.svelte';
 import { sources } from '../stores/sources.svelte';
 import { interests } from '../stores/interests.svelte';
-import { bookmarkWindow, failedWindow, sourceWindow } from '../stores/source-window.svelte';
+import { bookmarkWindow, failedWindow, sourceWindow, staleWindow } from '../stores/source-window.svelte';
 import { claims } from '../stores/claims.svelte';
 import { wiki } from '../stores/wiki.svelte';
 import { asks } from '../stores/asks.svelte';
@@ -104,6 +104,7 @@ async function loadScope(scope: Scope): Promise<void> {
       sourceWindow.invalidate();
       bookmarkWindow.invalidate();
       failedWindow.invalidate();
+  staleWindow.invalidate();
       return;
     case 'source':
       if (sourceDetailVisible() && sources.selectedHash) await sources.refresh();
@@ -373,6 +374,7 @@ export async function resyncAll(force = false): Promise<void> {
   sourceWindow.invalidate();
   bookmarkWindow.invalidate();
   failedWindow.invalidate();
+  staleWindow.invalidate();
 
   await Promise.all([
     system.loadStatus(),

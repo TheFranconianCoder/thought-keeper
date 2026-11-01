@@ -278,7 +278,8 @@ commit and the build time into `internal/version` via `-ldflags`, builds
   for that kind. The cadence is stored per source (`url_checked_at`), so restarting the app neither
   postpones nor doubles a refresh. A manual pass — `POST /api/v1/refresh-urls` — ignores it and checks
   everything now; the **Refresh** button (or `POST /api/v1/sources/{hash}/refresh`) checks ONE source
-  now. A source with a **human-supplied snapshot** is not fetched by the cadence; the source page can
+  now, under the exclusive side of the gate: it replaces the snapshot and resets the derivation, so
+  it waits for the document steps like any other rewrite of the vault. A source with a **human-supplied snapshot** is not fetched by the cadence; the source page can
   **Try the URL again** (`POST /api/v1/sources/{hash}/refetch`), which replaces it only when the page
   is readable. A **blocked** page (a login, a paywall, a consent gate) is attempted again on the same
   cadence, because it may become readable.

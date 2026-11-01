@@ -80,6 +80,7 @@ class SourceWindowStore {
       attachedOnly: next.attachedOnly ? true : undefined,
       bookmarksOnly: next.bookmarksOnly ? true : undefined,
       failedOnly: next.failedOnly ? true : undefined,
+      staleOnly: next.staleOnly ? true : undefined,
       favoriteOnly: next.favoriteOnly ? true : undefined,
       readLaterOnly: next.readLaterOnly ? true : undefined,
       interest: next.interest || undefined,
@@ -286,3 +287,6 @@ export const sourceWindow = new SourceWindowStore();
 export const bookmarkWindow = new SourceWindowStore();
 /** The Attention lens's source half: sources with a failed step, still a window. */
 export const failedWindow = new SourceWindowStore();
+
+/** The Attention lens's second source list: derivations that stopped with work left. */
+export const staleWindow = new SourceWindowStore();

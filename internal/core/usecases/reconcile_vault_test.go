@@ -26,6 +26,55 @@ import (
 // (the atoms cite nodes of a tree that no longer exists, the pages describe a document that is no
 // longer outlined), so the derivation is thrown away and the source is handed back to be derived
 // again.
+// TestReconcileReopensAStaleDistill: a record that says the distill is through while the index holds
+// fewer finished parts than text-bearing nodes is a derivation that STOPPED. The consistency pass
+// reopens it, the pump derives the missing parts, and a run that finds the outline's references stale
+// rebuilds the outline — the source heals on its own instead of sitting stale for ever.
+func TestReconcileReopensAStaleDistill(t *testing.T) {
+	ctx := context.Background()
+	sourcesDir := t.TempDir()
+	store := objects.New(sourcesDir)
+	idx := newFakeIndex()
+	meta := sourcemeta.NewTracker(sourcemeta.New(sourcesDir), nil, nil)
+	trees := treestore.New(sourcesDir)
+
+	hash := strings.Repeat("ab", 32)
+	if _, err := store.PutAt(hash, ".md", []byte("# Caching\ncaching is subtle\n")); err != nil {
+		t.Fatalf("object: %v", err)
+	}
+	if err := trees.Write(ctx, hash, []entities.SourceNode{
+		{NodeID: "0", Depth: 0},
+		{NodeID: "0.1", Depth: 1, Title: "Caching", TextHash: "hash", TextStart: 0, TextEnd: 8},
+	}); err != nil {
+		t.Fatalf("outline: %v", err)
+	}
+	ok := entities.StepStatus{State: entities.StepOK}
+	idx.m[hash] = entities.Source{
+		ID: ulid.Make(), Hash: hash, Kind: entities.SourceKindMD, Ext: ".md", Path: hash + ".md",
+		PartsTotal: 3, PartsDone: 2, TreeState: entities.TreeBuilt,
+		Steps: entities.NewStepSet().
+			With(entities.StepCapture, ok).With(entities.StepOutline, ok).With(entities.StepDistill, ok),
+	}
+	for _, step := range []entities.Step{entities.StepCapture, entities.StepOutline, entities.StepDistill} {
+		if err := meta.Record(ctx, hash, step, ok); err != nil {
+			t.Fatalf("record %s: %v", step, err)
+		}
+	}
+
+	uc := usecases.Maintenance{Store: store, Index: idx, Steps: meta, Trees: trees, Clock: fixedClock{}}
+	if _, err := uc.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	steps, err := meta.Steps(hash)
+	if err != nil {
+		t.Fatalf("steps: %v", err)
+	}
+	if got := steps.State(entities.StepDistill); got != entities.StepPending {
+		t.Fatalf("distill = %s, want pending (the pass must reopen a stopped derivation)", got)
+	}
+}
+
 func TestReconcileInvalidatesWhenAnArtefactIsGone(t *testing.T) {
 	ctx := context.Background()
 	// Object and outline share the sources/ directory, as they do in a vault.

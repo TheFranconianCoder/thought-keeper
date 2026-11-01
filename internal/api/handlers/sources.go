@@ -223,6 +223,7 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 		AttachedOnly:  truthy(q.Get("attached")),
 		BookmarksOnly: truthy(q.Get("bookmarks")),
 		FailedOnly:    truthy(q.Get("failed")),
+		StaleOnly:     truthy(q.Get("stale")),
 		FavoriteOnly:  truthy(q.Get("favorite")),
 		ReadLaterOnly: truthy(q.Get("readlater")),
 		Interest:      strings.TrimSpace(q.Get("interest")),

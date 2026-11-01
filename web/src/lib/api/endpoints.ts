@@ -68,6 +68,7 @@ export const api = {
         attached: filter.attachedOnly ? 1 : undefined,
         bookmarks: filter.bookmarksOnly ? 1 : undefined,
         failed: filter.failedOnly ? 1 : undefined,
+        stale: filter.staleOnly ? 1 : undefined,
         favorite: filter.favoriteOnly ? 1 : undefined,
         readlater: filter.readLaterOnly ? 1 : undefined,
         interest: filter.interest,

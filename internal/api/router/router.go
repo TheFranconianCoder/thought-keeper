@@ -155,7 +155,10 @@ func New(deps Deps, web http.Handler) http.Handler {
 		// Step 1 again (extract, render, name) — the outline follows, so the order holds.
 		r.Post("/sources/{hash}/capture", deps.Sources.Capture)
 		// Refresh ONE URL source now: a feed or a sitemap re-expands its list, a page is re-fetched.
-		r.With(deps.Gate.Shared).Post("/sources/{hash}/refresh", deps.URL.PostOne)
+		// A refresh replaces the snapshot and resets the derivation: it waits for the document steps
+		// like any other rewrite of the vault (a page fetched under a running distill is the race the
+		// feed copy showed).
+		r.With(deps.Gate.Exclusive).Post("/sources/{hash}/refresh", deps.URL.PostOne)
 		// Try the URL again even when its snapshot was attached by hand. It may replace the snapshot
 		// and reset the derivation (claims and tree), so it takes the exclusive side.
 		r.With(deps.Gate.Exclusive).Post("/sources/{hash}/refetch", deps.URL.Refetch)

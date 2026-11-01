@@ -83,6 +83,9 @@ type SourceFilter struct {
 	// lens's source half, served by the index rather than by reading every source and filtering in
 	// the client.
 	FailedOnly bool
+	// StaleOnly keeps sources whose distill step is not through (pending, failed or running). It is
+	// the other half of Attention: a derivation that stopped, not one that never started.
+	StaleOnly bool
 	// FavoriteOnly keeps the reader's starred sources.
 	FavoriteOnly bool
 	// ReadLaterOnly keeps the OPEN read-later queue: queued and not yet finished. The queue view is

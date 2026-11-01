@@ -20,6 +20,7 @@ var (
 	ErrNotImplemented    = errors.New("not implemented")
 	ErrForbidden         = errors.New("forbidden")
 	ErrRepairing         = errors.New("the vault is being rebuilt")
+	ErrOutlineStale      = errors.New("the outline references text the snapshot no longer has")
 	ErrInternal          = errors.New("internal error")
 )
 

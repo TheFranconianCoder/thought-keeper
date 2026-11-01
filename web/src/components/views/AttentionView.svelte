@@ -3,7 +3,7 @@
   import { untrack } from 'svelte';
   import { navigate, claimPath, router, sourcePath } from '../../lib/router.svelte';
   import { connection } from '../../lib/stores/connection.svelte';
-  import { failedWindow } from '../../lib/stores/source-window.svelte';
+  import { failedWindow, staleWindow } from '../../lib/stores/source-window.svelte';
   import { sources } from '../../lib/stores/sources.svelte';
   import { system } from '../../lib/stores/system.svelte';
   import type { Finding, Source } from '../../lib/api/types';
@@ -27,6 +27,9 @@
   const actionable = $derived(allActionable.filter((finding) => matches(finding, term)));
   const informational = $derived(allInformational.filter((finding) => matches(finding, term)));
   const failedCount = $derived(failedWindow.count);
+  // The second source list: derivations that STOPPED with work left. It is the same window
+  // machinery as the failed list, so a vault of a thousand sources still reads one screen.
+  const staleCount = $derived(staleWindow.count);
 
   // An assistant result in the Attention lens is the same materialized set: the window reads the
   // record instead of the failed flag, and the banner says which request it came from.
@@ -37,22 +40,28 @@
   // failed total is remembered while no search is active. An assistant result is its own set, so it
   // counts alone — the findings are not part of that request.
   let failedTotal = $state(0);
+  let staleTotal = $state(0);
   const total = $derived(
-    commandId ? failedWindow.count : failedTotal + allActionable.length,
+    commandId ? failedWindow.count : failedTotal + staleTotal + allActionable.length,
   );
-  // Both halves have to be here before the page may say "nothing needs attention": an empty list
+  // Every half has to be here before the page may say "nothing needs attention": an empty list
   // while the sources are still loading is not a finding.
-  const ready = $derived(failedWindow.loaded && system.findingsLoaded);
+  const ready = $derived(failedWindow.loaded && staleWindow.loaded && system.findingsLoaded);
 
   failedWindow.setFilter({ failedOnly: true });
+  staleWindow.setFilter({ staleOnly: true });
 
   $effect(() => {
     const id = commandId;
-    untrack(() => failedWindow.setFilter({ failedOnly: true, command: id }));
+    untrack(() => {
+      failedWindow.setFilter({ failedOnly: true, command: id });
+      staleWindow.setFilter({ staleOnly: true, command: id });
+    });
   });
 
   $effect(() => {
     if (!searching && failedWindow.loaded) failedTotal = failedWindow.count;
+    if (!searching && staleWindow.loaded) staleTotal = staleWindow.count;
   });
 
   let filterTimer: ReturnType<typeof setTimeout> | undefined;
@@ -61,6 +70,7 @@
     clearTimeout(filterTimer);
     filterTimer = setTimeout(() => {
       failedWindow.setFilter({ failedOnly: true, query: next, command: commandId });
+      staleWindow.setFilter({ staleOnly: true, query: next, command: commandId });
     }, 100);
     return () => clearTimeout(filterTimer);
   });
@@ -77,6 +87,10 @@
     if (!failedWindow.loaded || failedWindow.count === 0) {
       void failedWindow.ensure(0, 30);
     }
+    void staleWindow.epoch;
+    if (!staleWindow.loaded || staleWindow.count === 0) {
+      void staleWindow.ensure(0, 30);
+    }
   });
 
   function matches(finding: Finding, text: string): boolean {
@@ -88,6 +102,7 @@
 
   function retry(): void {
     failedWindow.reset();
+    staleWindow.reset();
     void system.loadFindings();
   }
 
@@ -171,6 +186,49 @@
                     <span class="attention-sub">{statusLabel(source, live)}</span>
                   </span>
                   <span class="chip chip--danger">{t('attention.failedChip')}</span>
+                  <Icon name="chevronRight" size={14} />
+                </button>
+              {:else}
+                <div class="attention-row attention-row--skeleton" aria-hidden="true">
+                  <span class="skeleton attention-skeleton"></span>
+                </div>
+              {/if}
+            {/snippet}
+          </SourceWindowList>
+        </div>
+      </section>
+    {/if}
+
+    {#if staleWindow.error}
+      <p class="notice notice--error">
+        {t('attention.staleFailed', { error: staleWindow.error })}
+        <button class="btn btn--ghost btn--sm" onclick={retry}>{t('common.retry')}</button>
+      </p>
+    {/if}
+    {#if staleCount > 0}
+      <section class="section">
+        <div class="section-head">
+          <h2>{t('attention.staleSteps')}</h2>
+          <span class="count">{n(staleCount)}</span>
+        </div>
+        <div class="attention-list">
+          <SourceWindowList
+            count={staleWindow.count}
+            rowHeight={48}
+            itemAt={(index) => staleWindow.itemAt(index)}
+            ensure={(start, end) => void staleWindow.ensure(start, end)}
+            epoch={staleWindow.epoch}
+          >
+            {#snippet row(source: Source | undefined)}
+              {#if source}
+                {@const live = sources.progress[source.hash]}
+                <button class="attention-row" onclick={() => navigate(sourcePath(source.hash))}>
+                  <SourceIcon kind={source.kind} hash={source.hash} size={16} />
+                  <span class="attention-main">
+                    <span class="attention-title">{source.title || source.hash.slice(0, 12)}</span>
+                    <span class="attention-sub">{statusLabel(source, live)}</span>
+                  </span>
+                  <span class="chip chip--warn">{t('attention.staleChip')}</span>
                   <Icon name="chevronRight" size={14} />
                 </button>
               {:else}
