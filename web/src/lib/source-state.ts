@@ -1,5 +1,5 @@
-import type { Pipeline, Source, StepName, StepState, StepStatus } from './api/types';
-import { t, tn } from './i18n/index.svelte';
+import type { Pipeline, Repair, Source, StepName, StepState, StepStatus } from './api/types';
+import { n, t, tn } from './i18n/index.svelte';
 
 /** The four steps, in order. The first three are document steps (one source); cluster runs over the
  *  whole vault and only while no document step runs. */
@@ -272,8 +272,36 @@ export function totalsLabel(source: Source, live?: LiveProgress): string {
 }
 
 /** pipelineLabel names what the application is doing right now, globally. */
+/** repairPhaseLabel names the index rebuild's current phase. */
+export function repairPhaseLabel(phase?: string): string {
+  switch (phase) {
+    case 'sources':
+      return t('status.repairSources');
+    case 'steps':
+      return t('status.repairSteps');
+    case 'claims':
+      return t('status.repairClaims');
+    case 'clusters':
+      return t('status.repairClusters');
+    default:
+      return t('status.repairChecking');
+  }
+}
+
+/** repairLabel is the sentence the top bar and Start show while the index is rebuilt: the vault is
+ *  read-only then, and that is not a detail the reader should have to open a page to learn. */
+export function repairLabel(repair: Repair): string {
+  const phase = repairPhaseLabel(repair.phase);
+  if (repair.total > 0) {
+    return t('sources.pipeline.rebuilding', { phase, done: n(repair.done), total: n(repair.total) });
+  }
+  return t('sources.pipeline.rebuildingNoCount', { phase });
+}
+
 export function pipelineLabel(pipeline: Pipeline | null): string {
   if (!pipeline) return '';
+  // A rebuild outranks every step: while it runs, nothing is written at all.
+  if (pipeline.repair?.active) return repairLabel(pipeline.repair);
   const running = pipeline.running ?? {};
   const queued = pipeline.queued ?? {};
   const sum = (map: Record<string, number>, ...steps: StepName[]): number =>

@@ -14,7 +14,7 @@
   import { navigate, router, sourcePath } from '../../lib/router.svelte';
   import { sources } from '../../lib/stores/sources.svelte';
   import { system } from '../../lib/stores/system.svelte';
-  import { jobStepLabel } from '../../lib/source-state';
+  import { jobStepLabel, repairPhaseLabel } from '../../lib/source-state';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
 
@@ -28,20 +28,6 @@
     repair && repair.total > 0 ? Math.min(100, Math.round((repair.done / repair.total) * 100)) : 0,
   );
 
-  function repairPhase(phase?: string): string {
-    switch (phase) {
-      case 'sources':
-        return t('status.repairSources');
-      case 'steps':
-        return t('status.repairSteps');
-      case 'claims':
-        return t('status.repairClaims');
-      case 'clusters':
-        return t('status.repairClusters');
-      default:
-        return t('status.repairChecking');
-    }
-  }
 
   let clock = $state(Date.now());
 
@@ -193,7 +179,7 @@
         <div class="repair-head">
           <Icon name="refresh" size={14} />
           <b>{t('status.repairTitle')}</b>
-          <span class="muted small">{repairPhase(repair?.phase)}</span>
+          <span class="muted small">{repairPhaseLabel(repair?.phase)}</span>
           <span class="grow"></span>
           {#if repair && repair.total > 0}
             <span class="repair-count">{n(repair.done)} / {n(repair.total)}</span>

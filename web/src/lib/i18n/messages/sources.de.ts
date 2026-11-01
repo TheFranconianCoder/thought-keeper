@@ -115,6 +115,8 @@ export const sourcesDe: Record<string, string> = {
   'sources.pipeline.clusterWaiting': 'Cluster-Durchlauf wartet auf die Dokumente',
   'sources.pipeline.queued': '{count} in der Warteschlange',
   'sources.pipeline.asking': 'fragt…',
+  'sources.pipeline.rebuilding': 'Index wird neu gebaut · {phase} · {done}/{total}',
+  'sources.pipeline.rebuildingNoCount': 'Index wird neu gebaut · {phase}',
   'sources.job.capture': 'erfassen',
   'sources.job.outline': 'gliedern',
   'sources.job.distill': 'destillieren',
