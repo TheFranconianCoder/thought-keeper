@@ -373,20 +373,22 @@
   <div class="page page--wide source-page">
     {#if sources.detailError}
       <p class="notice notice--error">{sources.detailError}</p>
-      <button
-        class="btn btn--primary btn--action"
-        title={t('common.retry')}
-        onclick={() => void sources.refresh(hash)}
-      >
-        <Icon name="refresh" size={14} /> <span class="btn-label">{t('common.retry')}</span>
-      </button>
-      <button
-        class="btn btn--secondary btn--action"
-        title={t('source.backToSources')}
-        onclick={backToSources}
-      >
-        <Icon name="arrowLeft" size={14} /> <span class="btn-label">{t('source.backToSources')}</span>
-      </button>
+      <div class="source-error-actions">
+        <button
+          class="btn btn--primary btn--sm btn--action"
+          title={t('common.retry')}
+          onclick={() => void sources.refresh(hash)}
+        >
+          <Icon name="refresh" size={13} /> <span class="btn-label">{t('common.retry')}</span>
+        </button>
+        <button
+          class="btn btn--secondary btn--sm btn--action"
+          title={t('source.backToSources')}
+          onclick={backToSources}
+        >
+          <Icon name="arrowLeft" size={13} /> <span class="btn-label">{t('source.backToSources')}</span>
+        </button>
+      </div>
     {:else if selected}
       <header class="source-head">
         <button
@@ -1181,6 +1183,17 @@
     flex: none;
   }
 
+  /* A source that could not be read has no head to carry its actions, so the notice keeps the
+     place and the actions sit under it, aligned like every other page's. */
+  .source-error-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
   .source-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 280px;
@@ -1572,6 +1585,10 @@
       flex-wrap: wrap;
       justify-content: flex-start;
       margin-top: 2px;
+    }
+
+    .source-error-actions {
+      justify-content: flex-start;
     }
   }
 
