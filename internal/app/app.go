@@ -170,7 +170,12 @@ type App struct {
 	distillQueue    chan runJob
 	queryQueue      chan runJob
 	lintQueue       chan runJob
-	urlQueue        chan urlJob
+	urlQueue chan urlJob
+	// urlPending is the set of sources whose page fetch is queued or in flight. The pipeline must not
+	// outline or distill such a source: its snapshot is about to be replaced, and a derivation built
+	// on the copy that is leaving is wrong the moment the page arrives.
+	urlPendingMu sync.Mutex
+	urlPending   map[string]bool
 	// pumpWake is the coalesced request for a pipeline pass. A wiki page that queues 150 links would
 	// otherwise ask for 150 passes, and a pass walks every source: that is what made one save take
 	// minutes (and made it quadratic in the size of the vault).
@@ -369,6 +374,7 @@ func New(opts Options) (*App, error) {
 		// names are worth a pass, and a seven-minute model call at minute one is not a good morning.
 		vocabLast:        time.Now(),
 		urlQueue:         make(chan urlJob, 4096),
+		urlPending:       make(map[string]bool),
 		pumpWake:         make(chan string, 1),
 		hub:              stream.NewHub(),
 		retries:          make(map[string]int),
@@ -564,6 +570,11 @@ func (a *App) stepBarrierAllows(step entities.Step) bool {
 		if len(known) > 0 && !known[hash] {
 			continue // a sidecar without its source is stale, not a barrier
 		}
+		if a.urlFetchPending(hash) {
+			// Its page fetch is queued or in flight: its snapshot is about to be replaced, so it is
+			// not a barrier. The others go on; this source is derived when the fetch ends.
+			continue
+		}
 		for _, prior := range entities.PipelineSteps {
 			if prior == step {
 				break
@@ -724,6 +735,11 @@ func (a *App) pumpOnce(reason string) {
 			if len(known) > 0 && !known[hash] {
 				continue
 			}
+			if a.urlFetchPending(hash) {
+				// Its snapshot is about to be replaced. It does not hold the barrier: the sources
+				// whose bytes are final go on, and this one is queued again when its fetch ends.
+				continue
+			}
 			if !a.stepComplete(hash, rec, step) {
 				all = false
 				break
@@ -744,6 +760,9 @@ func (a *App) pumpOnce(reason string) {
 		for hash, rec := range records {
 			if len(known) > 0 && !known[hash] {
 				continue
+			}
+			if a.urlFetchPending(hash) {
+				continue // its snapshot is about to be replaced — no document step on it yet
 			}
 			if a.stepComplete(hash, rec, step) {
 				continue
@@ -3118,12 +3137,10 @@ func (a *App) ScheduleURLs(urls []string) (int, error) {
 			continue
 		}
 		seen[u] = true
-		select {
-		case a.urlQueue <- urlJob{URL: u}:
-			accepted++
-		default:
+		if !a.enqueueURL(urlJob{URL: u}) {
 			return accepted, types.New("conflict", "url queue is full", types.ErrConflict)
 		}
+		accepted++
 	}
 	if accepted > 0 && a.log != nil {
 		a.log.Info("url batch queued", "urls", accepted)
@@ -3157,9 +3174,7 @@ func (a *App) ScheduleSitemapURLs(parentHash string, urls []string) {
 		}
 		a.publish("source", map[string]any{"hash": parentHash, "links": len(queued)})
 		for _, raw := range queued {
-			select {
-			case a.urlQueue <- urlJob{URL: raw, Origin: entities.SitemapOrigin, ParentHash: parentHash}:
-			case <-a.quit:
+			if !a.enqueueURL(urlJob{URL: raw, Origin: entities.SitemapOrigin, ParentHash: parentHash}) {
 				return
 			}
 		}
@@ -3187,9 +3202,7 @@ func (a *App) ScheduleFeedURLs(parentHash string, urls []string) {
 		}
 		a.publish("source", map[string]any{"hash": parentHash, "links": len(urls)})
 		for _, raw := range urls {
-			select {
-			case a.urlQueue <- urlJob{URL: raw, Origin: entities.RSSOrigin, ParentHash: parentHash}:
-			case <-a.quit:
+			if !a.enqueueURL(urlJob{URL: raw, Origin: entities.RSSOrigin, ParentHash: parentHash}) {
 				return
 			}
 		}
@@ -3222,9 +3235,7 @@ func (a *App) ScheduleWikiURLs(pageID string, urls []string) {
 		// brought, and the light says what happened to each of them.
 		a.publish("source", map[string]any{"page": pageID, "links": len(queued)})
 		for _, raw := range queued {
-			select {
-			case a.urlQueue <- urlJob{URL: raw, Origin: entities.WikiLinkOrigin, WikiPage: pageID}:
-			default:
+			if !a.enqueueURL(urlJob{URL: raw, Origin: entities.WikiLinkOrigin, WikiPage: pageID}) {
 				a.log.Warn("url queue is full: the link was not fetched", "url", raw, "page", pageID)
 			}
 		}
@@ -3330,69 +3341,109 @@ func (a *App) urlWorker() {
 		case <-a.quit:
 			return
 		case job := <-a.urlQueue:
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			// A URL fetch writes a source object and its row: shared gate, so it may run beside a
-			// document step but never beside the cluster pass.
-			a.gate.RLock()
-			// A dependent link can outlive its owner in the queue (the owner was deleted while the
-			// fetch was still owed). Do not resurrect it as an independent source: the owner and the
-			// claimed row are both gone, so the job is over. The check sits inside the shared gate:
-			// deletion takes the exclusive side and cannot slip between it and the fetch.
-			var child entities.Source
-			if job.Origin != "" {
-				var childErr error
-				child, childErr = a.addURL.Index.GetSourceByHash(ctx, entities.URLHash(job.URL))
-				var parentErr error
-				if job.ParentHash != "" {
-					_, parentErr = a.addURL.Index.GetSourceByHash(ctx, job.ParentHash)
-				}
-				if childErr != nil || parentErr != nil {
-					a.gate.RUnlock()
-					cancel()
-					continue
-				}
-			}
-			// A page that a feed supplied as a copy is checked THROUGH THE REFRESH PATH: the page is
-			// tried, the copy is kept when the page is walled/unreadable/less rich, and a page that
-			// wins reports the reset the app must run. AddURL is for a page that has no copy yet.
-			if job.Origin == entities.RSSOrigin && child.FromFeed {
-				res, rErr := a.refreshURLs.RefreshOne(ctx, entities.URLHash(job.URL))
-				a.gate.RUnlock()
-				cancel()
-				if rErr != nil {
-					a.log.Warn("feed page: refresh failed", "url", job.URL, "err", rErr)
-					a.publish("source", map[string]any{"hash": child.Hash})
-					continue
-				}
-				a.applyRefreshResult(res, child.Hash)
-				continue
-			}
-			// The human's own addition WINS over a wiki/sitemap/feed claim (job.Origin is empty for
-			// both the single add and a pasted batch). A job with an owner stays a sub-source.
-			fetch := a.addURL.Add
-			if job.Origin == "" {
-				fetch = a.addURL.AddManual
-			}
-			src, err := fetch(ctx, job.URL, false)
+			a.handleURLJob(job)
+		}
+	}
+}
+
+// enqueueURL queues one URL fetch and marks its source as "snapshot in flight". The pipeline must not
+// outline or distill a source whose page is about to be replaced: a derivation built on the copy that
+// is leaving is wrong the moment the page arrives. The worker clears the mark when the fetch is over,
+// whatever the outcome, and the source becomes eligible again.
+func (a *App) enqueueURL(job urlJob) bool {
+	hash := entities.URLHash(job.URL)
+	a.urlPendingMu.Lock()
+	a.urlPending[hash] = true
+	a.urlPendingMu.Unlock()
+	select {
+	case a.urlQueue <- job:
+		return true
+	case <-a.quit:
+		a.clearURLPending(hash)
+		return false
+	}
+}
+
+func (a *App) clearURLPending(hash string) {
+	a.urlPendingMu.Lock()
+	delete(a.urlPending, hash)
+	a.urlPendingMu.Unlock()
+}
+
+// urlFetchPending reports whether this source's snapshot is about to be replaced. Such a source is not
+// eligible for a document step, and it does not hold the pipeline barrier: the others go on.
+func (a *App) urlFetchPending(hash string) bool {
+	a.urlPendingMu.Lock()
+	defer a.urlPendingMu.Unlock()
+	return a.urlPending[hash]
+}
+
+// handleURLJob runs one queued fetch and always releases the source's "snapshot in flight" mark.
+func (a *App) handleURLJob(job urlJob) {
+	defer a.clearURLPending(entities.URLHash(job.URL))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	// A URL fetch writes a source object and its row: shared gate, so it may run beside a document
+	// step but never beside the cluster pass.
+	a.gate.RLock()
+	// A dependent link can outlive its owner in the queue (the owner was deleted while the fetch was
+	// still owed). Do not resurrect it as an independent source: the owner and the claimed row are
+	// both gone, so the job is over. The check sits inside the shared gate: deletion takes the
+	// exclusive side and cannot slip between it and the fetch.
+	var child entities.Source
+	if job.Origin != "" {
+		var childErr error
+		child, childErr = a.addURL.Index.GetSourceByHash(ctx, entities.URLHash(job.URL))
+		var parentErr error
+		if job.ParentHash != "" {
+			_, parentErr = a.addURL.Index.GetSourceByHash(ctx, job.ParentHash)
+		}
+		if childErr != nil || parentErr != nil {
 			a.gate.RUnlock()
 			cancel()
-			if err != nil {
-				a.reportLinkFailure(job, err)
-				continue
-			}
-			a.log.Info("url added", "url", job.URL, "hash", src.Hash)
-			if len(src.SitemapURLs) > 0 {
-				a.ScheduleSitemapURLs(src.Hash, src.SitemapURLs)
-			}
-			if len(src.RSSURLs) > 0 {
-				a.ScheduleFeedURLs(src.Hash, src.RSSURLs)
-			}
-			if src.NeedsReset {
-				a.ScheduleSourceReset(src.Hash, "the page replaced the stored snapshot — the derivation was rebuilt")
-			} else {
-				a.onAdded(src.Hash)
-			}
+			return
 		}
+	}
+	// A page that a feed supplied as a copy is checked THROUGH THE REFRESH PATH: the page is tried,
+	// the copy is kept when the page is walled/unreadable/less rich, and a page that wins reports the
+	// reset the app must run. AddURL is for a page that has no copy yet.
+	if job.Origin == entities.RSSOrigin && child.FromFeed {
+		res, rErr := a.refreshURLs.RefreshOne(ctx, entities.URLHash(job.URL))
+		a.gate.RUnlock()
+		cancel()
+		if rErr != nil {
+			a.log.Warn("feed page: refresh failed", "url", job.URL, "err", rErr)
+			a.publish("source", map[string]any{"hash": child.Hash})
+			a.pumpPipeline("feed page failed")
+			return
+		}
+		a.applyRefreshResult(res, child.Hash)
+		return
+	}
+	// The human's own addition WINS over a wiki/sitemap/feed claim (job.Origin is empty for both the
+	// single add and a pasted batch). A job with an owner stays a sub-source.
+	fetch := a.addURL.Add
+	if job.Origin == "" {
+		fetch = a.addURL.AddManual
+	}
+	src, err := fetch(ctx, job.URL, false)
+	a.gate.RUnlock()
+	cancel()
+	if err != nil {
+		a.reportLinkFailure(job, err)
+		a.pumpPipeline("url intake failed")
+		return
+	}
+	a.log.Info("url added", "url", job.URL, "hash", src.Hash)
+	if len(src.SitemapURLs) > 0 {
+		a.ScheduleSitemapURLs(src.Hash, src.SitemapURLs)
+	}
+	if len(src.RSSURLs) > 0 {
+		a.ScheduleFeedURLs(src.Hash, src.RSSURLs)
+	}
+	if src.NeedsReset {
+		a.ScheduleSourceReset(src.Hash, "the page replaced the stored snapshot — the derivation was rebuilt")
+	} else {
+		a.onAdded(src.Hash)
 	}
 }
 
@@ -3575,9 +3626,7 @@ func (a *App) ScheduleDiscoveredChildren(children []usecases.DiscoveredChildren)
 	}
 	for _, group := range children {
 		for _, raw := range group.URLs {
-			select {
-			case a.urlQueue <- urlJob{URL: raw, Origin: group.Origin, ParentHash: group.ParentHash}:
-			case <-a.quit:
+			if !a.enqueueURL(urlJob{URL: raw, Origin: group.Origin, ParentHash: group.ParentHash}) {
 				return
 			}
 		}

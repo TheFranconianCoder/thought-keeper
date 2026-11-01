@@ -58,6 +58,37 @@ func TestFeedAndSitemapAreNeverTheBarrier(t *testing.T) {
 	}
 }
 
+// TestAPendingPageFetchIsNotTheBarrier: a source whose page is being fetched is not derived yet and
+// must not hold the vault. A derivation built on the copy that is leaving would be wrong the moment
+// the page arrives, so the source waits — alone.
+func TestAPendingPageFetchIsNotTheBarrier(t *testing.T) {
+	ok := entities.StepStatus{State: entities.StepOK}
+	pending := entities.StepStatus{State: entities.StepPending}
+	recs := barrierSteps{
+		"a.pdf": {
+			Identity: entities.SourceIdentity{Kind: entities.SourceKindPDF},
+			Steps:    entities.NewStepSet().With(entities.StepCapture, ok).With(entities.StepOutline, ok).With(entities.StepDistill, ok),
+		},
+		"b.pdf": {
+			Identity: entities.SourceIdentity{Kind: entities.SourceKindPDF},
+			Steps:    entities.NewStepSet().With(entities.StepCapture, pending),
+		},
+	}
+	a := &App{steps: recs, urlPending: map[string]bool{"b.pdf": true}}
+
+	for _, step := range []entities.Step{entities.StepOutline, entities.StepDistill, entities.StepCluster} {
+		if !a.stepBarrierAllows(step) {
+			t.Errorf("%s must not wait for a source whose page is being fetched", step)
+		}
+	}
+
+	// Once the fetch is over, the source is derived again and the barrier is real.
+	a.clearURLPending("b.pdf")
+	if a.stepBarrierAllows(entities.StepOutline) {
+		t.Error("outline must wait for a source whose page fetch is over and its capture is not done")
+	}
+}
+
 // TestGlobalStepBarrier: a later step is allowed only when EVERY source has completed every
 // earlier document step. A single source behind blocks outline, distill and compile together.
 func TestGlobalStepBarrier(t *testing.T) {

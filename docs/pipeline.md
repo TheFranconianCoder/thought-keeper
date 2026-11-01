@@ -248,6 +248,12 @@ different sources at the same time — but only up to the **global step**: `capt
 (or skipped) for every source before any outline starts; every outline before any distill; every
 distill before `cluster`.
 
+**A source whose page fetch is queued or in flight is not derived.** Its snapshot is about to be
+replaced (a feed copy becomes the page, a refetch writes new bytes), and an outline built on the copy
+that is leaving points into text the page no longer has. The source is skipped by the pump and does
+not hold the barrier for the others; the worker clears the mark when the fetch ends — the page
+arrived, was walled, or failed — and the source is derived from whatever the snapshot is then.
+
 ## 4. Status: four lights and two bars
 
 Each source carries the state of the four steps as a traffic light:
