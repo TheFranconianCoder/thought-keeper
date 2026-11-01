@@ -11,6 +11,7 @@ export const statusEn: Record<string, string> = {
   // The index rebuild: it runs before the vault accepts writes.
   'status.repairTitle': 'Rebuilding the index',
   'status.repairChecking': 'checking the vault',
+  'status.repairSearch': 'search index',
   'status.repairSources': 'sources',
   'status.repairSteps': 'step records',
   'status.repairClaims': 'claims',

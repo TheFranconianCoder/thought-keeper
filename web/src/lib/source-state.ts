@@ -275,6 +275,8 @@ export function totalsLabel(source: Source, live?: LiveProgress): string {
 /** repairPhaseLabel names the index rebuild's current phase. */
 export function repairPhaseLabel(phase?: string): string {
   switch (phase) {
+    case 'search':
+      return t('status.repairSearch');
     case 'sources':
       return t('status.repairSources');
     case 'steps':

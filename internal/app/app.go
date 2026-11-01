@@ -399,7 +399,10 @@ func New(opts Options) (*App, error) {
 		}
 	}
 
-	a.fts5 = persistence.EnsureFTS(db, a.log)
+	// The CAPABILITY is a quick probe. Installing the FTS triggers and (when needed) rebuilding the
+	// search index is vault work: it runs in the start's read-only repair window, after the API is
+	// up, so a big rebuild never delays the first request.
+	a.fts5 = persistence.HasFTS5(db)
 	a.pdfOK = a.runner.Available(cfg.PDF.TextTool)
 	a.ocrOK = a.runner.Available(cfg.OCR.Rasterizer) && a.runner.Available(cfg.OCR.Tesseract)
 
@@ -3671,6 +3674,15 @@ func (a *App) startupRepair() {
 		a.log.Info("startup: closed runs a previous process left running", "runs", n)
 	}
 
+	// The search index is part of the index this pass repairs. It is installed here, not in New: the
+	// server is already up, writes are refused, and the reader sees "search index" instead of a dead
+	// app while a 238k-claim rebuild runs.
+	a.RepairProgress("search", 0, 0)
+	if a.db != nil && !persistence.EnsureFTS(a.db, a.log) {
+		a.log.Warn("startup: the FTS index could not be installed — search may be degraded")
+	}
+
+	a.RepairProgress("", 0, 0) // the consistency check has no count to report
 	a.log.Info("startup: checking vault consistency")
 	started := time.Now()
 	needsRepair, reason, checkErr := a.reindex.NeedsRepair(context.Background())

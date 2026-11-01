@@ -11,6 +11,7 @@ export const statusDe: Record<string, string> = {
   // Der Neuaufbau des Index: er läuft, bevor der Tresor Schreibzugriffe annimmt.
   'status.repairTitle': 'Der Index wird neu gebaut',
   'status.repairChecking': 'Tresor wird geprüft',
+  'status.repairSearch': 'Suchindex',
   'status.repairSources': 'Quellen',
   'status.repairSteps': 'Schrittaufzeichnungen',
   'status.repairClaims': 'Aussagen',
