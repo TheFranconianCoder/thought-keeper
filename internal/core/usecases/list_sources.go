@@ -16,6 +16,7 @@ import (
 // content, and the delete that cascades into everything derived from a source.
 type Sources struct {
 	Store        interfaces.SourceStore
+	Pages        interfaces.WikiStore
 	Index        interfaces.IndexRepository
 	Atoms        interfaces.AtomRepository
 	AtomStore    interfaces.AtomStore
@@ -140,6 +141,12 @@ func (uc Sources) Get(ctx context.Context, hash string) (partialentities.Partial
 	// A wiki page's children are recorded under the PAGE id, not under the representation's hash.
 	if n, cErr := uc.Index.CountSourceChildren(ctx, src.Hash, entities.WikiIDFromOriginalName(src.OriginalName)); cErr == nil {
 		out.Children = n
+	}
+	// A list declares more than it OWNS: a URL another owner brought in first stays with that owner.
+	// The number keeps the two apart (24 declared, 15 owned) instead of making the difference look
+	// like a missing article.
+	if src.OwnsChildren() {
+		out.Declared = len(declaredURLs(uc.Store, src))
 	}
 	return out, nil
 }

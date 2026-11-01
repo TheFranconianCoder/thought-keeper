@@ -452,7 +452,9 @@
                     {#if source.bookmark}<span class="tag">{t('sources.tagLink')}</span>{/if}
                     {#if source.sitemap}<span class="tag">{t('sources.tagSitemap')}</span>{/if}
                     {#if source.rss}<span class="tag">{t('sources.tagFeed')}</span>{/if}
+                    {#if source.listing}<span class="tag">{t('sources.tagListing')}</span>{/if}
                     {#if source.origin === 'sitemap'}<span class="tag">{t('sources.tagSitemapPage')}</span>{/if}
+                    {#if source.origin === 'listing'}<span class="tag">{t('sources.tagListingArticle')}</span>{/if}
                     {#if source.origin === 'rss'}
                       <span class="tag tag--wide">{t('sources.tagFeedItem')}</span>
                       <span class="tag tag--narrow" title={t('sources.tagFeedItem')}>{t('sources.tagFeedItemShort')}</span>

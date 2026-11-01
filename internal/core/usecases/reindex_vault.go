@@ -649,6 +649,7 @@ func (uc Maintenance) sources(ctx context.Context, records map[string]entities.S
 			ParentHash:   identity.ParentHash,
 			Sitemap:      identity.Sitemap,
 			RSS:          identity.RSS,
+			Listing:      identity.Listing,
 			FromFeed:     identity.FromFeed,
 			FeedHash:     identity.FeedHash,
 			Tags:         record.Tags,
@@ -727,7 +728,7 @@ func (uc Maintenance) sources(ctx context.Context, records map[string]entities.S
 			}), entities.Source{
 				Language: rec.Identity.Language, Origin: rec.Identity.Origin,
 				WikiPage: rec.Identity.WikiPage, ParentHash: rec.Identity.ParentHash,
-				Sitemap: rec.Identity.Sitemap, RSS: rec.Identity.RSS,
+				Sitemap: rec.Identity.Sitemap, RSS: rec.Identity.RSS, Listing: rec.Identity.Listing,
 				FromFeed: rec.Identity.FromFeed, FeedHash: rec.Identity.FeedHash,
 			})
 			if err := uc.Index.SetSourceMeta(ctx, o.Hash, meta); err != nil {
@@ -763,6 +764,7 @@ func (uc Maintenance) sources(ctx context.Context, records map[string]entities.S
 			Origin: rec.Identity.Origin, WikiPage: rec.Identity.WikiPage,
 			ParentHash: rec.Identity.ParentHash, Sitemap: rec.Identity.Sitemap,
 			RSS:       rec.Identity.RSS,
+			Listing:   rec.Identity.Listing,
 			FromFeed:  rec.Identity.FromFeed,
 			FeedHash:  rec.Identity.FeedHash,
 			TreeState: entities.TreeNone, ImportedAt: uc.Clock.Now(), Meta: "{}",

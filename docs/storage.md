@@ -131,11 +131,18 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
     readable once **keeps its snapshot** when a later fetch is walled or yields no readable text. The
     wall describes the last fetch (a fact of the index metadata, re-derived by the next refresh), not
     the source's identity.
-- **A sitemap and a feed are PARENTS, not pages.** Their snapshot is the list they declared (`sitemap:
-  true` / `rss: true`); their children are ordinary URL sources with `origin: sitemap|rss` and
-  `parent_hash`. A sitemap is a complete list (a refresh reconciles it 1:1 and deletes what left); a
-  feed is a window on the newest items (a refresh only adds — a page that left it stays until the feed
-  is deleted).
+- **A sitemap, a feed and a listing are PARENTS, not pages.** Their snapshot is the list they declared
+  (`sitemap: true` / `rss: true` / `listing: true`); their children are ordinary URL sources with
+  `origin: sitemap|rss|listing` and `parent_hash`. A sitemap is a complete list (a refresh reconciles
+  it 1:1 and deletes what left); a feed and a listing are windows on the newest items (a refresh only
+  adds — a page that left them stays until the owner is deleted).
+- **A listing's snapshot is rendered, never extracted.** Readability throws a card grid away (a blog
+  index can come back as 200 characters and no links), so the listing's body is written from the
+  cards: frontmatter `listing: true`, then one `- [title](url) — date` line per article. The article
+  title comes from the card's own label (aria-label), then its heading, then the text with a leading
+  date removed; the page's title replaces it after its own capture. The snapshot is rewritten after
+  every page of the INITIAL walk, and a refresh merges page 1 into the articles the listing already
+  declared — the archive is never lost to a check.
 - **A feed may carry the post itself.** When an item has usable content (`content:encoded`, Atom
   `content`, or a description long enough), that copy becomes the page's **provisional** snapshot:
   frontmatter `from_feed: true`, `feed`, `feed_hash`, `captured_at` (no `fetched_at`/`http_status` —
@@ -144,9 +151,9 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
   queued immediately; a readable page that carries at least as much text replaces the copy and clears
   the marker (a changed text resets the derivation), a page that is walled, fails or carries less
   text leaves the copy. The same rule applies on the weekly pass.
-- **Ownership can be released.** A URL the human adds by hand wins over the page/sitemap/feed that
-  claimed it first: the record's `origin`, `wiki_page` and `parent_hash` are cleared, the source stays
-  as it is, and the owner's next reconciliation no longer touches it.
+- **Ownership can be released.** A URL the human adds by hand wins over the page/sitemap/feed/listing
+  that claimed it first: the record's `origin`, `wiki_page` and `parent_hash` are cleared, the source
+  stays as it is, and the owner's next reconciliation no longer touches it.
 - **The human may attach the page.** `POST /api/v1/sources/{hash}/attach` (or
   `thought-keeper attach --url URL --file FILE`) converts a saved `.html`, `.pdf`, `.md` or `.txt`
   into a URL source's snapshot at the same address (readability, poppler/OCR, or the text as it is)
@@ -320,7 +327,8 @@ Channels connect goroutines.
   runs is declared again and its source stays, and a save whose cleanup was lost is healed by the next
   one. A URL collected independently is left alone. The wiki page source itself is re-derived;
   existing URL sources are not re-interpreted. The snapshot-stable keys (`language`, `origin`,
-  `wiki_page`, `parent_hash`, `sitemap`, favicon references, `content_hash`, `attached`) survive
+  `wiki_page`, `parent_hash`, `sitemap`, `rss`, `listing`, favicon references, `content_hash`,
+  `attached`) survive
   every meta write — a snapshot rebuild must never un-own a link or turn a human's attached article
   back into a page the next refresh may overwrite. They are carried forward by the writer (the
   snapshot JSON is merged into the row's meta, never rebuilt from scratch), and the consistency job
@@ -330,10 +338,27 @@ Channels connect goroutines.
   `sitemap: true`. New URLs become ordinary source rows claimed with `origin: sitemap` and
   `parent_hash: <sitemap hash>`, then fetch in the background. A child sitemap expands the same way;
   ownership forms a tree.
-- **A dependent source cannot be deleted on its own.** A source with an `origin` (wiki or sitemap)
-  is refused by `DELETE /api/v1/sources/{hash}` with `dependent_source`; its owner decides. Deleting
-  the owner removes the whole subtree: a sitemap cascades through its pages and child sitemaps, and
-  a wiki page removes the links it brought in (unless another page still lists them).
+- **A listing is a page that owns the articles it declares.** A blog index or a newsletter archive is
+  recognised by its repeated article-shaped cards, but only the READER turns it into an owner: the
+  page is stored as a normal source, the answer carries how many cards were found, and a second add
+  with `listing: true` writes `listing: true` into the record and claims the articles with
+  `origin: listing` and `parent_hash: <listing hash>`. Its pagination is walked once, on capture.
+- **A dependent source cannot be deleted on its own.** A source with an `origin` (wiki, sitemap, feed
+  or listing) is refused by `DELETE /api/v1/sources/{hash}` with `dependent_source`; its owner
+  decides. Deleting the owner removes the whole subtree: a sitemap cascades through its pages and
+  child sitemaps, a listing through its articles, and a wiki page removes the links it brought in —
+  **unless another owner still declares the URL.** Then the source is **re-homed** instead of
+  deleted: its bytes, claims, outline and log stay, and only its record's owner changes (a page that
+  linked it, a listing or feed that still lists it, a sitemap that still declares it). Ownership is
+  the last owner standing. The declarations are read once per delete action from the list snapshots
+  (`- [title](url)` lines) and the wiki pages' prose; a tie is broken sitemap → feed → listing →
+  wiki page, because a complete list is the stronger claim. A source that a human released (no
+  owner) is never touched by a cascade.
+- **A list DECLARES more than it OWNS.** A URL another owner brought in first stays with that owner,
+  so a listing that lists 24 articles may own 15. Both numbers are kept apart: the snapshot is the
+  declaration, `parent_hash` is the ownership. The single-source read reports `declared` next to
+  `children`, and the rail shows `24 declared · 15 here · 9 elsewhere` — the difference is ownership,
+  not a missing article. Deleting the other owner moves those 9 here.
 - **Wiki pages are a lens, not a cluster.** The sidebar has **Wiki** below **Claims**. Clusters stay
   titleless and are never listed.
 

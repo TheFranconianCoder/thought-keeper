@@ -13,6 +13,7 @@ export const sourceDe: Record<string, string> = {
   'source.reset': 'Zurücksetzen',
   'source.feed': 'Feed',
   'source.sitemap': 'Sitemap',
+  'source.listing': 'Übersicht',
   'source.pages.one': '{count} Seite',
   'source.pages.many': '{count} Seiten',
   'source.chapters.one': '{count} Kapitel',
@@ -21,7 +22,6 @@ export const sourceDe: Record<string, string> = {
   // Tabs.
   'source.viewAria': 'Quellenansicht',
   'source.tabSnapshot': 'Momentaufnahme',
-  'source.tabLive': 'Live',
   'source.tabText': 'Text',
   'source.tabContent': 'Inhalt',
   'source.tabSummary': 'Zusammenfassung',
@@ -64,7 +64,6 @@ export const sourceDe: Record<string, string> = {
   // Tabs „Protokoll“, „Live“ und PDF.
   'source.logShowingLast': 'Die letzten {size} von {total} werden angezeigt.',
   'source.noLog': 'Keine Protokolleinträge.',
-  'source.liveTitle': 'Live-Seite',
   'source.loadingPdf': 'Das PDF wird geladen…',
 
   // Ein Teil und die Gliederung.
@@ -94,6 +93,8 @@ export const sourceDe: Record<string, string> = {
   'source.bookmarkPrint': 'drucke sie als PDF',
   'source.bookmarkTextEnd':
     '(oder kopiere den Text) und hänge sie hier an. Die URL bleibt die Adresse dieser Quelle.',
+  'source.bookmarkSnapshotNote':
+    'Das ist ein gesammelter Link — die App hat den Text der Seite nicht gelesen. Öffne sie im Browser:',
   'source.blocked':
     'Diese Seite konnte nicht gelesen werden. Öffne sie im Browser, speichere sie als HTML oder PDF (oder kopiere den Text) und hänge sie hier an. Die URL bleibt die Adresse dieser Quelle.',
   'source.blockedWithDetail':
@@ -127,6 +128,12 @@ export const sourceDe: Record<string, string> = {
   'source.partOfSitemap': 'Teil einer Sitemap',
   'source.copyLabel': 'Kopie',
   'source.sitemapOwns': 'besitzt die Seiten, die sie auflistet',
+  'source.listingOwns': 'besitzt die Artikel, die sie auflistet',
+  'source.declaredLabel': 'deklariert',
+  'source.declaredOwned': '{declared} deklariert · {owned} hier',
+  'source.declaredElsewhere': '{count} bei anderen',
+  'source.partOfListing': 'Teil einer Übersicht',
+  'source.ownerListing': 'ihre Übersicht',
   'source.feedOwns': 'besitzt die Seiten, auf die ihre Einträge zeigen',
   'source.copyFromFeed': 'aus ihrem Feed übernommen — die Seite hat sie nicht ersetzt',
   'source.openPage': 'die Seite öffnen',

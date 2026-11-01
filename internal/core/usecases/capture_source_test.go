@@ -119,6 +119,17 @@ func (f *fakeSteps) Release(hash string) error {
 	return nil
 }
 
+// SetOwnership mirrors a re-home: an empty value clears the recorded one.
+func (f *fakeSteps) SetOwnership(hash, origin, wikiPage, parentHash string) error {
+	if f.identities == nil {
+		f.identities = map[string]entities.SourceIdentity{}
+	}
+	id := f.identities[hash]
+	id.Origin, id.WikiPage, id.ParentHash = origin, wikiPage, parentHash
+	f.identities[hash] = id
+	return nil
+}
+
 func (f *fakeSteps) SetIdentity(hash string, id entities.SourceIdentity) error {
 	if f.identities == nil {
 		f.identities = map[string]entities.SourceIdentity{}

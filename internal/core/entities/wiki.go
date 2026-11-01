@@ -43,9 +43,15 @@ const SitemapOrigin = "sitemap"
 // that DISAPPEARS from the feed is kept: a feed is a window on the newest items, not a complete list.
 const RSSOrigin = "rss"
 
-// OwnsChildren reports whether a source is an OWNER: a sitemap or a feed owns the URL sources it
-// declared, and deleting it removes the whole subtree.
-func (s Source) OwnsChildren() bool { return s.Sitemap || s.RSS }
+// ListingOrigin is the Origin of a URL source that a LISTING brought into the vault: a blog index
+// or a newsletter archive whose cards point at articles. Its owner is the listing source named by
+// ParentHash; removal of the listing removes it too. Like a feed, a listing is a WINDOW: an article
+// that rotates out of its pagination is kept.
+const ListingOrigin = "listing"
+
+// OwnsChildren reports whether a source is an OWNER: a sitemap, a feed or a listing owns the URL
+// sources it declared, and deleting it removes the whole subtree.
+func (s Source) OwnsChildren() bool { return s.Sitemap || s.RSS || s.Listing }
 
 // ChildOrigin is the Origin its children carry.
 func (s Source) ChildOrigin() string {
@@ -54,6 +60,8 @@ func (s Source) ChildOrigin() string {
 		return SitemapOrigin
 	case s.RSS:
 		return RSSOrigin
+	case s.Listing:
+		return ListingOrigin
 	default:
 		return ""
 	}

@@ -386,18 +386,23 @@ func (uc Wiki) PruneLinks(ctx context.Context, pageID ulid.ULID, staleHash strin
 	if !ok {
 		return res, nil
 	}
+	hashes := make([]string, 0, len(candidates))
 	for _, child := range candidates {
 		if refs[entities.URLKey(child.URL)] {
 			continue
 		}
-		if _, err := uc.DeleteSource(ctx, child.Hash); err != nil {
-			if uc.Log != nil {
-				uc.Log.Warn("wiki: URL source not removed", "page", pageID.String(), "url", child.URL, "err", err)
-			}
-			continue
-		}
-		res.LinksRemoved++
+		hashes = append(hashes, child.Hash)
 	}
+	if len(hashes) == 0 {
+		return res, nil
+	}
+	// ONE delete scope: a link that another owner still declares (a listing, a feed) is re-homed
+	// instead of removed, and the declaration map is read once for the whole page.
+	removed, err := uc.DeleteSource(ctx, hashes...)
+	if err != nil && uc.Log != nil {
+		uc.Log.Warn("wiki: URL sources not removed", "page", pageID.String(), "err", err)
+	}
+	res.LinksRemoved = len(removed.Removed)
 	return res, nil
 }
 
@@ -420,6 +425,7 @@ func (uc Wiki) Delete(ctx context.Context, id ulid.ULID) (string, []string, erro
 	// A read error here is conservative: not knowing what other pages declare is a reason to leave
 	// their link sources alone, never to delete one.
 	refs, refsOK := otherPagesURLKeys(ctx, uc.Pages, page.ID)
+	hashes := make([]string, 0, len(children))
 	for _, child := range children {
 		if child.Origin != entities.WikiLinkOrigin {
 			continue
@@ -427,13 +433,16 @@ func (uc Wiki) Delete(ctx context.Context, id ulid.ULID) (string, []string, erro
 		if refsOK && refs[entities.URLKey(child.URL)] {
 			continue
 		}
-		if _, err := uc.DeleteSource(ctx, child.Hash); err != nil {
-			if uc.Log != nil {
-				uc.Log.Warn("wiki: URL source not removed with the page", "page", page.ID.String(), "url", child.URL, "err", err)
-			}
-			continue
+		hashes = append(hashes, child.Hash)
+	}
+	if len(hashes) > 0 {
+		// ONE delete scope: a link a listing, a feed or a sitemap still declares is re-homed to that
+		// owner and survives the page.
+		removed, err := uc.DeleteSource(ctx, hashes...)
+		if err != nil && uc.Log != nil {
+			uc.Log.Warn("wiki: URL sources not removed with the page", "page", page.ID.String(), "err", err)
 		}
-		removedURLs = append(removedURLs, child.Hash)
+		removedURLs = append(removedURLs, removed.Removed...)
 	}
 	if page.SourceHash != "" {
 		if _, err := uc.Index.GetSourceByHash(ctx, page.SourceHash); err == nil {

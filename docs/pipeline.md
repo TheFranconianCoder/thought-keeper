@@ -45,11 +45,27 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   a parent source whose snapshot is the **item list**, and every item's page is a URL source owned by
   the feed (`origin: rss`, `parent_hash`). Feed sources are marked `rss: true`; outline, distill and
   the association step are skipped for them.
-- **A feed or a sitemap is a LIST, not a document.** Its capture is the fetch that produced the list;
-  outline, distill and the association step do not apply and are recorded (and shown) `skipped` —
-  grey lights, never pending. The document pipeline never queues a step for a list: it has no parts
-  and no claims of its own. The source page offers **Refresh** in place of Capture/Outline/Distill/
-  Reset, and the API refuses a document run with `conflict`. Its children carry the prose.
+- **A page that lists articles is a listing.** A blog index or a newsletter archive has no feed: its
+  snapshot is the cards it renders. The app detects **repeated article-shaped links** (a title in a
+  heading, a date on the card, or a shared path prefix — never navigation, whose text is short and
+  whose links are scattered) and offers the page to the reader as a listing. Nothing is reclassified
+  silently: the page is stored as it was and the answer carries how many cards were found; confirming
+  it (`POST /api/v1/add` with `listing: true`) makes it an owner. The articles become URL sources
+  (`origin: listing`, `parent_hash`) and the listing's snapshot is the **rendered list** — readability
+  throws a card grid away, so a card grid is never distilled as prose.
+- **The initial capture walks the pagination; a refresh does not.** A listing is read page by page
+  (`rel="next"`, then a "load more"/"older" anchor whose address is a pager) up to
+  `capture.listing_max_pages` (default 100); each page's cards are claimed and fetched, and the
+  listing's snapshot is rewritten after every page. A refresh reads **page 1 only** — a blog index and
+  a newsletter archive are newest-first, so a new article is always there — and merges it into the
+  articles the listing already declares. A listing is a WINDOW like a feed: an article that rotates
+  out of the pagination is kept, and only deleting the listing removes its articles. There is no "load more" XHR and no infinite scroll: those would need a browser
+  (a locked non-goal).
+- **A feed, a sitemap or a listing is a LIST, not a document.** Its capture is the fetch that produced
+  the list; outline, distill and the association step do not apply and are recorded (and shown)
+  `skipped` — grey lights, never pending. The document pipeline never queues a step for a list: it has
+  no parts and no claims of its own. The source page offers **Refresh** in place of Capture/Outline/
+  Distill/Reset, and the API refuses a document run with `conflict`. Its children carry the prose.
 - **A feed that carries the post solves the JavaScript page.** Many feeds include the article itself
   (`content:encoded`, Atom `content`). The item's copy becomes the page's **provisional** snapshot —
   marked `from_feed` with the feed it came from — so the source is readable immediately. The page is
@@ -57,17 +73,21 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   empty, so the hourly pass retries it). A readable page that carries at least as much text replaces
   the copy and clears the marker; a page that is unreadable, walled, fails, or carries less text
   leaves the copy. The same rule applies on the weekly pass.
-- **A sitemap is complete; a feed is a window.** A refresh is a 1:1 reconciliation for a sitemap and
-  for a wiki page's links: a page that disappeared from the list is removed from Sources. A feed only
-  ever EXTENDS: a page that disappeared from it stays — and only deleting the feed removes its pages.
-  This is why the two are different origins and not one "parent" kind.
-- **A manual addition wins.** A URL the human adds by hand is INDEPENDENT: if a wiki page, a sitemap or
-  a feed had claimed it first, the addition releases it (the record's origin is cleared), so deleting
-  the owner no longer deletes it. A URL that a page or feed declares later never takes an existing
-  source over.
+- **A sitemap is complete; a feed and a listing are windows.** A refresh is a 1:1 reconciliation for a
+  sitemap and for a wiki page's links: a page that disappeared from the list is removed from Sources.
+  A feed and a listing only ever EXTEND: a page that disappeared from them stays — and only deleting
+  the owner removes its pages. A listing's pagination is a guess about a layout with a cap, so a
+  misread on refresh must never delete knowledge. A page that leaves a complete list (a sitemap) is
+  removed **unless another owner still declares it** — then it is re-homed to that owner and keeps
+  its claims. This is why they are different origins and not one
+  "parent" kind.
+- **A manual addition wins.** A URL the human adds by hand is INDEPENDENT: if a wiki page, a sitemap,
+  a feed or a listing had claimed it first, the addition releases it (the record's origin is cleared),
+  so deleting the owner no longer deletes it. A URL that a page or a list declares later never takes
+  an existing source over.
 - **Two URLs that differ only by a trailing slash are one source.** Existence checks (wiki save,
-  sitemap/feed claim, re-add) compare `entities.URLKey` — path trailing slash and fragment ignored. The
-  stored address stays the URL as it was given.
+  sitemap/feed/listing claim, re-add) compare `entities.URLKey` — path trailing slash and fragment
+  ignored. The stored address stays the URL as it was given.
 - **A URL that does not answer with itself is `blocked`, not a failure and never content.** A login
   wall (`401`/`403`, a redirect to a sign-in, a password form **on a page without substantial article
   text**), a paywall (a teaser instead of the article) and a consent gate are named as such
@@ -89,8 +109,8 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   **replace** the file (a new attach; the old derivation is reset) or **try the URL again**
   (`POST /sources/{hash}/refetch`): a readable page replaces the snapshot and clears the marker (a
   changed text also resets the old derivation), a wall or a failure keeps the attachment.
-- **A page or sitemap is refreshed once a week, a feed once a day** (`capture.refresh_interval:
-  '168h'`, `capture.feed_refresh_interval: '24h'`), manually at any time. The cadence belongs to the
+- **A page or sitemap is refreshed once a week, a feed and a listing once a day**
+  (`capture.refresh_interval: '168h'`, `capture.feed_refresh_interval: '24h'`), manually at any time. The cadence belongs to the
   source (`url_checked_at`), not to the process. Attached sources are not fetched by the cadence; an
   explicit refetch may try one, and a walled normal source is attempted again on the same cadence,
   because it may become readable.
@@ -237,7 +257,7 @@ merge, not a target. **Identity is the claim, never a title.**
 - **`sources.steps`** is the mirror of the file; `reindex` rebuilds it from the files.
 
 **The order is enforced, and a failure blocks what follows.** A step may only run when every step
-before it is `ok` (or `skipped`, for a bookmark, a blocked URL or a feed/sitemap). The rule is one
+before it is `ok` (or `skipped`, for a bookmark, a blocked URL or a feed/sitemap/listing). The rule is one
 function (`entities.StepSet.Ready`) and one lock (the gate). The scheduler is `App.pumpPipeline`; the
 workers re-check the barrier on the way in.
 
@@ -275,13 +295,14 @@ Each source carries the state of the four steps as a traffic light:
 | **blue** | running right now |
 | **green** | ok — done, and the result on disk is the one derived |
 | **red** | failed; it blocks the next step |
-| **grey** | does not apply (a bookmark, a feed/sitemap, or a URL whose capture is blocked by a wall) |
+| **grey** | does not apply (a bookmark, a feed/sitemap/listing, or a URL whose capture is blocked by a wall) |
 | **amber** | started but not finished: a part is still open, the derivation produced no claim, or something it depends on changed (`stale`) — and, for the derived fourth light, only some of the claims reached the association layer |
 
-A **feed** or a **sitemap** shows capture green and the other three lights grey: it is a list of
-sources, not a document, and there is nothing to outline, distil or associate in the list itself.
-Its state label names it (`feed · the items are sources`, `sitemap · the pages are sources`), so a
-finished list is never mistaken for a document stuck after step 1.
+A **feed**, a **sitemap** or a **listing** shows capture green and the other three lights grey: it is
+a list of sources, not a document, and there is nothing to outline, distil or associate in the list
+itself. Its state label names it (`feed · the items are sources`, `sitemap · the pages are sources`,
+`listing · the articles are sources`), so a finished list is never mistaken for a document stuck
+after step 1.
 
 Green means done and nothing else. Two bars sit **left** of the lights, stacked:
 

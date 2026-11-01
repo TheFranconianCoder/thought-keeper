@@ -62,7 +62,7 @@ SELECT * FROM sources ORDER BY imported_at DESC LIMIT ? OFFSET ?;
 SELECT * FROM sources WHERE kind = ? ORDER BY imported_at DESC LIMIT ? OFFSET ?;
 
 -- name: ListRecentContentSources :many
--- The query agent's recency window: the newest CONTENT sources (bookmarks and sitemap/feed
+-- The query agent's recency window: the newest CONTENT sources (bookmarks and sitemap/feed/listing
 -- CONTAINERS excluded) that entered the vault at or after `since`, newest first, paged so the
 -- agent can cover a whole day without one tool answer hitting the transcript cap. `meta` holds
 -- the container flags as the strings "true" (withMetaFields writes strings); the CAST also accepts
@@ -76,6 +76,9 @@ WHERE imported_at >= sqlc.arg(since)
   AND (CASE WHEN json_valid(meta) THEN
               COALESCE(CAST(json_extract(meta, '$.rss') AS TEXT), '')
             ELSE '' END) NOT IN ('true', '1')
+  AND (CASE WHEN json_valid(meta) THEN
+              COALESCE(CAST(json_extract(meta, '$.listing') AS TEXT), '')
+            ELSE '' END) NOT IN ('true', '1')
 ORDER BY imported_at DESC
 LIMIT sqlc.arg(limit) OFFSET sqlc.arg(offset);
 
@@ -88,10 +91,13 @@ WHERE imported_at >= ?
             ELSE '' END) NOT IN ('true', '1')
   AND (CASE WHEN json_valid(meta) THEN
               COALESCE(CAST(json_extract(meta, '$.rss') AS TEXT), '')
+            ELSE '' END) NOT IN ('true', '1')
+  AND (CASE WHEN json_valid(meta) THEN
+              COALESCE(CAST(json_extract(meta, '$.listing') AS TEXT), '')
             ELSE '' END) NOT IN ('true', '1');
 
 -- name: CountRecentExcludedSources :one
--- What the recency window holds but does not list: collected links and the sitemap/feed containers
+-- What the recency window holds but does not list: collected links and the sitemap/feed/listing containers
 -- that are navigation rather than content. A bookmark that is also a container counts as a bookmark.
 SELECT
     CAST(COALESCE(SUM(CASE WHEN bookmark != 0 THEN 1 ELSE 0 END), 0) AS INTEGER) AS bookmarks,
@@ -100,6 +106,8 @@ SELECT
             (CASE WHEN json_valid(meta) THEN COALESCE(CAST(json_extract(meta, '$.sitemap') AS TEXT), '') ELSE '' END) IN ('true', '1')
             OR
             (CASE WHEN json_valid(meta) THEN COALESCE(CAST(json_extract(meta, '$.rss') AS TEXT), '') ELSE '' END) IN ('true', '1')
+            OR
+            (CASE WHEN json_valid(meta) THEN COALESCE(CAST(json_extract(meta, '$.listing') AS TEXT), '') ELSE '' END) IN ('true', '1')
         )
         THEN 1 ELSE 0 END), 0) AS INTEGER) AS containers
 FROM sources

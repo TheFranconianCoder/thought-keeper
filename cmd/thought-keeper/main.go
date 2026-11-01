@@ -109,7 +109,9 @@ Usage:
   thought-keeper [app] [--headless] [--no-open] [--config PATH]   start the desktop app
   thought-keeper open                                 open the running instance's UI
   thought-keeper status [--json]                      show the doctor report
-  thought-keeper add --path FILE | --url URL [--bookmark]   add a source
+  thought-keeper add --path FILE | --url URL [--bookmark] [--listing auto|yes|no]
+                                                          add a source; a detected listing is
+                                                          offered, --listing=yes collects it
   thought-keeper attach --url URL --file FILE             attach a saved page to a URL the app could
                                                           not read (a login, a paywall); --source HASH
                                                           works too
@@ -173,17 +175,30 @@ func cmdAdd(args []string) error {
 	path := fs.String("path", "", "filesystem path of the source")
 	url := fs.String("url", "", "URL of the source")
 	bookmark := fs.Bool("bookmark", false, "store the URL as a collected link (no indexing)")
+	listing := fs.String("listing", "auto", "listing mode for a URL: auto (detect and report), yes (collect the articles) or no")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *path == "" && *url == "" {
 		return errors.New("add requires --path or --url")
 	}
+	var choice *bool
+	switch strings.ToLower(strings.TrimSpace(*listing)) {
+	case "", "auto":
+	case "yes", "true", "1":
+		value := true
+		choice = &value
+	case "no", "false", "0":
+		value := false
+		choice = &value
+	default:
+		return fmt.Errorf("invalid --listing %q: use auto, yes or no", *listing)
+	}
 	addr, err := resolveAddr("")
 	if err != nil {
 		return err
 	}
-	status, body, err := apiRequest(addr, http.MethodPost, "/add", payloads.AddRequest{Path: *path, URL: *url, Bookmark: *bookmark})
+	status, body, err := apiRequest(addr, http.MethodPost, "/add", payloads.AddRequest{Path: *path, URL: *url, Bookmark: *bookmark, Listing: choice})
 	if err != nil {
 		return err
 	}
@@ -193,6 +208,9 @@ func cmdAdd(args []string) error {
 	var src payloads.Source
 	if err := json.Unmarshal(body, &src); err != nil {
 		return err
+	}
+	if src.ListingCandidates >= 5 && !src.Listing {
+		fmt.Fprintf(os.Stderr, "this page lists %d articles; add it again with --listing=yes to collect them\n", src.ListingCandidates)
 	}
 	fmt.Println(src.Hash)
 	return nil

@@ -134,6 +134,11 @@ type Source struct {
 	// children are the pages its items point at. A feed is not a complete list of a site: a child
 	// that later disappears from it is kept.
 	RSS bool
+	// Listing marks a URL source that is itself a LISTING: a page that declares articles instead of
+	// carrying one (a blog index, a newsletter archive). Its snapshot is the list of cards and its
+	// children are the articles. Like a feed it is a window — an article that rotates out of the
+	// pagination is kept — and only deleting the listing removes its articles.
+	Listing bool
 	// FromFeed marks a URL snapshot whose bytes came from the FEED's own copy of the post (many feeds
 	// carry the whole article while the page is a JavaScript shell). FeedHash names that feed. A
 	// readable page may replace the copy; while it cannot, the copy is what the vault knows.

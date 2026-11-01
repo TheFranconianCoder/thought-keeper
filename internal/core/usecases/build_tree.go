@@ -68,8 +68,11 @@ func (uc Trees) Build(ctx context.Context, hash string) (TreeResult, error) {
 		if src.Bookmark || src.Steps.State(entities.StepCapture) == entities.StepFailed || src.OwnsChildren() {
 			if src.OwnsChildren() {
 				what := "feed"
-				if src.Sitemap {
+				switch {
+				case src.Sitemap:
 					what = "sitemap"
+				case src.Listing:
+					what = "listing"
 				}
 				recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepOutline, entities.StepSkipped, what, nil)
 				recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepDistill, entities.StepSkipped, what, nil)

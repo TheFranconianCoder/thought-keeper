@@ -216,7 +216,7 @@ func (uc Maintenance) healIdentity(ctx context.Context, src entities.Source, res
 	healed := entities.SourceIdentity{
 		Kind: src.Kind, URL: src.URL, Bookmark: src.Bookmark, Language: src.Language,
 		Origin: src.Origin, WikiPage: src.WikiPage, ParentHash: src.ParentHash,
-		Sitemap: src.Sitemap, RSS: src.RSS,
+		Sitemap: src.Sitemap, RSS: src.RSS, Listing: src.Listing,
 		FromFeed: src.FromFeed, FeedHash: src.FeedHash,
 		OriginalName: src.OriginalName,
 		ContentHash:  contentHashFromMeta(src.Meta), FaviconHash: faviconHash(faviconFromMeta(src.Meta)),

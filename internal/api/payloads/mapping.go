@@ -12,44 +12,47 @@ import (
 // place that translates the domain to JSON.
 func SourceFromPartial(p partialentities.PartialSource) Source {
 	s := Source{
-		Hash:            p.Hash,
-		Kind:            p.Kind,
-		Ext:             p.Ext,
-		Path:            p.Path,
-		URL:             p.URL,
-		Title:           p.Title,
-		Language:        p.Language,
-		Origin:          p.Origin,
-		WikiPage:        p.WikiPage,
-		ParentHash:      p.ParentHash,
-		Sitemap:         p.Sitemap,
-		RSS:             p.RSS,
-		FromFeed:        p.FromFeed,
-		FeedHash:        p.FeedHash,
-		Wall:            p.Wall,
-		Attached:        p.Attached,
-		AttachedFrom:    p.AttachedFrom,
-		OriginalName:    p.OriginalName,
-		Tags:            p.Tags,
-		AutoTags:        p.AutoTags,
-		FavoriteAt:      wireTime(p.FavoriteAt),
-		ReadLaterAt:     wireTime(p.ReadLaterAt),
-		ReadLaterDoneAt: wireTime(p.ReadLaterDoneAt),
-		ReadLaterManual: p.ReadLaterManual,
-		ReadLaterVia:    p.ReadLaterVia,
-		ReadLater:       !p.ReadLaterAt.IsZero() && p.ReadLaterDoneAt.IsZero(),
-		Bytes:           p.Bytes,
-		Pages:           p.Pages,
-		TreeState:       p.TreeState,
-		AtomCount:       p.AtomCount,
-		ProvenanceRows:  p.ProvenanceRows,
-		Children:        p.Children,
-		PartsTotal:      p.PartsTotal,
-		PartsDone:       p.PartsDone,
-		AtomsLeft:       p.AtomsLeft,
-		URLStatus:       p.URLStatus,
-		Bookmark:        p.Bookmark,
-		ImportedAt:      p.ImportedAt.UTC().Format(time.RFC3339),
+		Hash:              p.Hash,
+		Kind:              p.Kind,
+		Ext:               p.Ext,
+		Path:              p.Path,
+		URL:               p.URL,
+		Title:             p.Title,
+		Language:          p.Language,
+		Origin:            p.Origin,
+		WikiPage:          p.WikiPage,
+		ParentHash:        p.ParentHash,
+		Sitemap:           p.Sitemap,
+		RSS:               p.RSS,
+		Listing:           p.Listing,
+		ListingCandidates: p.ListingCandidates,
+		FromFeed:          p.FromFeed,
+		FeedHash:          p.FeedHash,
+		Wall:              p.Wall,
+		Attached:          p.Attached,
+		AttachedFrom:      p.AttachedFrom,
+		OriginalName:      p.OriginalName,
+		Tags:              p.Tags,
+		AutoTags:          p.AutoTags,
+		FavoriteAt:        wireTime(p.FavoriteAt),
+		ReadLaterAt:       wireTime(p.ReadLaterAt),
+		ReadLaterDoneAt:   wireTime(p.ReadLaterDoneAt),
+		ReadLaterManual:   p.ReadLaterManual,
+		ReadLaterVia:      p.ReadLaterVia,
+		ReadLater:         !p.ReadLaterAt.IsZero() && p.ReadLaterDoneAt.IsZero(),
+		Bytes:             p.Bytes,
+		Pages:             p.Pages,
+		TreeState:         p.TreeState,
+		AtomCount:         p.AtomCount,
+		ProvenanceRows:    p.ProvenanceRows,
+		Children:          p.Children,
+		Declared:          p.Declared,
+		PartsTotal:        p.PartsTotal,
+		PartsDone:         p.PartsDone,
+		AtomsLeft:         p.AtomsLeft,
+		URLStatus:         p.URLStatus,
+		Bookmark:          p.Bookmark,
+		ImportedAt:        p.ImportedAt.UTC().Format(time.RFC3339),
 	}
 	if !p.URLChecked.IsZero() {
 		s.URLCheckedAt = p.URLChecked.UTC().Format(time.RFC3339)
@@ -113,13 +116,17 @@ func stepsFromPartial(p partialentities.PartialSource) map[string]StepStatus {
 		return out
 	}
 
-	// A feed or a sitemap is a LIST of sources: capture fetched the list, and outline, distill and
-	// association do not apply to it. Saying so explicitly (rather than leaving a light pending on a
-	// step that will never run) is what separates a finished list from a document stuck after step 1.
-	if p.RSS || p.Sitemap {
+	// A feed, a sitemap or a listing is a LIST of sources: capture fetched the list, and outline,
+	// distill and association do not apply to it. Saying so explicitly (rather than leaving a light
+	// pending on a step that will never run) is what separates a finished list from a document stuck
+	// after step 1.
+	if p.RSS || p.Sitemap || p.Listing {
 		what := "sitemap"
-		if p.RSS {
+		switch {
+		case p.RSS:
 			what = "feed"
+		case p.Listing:
+			what = "listing"
 		}
 		for _, step := range []entities.Step{entities.StepOutline, entities.StepDistill, entities.StepCluster} {
 			put(string(step), StepStatus{State: string(entities.StepSkipped), Detail: what})

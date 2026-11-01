@@ -13,6 +13,7 @@ export const sourceEn: Record<string, string> = {
   'source.reset': 'Reset',
   'source.feed': 'feed',
   'source.sitemap': 'sitemap',
+  'source.listing': 'listing',
   'source.pages.one': '{count} page',
   'source.pages.many': '{count} pages',
   'source.chapters.one': '{count} chapter',
@@ -21,7 +22,6 @@ export const sourceEn: Record<string, string> = {
   // Tabs.
   'source.viewAria': 'Source view',
   'source.tabSnapshot': 'Snapshot',
-  'source.tabLive': 'Live',
   'source.tabText': 'Text',
   'source.tabContent': 'Content',
   'source.tabSummary': 'Summary',
@@ -64,7 +64,6 @@ export const sourceEn: Record<string, string> = {
   // Log, live and PDF tabs.
   'source.logShowingLast': 'Showing the last {size} of {total}.',
   'source.noLog': 'No log entries.',
-  'source.liveTitle': 'Live page',
   'source.loadingPdf': 'Loading the PDF…',
 
   // Reading a part, and the outline.
@@ -94,6 +93,8 @@ export const sourceEn: Record<string, string> = {
   'source.bookmarkPrint': 'print it to PDF',
   'source.bookmarkTextEnd':
     '(or copy the text), and attach it here. The URL stays the address of this source.',
+  'source.bookmarkSnapshotNote':
+    'This is a collected link — the app did not read the page. Open it in your browser:',
   'source.blocked':
     'This page could not be read. Open it in your browser, save it as HTML or PDF (or copy the text), and attach it here. The URL stays the address of this source.',
   'source.blockedWithDetail':
@@ -125,15 +126,21 @@ export const sourceEn: Record<string, string> = {
   'source.idLabel': 'Source ID',
   'source.partOfFeed': 'part of a feed',
   'source.partOfSitemap': 'part of a sitemap',
+  'source.partOfListing': 'part of a listing',
   'source.copyLabel': 'copy',
   'source.sitemapOwns': 'owns the pages it lists',
   'source.feedOwns': 'owns the pages its items point at',
+  'source.listingOwns': 'owns the articles it lists',
+  'source.declaredLabel': 'declared',
+  'source.declaredOwned': '{declared} declared · {owned} here',
+  'source.declaredElsewhere': '{count} elsewhere',
   'source.copyFromFeed': 'kept from its feed — the page did not replace it',
   'source.openPage': 'open the page',
   'source.linkedFromPage': 'linked from a page',
   'source.ownedBy': 'Owned by {owner} — remove the owner to remove this source.',
   'source.ownerSitemap': 'its sitemap',
   'source.ownerFeed': 'its feed',
+  'source.ownerListing': 'its listing',
   'source.ownerWiki': 'its wiki page',
 
   // Tags.

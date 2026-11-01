@@ -28,6 +28,8 @@ export const shellEn: Record<string, string> = {
     '/path/to/file.pdf\n/path/to/book.epub\nhttps://example.com/article\nhttps://another.example.org/post',
   'add.bookmarkTitle': 'Keep as a bookmark',
   'add.bookmarkHint': 'Collect the link without indexing its text.',
+  'add.listingTitle': 'This page lists articles',
+  'add.listingHint': 'Collect the articles it links as sources. Its pagination is read once, up to the configured cap.',
   'add.dropPrefix': 'Drop a Markdown, PDF, TXT or EPUB file here, or ',
   'add.browse': 'browse',
   'add.dropSuffix': '.',

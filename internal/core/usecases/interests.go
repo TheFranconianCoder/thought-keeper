@@ -204,8 +204,8 @@ func (uc ReadLater) Match(ctx context.Context, hash string) (MatchSourceResult, 
 	if err != nil {
 		return out, err
 	}
-	// A sitemap/feed is a container, not a document: its pages match individually.
-	if src.Sitemap || src.RSS {
+	// A sitemap/feed/listing is a container, not a document: its pages match individually.
+	if src.Sitemap || src.RSS || src.Listing {
 		return out, nil
 	}
 	enabled := make([]entities.Interest, 0, len(rules))

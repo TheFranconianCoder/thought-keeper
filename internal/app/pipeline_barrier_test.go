@@ -25,6 +25,7 @@ func (b barrierSteps) SetLanguage(string, string) error                  { retur
 func (b barrierSteps) SetOrigin(string, string, string) error            { return nil }
 func (b barrierSteps) Release(string) error                              { return nil }
 func (b barrierSteps) SetIdentity(string, entities.SourceIdentity) error { return nil }
+func (b barrierSteps) SetOwnership(string, string, string, string) error { return nil }
 func (b barrierSteps) Identity(string) (entities.SourceIdentity, error) {
 	return entities.SourceIdentity{}, nil
 }

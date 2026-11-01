@@ -255,7 +255,7 @@ func Build(
 		Gateway: gw, Model: cfg.OpenAI.ModelCompile, Apply: true, Clock: clock, Log: log,
 	}
 	sources := usecases.Sources{
-		Store: store, Index: index, Atoms: atomRepo, AtomStore: atomStore,
+		Store: store, Pages: wikiStore, Index: index, Atoms: atomRepo, AtomStore: atomStore,
 		CommandStore: commandStore, Tags: steps, Shelf: index, Favicons: faviconStore,
 		Trees: trees, Convert: converter, Extractor: extractor,
 		Gateway: gw, SourceLog: sourceLog, Steps: steps, Languages: languages, Runs: runRepo,
@@ -263,7 +263,8 @@ func Build(
 		MaxBytes: cfg.PDF.MaxBytes,
 	}
 	urls := usecases.URLs{
-		Fetch: fetcher, Convert: converter, Store: store, Index: index, Atoms: atomRepo, AtomStore: atomStore,
+		Fetch: fetcher, Convert: converter, Links: gateways.HTMLLinkExtractor{}, Store: store, Index: index,
+		Atoms: atomRepo, AtomStore: atomStore,
 		Favicons: faviconStore, Steps: steps, Languages: languages, SourceLog: sourceLog,
 		Clock: clock, Log: log, MinTextChars: cfg.Capture.MinTextChars,
 		MinAge: refreshMinAge, FeedMinAge: feedRefreshMinAge,

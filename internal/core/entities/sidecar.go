@@ -132,7 +132,10 @@ type SourceIdentity struct {
 	Sitemap    bool
 	// RSS marks a source that is itself a feed: its snapshot is the item list and its children are
 	// the pages the items point at. Like Sitemap it is identity, not derived state.
-	RSS          bool
+	RSS bool
+	// Listing marks a source that is itself a listing (a blog index, a newsletter archive): its
+	// snapshot is the article list and its children are the articles. Identity, like Sitemap.
+	Listing      bool
 	OriginalName string
 	// ContentHash is the SNAPSHOT's hash: what a refresh compares to tell "the same page" from "a
 	// changed page".

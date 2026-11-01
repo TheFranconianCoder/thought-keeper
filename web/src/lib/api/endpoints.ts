@@ -107,8 +107,8 @@ export const api = {
   faviconURL: (hash: string) => `/api/v1/sources/${enc(hash)}/favicon`,
 
   addPath: (path: string) => request<Source>('/add', json('POST', { path })),
-  addURL: (url: string, bookmark = false) =>
-    request<Source>('/add', json('POST', { url, bookmark })),
+  addURL: (url: string, bookmark = false, listing?: boolean) =>
+    request<Source>('/add', json('POST', { url, bookmark, ...(listing === undefined ? {} : { listing }) })),
   addURLs: (urls: string[]) => request<{ accepted: number }>('/add-urls', json('POST', { urls })),
   addUpload: (file: File) => {
     const body = new FormData();

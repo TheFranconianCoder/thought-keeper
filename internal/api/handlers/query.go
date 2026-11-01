@@ -7,6 +7,7 @@ import (
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/payloads"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/listing"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
@@ -29,6 +30,8 @@ type URLBulkScheduler interface {
 	ScheduleWikiURLs(pageID string, urls []string)
 	ScheduleSitemapURLs(parentHash string, urls []string)
 	ScheduleFeedURLs(parentHash string, urls []string)
+	ScheduleListingURLs(parentHash string, urls []string)
+	ScheduleListingWalk(parentHash, next string, seed []listing.Item)
 }
 
 // SearchHandler serves GET /api/v1/search.

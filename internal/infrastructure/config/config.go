@@ -208,6 +208,10 @@ type CaptureConfig struct {
 	// MinTextChars: a fetched page with less extracted text than this is kept as a
 	// bookmark (metadata only, never distilled) instead of an indexed document.
 	MinTextChars int `yaml:"min_text_chars"`
+	// ListingMaxPages bounds the INITIAL walk of a listing's pagination (a blog index, a newsletter
+	// archive). A listing is captured by following every page it declares up to this many; a refresh
+	// only reads page 1, because new articles appear there first. Default 100.
+	ListingMaxPages int `yaml:"listing_max_pages"`
 }
 
 // AssistantConfig is the command assistant. A command is a short-lived record: the retention is

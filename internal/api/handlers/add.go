@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/payloads"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/listing"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
@@ -34,16 +35,19 @@ type AddHandler struct {
 	// OnReplaced is called when this add replaced a source's snapshot with different text. The app
 	// rebuilds the derivation (exclusive); OnAdded must not also run for it.
 	OnReplaced func(hash, reason string)
-	// Children claims and fetches the pages a sitemap or a feed declared. It is background work: the
-	// parent source is already stored when this is called.
+	// Children claims and fetches the pages a sitemap, a feed or a listing declared. It is background
+	// work: the parent source is already stored when this is called.
 	Children ChildScheduler
 }
 
-// ChildScheduler queues the pages a sitemap or feed source declared. The feed's pages are claimed the
-// same way; the REFRESH is what differs (a sitemap is reconciled 1:1, a feed is only extended).
+// ChildScheduler queues the pages a sitemap, feed or listing source declared. The children are
+// claimed the same way; the REFRESH is what differs (a sitemap is reconciled 1:1, a feed and a
+// listing are only extended).
 type ChildScheduler interface {
 	ScheduleSitemapURLs(parentHash string, urls []string)
 	ScheduleFeedURLs(parentHash string, urls []string)
+	ScheduleListingURLs(parentHash string, urls []string)
+	ScheduleListingWalk(parentHash, next string, seed []listing.Item)
 }
 
 // Post adds a source from a path, a URL or an upload.
@@ -63,7 +67,14 @@ func (h AddHandler) Post(w http.ResponseWriter, r *http.Request) {
 			payloads.WriteError(w, types.New("not_implemented", "url intake is not configured", types.ErrNotImplemented))
 			return
 		}
-		src, err := h.URLManual(r.Context(), url, req.Bookmark)
+		choice := usecases.ListingAuto
+		if req.Listing != nil {
+			choice = usecases.ListingNo
+			if *req.Listing {
+				choice = usecases.ListingYes
+			}
+		}
+		src, err := h.URLManual(r.Context(), url, req.Bookmark, choice)
 		if err != nil {
 			payloads.WriteError(w, err)
 			return
@@ -140,6 +151,12 @@ func (h AddHandler) finish(w http.ResponseWriter, src partialentities.PartialSou
 		}
 		if len(src.RSSURLs) > 0 {
 			h.Children.ScheduleFeedURLs(src.Hash, src.RSSURLs)
+		}
+		if len(src.ListingURLs) > 0 {
+			h.Children.ScheduleListingURLs(src.Hash, src.ListingURLs)
+		}
+		if src.ListingNext != "" {
+			h.Children.ScheduleListingWalk(src.Hash, src.ListingNext, src.ListingItems)
 		}
 	}
 	payloads.WriteJSON(w, http.StatusCreated, payloads.SourceFromPartial(src))

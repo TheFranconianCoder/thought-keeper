@@ -30,7 +30,7 @@ it needs the body. A claim body carries no links; the cluster is the association
 `list_sources` reads a **recency window**: the newest content sources by vault arrival
 (`imported_at`), with a short excerpt of each overview. It is **paged**: a page carries
 `next_offset`, and the model asks for the next page with `offset` until the window is read.
-Bookmarks and sitemap/feed containers are counted, never listed — they have no derivation to
+Bookmarks and sitemap/feed/listing containers are counted, never listed — they have no derivation to
 summarise. `read_source_summary` opens one overview in full; when none has been written yet it
 returns the source's claims (or its derivation state while the source is still being processed).
 
@@ -123,7 +123,8 @@ the vault as it is; a half-associated vault is still worth asking.
   - If the window is too large for the tool budget, the answer groups what it read by theme, names
     the total and says that it covers the newest ones. It never implies completeness it does not
     have.
-  - Bookmarks and sitemap/feed containers are counted, not summarised: they have no derivation.
+  - Bookmarks and sitemap/feed/listing containers are counted, not summarised: they have no
+    derivation.
 
 A question can be **scoped to one source** — the Ask action on a source page. The source hash travels
 with the run: the system prompt names it and every tool is restricted to that source. `list_topics`

@@ -11,6 +11,7 @@
   const open = $derived(addOpen());
   let value = $state('');
   let bookmark = $state(false);
+  let listing = $state(false);
   let dragging = $state(false);
   let busy = $state(false);
   let fileInput: HTMLInputElement | undefined = $state();
@@ -20,6 +21,7 @@
     closeAdd();
     value = '';
     bookmark = false;
+    listing = false;
     system.notice = '';
   }
 
@@ -34,7 +36,7 @@
     system.notice = '';
     try {
       if (lines.length === 1) {
-        await addPathOrURL(lines[0], bookmark);
+        await addPathOrURL(lines[0], bookmark, listing);
       } else if (lines.every(isURL)) {
         await addManyURLs(lines);
       } else {
@@ -44,6 +46,7 @@
       closeAdd();
       value = '';
       bookmark = false;
+      listing = false;
     } catch {
       // The action already wrote a precise notice; keep the dialog open so the input survives.
     } finally {
@@ -106,12 +109,31 @@
       ></textarea>
     </label>
 
-    {#if isURL(value)}
+    {#if isURL(value) && !value.trim().includes('\n')}
       <label class="bookmark-option">
-        <input type="checkbox" bind:checked={bookmark} />
+        <input
+          type="checkbox"
+          bind:checked={bookmark}
+          onchange={() => {
+            if (bookmark) listing = false;
+          }}
+        />
         <span>
           <b>{t('add.bookmarkTitle')}</b>
           <small>{t('add.bookmarkHint')}</small>
+        </span>
+      </label>
+      <label class="bookmark-option">
+        <input
+          type="checkbox"
+          bind:checked={listing}
+          onchange={() => {
+            if (listing) bookmark = false;
+          }}
+        />
+        <span>
+          <b>{t('add.listingTitle')}</b>
+          <small>{t('add.listingHint')}</small>
         </span>
       </label>
     {/if}

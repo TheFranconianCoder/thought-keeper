@@ -129,6 +129,11 @@ export interface Source {
   sitemap?: boolean;
   // rss marks a feed: its snapshot is the item list and its children are the pages the items point at.
   rss?: boolean;
+  // listing marks a listing: a blog index or a newsletter archive whose cards are the articles.
+  listing?: boolean;
+  // listing_candidates is how many article cards the detector found on a page stored as a normal
+  // source. Present means "this may be a listing": the reader is asked once.
+  listing_candidates?: number;
   // from_feed marks a snapshot taken from the feed's own copy of the post (the page may need
   // JavaScript); feed_hash is the feed it came from.
   from_feed?: boolean;
@@ -170,6 +175,9 @@ export interface Source {
   imported_at: string;
   steps?: Partial<Record<StepName, StepStatus>>;
   sidecars?: Sidecar[];
+  /** How many articles a list source declares. It is larger than `children` when another owner
+   *  brought some of them in first (they stay with that owner). */
+  declared?: number;
   /** How many sub-sources this source owns (a sitemap's pages, a wiki page's linked URLs). */
   children?: number;
 }

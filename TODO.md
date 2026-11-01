@@ -149,6 +149,24 @@ are.
    agent's and the queue is about reading. Whether "keep this claim" deserves a mark of its own (and
    where it would live) is open.
 
+## Listings (open work)
+
+1. **A declined card comes back.** A blog index declares more than articles: a pinned event, a promo
+   banner, a job ad. The listing owns everything it declares, so deleting one card is refused
+   (`dependent_source`) — the answer is a per-owner **skip list** in the parent's `.meta` that
+   `QueueListing` (and `QueueFeed`, which has the same gap) honours, with "do not collect this" in
+   the rail.
+2. **A sitemap is sometimes the better list.** When the human adds a blog index, probe
+   `robots.txt`/`/sitemap.xml` first: a sitemap that covers the same path is complete and needs no
+   layout heuristic. Neither example here qualifies (agilealliance's is a mixed 500-URL list,
+   beehiiv's a 29-URL site list), but many WordPress sites do.
+3. **Heading-less cards without dates are not detected.** The rules need a heading, a date or a
+   shared path prefix; a grid of plain title links is stored as a bookmark unless the reader forces
+   `listing: true` through the API. There is no UI affordance for the forced path yet.
+4. **The initial walk does not resume.** It runs in the background, page by page, and rewrites the
+   listing's snapshot after each page — but a restart mid-walk leaves the rest of the archive
+   unread, and nothing queues it again. A job in the URL queue would make it resumable.
+
 ## Ideas
 
 - Wiki / Notes Overlay / Flyover to scribble with links

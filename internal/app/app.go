@@ -28,8 +28,10 @@ import (
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/payloads"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/listing"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/config"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/gateways"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/persistence"
@@ -614,10 +616,10 @@ func (a *App) sourceCannotReach(rec entities.SourceRecord, step entities.Step) b
 
 // stepComplete reports whether one source has completed one step (ok or skipped).
 func (a *App) stepComplete(hash string, rec entities.SourceRecord, step entities.Step) bool {
-	// A feed or a sitemap is a LIST of sources, not a document. Its capture is the fetch that
-	// produced the list; the outline, distill and association steps do not apply to it. No record —
-	// a legacy one, a half-refresh — may hold the whole vault's barrier for a list.
-	if rec.Identity.RSS || rec.Identity.Sitemap {
+	// A feed, a sitemap or a listing is a LIST of sources, not a document. Its capture is the fetch
+	// that produced the list; the outline, distill and association steps do not apply to it. No
+	// record — a legacy one, a half-refresh — may hold the whole vault's barrier for a list.
+	if rec.Identity.RSS || rec.Identity.Sitemap || rec.Identity.Listing {
 		return true
 	}
 	kind := rec.Identity.Kind
@@ -1592,9 +1594,9 @@ func (a *App) ScheduleDistill(hash string, reset bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if src.RSS || src.Sitemap {
+	if src.RSS || src.Sitemap || src.Listing {
 		return "", types.New("conflict",
-			"a feed or a sitemap is a list of sources; it has no document to derive — refresh it instead",
+			"a feed, a sitemap or a listing is a list of sources; it has no document to derive — refresh it instead",
 			types.ErrConflict)
 	}
 	if !a.claimDistill(hash) {
@@ -2395,8 +2397,8 @@ func (a *App) ScheduleCapture(hash string) (bool, string, error) {
 	if src.Bookmark {
 		return false, "a bookmark is collected, not derived", nil
 	}
-	if src.RSS || src.Sitemap {
-		return false, "a feed or a sitemap is a list: refresh it instead of capturing it", nil
+	if src.RSS || src.Sitemap || src.Listing {
+		return false, "a feed, a sitemap or a listing is a list: refresh it instead of capturing it", nil
 	}
 	if !src.ToEntity().NeedsCapture() {
 		return false, "the source is readable as it is — its title comes from the object (reindex restores it)", nil
@@ -3248,6 +3250,94 @@ func (a *App) ScheduleFeedURLs(parentHash string, urls []string) {
 	}()
 }
 
+// ScheduleListingURLs claims the articles a listing declared and hands the NEW ones to the fetch
+// queue. The listing is their owner: the rows carry its hash in ParentHash, and deleting the listing
+// deletes them. The parent source is already written when this runs.
+func (a *App) ScheduleListingURLs(parentHash string, urls []string) {
+	if parentHash == "" || len(urls) == 0 || a.queueURLs.Index == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		a.gate.RLock()
+		if _, err := a.queueURLs.Index.GetSourceByHash(ctx, parentHash); err != nil {
+			a.gate.RUnlock()
+			return
+		}
+		queued, err := a.queueURLs.QueueListing(ctx, parentHash, urls)
+		a.gate.RUnlock()
+		if err != nil {
+			a.log.Warn("listing: articles not queued", "hash", parentHash, "err", err)
+			return
+		}
+		if len(queued) == 0 {
+			return
+		}
+		a.publish("source", map[string]any{"hash": parentHash, "links": len(queued)})
+		for _, raw := range queued {
+			if !a.enqueueURL(urlJob{URL: raw, Origin: entities.ListingOrigin, ParentHash: parentHash}) {
+				return
+			}
+		}
+		a.log.Info("listing articles queued", "hash", parentHash, "links", len(queued))
+	}()
+}
+
+// ScheduleListingWalk follows a listing's INITIAL pagination — every page it declares, bounded by
+// capture.listing_max_pages — and claims the articles each page brings. A refresh never walks: a
+// blog index and a newsletter archive are newest-first, so page 1 is where a new article appears.
+//
+// The walk rewrites the listing's snapshot after every page, so an interrupted walk keeps what it
+// found. `seed` is the first page's items, already in the source's snapshot.
+func (a *App) ScheduleListingWalk(parentHash, next string, seed []listing.Item) {
+	if parentHash == "" || next == "" || a.addURL.Index == nil || a.queueURLs.Index == nil {
+		return
+	}
+	go func() {
+		maxPages := a.cfg.Capture.ListingMaxPages
+		if maxPages <= 0 {
+			maxPages = 100
+		}
+		items := append([]listing.Item(nil), seed...)
+		visited := map[string]bool{entities.URLKey(next): true}
+		// read counts the pages the listing has been read through; page 1 was read by the add.
+		read := 1
+		for next != "" && read < maxPages {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			a.gate.RLock()
+			page, err := a.addURL.ExpandListing(ctx, parentHash, next)
+			if err == nil && len(page.Items) > 0 {
+				items = append(items, page.Items...)
+				_, err = a.addURL.FinishListing(ctx, parentHash, items, page.Status)
+			}
+			a.gate.RUnlock()
+			cancel()
+			if err != nil {
+				a.log.Warn("listing walk stopped", "hash", parentHash, "page", next, "err", err)
+				return
+			}
+			if len(page.Items) == 0 {
+				break
+			}
+			read++
+			urls := make([]string, 0, len(page.Items))
+			for _, item := range page.Items {
+				urls = append(urls, item.URL)
+			}
+			a.publish("source", map[string]any{"hash": parentHash, "links": len(urls)})
+			a.ScheduleListingURLs(parentHash, urls)
+			if page.Next == "" || visited[entities.URLKey(page.Next)] {
+				break
+			}
+			visited[entities.URLKey(page.Next)] = true
+			next = page.Next
+		}
+		a.publish("source", map[string]any{"hash": parentHash, "articles": len(items)})
+		a.log.Info("listing walked", "hash", parentHash, "pages", read, "articles", len(items))
+	}()
+}
+
 // ScheduleWikiURLs claims the links a page just declared and hands the NEW ones to the fetch queue.
 // It runs OFF the request path: writing a page with a hundred links is a local write, and the hundred
 // fetches are background work. Each link becomes a source row before the first fetch answers, so the
@@ -3458,12 +3548,17 @@ func (a *App) handleURLJob(job urlJob) {
 		return
 	}
 	// The human's own addition WINS over a wiki/sitemap/feed claim (job.Origin is empty for both the
-	// single add and a pasted batch). A job with an owner stays a sub-source.
-	fetch := a.addURL.Add
+	// single add and a pasted batch). A job with an owner stays a sub-source. A batch never asks the
+	// listing question: one dialog per pasted line is not a dialog, it is a maze.
+	var (
+		src partialentities.PartialSource
+		err error
+	)
 	if job.Origin == "" {
-		fetch = a.addURL.AddManual
+		src, err = a.addURL.AddManual(ctx, job.URL, false, usecases.ListingNo)
+	} else {
+		src, err = a.addURL.Add(ctx, job.URL, false)
 	}
-	src, err := fetch(ctx, job.URL, false)
 	a.gate.RUnlock()
 	cancel()
 	if err != nil {
@@ -3477,6 +3572,9 @@ func (a *App) handleURLJob(job urlJob) {
 	}
 	if len(src.RSSURLs) > 0 {
 		a.ScheduleFeedURLs(src.Hash, src.RSSURLs)
+	}
+	if len(src.ListingURLs) > 0 {
+		a.ScheduleListingURLs(src.Hash, src.ListingURLs)
 	}
 	if src.NeedsReset {
 		a.ScheduleSourceReset(src.Hash, "the page replaced the stored snapshot — the derivation was rebuilt")
@@ -3507,6 +3605,8 @@ func (a *App) reportLinkFailure(job urlJob, cause error) {
 		hash, err = a.markURLFailed.MarkFailedSitemap(ctx, job.URL, job.ParentHash, cause)
 	case entities.RSSOrigin:
 		hash, err = a.markURLFailed.MarkFailedFeed(ctx, job.URL, job.ParentHash, cause)
+	case entities.ListingOrigin:
+		hash, err = a.markURLFailed.MarkFailedListing(ctx, job.URL, job.ParentHash, cause)
 	default:
 		hash, err = a.markURLFailed.MarkFailed(ctx, job.URL, job.WikiPage, cause)
 	}

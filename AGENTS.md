@@ -42,7 +42,9 @@ interned arrays (not a map per claim), so a pass over a 170k-claim vault costs a
 working set instead of a gigabyte; `status` reports live and peak heap, with the pass that caused
 the peak. Query,
 lexical search and programmatic lint are in place. A sitemap URL expands into page sources owned by
-the sitemap; wiki-page and sitemap children cannot be deleted apart from their owner.
+the sitemap, a feed into the pages its items point at, and a blog index or newsletter archive — a
+**listing** — into the articles its cards declare; wiki-page and list children cannot be deleted
+apart from their owner, and a child another owner still declares is re-homed rather than deleted.
 
 The PWA is **event-driven** (SSE) and **claim-first**: a calm, Notion-flavored reader whose navigation
 is a finite set of lenses — **Start, Sources, Wiki, Bookmarks, Claims, Ask, Attention, Status** — in a
@@ -109,7 +111,9 @@ index table, no model, no second grouping.
   workflow.
 - **Not a classic server.** Loopback only, no multi-user, no cloud, no sync in v1.
 - **No crawling.** The agent fetches the URLs you give it, one at a time — or every page a sitemap
-  you explicitly added declares. It never discovers links on its own.
+  you explicitly added declares, every article a feed announces, or every article the listing you
+  confirmed declares (including the listing's own pagination, bounded by `capture.listing_max_pages`).
+  It never discovers links on its own.
 - **No external MCP servers in v1.**
 - **No silent writes.** Every agent mutation goes through the same use cases as any other write.
 
@@ -129,6 +133,7 @@ index table, no model, no second grouping.
 | **language** | A source's detected ISO 639-1 hint (ISO 639-3 when no 639-1 exists), stored in `<hash>.meta` and mirrored into the index. It tunes search, never filters a result. | `<hash>.meta` |
 | **sitemap** | A URL source whose snapshot is a page list; it owns the page sources it declared (`origin: sitemap`, `parent_hash`). A sitemap is COMPLETE: a page that left it is removed. | `<hash>.meta` |
 | **feed** | An RSS/Atom URL source whose snapshot is its item list; it owns the page sources its items point at (`origin: rss`, `parent_hash`). A feed is a WINDOW: a page that left it is kept, and only deleting the feed removes its pages. When the feed carries a post, that copy becomes the page's **provisional** snapshot (`from_feed`); the page is still fetched once, and a readable page that carries at least as much text replaces the copy. | `<hash>.meta` |
+| **listing** | A URL source whose snapshot is an ARTICLE LIST: a blog index or a newsletter archive whose repeated cards declare articles. It owns the articles (`origin: listing`, `parent_hash`). A listing is a WINDOW like a feed: an article that rotates out of its pagination is kept, and only deleting the listing removes its articles. Its pagination is walked ONCE (on capture, up to `capture.listing_max_pages`); a refresh reads page 1 only. It is never detected silently: the reader confirms the card list before the page becomes an owner. | `<hash>.meta` |
 | **part** | ONE text-bearing node of a document: the unit the distill step derives. | the outline + `distill_parts` |
 | **node** / **node id** | A place in a document's outline; the ADDRESS a claim cites (`0.1`, `2.3`). | `source_nodes` |
 | **outline** | A document's structure: titles, summaries and REFERENCES into the readable text. | `sources/<hash>.outline` |
@@ -181,10 +186,11 @@ scheduling: `docs/pipeline.md`.
   language, provenance to a source node, then an audit for statements left uncovered.
 - **Cluster** prunes, attaches, graphs, splits, overlaps and writes titleless memberships. No model.
 
-A page or sitemap is refreshed once a week (`capture.refresh_interval: '168h'`), a feed once a day
-(`capture.feed_refresh_interval: '24h'`); an attached snapshot is never fetched by the cadence, only
-by the explicit refetch of its source. A sitemap refresh reconciles its pages 1:1, a feed refresh only
-adds — and a URL the human added by hand is released from its page/sitemap/feed, so it outlives its
+A page or sitemap is refreshed once a week (`capture.refresh_interval: '168h'`), a feed and a listing
+once a day (`capture.feed_refresh_interval: '24h'`); an attached snapshot is never fetched by the
+cadence, only by the explicit refetch of its source. A sitemap refresh reconciles its pages 1:1, a
+feed refresh only adds, and a listing refresh reads its first page (new articles appear there first).
+A URL the human added by hand is released from its page/sitemap/feed/listing, so it outlives its
 former owner.
 
 Derived things are caches (`outline`, `index.db`, `clusters/`); records are the truth (`<hash>.meta`,

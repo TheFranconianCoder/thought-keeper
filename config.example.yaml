@@ -126,11 +126,14 @@ capture:                                   # URL sources
     dedupe_by_url: true
     refresh_interval: '168h'               # how often ONE URL page or sitemap may be revisited
                                            # (weekly); a due check runs hourly; empty = manual only
-    feed_refresh_interval: '24h'           # how often ONE RSS/Atom feed (its item list) is checked
-                                           # (daily); empty = feeds are not refreshed automatically
+    feed_refresh_interval: '24h'           # how often ONE RSS/Atom feed (its item list) and ONE
+                                           # listing (a blog index) are checked (daily); empty =
+                                           # they are not refreshed automatically
     min_text_chars: 400                    # below this a page becomes a bookmark
                                            # (video/app), never distilled; a login,
                                            # paywall or consent wall is BLOCKED instead
+    listing_max_pages: 100                 # the INITIAL walk of a listing's pagination stops here;
+                                           # a refresh only reads page 1 (new articles appear there)
 
 fetch:
     timeout: '20s'

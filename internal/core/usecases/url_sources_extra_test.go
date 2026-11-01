@@ -92,7 +92,7 @@ func TestManualAdditionWinsOverAnOwner(t *testing.T) {
 	}
 
 	// The human's own addition releases it.
-	if _, err := add.AddManual(ctx, raw, false); err != nil {
+	if _, err := add.AddManual(ctx, raw, false, usecases.ListingNo); err != nil {
 		t.Fatalf("manual add: %v", err)
 	}
 	row := idx.m[src.Hash]
@@ -121,7 +121,7 @@ func TestFeedIsASourceOfSources(t *testing.T) {
 		Clock:   fixedClock{},
 		Convert: &fakeConverter{},
 	}
-	src, err := uc.AddManual(ctx, "https://example.com/feed.xml", false)
+	src, err := uc.AddManual(ctx, "https://example.com/feed.xml", false, usecases.ListingNo)
 	if err != nil {
 		t.Fatalf("feed: %v", err)
 	}

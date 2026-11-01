@@ -94,9 +94,11 @@ flowchart LR
 1. **Capture** makes the source readable locally. Markdown and text already are; a PDF gets its text
    layer (poppler) or is OCR'd page by page (poppler + tesseract); an EPUB's chapters are read out of
    the container in pure Go; a URL is fetched and stored as a
-   static snapshot. A URL that turns out to be a **sitemap** or an **RSS/Atom feed** is not a page at
-   all: it becomes a parent source whose snapshot is the list it declared, and the pages it names are
-   fetched as sources of their own. A page behind a **login or a paywall** is reported as blocked — the
+   static snapshot. A URL that turns out to be a **sitemap**, an **RSS/Atom feed** or a page that
+   **lists its articles** (a blog index, a newsletter archive) is not a page at all: it becomes a
+   parent source whose snapshot is the list it declared, and the pages it names are fetched as
+   sources of their own. A listing is never assumed — the app offers the repeated cards it found and
+   the reader confirms them. A page behind a **login or a paywall** is reported as blocked — the
    app never stores a credential and never distils a login form. Capture never guesses: if a scanned
    PDF has no text and OCR is unavailable, the source is flagged `unsupported_source`, never silently
    empty — and so is a DRM-encrypted or image-only EPUB.
@@ -161,18 +163,22 @@ line. A new vault starts with "add the first source" here.
 - Every source is one folder entry with its whole story: the object, the capture rendering, the step
   record, the outline, the summary and its own append-only **log**.
 - **A source page opens on its summary**, the app's own account of what the source says; its other
-  tabs are content/PDF, the live page (URLs), the log, the files and sub-sources. URL addresses are
+  tabs are content/PDF, the log, the files and sub-sources. URL addresses are
   clickable — in the frontmatter, the rail and the **Open URL** action. Every text field has a clear
   (×) button.
-- **Sitemaps and RSS/Atom feeds** expand into page sources they own. A sitemap is a complete list, so
-  it is reconciled 1:1 (a page that leaves it is removed); a feed only ever extends — a page that
-  leaves it stays, and only deleting the feed removes its pages. **A feed that carries the post solves
+- **Sitemaps, RSS/Atom feeds and listings** expand into page sources they own. A sitemap is a
+  complete list, so it is reconciled 1:1 (a page that leaves it is removed); a feed and a listing
+  only ever extend — an article that leaves them stays, and only deleting the owner removes its
+  pages. A source another owner still declares (a page, a feed, a listing, a sitemap) is re-homed to
+  that owner instead of being deleted, so a URL another owner brought in first survives. A listing is read through all its pagination once (bounded by `capture.listing_max_pages`),
+  refreshed through page 1 only, and its snapshot merges page 1 into the archive it already
+  declares. **A feed that carries the post solves
   the JavaScript page**: the item's own copy becomes the page's snapshot (marked `from feed`), so a
   page that only resolves in a browser is still readable — and a later readable page replaces the copy.
   **Wiki pages** own the URLs they brought in, also 1:1. The **Sub-sources** tab lists them, and an
   owned source cannot be deleted apart from its owner. A URL you add yourself always wins: it is
-  released from any page/sitemap/feed that had claimed it. Two URLs that differ only by a trailing
-  slash are one source.
+  released from any page/sitemap/feed/listing that had claimed it. Two URLs that differ only by a
+  trailing slash are one source.
 - **A page behind a login or a paywall is reported, not guessed.** The app never stores a credential
   and never drives a browser: it names the gate (`login required`, `paywalled`), never distils a
   login form, and offers **Attach snapshot…** — save the page in your browser as HTML or PDF (for a
@@ -201,10 +207,10 @@ line. A new vault starts with "add the first source" here.
   backfill), and every match carries its evidence. The matcher is the same lexical substrate as
   search, with no model, no embeddings and no tokens; "not this interest" is a one-click correction.
   They are managed in an overlay — there is no ninth lens.
-- **Pages and sitemaps are re-checked once a week, feeds daily** (configurable, and on demand), with
-  a per-source and per-page HTTP status; broken links stay visible. A sitemap is reconciled against
-  its list 1:1; a feed only extends. A URL you add yourself wins over any page, sitemap or feed that
-  had claimed it.
+- **Pages and sitemaps are re-checked once a week, feeds and listings daily** (configurable, and on
+  demand), with a per-source and per-page HTTP status; broken links stay visible. A sitemap is
+  reconciled against its list 1:1; a feed and a listing only extend. A URL you add yourself wins over
+  any page, sitemap, feed or listing that had claimed it.
 
 ### Associations
 
@@ -339,7 +345,7 @@ The interesting documents are big and the vault grows. The app takes that seriou
   pipeline gate while it only reads. It verifies that every step record matches a file on disk,
   invalidates derivations whose artefact is gone, repairs lost identities and missing languages, and
   restores a source row's **owner** from its record — a source page never silently loses the wiki
-  page, sitemap or feed it belongs to.
+  page, sitemap, feed or listing it belongs to.
 - **No silent writes and no invented records.** A failed step is recorded; a dead link is listed; a
   missing file is a visible red light, not a blank page.
 - `app.memory_limit_mb` sets a soft Go heap ceiling; `thought-keeper status` reports the peak with
@@ -541,7 +547,7 @@ The same binary is the CLI; content verbs are **clients of the running instance*
 | `app [--headless] [--no-open] [--config PATH]` | start the desktop app |
 | `open` | open the running instance's UI |
 | `status` (alias `doctor`) `[--json]` | the doctor report |
-| `add --path FILE \| --url URL [--bookmark]` | intake a source (a URL may be a sitemap or a feed) |
+| `add --path FILE \| --url URL [--bookmark] [--listing auto\|yes\|no]` | intake a source (a URL may be a sitemap, a feed or a listing; a detected listing is offered, and `--listing=yes` collects it) |
 | `attach --url URL \| --source HASH --file FILE` | attach a saved page (HTML/PDF/MD/TXT) to a URL the app could not read |
 | `refetch --source HASH \| --url URL` | try the URL again for an attached snapshot; a wall keeps it |
 | `sources [--kind K] [--limit N]` | list sources |
@@ -571,7 +577,7 @@ Everything lives in one YAML file; `${ENV}` expansion keeps secrets out of it. T
 | `pipeline` | automation, timeouts, parallel parts/runs, consistency interval/batch |
 | `cluster` | the association quality gates (neighbours, merge/split, attach, overlap, size cap) |
 | `assistant` | command retention and prune interval, materialized-set cap, scan limit |
-| `capture` / `fetch` | URL dedupe (trailing slashes ignored), weekly page/sitemap and daily feed cadence, size limits, SSRF guard |
+| `capture` / `fetch` | URL dedupe (trailing slashes ignored), weekly page/sitemap and daily feed/listing cadence, the listing pagination cap, size limits, SSRF guard |
 | `pdf` / `ocr` | poppler/tesseract paths, page limits, OCR language and DPI |
 | `lint` | programmatic checks after each cluster pass |
 | `language` | UI, claim and summary language (all default to English) |
@@ -586,13 +592,13 @@ A small JSON API on loopback, serving the PWA and the CLI. Highlights:
 - `GET /api/v1/events` — one SSE stream for run state, source progress, live logs and counters.
 - `GET /api/v1/sources…` — list/read, tree, nodes, claims, raw files, log, summary, children.
 - `POST /api/v1/add` — intake a path, a URL or an upload. A sitemap or feed URL expands into its
-  parent source; a manual URL is released from any owner it had.
+  parent source; a page that lists articles answers with `listing_candidates`, and `{listing: true}`
+  turns it into a listing; a manual URL is released from any owner it had.
 - `POST /api/v1/sources/{hash}/attach` — give a blocked URL source the page you saved (multipart);
   replacing an attached snapshot resets the derivation the old bytes produced.
 - `POST /api/v1/sources/{hash}/refetch` — try the URL again for an attached snapshot; a wall keeps it.
-- `POST /api/v1/refresh-urls` — check every URL now (pages/sitemaps weekly, feeds daily otherwise);
-  sitemaps reconcile 1:1,
-  feeds only extend.
+- `POST /api/v1/refresh-urls` — check every URL now (pages/sitemaps weekly, feeds and listings daily
+  otherwise); sitemaps reconcile 1:1, feeds and listings only extend.
 - `GET /api/v1/atoms…` — claims, topics, related (`peers` + `same_topic`); duplicates and collapse
   (`GET …/duplicates`, `POST …/collapse`).
 - `POST /api/v1/query` — Ask; every long operation is a run you can query by id.
@@ -620,8 +626,9 @@ Thought Keeper is opinionated about what it will **not** do:
 - **No credentials and no browser automation.** The app never stores a login, reads your browser's
   cookies or drives a headless browser. A page behind a login or a paywall is **blocked**: reported
   with the reason, never distilled, and you can attach the snapshot you saved yourself.
-- **No crawling.** The agent fetches the URLs you give it, one at a time — or every page a sitemap or
-  feed you explicitly added declares. It never discovers links on its own.
+- **No crawling.** The agent fetches the URLs you give it, one at a time — or every page a sitemap,
+  feed or listing you explicitly added (and confirmed) declares, including the listing's own
+  pagination. It never discovers links on its own.
 - **Not a server.** Loopback only, one user, no auth surface, no cloud, no sync in v1.
 - **No external MCP servers in v1.**
 - **No silent writes.** Every agent mutation goes through the same use cases as any other write.
@@ -633,9 +640,9 @@ Thought Keeper is opinionated about what it will **not** do:
 The core is implemented end to end: the desktop shell, the vault and index, the four-step pipeline
 with poppler/tesseract OCR and the tree builder, claims and titleless clusters, lexical search and
 Ask, wiki pages and their derived tags, the vocabulary curation, the consistency job, the audit, and
-the PWA with its lenses. URL sources cover the whole life of a link: sitemaps and RSS/Atom feeds
-expand into owned pages, login and paywall walls are reported instead of guessed, and a page you
-saved yourself can be attached to a blocked URL.
+the PWA with its lenses. URL sources cover the whole life of a link: sitemaps, RSS/Atom feeds and
+confirmed article listings expand into owned pages, login and paywall walls are reported instead of
+guessed, and a page you saved yourself can be attached to a blocked URL.
 
 Current work is about the long tail of a grown vault: memory- and time-conscious reads, cluster-pass
 throughput, the summary backfill, and the small interaction details that make a desktop app feel

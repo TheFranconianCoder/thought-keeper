@@ -19,6 +19,7 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/listing"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
@@ -286,6 +287,11 @@ func metaWithIdentity(raw string, src entities.Source) string {
 	if src.RSS {
 		set["rss"] = "true"
 	}
+	if src.Listing {
+		// A STRING, like sitemap and rss: metaField reads strings, and a bool would make the marker
+		// invisible to every reader.
+		set["listing"] = "true"
+	}
 	if src.FromFeed {
 		set["from_feed"] = "true"
 	}
@@ -298,11 +304,12 @@ func metaWithIdentity(raw string, src entities.Source) string {
 	return metaWith(raw, set)
 }
 
-// URLs is the use case of the URL sources: adding a link (page, sitemap or feed), refreshing what
-// the cadence finds due, and recording a fetch that failed.
+// URLs is the use case of the URL sources: adding a link (page, sitemap, feed or listing),
+// refreshing what the cadence finds due, and recording a fetch that failed.
 type URLs struct {
 	Fetch        interfaces.Fetcher
 	Convert      interfaces.HTMLConverter
+	Links        interfaces.LinkExtractor
 	Store        interfaces.SourceStore
 	Index        interfaces.IndexRepository
 	Atoms        interfaces.AtomRepository
@@ -323,22 +330,25 @@ type URLs struct {
 // URLAdder adds one URL source. A handler holds this value; nil means the feature is not wired.
 type URLAdder func(ctx context.Context, rawURL string, force bool) (partialentities.PartialSource, error)
 
-// Add fetches and stores one URL that a wiki page, sitemap or feed claimed. It never takes a source
-// away from its owner. force=true stores a bookmark regardless of how much text the page has.
+// Add fetches and stores one URL that a wiki page, sitemap, feed or listing claimed. It never takes
+// a source away from its owner. force=true stores a bookmark regardless of how much text the page
+// has. A page a child declares is never detected as a listing: an owner is what the human added.
 func (uc URLs) Add(ctx context.Context, rawURL string, force bool) (partialentities.PartialSource, error) {
-	return uc.execute(ctx, rawURL, force, false)
+	return uc.execute(ctx, rawURL, force, false, ListingNo)
 }
 
 // URLManualAdder adds a URL source the human entered by hand. A handler holds this value; nil means
 // the feature is not wired.
-type URLManualAdder func(ctx context.Context, rawURL string, force bool) (partialentities.PartialSource, error)
+type URLManualAdder func(ctx context.Context, rawURL string, force bool, listing ListingChoice) (partialentities.PartialSource, error)
 
-// AddManual adds a URL the human entered.
-func (uc URLs) AddManual(ctx context.Context, rawURL string, force bool) (partialentities.PartialSource, error) {
-	return uc.execute(ctx, rawURL, force, true)
+// AddManual adds a URL the human entered. The listing choice says whether a page that declares
+// articles should be offered as a listing (the default), forced into one (the confirmation), or
+// never treated as one.
+func (uc URLs) AddManual(ctx context.Context, rawURL string, force bool, listing ListingChoice) (partialentities.PartialSource, error) {
+	return uc.execute(ctx, rawURL, force, true, listing)
 }
 
-func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool) (partialentities.PartialSource, error) {
+func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, listingChoice ListingChoice) (partialentities.PartialSource, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
 		return partialentities.PartialSource{}, types.New("invalid_url", "url is required", types.ErrInvalidURL)
@@ -445,6 +455,45 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool) (
 		}
 	}
 
+	// A listing that is already known is RE-READ as a listing, whatever the caller asked: its
+	// snapshot is the article list, and writing a page over it would replace the list with a card
+	// grid (or a bookmark). No pagination walk follows — that is a capture, and this is a re-read.
+	if known && existing.Listing && uc.Links != nil && looksLikeHTML(page.ContentType) {
+		if res, lErr := uc.listingResult(ctx, page.Body, rawURL); lErr == nil && len(res.Items) > 0 {
+			return uc.storeListing(ctx, rawURL, page, res, conv.Title, existing, known)
+		}
+	}
+
+	// A LISTING is a page that declares articles instead of carrying one. Detection is offered, not
+	// applied: the page is stored and the answer carries how many cards were found, so the reader can
+	// confirm it. A page misread as a list would never be distilled, so the default is a question,
+	// never a verdict.
+	var detected listing.Result
+	if manual && listingChoice != ListingNo && uc.Links != nil && looksLikeHTML(page.ContentType) {
+		res, detectErr := uc.listingResult(ctx, page.Body, rawURL)
+		switch {
+		case detectErr != nil:
+			if uc.Log != nil {
+				uc.Log.Warn("url: the page's links could not be read", "url", rawURL, "err", detectErr)
+			}
+		case listingChoice == ListingYes:
+			if len(res.Items) == 0 {
+				return partialentities.PartialSource{}, types.New("unsupported_source",
+					"no article cards were found on this page — it is not a listing", types.ErrUnsupportedSource)
+			}
+			return uc.storeListing(ctx, rawURL, page, res, conv.Title, existing, known)
+		case listing.Suggests(res, bodyChars, minChars, linkedInMain(res.Items, conv.Markdown)):
+			// The page is stored as it is and the answer says what was found: the reader confirms
+			// the listing. Nothing is reclassified here — but a card grid is not prose, and a page
+			// that is about to become a list must not be distilled into claims about its own titles
+			// while the reader decides. A NEW page is therefore kept as a collected link.
+			detected = res
+			if !known {
+				bookmark = true
+			}
+		}
+	}
+
 	language := ""
 	if uc.Languages != nil {
 		language = uc.Languages.Detect(body)
@@ -509,6 +558,7 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool) (
 				OriginalName: rawURL, ContentHash: contentHash, FaviconHash: faviconHash(favicon),
 				FaviconExt: faviconExt(favicon), Origin: existing.Origin, WikiPage: existing.WikiPage,
 				ParentHash: existing.ParentHash, Sitemap: existing.Sitemap, RSS: existing.RSS,
+				Listing: existing.Listing,
 			})
 		}
 		stored, err := uc.Index.GetSourceByHash(ctx, existing.Hash)
@@ -517,6 +567,7 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool) (
 		}
 		out := partialentities.PartialFromSource(stored)
 		out.NeedsReset = needsReset
+		out.ListingCandidates = len(detected.Items)
 		return out, nil
 	}
 	src := entities.Source{
@@ -602,7 +653,7 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool) (
 			Kind: entities.SourceKindURL, URL: rawURL, Bookmark: bookmark, Language: language,
 			OriginalName: rawURL, ContentHash: contentHash, FaviconHash: faviconHash(favicon),
 			FaviconExt: faviconExt(favicon), Origin: src.Origin, WikiPage: src.WikiPage,
-			ParentHash: src.ParentHash, Sitemap: src.Sitemap, RSS: src.RSS,
+			ParentHash: src.ParentHash, Sitemap: src.Sitemap, RSS: src.RSS, Listing: src.Listing,
 		})
 	}
 	if bookmark {
@@ -611,7 +662,9 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool) (
 		recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepOutline, entities.StepSkipped, "bookmark", nil)
 		recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepDistill, entities.StepSkipped, "bookmark", nil)
 	}
-	return partialentities.PartialFromSource(stored), nil
+	out := partialentities.PartialFromSource(stored)
+	out.ListingCandidates = len(detected.Items)
+	return out, nil
 }
 
 // storeSitemap writes the sitemap as a source of its own and returns the URLs it declared. The
@@ -836,7 +889,7 @@ func (uc URLs) recordWall(ctx context.Context, rawURL string, page interfaces.Fe
 		_ = uc.Steps.SetIdentity(written.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			Kind: entities.SourceKindURL, URL: rawURL, OriginalName: rawURL,
 			Origin: written.Origin, WikiPage: written.WikiPage, ParentHash: written.ParentHash,
-			Sitemap: written.Sitemap, RSS: written.RSS,
+			Sitemap: written.Sitemap, RSS: written.RSS, Listing: written.Listing,
 		})
 	}
 	stored, err := uc.Index.GetSourceByHash(ctx, written.Hash)
@@ -1133,9 +1186,9 @@ func (uc URLs) RefreshOneForce(ctx context.Context, hash string) (RefreshResult,
 		return RefreshResult{}, types.New("unsupported_source",
 			"only a URL source can be fetched again", types.ErrUnsupportedSource)
 	}
-	if src.Sitemap || src.RSS {
+	if src.Sitemap || src.RSS || src.Listing {
 		return RefreshResult{}, types.New("unsupported_source",
-			"a sitemap or a feed is a list, not a page to attach", types.ErrUnsupportedSource)
+			"a sitemap, a feed or a listing is a list, not a page to attach", types.ErrUnsupportedSource)
 	}
 	if !isAttached(src.Meta) {
 		return RefreshResult{}, types.New("unsupported_source",
@@ -1178,7 +1231,9 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 			// A feed (its item list) is checked daily; a page and a sitemap weekly. A kind whose
 			// interval is zero is not refreshed automatically at all.
 			age := uc.MinAge
-			if s.RSS {
+			if s.RSS || s.Listing {
+				// A feed announces new posts and a listing shows them: both change far more often
+				// than a page's text does.
 				age = uc.FeedMinAge
 			}
 			if age <= 0 {
@@ -1289,10 +1344,10 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 			}
 			continue
 		}
-		// A sitemap's or feed's snapshot is a LIST, not HTML: re-expanding it here is what brings new
-		// pages in (and, for a sitemap, what removes the ones it no longer lists). Its children are
-		// fetched as their own sources.
-		if s.Sitemap || s.RSS {
+		// A sitemap's, feed's or listing's snapshot is a LIST, not HTML: re-expanding it here is what
+		// brings new pages in (and, for a sitemap, what removes the ones it no longer lists). Its
+		// children are fetched as their own sources.
+		if s.Sitemap || s.RSS || s.Listing {
 			parent, queued, removed, parentErr := uc.refreshParent(ctx, s, page, now)
 			if parentErr != nil {
 				res.Failed++
@@ -1644,6 +1699,32 @@ func (uc URLs) refreshParent(ctx context.Context, s entities.Source, page interf
 		if removed, err = uc.removeGoneChildren(ctx, s, entries); err != nil {
 			return partialentities.PartialSource{}, nil, 0, err
 		}
+	} else if s.Listing {
+		// A listing is refreshed through its FIRST page only. A blog index and a newsletter archive
+		// are newest-first: a new article is on page 1, and walking the pagination again every day
+		// would fetch the archive to learn nothing.
+		res, rErr := uc.listingResult(ctx, page.Body, s.URL)
+		if rErr != nil {
+			return partialentities.PartialSource{}, nil, 0, rErr
+		}
+		if len(res.Items) == 0 {
+			return partialentities.PartialSource{}, nil, 0, errors.New("the listing could not be read")
+		}
+		// Only page 1 was fetched. The archive the initial walk collected is kept: a listing is a
+		// window, and a snapshot that forgot every article older than the newest page would read as
+		// data loss.
+		fresh := len(res.Items)
+		items := mergeListingItems(res.Items, uc.listingSnapshotItems(s))
+		title = s.Title
+		if title == "" {
+			title = listingTitle(s.URL)
+		}
+		snapshot = renderListingSnapshot(s.URL, title, page.Status, now, items)
+		contentHash = contentHashOf(title, snapshot)
+		detail = fmt.Sprintf("HTTP %d · listing · %d articles · %d on page 1", page.Status, len(items), fresh)
+		if queued, err = queue.QueueListing(ctx, s.Hash, itemURLs(items)); err != nil {
+			return partialentities.PartialSource{}, nil, 0, err
+		}
 	} else {
 		doc, ok := parseFeed(page.Body, s.URL)
 		if !ok {
@@ -1685,15 +1766,18 @@ func (uc URLs) refreshParent(ctx context.Context, s entities.Source, page interf
 			Kind: entities.SourceKindURL, URL: s.URL, Language: s.Language, OriginalName: s.URL,
 			ContentHash: contentHash, FaviconHash: faviconHash(icon), FaviconExt: faviconExt(icon),
 			Origin: s.Origin, WikiPage: s.WikiPage, ParentHash: s.ParentHash,
-			Sitemap: s.Sitemap, RSS: s.RSS,
+			Sitemap: s.Sitemap, RSS: s.RSS, Listing: s.Listing,
 		})
 	}
 	recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK, detail, nil)
 	// A feed or a sitemap is a LIST: the refresh just fetched it, and the document steps still do not
 	// apply. Re-recording them keeps the .meta the truth even when an older record lost them.
 	parentDetail := "feed"
-	if s.Sitemap {
+	switch {
+	case s.Sitemap:
 		parentDetail = "sitemap"
+	case s.Listing:
+		parentDetail = "listing"
 	}
 	recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepOutline, entities.StepSkipped, parentDetail, nil)
 	recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepDistill, entities.StepSkipped, parentDetail, nil)
@@ -1722,7 +1806,7 @@ func (uc URLs) removeGoneChildren(ctx context.Context, parent entities.Source, e
 	if err != nil {
 		return 0, err
 	}
-	removed := 0
+	hashes := make([]string, 0, len(children))
 	for _, child := range children {
 		if child.ParentHash != parent.Hash || child.Origin != entities.SitemapOrigin {
 			continue
@@ -1730,16 +1814,18 @@ func (uc URLs) removeGoneChildren(ctx context.Context, parent entities.Source, e
 		if child.URL != "" && keep[entities.URLKey(child.URL)] {
 			continue
 		}
-		if _, err := uc.Delete(ctx, child.Hash); err != nil {
-			if uc.Log != nil {
-				uc.Log.Warn("sitemap refresh: page not removed", "sitemap", parent.Hash,
-					"page", child.Hash, "err", err)
-			}
-			continue
-		}
-		removed++
+		hashes = append(hashes, child.Hash)
 	}
-	return removed, nil
+	if len(hashes) == 0 {
+		return 0, nil
+	}
+	// ONE delete scope: a page that left the sitemap but is still declared by a listing or a wiki
+	// page is re-homed, not removed.
+	result, err := uc.Delete(ctx, hashes...)
+	if err != nil && uc.Log != nil {
+		uc.Log.Warn("sitemap refresh: pages not removed", "sitemap", parent.Hash, "err", err)
+	}
+	return len(result.Removed), nil
 }
 
 // metaWithFavicon preserves the other URL metadata (bookmark, excerpt, site) while setting the
@@ -1956,4 +2042,12 @@ func yamlScalar(s string) string {
 		return strconv.Quote(s)
 	}
 	return s
+}
+
+// looksLikeHTML reports whether a response says it is a document to read as a page. An empty type is
+// accepted: the converter already treats unknown bytes as HTML, and a detector that refused them
+// would miss the half of the web that omits the header.
+func looksLikeHTML(contentType string) bool {
+	ct := strings.ToLower(contentType)
+	return ct == "" || strings.Contains(ct, "text/html") || strings.Contains(ct, "application/xhtml")
 }

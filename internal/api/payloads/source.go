@@ -19,6 +19,12 @@ type Source struct {
 	// RSS marks a feed source: its snapshot is the item list and its children are the pages the items
 	// point at. A feed only ever grows; a sitemap is reconciled 1:1.
 	RSS bool `json:"rss,omitempty"`
+	// Listing marks a listing source: a blog index or a newsletter archive whose cards are articles.
+	// Like a feed it only grows; its pagination is walked once, on capture.
+	Listing bool `json:"listing,omitempty"`
+	// ListingCandidates is how many repeated article cards the detector found on a page that was
+	// stored as a normal source. It asks the reader one question; it is not a property of the source.
+	ListingCandidates int `json:"listing_candidates,omitempty"`
 	// FromFeed marks a snapshot taken from a feed's own copy of the post (the page itself may be a
 	// JavaScript shell); FeedHash is the feed it came from.
 	FromFeed bool   `json:"from_feed,omitempty"`
@@ -58,6 +64,9 @@ type Source struct {
 	// Children is how many sub-sources this source owns (a sitemap's pages, a wiki page's linked
 	// URLs). Zero on a list row; only the detail read fills it.
 	Children int `json:"children,omitempty"`
+	// Declared is how many articles a list source declares (a sitemap's pages, a feed's items, a
+	// listing's articles). It is larger than Children when another owner brought some of them in.
+	Declared int `json:"declared,omitempty"`
 	// RunningStep names the document step that is running for this source right now
 	// ("capture"/"outline"/"distill"), or is empty. The CLUSTER step is not per source (it is reported
 	// globally): a source row must not claim to be compiling.
@@ -144,6 +153,10 @@ type AddRequest struct {
 	// Bookmark forces a URL to be stored as a collected link (no indexing), even if
 	// the page has readable text.
 	Bookmark bool `json:"bookmark"`
+	// Listing answers the listing question for a URL. Absent means "detect and OFFER": the page is
+	// stored as it is and the answer says how many article cards were found. true turns the page
+	// into a listing (the reader confirmed the offer), false never treats it as one.
+	Listing *bool `json:"listing,omitempty"`
 }
 
 // AddURLsRequest is the body of POST /api/v1/add-urls (one or many URLs).

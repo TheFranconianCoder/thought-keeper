@@ -36,7 +36,7 @@ func NewSourceRepository(db *sql.DB) *SourceRepository {
 // UpsertSource inserts or refreshes a source row. On conflict only derived columns
 // are refreshed, so ids, titles, provenance and tree state survive a reindex.
 func (r *SourceRepository) UpsertSource(ctx context.Context, s entities.Source) error {
-	meta := withMetaFields(s.Meta, map[string]string{"language": s.Language, "origin": s.Origin, "wiki_page": s.WikiPage, "parent_hash": s.ParentHash, "sitemap": boolField(s.Sitemap), "rss": boolField(s.RSS), "from_feed": boolField(s.FromFeed), "feed_hash": s.FeedHash})
+	meta := withMetaFields(s.Meta, map[string]string{"language": s.Language, "origin": s.Origin, "wiki_page": s.WikiPage, "parent_hash": s.ParentHash, "sitemap": boolField(s.Sitemap), "rss": boolField(s.RSS), "listing": boolField(s.Listing), "from_feed": boolField(s.FromFeed), "feed_hash": s.FeedHash})
 	err := r.q.UpsertSource(ctx, dal.UpsertSourceParams{
 		ID:         s.ID,
 		Hash:       s.Hash,
@@ -74,7 +74,7 @@ func (r *SourceRepository) FillURLSource(ctx context.Context, s entities.Source)
 		Title:        s.Title,
 		OriginalName: s.OriginalName,
 		Bookmark:     boolInt(s.Bookmark),
-		Meta:         withMetaFields(s.Meta, map[string]string{"language": s.Language, "origin": s.Origin, "wiki_page": s.WikiPage, "parent_hash": s.ParentHash, "sitemap": boolField(s.Sitemap), "rss": boolField(s.RSS), "from_feed": boolField(s.FromFeed), "feed_hash": s.FeedHash}),
+		Meta:         withMetaFields(s.Meta, map[string]string{"language": s.Language, "origin": s.Origin, "wiki_page": s.WikiPage, "parent_hash": s.ParentHash, "sitemap": boolField(s.Sitemap), "rss": boolField(s.RSS), "listing": boolField(s.Listing), "from_feed": boolField(s.FromFeed), "feed_hash": s.FeedHash}),
 		Hash:         s.Hash,
 	})
 	if err != nil {
@@ -130,7 +130,7 @@ func keepOwnership(current, next string) string {
 		return next
 	}
 	changed := false
-	for _, key := range []string{"origin", "wiki_page", "parent_hash", "sitemap", "rss"} {
+	for _, key := range []string{"origin", "wiki_page", "parent_hash", "sitemap", "rss", "listing"} {
 		if _, owned := nxt[key]; owned {
 			continue
 		}
@@ -935,6 +935,7 @@ func toEntity(row dal.Source) entities.Source {
 		ParentHash:   metaField(row.Meta, "parent_hash"),
 		Sitemap:      metaField(row.Meta, "sitemap") == "true",
 		RSS:          metaField(row.Meta, "rss") == "true",
+		Listing:      metaField(row.Meta, "listing") == "true",
 		FromFeed:     metaField(row.Meta, "from_feed") == "true",
 		FeedHash:     metaField(row.Meta, "feed_hash"),
 		Wall:         metaField(row.Meta, "wall"),

@@ -72,7 +72,7 @@ func newFeedPageFixture(t *testing.T, conv feedPageConverter) feedPageFixture {
 		},
 		Convert: conv, Store: store, Index: idx, Steps: steps, Clock: fixedClock{}, MinTextChars: 40,
 	}
-	if _, err := add.AddManual(ctx, feedURL, false); err != nil {
+	if _, err := add.AddManual(ctx, feedURL, false, usecases.ListingNo); err != nil {
 		t.Fatalf("feed: %v", err)
 	}
 	oneHash := entities.URLHash(oneURL)
@@ -195,7 +195,7 @@ func TestAddUrlDoesNotClobberAFeedCopyWithAShell(t *testing.T) {
 		},
 		Store: f.store, Index: f.idx, Steps: f.steps, Clock: fixedClock{}, MinTextChars: 40,
 	}
-	src, err := add.AddManual(f.ctx, "https://example.com/one", false)
+	src, err := add.AddManual(f.ctx, "https://example.com/one", false, usecases.ListingNo)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestAddUrlReportsAResetWhenItReplacesAFeedCopy(t *testing.T) {
 		},
 		Store: f.store, Index: f.idx, Steps: f.steps, Clock: fixedClock{}, MinTextChars: 40,
 	}
-	src, err := add.AddManual(f.ctx, "https://example.com/one", false)
+	src, err := add.AddManual(f.ctx, "https://example.com/one", false, usecases.ListingNo)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}

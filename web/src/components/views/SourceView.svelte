@@ -45,11 +45,9 @@
   );
   const defaultTab = $derived(summaryTab ? 'summary' : 'snapshot');
   const requestedTab = $derived(route.params.get('tab') ?? '');
-  // An address that names a tab the source does not have (a summary on a bookmark) falls back to
-  // the default instead of rendering a panel whose tab is not there.
-  const tab = $derived(
-    requestedTab && (requestedTab !== 'summary' || summaryTab) ? requestedTab : defaultTab,
-  );
+  // An address that names a tab the source does not have (a PDF tab on a page, a summary on a
+  // bookmark, an old "live" link) falls back to the default instead of rendering an empty panel.
+  const tab = $derived(requestedTab && tabExists(requestedTab) ? requestedTab : defaultTab);
   const partID = $derived(route.params.get('part') ?? '');
   const fileParam = $derived(route.params.get('file') ?? '');
   const sidecars = $derived(selected?.sidecars ?? []);
@@ -57,12 +55,13 @@
   const isPDF = $derived(selected?.ext === '.pdf');
   const isEPUB = $derived(selected?.kind === 'epub');
   const isURLSource = $derived(selected?.kind === 'url');
-  // A sitemap's snapshot IS a page list, a feed's items point at pages the vault already owns, and
-  // a wiki page's representation carries the page's own prose: all three read as prose whose links
-  // may already be sources, so they open the source, not the web.
+  // A sitemap's snapshot IS a page list, a feed's or listing's items point at pages the vault
+  // already owns, and a wiki page's representation carries the page's own prose: all of them read as
+  // prose whose links may already be sources, so they open the source, not the web.
   const listSource = $derived(
     selected?.sitemap === true ||
       selected?.rss === true ||
+      selected?.listing === true ||
       (selected?.original_name?.startsWith('wiki:') ?? false),
   );
   const markdownView = $derived(
@@ -82,8 +81,17 @@
       : null,
   );
   const hasChildrenTab = $derived(
-    !!selected && (selected.sitemap === true || selected.rss === true || (selected.children ?? 0) > 0),
+    !!selected &&
+      (selected.sitemap === true ||
+        selected.rss === true ||
+        selected.listing === true ||
+        (selected.children ?? 0) > 0),
   );
+  // A list declares more than it OWNS: a URL another owner brought in first stays there. Both
+  // numbers are shown so the difference reads as ownership, not as missing articles.
+  const declared = $derived(selected?.declared ?? 0);
+  const owned = $derived(selected?.children ?? 0);
+  const elsewhere = $derived(Math.max(declared - owned, 0));
   const live = $derived(sources.progress[hash]);
   const counts = $derived(selected ? countsOf(selected, live) : null);
   const progress = $derived(selected ? progressOf(selected, live) : null);
@@ -378,6 +386,40 @@
     navigate('#/sources');
     setPagePosition(top);
   }
+
+  /** tabExists reports whether this source has the tab an address names. */
+  function tabExists(name: string): boolean {
+    switch (name) {
+      case 'summary':
+        return summaryTab;
+      case 'snapshot':
+      case 'log':
+      case 'files':
+        return true;
+      case 'pdf':
+        return isPDF;
+      case 'children':
+        return hasChildrenTab;
+      default:
+        return false;
+    }
+  }
+
+  /** ownerOf names the source that controls a child's removal. */
+  function ownerOf(origin: string | undefined): string {
+    if (origin === 'sitemap') return t('source.ownerSitemap');
+    if (origin === 'rss') return t('source.ownerFeed');
+    if (origin === 'listing') return t('source.ownerListing');
+    return t('source.ownerWiki');
+  }
+
+  /** partOf names the relation of a child to its owner. */
+  function partOf(origin: string | undefined): string {
+    if (origin === 'sitemap') return t('source.partOfSitemap');
+    if (origin === 'rss') return t('source.partOfFeed');
+    if (origin === 'listing') return t('source.partOfListing');
+    return t('source.partOfSitemap');
+  }
 </script>
 
 {#if route.view === 'source' && hash}
@@ -417,6 +459,7 @@
             <span class="chip chip--mono">{selected.kind}</span>
             {#if selected.sitemap}<span class="chip">{t('source.sitemap')}</span>{/if}
             {#if selected.rss}<span class="chip">{t('source.feed')}</span>{/if}
+            {#if selected.listing}<span class="chip">{t('source.listing')}</span>{/if}
             <span>{fmtBytes(selected.bytes)}</span>
             <span>·</span>
             <span>{relTime(selected.imported_at)}</span>
@@ -471,7 +514,7 @@
               <Icon name="external" size={13} /> <span class="btn-label">{t('source.openUrl')}</span>
             </a>
           {/if}
-          {#if selected.rss || selected.sitemap}
+          {#if selected.rss || selected.sitemap || selected.listing}
             <button
               class="btn btn--secondary btn--sm btn--action"
               title={t('source.refresh')}
@@ -539,7 +582,6 @@
             {/if}
             {#if isURLSource}
               <button class="tab" class:on={tab === 'snapshot'} onclick={() => setTab('snapshot')}>{t('source.tabSnapshot')}</button>
-              <button class="tab" class:on={tab === 'live'} onclick={() => setTab('live')}>{t('source.tabLive')}</button>
             {:else}
               <button class="tab" class:on={tab === 'snapshot'} onclick={() => setTab('snapshot')}>
                 {isPDF || isEPUB ? t('source.tabText') : t('source.tabContent')}
@@ -558,6 +600,14 @@
           </div>
 
           <div class="source-body">
+            {#if tab === 'snapshot' && selected.bookmark}
+              <p class="file-notice muted">
+                {t('source.bookmarkSnapshotNote')}
+                {#if selected.url}
+                  <a href={selected.url} target="_blank" rel="noopener noreferrer">{t('source.openUrl')}</a>
+                {/if}
+              </p>
+            {/if}
             {#if tab === 'summary'}
               {#if sources.summary && !sources.summaryMissing}
                 <div class="summary-head">
@@ -701,8 +751,6 @@
                 </p>
               {/if}
               <pre class="raw-file log-file">{logTail || sources.logError || t('source.noLog')}</pre>
-            {:else if tab === 'live' && selected.url}
-              <iframe class="frame" title={t('source.liveTitle')} src={selected.url}></iframe>
             {:else if tab === 'pdf' && isPDF}
               {#if pdfReady}
                 <iframe class="frame" title={selected.title || 'PDF'} src={api.rawURL(selected.hash)}></iframe>
@@ -892,7 +940,7 @@
                 (selected.bookmark ? t('source.notIndexed') : t('source.unknown'))}</span>
             </div>
             {#if selected.pages}<div class="kv"><span class="k">{t(isEPUB ? 'source.chaptersLabel' : 'source.pagesLabel')}</span><span class="v">{n(selected.pages)}</span></div>{/if}
-            {#if !selected.rss && !selected.sitemap}
+            {#if !selected.rss && !selected.sitemap && !selected.listing}
               <div class="kv"><span class="k">{t('source.outlineLabel')}</span><span class="v">{selected.tree_state}</span></div>
             {/if}
             <div class="kv"><span class="k">{t('source.addedLabel')}</span><span class="v">{relTime(selected.imported_at)}</span></div>
@@ -910,12 +958,12 @@
               <div class="kv"><span class="k">{t('source.httpLabel')}</span><span class="v">{selected.url_status} · {relTime(selected.url_checked_at)}</span></div>
             {/if}
             <div class="kv"><span class="k">ID</span><span class="v"><CopyId text={selected.hash} label={t('source.idLabel')} display={selected.hash.slice(0, 12)} /></span></div>
-            {#if (selected.origin === 'sitemap' || selected.origin === 'rss') && selected.parent_hash}
+            {#if (selected.origin === 'sitemap' || selected.origin === 'rss' || selected.origin === 'listing') && selected.parent_hash}
               <div class="kv">
-                <span class="k">{selected.origin === 'rss' ? t('source.feed') : t('source.sitemap')}</span>
+                <span class="k">{ownerOf(selected.origin)}</span>
                 <span class="v">
                   <a class="rail-link" href={sourcePath(selected.parent_hash)}>
-                    {selected.origin === 'rss' ? t('source.partOfFeed') : t('source.partOfSitemap')}
+                    {partOf(selected.origin)}
                   </a>
                 </span>
               </div>
@@ -930,6 +978,20 @@
               <div class="kv">
                 <span class="k">{t('source.feed')}</span>
                 <span class="v">{t('source.feedOwns')}</span>
+              </div>
+            {/if}
+            {#if selected.listing}
+              <div class="kv">
+                <span class="k">{t('source.listing')}</span>
+                <span class="v">{t('source.listingOwns')}</span>
+              </div>
+            {/if}
+            {#if (selected.sitemap || selected.rss || selected.listing) && declared > 0}
+              <div class="kv">
+                <span class="k">{t('source.declaredLabel')}</span>
+                <span class="v">
+                  {t('source.declaredOwned', { declared, owned })}{#if elsewhere > 0} · {t('source.declaredElsewhere', { count: elsewhere })}{/if}
+                </span>
               </div>
             {/if}
             {#if selected.from_feed}
@@ -960,11 +1022,7 @@
               <p class="rail-note">
                 {t('source.ownedBy', {
                   owner:
-                    selected.origin === 'sitemap'
-                      ? t('source.ownerSitemap')
-                      : selected.origin === 'rss'
-                        ? t('source.ownerFeed')
-                        : t('source.ownerWiki'),
+                    ownerOf(selected.origin),
                 })}
               </p>
             {/if}

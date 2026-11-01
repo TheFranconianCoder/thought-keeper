@@ -54,7 +54,7 @@ func (f *fakeIndex) UpsertSource(_ context.Context, s entities.Source) error {
 	}
 	old.Kind, old.Ext, old.Path, old.Bytes = s.Kind, s.Ext, s.Path, s.Bytes
 	// The real repository merges these identity markers from the entity into the row's meta.
-	old.Sitemap, old.RSS = s.Sitemap, s.RSS
+	old.Sitemap, old.RSS, old.Listing = s.Sitemap, s.RSS, s.Listing
 	old.FromFeed, old.FeedHash = s.FromFeed, s.FeedHash
 	f.m[s.Hash] = old
 	return nil
@@ -71,7 +71,7 @@ func (f *fakeIndex) FillURLSource(_ context.Context, s entities.Source) error {
 	old.Kind, old.Ext, old.Path, old.Bytes = s.Kind, s.Ext, s.Path, s.Bytes
 	old.Title, old.OriginalName, old.Bookmark, old.Meta = s.Title, s.OriginalName, s.Bookmark, s.Meta
 	old.FromFeed, old.FeedHash = s.FromFeed, s.FeedHash
-	old.RSS, old.Sitemap = s.RSS, s.Sitemap
+	old.RSS, old.Sitemap, old.Listing = s.RSS, s.Sitemap, s.Listing
 	f.m[s.Hash] = old
 	return nil
 }

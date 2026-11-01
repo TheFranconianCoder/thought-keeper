@@ -28,6 +28,8 @@ export const shellDe: Record<string, string> = {
     '/pfad/zur/datei.pdf\n/pfad/zum/buch.epub\nhttps://example.com/artikel\nhttps://anderes.example.org/beitrag',
   'add.bookmarkTitle': 'Als Lesezeichen behalten',
   'add.bookmarkHint': 'Den Link sammeln, ohne seinen Text zu indizieren.',
+  'add.listingTitle': 'Diese Seite listet Artikel',
+  'add.listingHint': 'Die verlinkten Artikel als Quellen einsammeln. Die Seitenzahl wird einmal gelesen, bis zur eingestellten Obergrenze.',
   'add.dropPrefix': 'Eine Markdown-, PDF-, TXT- oder EPUB-Datei hier ablegen oder ',
   'add.browse': 'durchsuchen',
   'add.dropSuffix': '.',

@@ -8,6 +8,7 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/listing"
 )
 
 // PartialSource is the DTO for entities.Source.
@@ -25,6 +26,7 @@ type PartialSource struct {
 	ParentHash      string
 	Sitemap         bool
 	RSS             bool
+	Listing         bool
 	FromFeed        bool
 	FeedHash        string
 	Wall            string
@@ -57,6 +59,10 @@ type PartialSource struct {
 	// Children is how many sub-sources this source owns (a sitemap's pages, a wiki page's linked
 	// URLs). It is filled by the SINGLE-source read only: a list row has no use for it.
 	Children int
+	// Declared is how many articles a LIST source declares in its snapshot — which is not the same
+	// as Children: a URL another owner brought in first stays there. Filled by the single-source
+	// read only, and zero for a document.
+	Declared int
 	// NeedsReset marks a source whose snapshot THIS operation replaced with different text. The
 	// caller must rebuild the derivation (exclusive) instead of merely pumping. It is a property of
 	// the call, not of the source, and the wire payload ignores it.
@@ -66,6 +72,19 @@ type PartialSource struct {
 	SitemapURLs []string
 	// RSSURLs is the expansion an RSS/Atom feed produced, claimed the same way (origin rss).
 	RSSURLs []string
+	// ListingURLs is the expansion a listing produced, claimed the same way (origin listing).
+	ListingURLs []string
+	// ListingItems are the articles the listing's first page declared. The pagination walk appends
+	// the later pages and rewrites the listing's snapshot when it is done.
+	ListingItems []listing.Item
+	// ListingNext is the listing's next page of pagination, or empty when the first page was the
+	// whole listing.
+	ListingNext string
+	// ListingCandidates is how many repeated article cards the detector found on a page that was
+	// stored as a normal source. Non-zero means "this may be a listing": the reader is asked once,
+	// and a confirmed re-add turns the page into an owner. It is a property of the answer, not of
+	// the source, and the wire payload carries it.
+	ListingCandidates int
 }
 
 // ToEntity converts the partial into a domain entity.
@@ -101,6 +120,7 @@ func (p PartialSource) ToEntity() entities.Source {
 		ParentHash:      p.ParentHash,
 		Sitemap:         p.Sitemap,
 		RSS:             p.RSS,
+		Listing:         p.Listing,
 		FromFeed:        p.FromFeed,
 		FeedHash:        p.FeedHash,
 		Wall:            p.Wall,
@@ -125,6 +145,7 @@ func PartialFromSource(s entities.Source) PartialSource {
 		ParentHash:      s.ParentHash,
 		Sitemap:         s.Sitemap,
 		RSS:             s.RSS,
+		Listing:         s.Listing,
 		FromFeed:        s.FromFeed,
 		FeedHash:        s.FeedHash,
 		Wall:            s.Wall,

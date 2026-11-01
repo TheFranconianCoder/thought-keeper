@@ -221,6 +221,7 @@ export function statusLabel(source: Source, live?: LiveProgress): string {
     // stuck after step 1.
     if (source.rss) return t('sources.status.feedList');
     if (source.sitemap) return t('sources.status.sitemapList');
+    if (source.listing) return t('sources.status.listingList');
     if (source.steps?.distill?.state === 'ok') return t('sources.status.completeNoClaims');
     if (source.tree_state === 'built') return t('sources.status.ready');
     if (source.tree_state === 'failed') return t('sources.status.outlineFailed');

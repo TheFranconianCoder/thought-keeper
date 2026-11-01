@@ -45,6 +45,10 @@ type Record struct {
 	// RSS marks a source that is itself a feed (see entities.Source.RSS). Like Sitemap it is part of
 	// what the source IS, so a reindex keeps it.
 	RSS bool `json:"rss,omitempty"`
+	// Listing marks a source that is itself a listing: a blog index or a newsletter archive whose
+	// cards are the articles. Identity, like Sitemap and RSS — a reindex must not turn a listing into
+	// a document and distill its card titles as claims.
+	Listing bool `json:"listing,omitempty"`
 	// Bookmark marks a collected link: metadata only, never distilled.
 	Bookmark     bool   `json:"bookmark,omitempty"`
 	OriginalName string `json:"original_name,omitempty"`

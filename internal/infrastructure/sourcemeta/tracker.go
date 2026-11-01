@@ -93,6 +93,7 @@ func (t *Tracker) Records() (map[string]entities.SourceRecord, error) {
 				ParentHash:   rec.ParentHash,
 				Sitemap:      rec.Sitemap,
 				RSS:          rec.RSS,
+				Listing:      rec.Listing,
 				OriginalName: rec.OriginalName,
 				ContentHash:  rec.ContentHash,
 				FaviconHash:  rec.FaviconHash,
@@ -437,6 +438,7 @@ func (t *Tracker) SetIdentity(hash string, id entities.SourceIdentity) error {
 		}
 		rec.Sitemap = id.Sitemap
 		rec.RSS = id.RSS
+		rec.Listing = id.Listing
 		if id.OriginalName != "" {
 			rec.OriginalName = id.OriginalName
 		}
@@ -448,6 +450,19 @@ func (t *Tracker) SetIdentity(hash string, id entities.SourceIdentity) error {
 		rec.AttachedHash = id.AttachedHash
 		rec.FromFeed = id.FromFeed
 		rec.FeedHash = id.FeedHash
+		return nil
+	})
+	return err
+}
+
+// SetOwnership records who controls the source's removal. An empty value clears the recorded one:
+// this is the write a re-home needs, and the reason it is not SetIdentity (which never clears).
+func (t *Tracker) SetOwnership(hash, origin, wikiPage, parentHash string) error {
+	if t == nil || t.Meta == nil {
+		return nil
+	}
+	_, err := t.Meta.Update(hash, func(rec *Record) error {
+		rec.Origin, rec.WikiPage, rec.ParentHash = origin, wikiPage, parentHash
 		return nil
 	})
 	return err
@@ -474,6 +489,7 @@ func (t *Tracker) Identity(hash string) (entities.SourceIdentity, error) {
 		ParentHash:   rec.ParentHash,
 		Sitemap:      rec.Sitemap,
 		RSS:          rec.RSS,
+		Listing:      rec.Listing,
 		OriginalName: rec.OriginalName,
 		ContentHash:  rec.ContentHash,
 		FaviconHash:  rec.FaviconHash,

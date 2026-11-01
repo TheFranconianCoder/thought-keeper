@@ -39,7 +39,7 @@ sync when a knob changes. Sections:
 | `pipeline` | auto, auto_distill, debounce, run/cluster timeouts, parts per run, parallel parts/runs/queries, auto_continue, reconcile interval/batch |
 | `cluster` | the quality gates of the claim graph (no model) |
 | `assistant` | command `retention` (`168h`), `prune_interval` (`24h`), `max_items` per materialized set, `scan_limit` per resolution |
-| `capture` | URL dedupe, refresh interval (default `168h` — weekly for pages/sitemaps), feed interval (default `24h` — daily), `min_text_chars` |
+| `capture` | URL dedupe, refresh interval (default `168h` — weekly for pages/sitemaps), feed/listing interval (default `24h` — daily), `min_text_chars`, `listing_max_pages` (default 100 — the initial walk of a listing's pagination) |
 | `fetch` | timeout, max bytes, user agent, `allow_private` (SSRF guard) |
 | `pdf` | text tool, max bytes, max pages |
 | `ocr` | enabled, rasterizer, tesseract, languages, dpi, per-page threshold, max pages, timeout |
@@ -271,11 +271,14 @@ commit and the build time into `internal/version` via `-ldflags`, builds
 - **Fetch guards.** Only http/https, a User-Agent, timeouts, max bytes, an SSRF guard
   (`fetch.allow_private`, off by default). A login form is a wall only when the page carries no
   substantial article text of its own: a header login form on a readable article is navigation.
-- **No crawling.** The agent fetches the URLs you give it, one at a time (plus refresh).
-- **Pages and sitemaps are refreshed weekly, feeds daily.** `capture.refresh_interval: '168h'` is the
-  cadence one page or sitemap may be revisited; `capture.feed_refresh_interval: '24h'` is the cadence
-  of a feed's item list (the worker looks for due sources every hour); either empty means manual only
-  for that kind. The cadence is stored per source (`url_checked_at`), so restarting the app neither
+- **No crawling.** The agent fetches the URLs you give it, one at a time (plus refresh), every page a
+  sitemap you added declares, every article a feed announces, and every article a listing you
+  confirmed declares — including that listing's own pagination, bounded by
+  `capture.listing_max_pages` and followed once, on capture.
+- **Pages and sitemaps are refreshed weekly, feeds and listings daily.**
+  `capture.refresh_interval: '168h'` is the cadence one page or sitemap may be revisited;
+  `capture.feed_refresh_interval: '24h'` is the cadence of a feed's item list and of a listing (the
+  worker looks for due sources every hour); either empty means manual only for that kind. The cadence is stored per source (`url_checked_at`), so restarting the app neither
   postpones nor doubles a refresh. A manual pass — `POST /api/v1/refresh-urls` — ignores it and checks
   everything now; the **Refresh** button (or `POST /api/v1/sources/{hash}/refresh`) checks ONE source
   now, under the exclusive side of the gate: it replaces the snapshot and resets the derivation, so
@@ -284,8 +287,11 @@ commit and the build time into `internal/version` via `-ldflags`, builds
   is readable. A **blocked** page (a login, a paywall, a consent gate) is attempted again on the same
   cadence, because it may become readable.
 - **A refresh keeps parents honest.** A sitemap is reconciled 1:1 (new pages claimed, pages it no
-  longer lists removed with their claims); an RSS/Atom feed only ever extends (new items claimed,
-  items that left kept). A page the human added by hand is never removed by either — it was released
+  longer lists removed with their claims); an RSS/Atom feed and a listing only ever extend (new
+  articles claimed, articles that left kept). A listing is refreshed through its **first page** only:
+  new articles appear there first, and walking the archive again every day would fetch everything to
+  learn nothing. Page 1 is merged into the articles the listing already declares, so its snapshot
+  keeps the archive the initial walk collected. A page the human added by hand is never removed by either — it was released
   from its owner. A page whose snapshot came from the feed's copy keeps that copy while the page
   yields no readable text or carries less of it; a readable page that is at least as rich replaces it.
 - **A confirmed delete finishes.** The delete detaches from the request context, so a browser that

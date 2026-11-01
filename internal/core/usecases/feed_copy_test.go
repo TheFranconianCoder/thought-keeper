@@ -43,7 +43,7 @@ func TestFeedCopyMakesAJavaScriptPageReadable(t *testing.T) {
 		Clock:        fixedClock{},
 		MinTextChars: 40,
 	}
-	src, err := uc.AddManual(ctx, "https://example.com/feed.xml", false)
+	src, err := uc.AddManual(ctx, "https://example.com/feed.xml", false, usecases.ListingNo)
 	if err != nil {
 		t.Fatalf("feed: %v", err)
 	}

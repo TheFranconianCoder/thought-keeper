@@ -56,6 +56,10 @@ func (uc Sources) Attach(ctx context.Context, in AttachInput) (partialentities.P
 		return partialentities.PartialSource{}, types.New(
 			"unsupported_source", "a feed is an item list, not a document", types.ErrUnsupportedSource)
 	}
+	if src.Listing {
+		return partialentities.PartialSource{}, types.New(
+			"unsupported_source", "a listing is an article list, not a document", types.ErrUnsupportedSource)
+	}
 	name := filepath.Base(strings.TrimSpace(in.Name))
 	if name == "" {
 		return partialentities.PartialSource{}, types.New(
@@ -144,6 +148,7 @@ func (uc Sources) Attach(ctx context.Context, in AttachInput) (partialentities.P
 			OriginalName: src.URL, ContentHash: contentHashOf(doc.Title, body),
 			Attached: true, AttachedFrom: name, AttachedHash: sha,
 			Origin: src.Origin, WikiPage: src.WikiPage, ParentHash: src.ParentHash, Sitemap: src.Sitemap,
+			RSS: src.RSS, Listing: src.Listing,
 			FaviconHash: faviconHash(icon), FaviconExt: faviconExt(icon),
 		})
 	}

@@ -37,6 +37,10 @@ type StepTracker interface {
 	// so this is what keeps a URL recognizable: a reindex reads it back instead of guessing from an
 	// extension.
 	SetIdentity(hash string, id entities.SourceIdentity) error
+	// SetOwnership records who controls a source's removal. Unlike SetIdentity, an EMPTY value
+	// CLEARS the recorded one: re-homing a source must be able to take it away from the page that
+	// used to own it.
+	SetOwnership(hash, origin, wikiPage, parentHash string) error
 	// Identity returns what the source's RECORD says the source is. The consistency job asks it to
 	// find a record that lost its identity (a truncated write): the index still knows what the source
 	// was, and the record is the vault's truth a reindex would otherwise read as "Markdown".

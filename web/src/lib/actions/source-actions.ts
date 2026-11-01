@@ -37,12 +37,31 @@ async function refreshSourceViews(hash?: string): Promise<void> {
   if (hash && sources.selectedHash === hash) await sources.refresh(hash);
 }
 
-export async function addPathOrURL(value: string, bookmark = false): Promise<void> {
+export async function addPathOrURL(value: string, bookmark = false, listing = false): Promise<void> {
   const input = value.trim();
   if (!input) return;
-  system.notice = isURL(input) ? t('sources.fetchingLink') : t('sources.addingSource');
+  const url = isURL(input);
+  system.notice = url ? t('sources.fetchingLink') : t('sources.addingSource');
   try {
-    const source = isURL(input) ? await api.addURL(input, bookmark) : await api.addPath(input);
+    // An explicit "this is a listing" is the reader's answer, not a guess: the page is collected in
+    // one step and no offer follows. Without it the app detects the cards and asks once.
+    const source = url
+      ? await api.addURL(input, bookmark, listing ? true : undefined)
+      : await api.addPath(input);
+    // A page the reader did not mark is offered when it repeats article cards: the app never
+    // reclassifies it on its own, and only the answer turns the page into an owner.
+    const candidates = source.listing_candidates ?? 0;
+    if (url && source.listing !== true && candidates >= 5) {
+      const confirmed = await confirmListing(candidates);
+      if (confirmed) {
+        system.notice = t('sources.fetchingLink');
+        const collected = await api.addURL(input, false, true);
+        toast(t('sources.listingAdded', { count: candidates }), 'success');
+        system.notice = '';
+        await refreshSourceViews(collected.hash);
+        return;
+      }
+    }
     toast(
       t('sources.added', {
         kind: source.kind || t('sources.wordSource'),
@@ -56,6 +75,17 @@ export async function addPathOrURL(value: string, bookmark = false): Promise<voi
     system.notice = t('sources.addFailed', { error: firstLine(humanError(error)) });
     throw error;
   }
+}
+
+/** confirmListing asks the one question a detected listing earns. */
+async function confirmListing(count: number): Promise<boolean> {
+  system.notice = '';
+  return confirm({
+    title: t('sources.listingTitle'),
+    message: t('sources.listingOffer', { count }),
+    confirmLabel: t('sources.listingConfirm'),
+    cancelLabel: t('sources.listingKeep'),
+  });
 }
 
 export async function addManyURLs(lines: string[]): Promise<number> {
@@ -121,7 +151,7 @@ export async function attachSnapshot(hash: string, file: File): Promise<void> {
 export async function deleteSource(hash: string): Promise<void> {
   const source = findSource(hash);
   const label = labelOf(source, hash);
-  const ownsChildren = source?.rss === true || source?.sitemap === true;
+  const ownsChildren = source?.rss === true || source?.sitemap === true || source?.listing === true;
   const confirmed = await confirm({
     title: t('sources.deleteTitle', { label }),
     message: ownsChildren ? t('sources.deleteMessagePages') : t('sources.deleteMessage'),
