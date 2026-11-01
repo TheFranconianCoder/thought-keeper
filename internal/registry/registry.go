@@ -89,6 +89,13 @@ type Deps struct {
 	AgentAvailable       bool
 }
 
+// Readiness is the start's repair state: the API is up while the index is rebuilt, reads answer from
+// the vault and every change waits for a consistent index.
+type Readiness interface {
+	Repairing() bool
+	RepairProgress(phase string, done, total int)
+}
+
 // Build wires the adapters, the use cases and the HTTP handler.
 func Build(
 	cfg config.Config,
@@ -106,6 +113,7 @@ func Build(
 	clusterQueue handlers.ClusterQueue,
 	reconciler handlers.Reconciler,
 	gate router.Gate,
+	ready Readiness,
 	hub *stream.Hub,
 	log *slog.Logger,
 ) Deps {
@@ -210,12 +218,19 @@ func Build(
 		Index: index, Atoms: atomRepo, Clock: clock,
 	}
 	maintenanceRepo := sqlc.NewMaintenanceRepository(db)
+	var repairProgress func(phase string, done, total int)
+	var repairing func() bool
+	if ready != nil {
+		repairProgress = ready.RepairProgress
+		repairing = ready.Repairing
+	}
 	maintenance := usecases.Maintenance{
 		Store: store, Index: index, Atoms: atomRepo, AtomStore: atomStore,
 		MaintenanceRepo: maintenanceRepo, SourceLog: sourceLog, Lint: lintRepo,
 		Trees: trees, Clock: clock, Log: log, Steps: steps, Parts: partRepo, Shelf: index,
 		ClusterStore: clusterStore, ClusterRepo: clusterRepo,
 		Limit: cfg.Pipeline.ReconcileBatch, Languages: languages,
+		Progress: repairProgress,
 	}
 	derivation := usecases.Derivation{
 		Store: store, Index: index, Extractor: extractor, Steps: steps, Languages: languages,
@@ -398,6 +413,7 @@ func Build(
 		Lint:   handlers.LintHandler{Lint: scheduler, Findings: lintUC.Findings, Mark: scheduler},
 		Events: handlers.SSEHandler{Hub: hub},
 		Gate:   gate,
+		Ready:  repairing,
 		Log:    log,
 	}, web.Handler())
 

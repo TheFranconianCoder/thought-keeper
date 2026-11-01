@@ -51,7 +51,34 @@ type Deps struct {
 	Cluster   handlers.ClusterHandler
 	Reconcile handlers.ReconcileHandler
 	Gate      Gate
-	Log       *slog.Logger
+	// Ready reports whether the vault may be WRITTEN. The API serves immediately on start, but an
+	// index rebuild runs before it: reads answer from the vault, changes wait for a consistent index.
+	// Nil means always ready.
+	Ready func() bool
+	Log   *slog.Logger
+}
+
+// readOnlyWhileRebuilding refuses every mutation while the index is being rebuilt. The request is
+// valid and will be valid again, so the answer is 503 with a Retry-After — not a 409 that would read
+// like a mistake the client made.
+func readOnlyWhileRebuilding(ready func() bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if ready == nil || ready() {
+				next.ServeHTTP(w, r)
+				return
+			}
+			switch r.Method {
+			case http.MethodGet, http.MethodHead, http.MethodOptions:
+				next.ServeHTTP(w, r)
+				return
+			}
+			w.Header().Set("Retry-After", "5")
+			payloads.WriteError(w, types.New("repairing",
+				"the vault is being rebuilt — reads work, changes wait until the index is consistent",
+				types.ErrRepairing))
+		})
+	}
 }
 
 // noopGate is the fallback for a router built by hand (tests): every request passes.
@@ -85,6 +112,9 @@ func New(deps Deps, web http.Handler) http.Handler {
 				next.ServeHTTP(w, req)
 			})
 		})
+		// A rebuild is a write of the index: reads keep working, every change is refused until it is
+		// done. The embedded PWA's own assets are outside this group and always load.
+		r.Use(readOnlyWhileRebuilding(deps.Ready))
 		r.Get("/status", handlers.StatusHandler{Provider: deps.Status}.Get)
 		// The global pipeline status: documents (capture/outline/distill) or the cluster step —
 		// never both, which is the whole point of the strict separation.

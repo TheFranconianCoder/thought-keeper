@@ -20,6 +20,28 @@
 
   const jobs = $derived(system.pipeline?.jobs ?? []);
   const indexOutdated = $derived(system.status?.index.outdated ?? '');
+  // The index rebuild runs before the vault accepts writes. The status read and the live pipeline
+  // frames both carry it; the frames keep the bar moving.
+  const repair = $derived(system.pipeline?.repair ?? system.status?.repair ?? null);
+  const repairing = $derived(repair?.active === true);
+  const repairPercent = $derived(
+    repair && repair.total > 0 ? Math.min(100, Math.round((repair.done / repair.total) * 100)) : 0,
+  );
+
+  function repairPhase(phase?: string): string {
+    switch (phase) {
+      case 'sources':
+        return t('status.repairSources');
+      case 'steps':
+        return t('status.repairSteps');
+      case 'claims':
+        return t('status.repairClaims');
+      case 'clusters':
+        return t('status.repairClusters');
+      default:
+        return t('status.repairChecking');
+    }
+  }
 
   let clock = $state(Date.now());
 
@@ -166,6 +188,22 @@
       </div>
     {/if}
 
+    {#if repairing}
+      <section class="repair" role="status" aria-live="polite">
+        <div class="repair-head">
+          <Icon name="refresh" size={14} />
+          <b>{t('status.repairTitle')}</b>
+          <span class="muted small">{repairPhase(repair?.phase)}</span>
+          <span class="grow"></span>
+          {#if repair && repair.total > 0}
+            <span class="repair-count">{n(repair.done)} / {n(repair.total)}</span>
+          {/if}
+        </div>
+        <div class="repair-bar" aria-hidden="true"><span style="width: {repairPercent}%"></span></div>
+        <p class="muted small section-note">{t('status.repairNote')}</p>
+      </section>
+    {/if}
+
     <div class="stat-grid">
       <div class="stat"><span class="stat-num">{n(status.index.sources)}</span><span class="stat-label">{t('status.statSources')}</span></div>
       <div class="stat"><span class="stat-num">{n(status.index.atoms)}</span><span class="stat-label">{t('status.statClaims')}</span></div>
@@ -246,7 +284,7 @@
       <div class="action-list">
         {#each clusterActions as action (action.label)}
           <div class="action-row">
-            <button class="btn btn--secondary" disabled={busy(action.job)} onclick={() => void action.run()}>
+            <button class="btn btn--secondary" disabled={busy(action.job) || repairing} onclick={() => void action.run()}>
               <span class="btn-text">{action.label}</span>
             </button>
             <span class="action-hint">{action.hint}</span>
@@ -259,10 +297,10 @@
       <div class="section-head">
         <h2>{t('status.vocabulary')}</h2>
         <span class="grow"></span>
-        <button class="btn btn--primary btn--sm" disabled={busy('vocabulary')} onclick={() => void curateVocabulary()}>
+        <button class="btn btn--primary btn--sm" disabled={busy('vocabulary') || repairing} onclick={() => void curateVocabulary()}>
           <Icon name="spark" size={13} /> <span class="btn-text">{t('status.curate')}</span>
         </button>
-        <button class="btn btn--secondary btn--sm" disabled={busy('vocabulary')} onclick={() => void retopicClaims()}>
+        <button class="btn btn--secondary btn--sm" disabled={busy('vocabulary') || repairing} onclick={() => void retopicClaims()}>
           <Icon name="distill" size={13} /> <span class="btn-text">{t('status.retopic')}</span>
         </button>
       </div>
@@ -320,7 +358,7 @@
       <div class="action-list">
         {#each vaultActions as action (action.label)}
           <div class="action-row">
-            <button class="btn btn--secondary" disabled={busy(action.job)} onclick={() => void action.run()}>
+            <button class="btn btn--secondary" disabled={busy(action.job) || repairing} onclick={() => void action.run()}>
               <span class="btn-text">{action.label}</span>
             </button>
             <span class="action-hint">{action.hint}</span>
@@ -328,7 +366,7 @@
         {/each}
         {#if duplicates && duplicates.groups > 0}
           <div class="action-row">
-            <button class="btn btn--secondary" disabled={busy('collapse-atoms')} onclick={() => void collapseDuplicateClaims()}>
+            <button class="btn btn--secondary" disabled={busy('collapse-atoms') || repairing} onclick={() => void collapseDuplicateClaims()}>
               <span class="btn-text">{t('status.collapseDuplicates')}</span>
             </button>
             <span class="action-hint">{t('status.collapseDuplicatesHint')}</span>
@@ -364,6 +402,47 @@
 
   .page-notice {
     margin-bottom: 16px;
+  }
+
+  /* The index rebuild outranks the counters: while it runs, nothing can be written. */
+  .repair {
+    margin-bottom: 18px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+  }
+
+  .repair-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .repair-count {
+    color: var(--faint);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .repair-bar {
+    height: 4px;
+    margin: 9px 0 7px;
+    border-radius: var(--radius-pill);
+    background: var(--bg-muted);
+    overflow: hidden;
+  }
+
+  .repair-bar span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.4s ease;
+  }
+
+  .repair .section-note {
+    margin: 0;
   }
 
   .stat-grid {

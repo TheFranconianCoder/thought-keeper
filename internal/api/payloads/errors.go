@@ -35,6 +35,9 @@ func HTTPStatus(err error) int {
 		return http.StatusNotImplemented
 	case "forbidden":
 		return http.StatusForbidden
+	case "repairing":
+		// The index is being rebuilt: the request is valid and will be valid again — just not yet.
+		return http.StatusServiceUnavailable
 	case "fetch_failed", "research_failed":
 		return http.StatusBadGateway
 	default:

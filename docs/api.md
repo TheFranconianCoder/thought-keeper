@@ -12,8 +12,8 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/status` | Doctor report: vault, index (`index.outdated`, `index.bookmarks`, `index.failed`, `index.findings`), agent, pdf/ocr, inbox, search, memory (`heap_mb`, `heap_peak_mb`, `sys_mb`, `num_gc`, `peak_work`, `peak_at`), the summary backfill (`summary.missing`, `summary.queued`, `summary.running`, `summary.at`), and the configured output languages (`language.ui`, `language.claims`, `language.summary`) |
-| `GET` | `/api/v1/pipeline` | Global step status: documents or clusters, queued counts, `jobs` |
+| `GET` | `/api/v1/status` | Doctor report: vault, index (`index.outdated`, `index.bookmarks`, `index.failed`, `index.findings`), agent, pdf/ocr, inbox, search, memory (`heap_mb`, `heap_peak_mb`, `sys_mb`, `num_gc`, `peak_work`, `peak_at`), the summary backfill (`summary.missing`, `summary.queued`, `summary.running`, `summary.at`), the index rebuild (`repair.active`, `repair.phase`, `repair.done`, `repair.total`, `repair.since`), and the configured output languages (`language.ui`, `language.claims`, `language.summary`) |
+| `GET` | `/api/v1/pipeline` | Global step status: documents or clusters, queued counts, `jobs`, and the index rebuild (`repair`) while one runs |
 | `POST` | `/api/v1/cluster` | Queue the cluster step by hand (waits for the gate) |
 | `POST` | `/api/v1/reconcile` | Run the consistency job by hand |
 | `POST` | `/api/v1/reindex` | Rebuild index + clusters from the vault |
@@ -147,6 +147,10 @@ stack traces. API misses return the same JSON error; non-API paths go to the emb
 `422 unparsed` is the assistant's "I heard you, but this is not a command I can run": the request
 named no lens and no criterion, so answering with an unfiltered list would be a lie. The UI offers
 examples instead.
+
+`503 repairing` is the start's read-only window: the index is being rebuilt, reads answer from the
+vault, and every mutation is refused with a `Retry-After`. It is not a client mistake — the same
+request works once `repair.active` is false again.
 
 ## Not API
 

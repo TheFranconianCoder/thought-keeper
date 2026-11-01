@@ -189,6 +189,13 @@ type App struct {
 	// curation — has no such state, and without this it ran invisibly.
 	maintMu sync.Mutex
 	maint   map[ulid.ULID]maintJob
+	// repair is the index rebuild the start runs before the vault accepts writes. The API is up while
+	// it runs (reads answer from the files); every mutation is refused until it is done, and the
+	// Status lens follows the progress over the event stream.
+	repairMu      sync.Mutex
+	repair        payloads.Repair
+	repairLast    time.Time
+	repairPublish time.Time
 	// clusterProgress is the live progress of the cluster pass. It is a report for the Job Queue,
 	// not persisted state.
 	clusterProgressMu sync.Mutex
@@ -396,7 +403,7 @@ func New(opts Options) (*App, error) {
 	a.pdfOK = a.runner.Available(cfg.PDF.TextTool)
 	a.ocrOK = a.runner.Available(cfg.OCR.Rasterizer) && a.runner.Available(cfg.OCR.Tesseract)
 
-	reg := registry.Build(cfg, db, a, a.onAdded, a.onRemoved, a.ScheduleWikiTag, a.ScheduleWikiReprocess, a.ScheduleWikiCleanup, a.ScheduleSourceReset, a.ScheduleDiscoveredChildren, a, a, a, a, a, a.hub, a.log)
+	reg := registry.Build(cfg, db, a, a.onAdded, a.onRemoved, a.ScheduleWikiTag, a.ScheduleWikiReprocess, a.ScheduleWikiCleanup, a.ScheduleSourceReset, a.ScheduleDiscoveredChildren, a, a, a, a, a, a, a.hub, a.log)
 	a.handler = reg.Handler
 	a.intake = reg.Intake
 	a.capture = reg.Capture
@@ -876,9 +883,10 @@ func (a *App) Run() error {
 		debug.SetMemoryLimit(int64(v) << 20)
 		a.log.Info("memory limit set", "mb", v)
 	}
-	// Consistency is a precondition of serving, not a background chore: a stale page is a lie the
-	// reader cannot distinguish from a real one.
-	a.startupRepair()
+	// The API comes up FIRST. A start that finds the index inconsistent rebuilds it, and that can take
+	// minutes: the reader must be able to look at the vault (and at the progress) while it runs. Every
+	// mutation is refused until the rebuild is done — a write against a half-rebuilt index is a guess.
+	a.beginRepair()
 	var lc net.ListenConfig
 	ln, err := lc.Listen(context.Background(), "tcp", a.cfg.Server.Addr)
 	if err != nil {
@@ -897,41 +905,10 @@ func (a *App) Run() error {
 		}
 	}()
 
-	// The inbox watcher is the only part gated by pipeline.auto; the capture, outline and distill
-	// workers always run because work is scheduled explicitly (watcher, POST /add,
-	// start-up sweep).
-	if a.cfg.Pipeline.Auto {
-		go a.watch()
-	}
-	go a.captureWorker()
-	go a.treeWorker()
-	go a.interestWorker()
-	// Document runs across DIFFERENT sources are independent; only the same source is serialised
-	// (claimDistill). One source stuck against a slow endpoint must not block every other document.
-	for i := 0; i < a.cfg.Pipeline.ParallelRuns; i++ {
-		go a.runWorker(a.distillQueue)
-	}
-	// Ask is never gated and a question is independent of the next one: an answer waiting for a slow
-	// model must not hold the question the reader asks meanwhile.
-	for i := 0; i < a.cfg.Pipeline.ParallelQueries; i++ {
-		go a.runWorker(a.queryQueue)
-	}
-	go a.runWorker(a.lintQueue)
-	go a.runWorker(a.tagQueue)
-	go a.runWorker(a.summaryQueue)
-	go a.runWorker(a.vocabularyQueue)
-	// Step 4 has ONE worker: the cluster step is considered over the whole vault, so two of them would
-	// be two answers to one question. It takes the gate, so it never runs beside a document step.
-	go a.clusterWorker()
-	go a.pumpWorker()
-	go a.urlWorker()
-	go a.urlWorker()
-	go a.urlWorker()
-	go a.refreshWorker()
-	go a.watchClaims()
-	go a.reconcileWorker()
-	go a.startupSweep()
+	// The memory report is a read of this process: it needs no consistency and starts at once.
 	go a.memoryWatch()
+	// Everything that writes waits for the start's repair.
+	go a.startupSequence()
 
 	a.log.Info("run concurrency",
 		"distill_runs", a.cfg.Pipeline.ParallelRuns,
@@ -980,6 +957,52 @@ func (a *App) Run() error {
 	return nil
 }
 
+// startupSequence is the start's work after the API is up: rebuild the index if the vault needs it,
+// then start everything that writes.
+func (a *App) startupSequence() {
+	a.startupRepair()
+	a.endRepair()
+	a.startWorkers()
+	a.startupSweep()
+}
+
+// startWorkers starts every worker that writes the vault. It runs only after the start's repair: a
+// document step against a half-rebuilt index would write claims the rebuild is about to drop.
+func (a *App) startWorkers() {
+	// The inbox watcher is the only part gated by pipeline.auto; the capture, outline and distill
+	// workers always run because work is scheduled explicitly (watcher, POST /add, start-up sweep).
+	if a.cfg.Pipeline.Auto {
+		go a.watch()
+	}
+	go a.captureWorker()
+	go a.treeWorker()
+	go a.interestWorker()
+	// Document runs across DIFFERENT sources are independent; only the same source is serialised
+	// (claimDistill). One source stuck against a slow endpoint must not block every other document.
+	for i := 0; i < a.cfg.Pipeline.ParallelRuns; i++ {
+		go a.runWorker(a.distillQueue)
+	}
+	// Ask is never gated and a question is independent of the next one: an answer waiting for a slow
+	// model must not hold the question the reader asks meanwhile.
+	for i := 0; i < a.cfg.Pipeline.ParallelQueries; i++ {
+		go a.runWorker(a.queryQueue)
+	}
+	go a.runWorker(a.lintQueue)
+	go a.runWorker(a.tagQueue)
+	go a.runWorker(a.summaryQueue)
+	go a.runWorker(a.vocabularyQueue)
+	// Step 4 has ONE worker: the cluster step is considered over the whole vault, so two of them would
+	// be two answers to one question. It takes the gate, so it never runs beside a document step.
+	go a.clusterWorker()
+	go a.pumpWorker()
+	go a.urlWorker()
+	go a.urlWorker()
+	go a.urlWorker()
+	go a.refreshWorker()
+	go a.watchClaims()
+	go a.reconcileWorker()
+}
+
 // uiURL is the address of this instance's UI. What both shells do with it is the only difference
 // between them: the browser opens it, the native window loads it.
 func (a *App) uiURL() string { return "http://" + a.Addr() }
@@ -1024,6 +1047,7 @@ func (a *App) Status() payloads.Status {
 			Runs:        persistence.Count(a.db, "runs"),
 		},
 		Pipeline: a.PipelineStatus(),
+		Repair:   a.repairStatus(),
 		Summary:  a.summaryStatus(),
 		Language: payloads.LanguageInfo{
 			UI:      a.cfg.Language.UI,
@@ -1889,6 +1913,76 @@ type maintJob struct {
 func (a *App) MarkMaintenance(label, target string) func() {
 	_, done := a.beginMaintenance(label, target)
 	return done
+}
+
+const (
+	// repairPublishEvery bounds how often the rebuild pushes a frame: a 238k-claim pass must move the
+	// bar, not flood the stream.
+	repairPublishEvery = 500 * time.Millisecond
+	// repairStallTimeout aborts a rebuild that stopped making progress. Without it a hung pass would
+	// leave the vault read-only for ever.
+	repairStallTimeout = 10 * time.Minute
+)
+
+// Repairing reports whether the index is being rebuilt. While it is, the API answers reads and
+// refuses every change: a write against a half-rebuilt index is a guess.
+func (a *App) Repairing() bool {
+	a.repairMu.Lock()
+	defer a.repairMu.Unlock()
+	return a.repair.Active
+}
+
+// RepairProgress is the callback the rebuild reports through. It is a report for the reader, never
+// persisted state.
+func (a *App) RepairProgress(phase string, done, total int) {
+	a.repairMu.Lock()
+	a.repair.Phase, a.repair.Done, a.repair.Total = phase, done, total
+	a.repairLast = time.Now()
+	publish := time.Since(a.repairPublish) >= repairPublishEvery
+	if publish {
+		a.repairPublish = time.Now()
+	}
+	a.repairMu.Unlock()
+	if publish {
+		a.publishPipeline()
+	}
+}
+
+// beginRepair marks the rebuild as running BEFORE the server accepts its first request, so no write
+// can slip into the window between "listening" and "checking".
+func (a *App) beginRepair() {
+	a.repairMu.Lock()
+	now := time.Now()
+	a.repair = payloads.Repair{Active: true, Phase: "sources", Since: now.UTC().Format(time.RFC3339)}
+	a.repairLast, a.repairPublish = now, now
+	a.repairMu.Unlock()
+	a.publishPipeline()
+}
+
+// endRepair clears the report and tells every window the vault accepts writes again.
+func (a *App) endRepair() {
+	a.repairMu.Lock()
+	a.repair = payloads.Repair{}
+	a.repairMu.Unlock()
+	a.publishPipeline()
+}
+
+// repairStatus is the report for /status and /pipeline; nil when no rebuild runs.
+func (a *App) repairStatus() *payloads.Repair {
+	a.repairMu.Lock()
+	defer a.repairMu.Unlock()
+	if !a.repair.Active {
+		return nil
+	}
+	out := a.repair
+	return &out
+}
+
+// repairStalled reports whether the rebuild stopped making progress.
+func (a *App) repairStalled() bool {
+	a.repairMu.Lock()
+	defer a.repairMu.Unlock()
+	return a.repair.Active && time.Since(a.repairLast) > repairStallTimeout
 }
 
 // beginMaintenance registers a maintenance job and keeps its id, so a pass that WAITS for the gate can
@@ -3585,11 +3679,35 @@ func (a *App) startupRepair() {
 	}
 
 	runReindex := func(why string) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		// No deadline: the rebuild reports its progress and the reader can watch it. It is bounded by
+		// a STALL watchdog instead — a pass that keeps making progress may take as long as it needs,
+		// and a pass that stops is aborted so the vault does not stay read-only for ever.
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		stop := make(chan struct{})
+		defer close(stop)
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-a.quit:
+					cancel()
+					return
+				case <-stop:
+					return
+				case <-ticker.C:
+					if a.repairStalled() {
+						a.log.Warn("startup: the rebuild made no progress — aborting", "reason", why)
+						cancel()
+						return
+					}
+				}
+			}
+		}()
 		a.gate.Lock()
 		res, err := a.reindex.Reindex(ctx)
 		a.gate.Unlock()
-		cancel()
 		if err != nil {
 			a.log.Warn("startup: reindex failed", "reason", why, "err", err)
 			return
@@ -3602,7 +3720,7 @@ func (a *App) startupRepair() {
 	}
 
 	if needsRepair {
-		a.log.Warn("startup: the association layer is inconsistent — rebuilding it before serving", "reason", reason)
+		a.log.Warn("startup: the association layer is inconsistent — rebuilding it before accepting writes", "reason", reason)
 		runReindex(reason)
 	} else if checkErr == nil {
 		// Say that the check RAN, not only when it failed: "no news" is not evidence of a check.

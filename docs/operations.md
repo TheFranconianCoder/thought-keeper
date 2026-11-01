@@ -175,6 +175,13 @@ commit and the build time into `internal/version` via `-ldflags`, builds
 
 ## 6. The gate, scheduling and runs
 
+- **The API serves before the vault is ready to be written.** A start that finds the index
+  inconsistent rebuilds it; the server is already up, reads answer from the vault, and every mutation
+  is refused with `503 repairing` plus a `Retry-After` until the rebuild is done. The rebuild reports
+  its phase and counts (`repair` in `/status` and `/pipeline`), so the Status lens shows a progress
+  bar instead of a connection that looks hung. No deadline bounds the pass: a stall watchdog aborts
+  it when it stops making progress, and a partial pass never re-arms parts or deletes a file. The
+  workers that write start only after the rebuild.
 - **One gate.** Document steps take the SHARED side of one `sync.RWMutex` (including the outline);
   the cluster step, a vocabulary curation, a reset, a delete and every synchronous vault writer take
   it EXCLUSIVELY. A waiting writer blocks new readers. **Ask is never gated.**

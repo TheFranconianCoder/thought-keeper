@@ -113,6 +113,7 @@ func (a *App) PipelineStatus() payloads.Pipeline {
 		Running: map[string]int{},
 		Queued:  map[string]int{},
 		Asking:  a.pipe.asking,
+		Repair:  a.repairStatus(),
 	}
 	for _, step := range entities.PipelineSteps {
 		if n := a.pipe.docRunning[step]; n > 0 {

@@ -82,6 +82,8 @@ export interface Status {
     lint_running: number;
   };
   pipeline?: Pipeline;
+  /** The index rebuild, while one runs: the vault is read-only until it is done. */
+  repair?: Repair;
   message?: string;
 }
 
@@ -91,6 +93,16 @@ export interface Pipeline {
   queued: Record<string, number>;
   asking: number;
   jobs?: Job[];
+  repair?: Repair;
+}
+
+/** Repair is the index rebuild as the reader sees it. */
+export interface Repair {
+  active: boolean;
+  phase?: 'sources' | 'steps' | 'claims' | 'clusters' | string;
+  done: number;
+  total: number;
+  since?: string;
 }
 
 export interface Job {

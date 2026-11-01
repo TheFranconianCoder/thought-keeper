@@ -16,6 +16,9 @@ type Status struct {
 	Memory Memory `json:"memory"`
 	// Pipeline is the global step status (also served on its own at GET /api/v1/pipeline).
 	Pipeline Pipeline `json:"pipeline"`
+	// Repair is the index rebuild, when one runs. While it does, the vault is READ-ONLY: the bytes
+	// are fine, but the index the app answers from is being rebuilt.
+	Repair *Repair `json:"repair,omitempty"`
 	// Summary is the source-overview backfill: how many summaries the last consistency walk found
 	// missing, and how many are queued or running. Nil when there is nothing to do.
 	Summary *SummaryStatus `json:"summary,omitempty"`
@@ -58,6 +61,20 @@ type Pipeline struct {
 	// Jobs are the pieces of work behind those counts, one entry each. What a run REPORTS while it
 	// works (its phase, its parts) travels with the source's progress; this is what the app holds.
 	Jobs []Job `json:"jobs,omitempty"`
+	// Repair is the index rebuild in flight, so every open window follows it over the event stream.
+	Repair *Repair `json:"repair,omitempty"`
+}
+
+// Repair is the index rebuild as the reader sees it. A rebuild happens BEFORE the app serves
+// normally (a start that finds the association layer inconsistent, or a manual reindex), and while
+// it runs every mutation is refused: a write against a half-rebuilt index is a guess.
+type Repair struct {
+	Active bool   `json:"active"`
+	Phase  string `json:"phase,omitempty"` // sources | steps | claims | clusters
+	Done   int    `json:"done"`
+	Total  int    `json:"total"`
+	// Since is when the rebuild began (RFC 3339), so a pass that takes minutes can say how long.
+	Since string `json:"since,omitempty"`
 }
 
 // Job is one piece of work the app holds RIGHT NOW: which of the steps it is, what it is about, and

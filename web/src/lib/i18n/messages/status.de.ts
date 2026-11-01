@@ -8,6 +8,15 @@ export const statusDe: Record<string, string> = {
     'Thought Keeper ist nicht erreichbar. Starte die App, dann verbindet sich diese Seite von selbst neu.',
   'status.indexShape': 'Der Index hat eine andere Form.',
 
+  // Der Neuaufbau des Index: er läuft, bevor der Tresor Schreibzugriffe annimmt.
+  'status.repairTitle': 'Der Index wird neu gebaut',
+  'status.repairChecking': 'Tresor wird geprüft',
+  'status.repairSources': 'Quellen',
+  'status.repairSteps': 'Schrittaufzeichnungen',
+  'status.repairClaims': 'Aussagen',
+  'status.repairClusters': 'Cluster',
+  'status.repairNote': 'Lesen funktioniert; Änderungen warten, bis der Index wieder konsistent ist.',
+
   // Die Zähler.
   'status.statSources': 'Quellen',
   'status.statClaims': 'Aussagen',

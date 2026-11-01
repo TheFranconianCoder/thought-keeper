@@ -8,6 +8,15 @@ export const statusEn: Record<string, string> = {
     'Thought Keeper is not reachable. Start the app and this page reconnects by itself.',
   'status.indexShape': 'The index has another shape.',
 
+  // The index rebuild: it runs before the vault accepts writes.
+  'status.repairTitle': 'Rebuilding the index',
+  'status.repairChecking': 'checking the vault',
+  'status.repairSources': 'sources',
+  'status.repairSteps': 'step records',
+  'status.repairClaims': 'claims',
+  'status.repairClusters': 'clusters',
+  'status.repairNote': 'Reads work; changes wait until the index is consistent again.',
+
   // The counters.
   'status.statSources': 'sources',
   'status.statClaims': 'claims',

@@ -43,6 +43,9 @@ type Maintenance struct {
 	Shelf interfaces.ShelfMirror
 	// Parts restores the part records behind the distill step.
 	Parts interfaces.PartRepository
+	// Progress reports the rebuild to the reader: which phase runs and how far it is. Nil means no
+	// report (a test, or a caller that does not serve a UI).
+	Progress func(phase string, done, total int)
 	// The association layer: its records are the truth, its rows the cache.
 	ClusterStore interfaces.ClusterStore
 	ClusterRepo  interfaces.ClusterRepository
@@ -294,6 +297,13 @@ func (uc Maintenance) steps(ctx context.Context, res ReindexResult, records map[
 	return res
 }
 
+// progress reports one phase of the rebuild, when a reader is listening.
+func (uc Maintenance) progress(phase string, done, total int) {
+	if uc.Progress != nil {
+		uc.Progress(phase, done, total)
+	}
+}
+
 // sourceExists reports whether the vault still holds a source: its record, its bytes, or an index row
 // that outlived both. A lookup that FAILS is an error, never "gone" — treating a canceled context as
 // a missing source is what turned one timed-out rebuild into a mass delete.
@@ -365,7 +375,10 @@ func (uc Maintenance) derived(ctx context.Context, res ReindexResult, records ma
 		}
 		res.AtomsRemoved++
 	}
-	for _, a := range atoms {
+	for i, a := range atoms {
+		if i%500 == 0 {
+			uc.progress("claims", i, len(atoms))
+		}
 		if err := ctx.Err(); err != nil {
 			return res, err
 		}
@@ -420,6 +433,7 @@ func (uc Maintenance) derived(ctx context.Context, res ReindexResult, records ma
 		}
 		res.Atoms++
 	}
+	uc.progress("claims", len(atoms), len(atoms))
 	return res, nil
 }
 
@@ -451,7 +465,10 @@ func (uc Maintenance) clusters(ctx context.Context, res ReindexResult) (ReindexR
 	}
 	var lost []prunedRecord
 	want := make(map[ulid.ULID]bool, len(records))
-	for _, rec := range records {
+	for i, rec := range records {
+		if i%100 == 0 {
+			uc.progress("clusters", i, len(records))
+		}
 		kept := make([]ulid.ULID, 0, len(rec.Atoms))
 		for _, id := range rec.Atoms {
 			if exists[id] {
@@ -524,6 +541,7 @@ func (uc Maintenance) clusters(ctx context.Context, res ReindexResult) (ReindexR
 		}
 		res.ClustersRemoved++
 	}
+	uc.progress("clusters", len(records), len(records))
 	return res, nil
 }
 
@@ -598,7 +616,10 @@ func (uc Maintenance) sources(ctx context.Context, records map[string]entities.S
 	res := ReindexResult{Scanned: len(objs)}
 	seen := make(map[string]bool, len(objs))
 	res.objects = seen
-	for _, o := range objs {
+	for i, o := range objs {
+		if i%100 == 0 {
+			uc.progress("sources", i, len(objs))
+		}
 		// WHAT the source IS comes from its record first: a URL snapshot, a Markdown source and a
 		// PDF's readable rendering are all <hash>.md — the record is the only thing that tells them
 		// apart. What the index already knows beats the file name; the extension is the last resort.

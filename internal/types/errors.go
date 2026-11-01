@@ -19,6 +19,7 @@ var (
 	ErrNoInstance        = errors.New("no running instance")
 	ErrNotImplemented    = errors.New("not implemented")
 	ErrForbidden         = errors.New("forbidden")
+	ErrRepairing         = errors.New("the vault is being rebuilt")
 	ErrInternal          = errors.New("internal error")
 )
 
