@@ -230,7 +230,10 @@
         <p class="muted small">{t('status.noJobs')}</p>
       {:else}
         <div class="job-list">
-          {#each jobRows.rows as job (job.step + job.state + (job.target ?? ''))}
+          <!-- Keyed by POSITION: several jobs share a step, a state and no target (the maintenance
+               passes), and Svelte refuses duplicate keys — which took the whole Status page down
+               while a batch of source resets waited in the queue. -->
+          {#each jobRows.rows as job, index (index)}
             <div class="job-row">
               <span class="job-step">{jobStepLabel(job.step)}</span>
               <span class="job-state job-state--{job.state}" title={job.why ?? ''}>
