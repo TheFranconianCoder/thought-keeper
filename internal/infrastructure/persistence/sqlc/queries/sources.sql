@@ -320,7 +320,8 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
        OR instr(lower(original_name), lower(sqlc.arg(query))) > 0
        OR instr(lower(COALESCE(url, '')), lower(sqlc.arg(query))) > 0
        OR instr(lower(tags), lower(sqlc.arg(query))) > 0
-       OR instr(lower(auto_tags), lower(sqlc.arg(query))) > 0)
+       OR instr(lower(auto_tags), lower(sqlc.arg(query))) > 0
+       OR instr(hash, lower(sqlc.arg(query))) > 0)
   AND (sqlc.arg(tag) = ''
        OR instr(tags, '"' || sqlc.arg(tag) || '"') > 0
        OR instr(auto_tags, '"' || sqlc.arg(tag) || '"') > 0)
@@ -330,6 +331,12 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
                 ELSE '' END) IN ('true', '1'))
   AND (sqlc.arg(bookmarks) = 0 OR bookmark = 1)
   AND (sqlc.arg(failed) = 0 OR instr(steps, '"state":"failed"') > 0)
+  -- Stale: the distill step STOPPED with work left (a recorded pending). Not failed (that is the
+  -- failed list) and not running (that is work in flight): the other half of Attention.
+  AND (COALESCE(sqlc.arg(stale), 0) = 0
+       OR (CASE WHEN json_valid(steps)
+                THEN json_extract(steps, '$.distill.state')
+                ELSE '' END) = 'pending')
   AND (sqlc.arg(favorite) = 0 OR favorite_at IS NOT NULL)
   AND (sqlc.arg(read_later) = 0
        OR (read_later_at IS NOT NULL AND read_later_done_at IS NULL))
@@ -353,7 +360,8 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
        OR instr(lower(original_name), lower(sqlc.arg(query))) > 0
        OR instr(lower(COALESCE(url, '')), lower(sqlc.arg(query))) > 0
        OR instr(lower(tags), lower(sqlc.arg(query))) > 0
-       OR instr(lower(auto_tags), lower(sqlc.arg(query))) > 0)
+       OR instr(lower(auto_tags), lower(sqlc.arg(query))) > 0
+       OR instr(hash, lower(sqlc.arg(query))) > 0)
   AND (sqlc.arg(tag) = ''
        OR instr(tags, '"' || sqlc.arg(tag) || '"') > 0
        OR instr(auto_tags, '"' || sqlc.arg(tag) || '"') > 0)
@@ -363,6 +371,12 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
                 ELSE '' END) IN ('true', '1'))
   AND (sqlc.arg(bookmarks) = 0 OR bookmark = 1)
   AND (sqlc.arg(failed) = 0 OR instr(steps, '"state":"failed"') > 0)
+  -- Stale: the distill step STOPPED with work left (a recorded pending). Not failed (that is the
+  -- failed list) and not running (that is work in flight): the other half of Attention.
+  AND (COALESCE(sqlc.arg(stale), 0) = 0
+       OR (CASE WHEN json_valid(steps)
+                THEN json_extract(steps, '$.distill.state')
+                ELSE '' END) = 'pending')
   AND (sqlc.arg(favorite) = 0 OR favorite_at IS NOT NULL)
   AND read_later_at IS NOT NULL AND read_later_done_at IS NULL
   AND (sqlc.arg(interest) = ''
@@ -380,7 +394,8 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
        OR instr(lower(original_name), lower(sqlc.arg(query))) > 0
        OR instr(lower(COALESCE(url, '')), lower(sqlc.arg(query))) > 0
        OR instr(lower(tags), lower(sqlc.arg(query))) > 0
-       OR instr(lower(auto_tags), lower(sqlc.arg(query))) > 0)
+       OR instr(lower(auto_tags), lower(sqlc.arg(query))) > 0
+       OR instr(hash, lower(sqlc.arg(query))) > 0)
   AND (sqlc.arg(tag) = ''
        OR instr(tags, '"' || sqlc.arg(tag) || '"') > 0
        OR instr(auto_tags, '"' || sqlc.arg(tag) || '"') > 0)
@@ -390,6 +405,12 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
                 ELSE '' END) IN ('true', '1'))
   AND (sqlc.arg(bookmarks) = 0 OR bookmark = 1)
   AND (sqlc.arg(failed) = 0 OR instr(steps, '"state":"failed"') > 0)
+  -- Stale: the distill step STOPPED with work left (a recorded pending). Not failed (that is the
+  -- failed list) and not running (that is work in flight): the other half of Attention.
+  AND (COALESCE(sqlc.arg(stale), 0) = 0
+       OR (CASE WHEN json_valid(steps)
+                THEN json_extract(steps, '$.distill.state')
+                ELSE '' END) = 'pending')
   AND (sqlc.arg(favorite) = 0 OR favorite_at IS NOT NULL)
   AND (sqlc.arg(read_later) = 0
        OR (read_later_at IS NOT NULL AND read_later_done_at IS NULL))

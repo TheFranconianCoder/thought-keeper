@@ -210,7 +210,8 @@ WHERE (?1 = '' OR kind = ?1)
        OR instr(lower(original_name), lower(?2)) > 0
        OR instr(lower(COALESCE(url, '')), lower(?2)) > 0
        OR instr(lower(tags), lower(?2)) > 0
-       OR instr(lower(auto_tags), lower(?2)) > 0)
+       OR instr(lower(auto_tags), lower(?2)) > 0
+       OR instr(hash, lower(?2)) > 0)
   AND (?3 = ''
        OR instr(tags, '"' || ?3 || '"') > 0
        OR instr(auto_tags, '"' || ?3 || '"') > 0)
@@ -220,12 +221,18 @@ WHERE (?1 = '' OR kind = ?1)
                 ELSE '' END) IN ('true', '1'))
   AND (?5 = 0 OR bookmark = 1)
   AND (?6 = 0 OR instr(steps, '"state":"failed"') > 0)
-  AND (?7 = 0 OR favorite_at IS NOT NULL)
-  AND (?8 = 0
+  -- Stale: the distill step STOPPED with work left (a recorded pending). Not failed (that is the
+  -- failed list) and not running (that is work in flight): the other half of Attention.
+  AND (COALESCE(?7, 0) = 0
+       OR (CASE WHEN json_valid(steps)
+                THEN json_extract(steps, '$.distill.state')
+                ELSE '' END) = 'pending')
+  AND (?8 = 0 OR favorite_at IS NOT NULL)
+  AND (?9 = 0
        OR (read_later_at IS NOT NULL AND read_later_done_at IS NULL))
-  AND (?9 = ''
-       OR instr(read_later_via, '"' || ?9 || '"') > 0)
-  AND (?10 = 0
+  AND (?10 = ''
+       OR instr(read_later_via, '"' || ?10 || '"') > 0)
+  AND (?11 = 0
        OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
 `
 
@@ -236,6 +243,7 @@ type CountSourcesFilteredParams struct {
 	Attached  interface{} `json:"attached"`
 	Bookmarks interface{} `json:"bookmarks"`
 	Failed    interface{} `json:"failed"`
+	Stale     interface{} `json:"stale"`
 	Favorite  interface{} `json:"favorite"`
 	ReadLater interface{} `json:"read_later"`
 	Interest  interface{} `json:"interest"`
@@ -250,6 +258,7 @@ func (q *Queries) CountSourcesFiltered(ctx context.Context, arg CountSourcesFilt
 		arg.Attached,
 		arg.Bookmarks,
 		arg.Failed,
+		arg.Stale,
 		arg.Favorite,
 		arg.ReadLater,
 		arg.Interest,
@@ -836,7 +845,8 @@ WHERE (?1 = '' OR kind = ?1)
        OR instr(lower(original_name), lower(?2)) > 0
        OR instr(lower(COALESCE(url, '')), lower(?2)) > 0
        OR instr(lower(tags), lower(?2)) > 0
-       OR instr(lower(auto_tags), lower(?2)) > 0)
+       OR instr(lower(auto_tags), lower(?2)) > 0
+       OR instr(hash, lower(?2)) > 0)
   AND (?3 = ''
        OR instr(tags, '"' || ?3 || '"') > 0
        OR instr(auto_tags, '"' || ?3 || '"') > 0)
@@ -846,17 +856,23 @@ WHERE (?1 = '' OR kind = ?1)
                 ELSE '' END) IN ('true', '1'))
   AND (?5 = 0 OR bookmark = 1)
   AND (?6 = 0 OR instr(steps, '"state":"failed"') > 0)
-  AND (?7 = 0 OR favorite_at IS NOT NULL)
-  AND (?8 = 0
+  -- Stale: the distill step STOPPED with work left (a recorded pending). Not failed (that is the
+  -- failed list) and not running (that is work in flight): the other half of Attention.
+  AND (COALESCE(?7, 0) = 0
+       OR (CASE WHEN json_valid(steps)
+                THEN json_extract(steps, '$.distill.state')
+                ELSE '' END) = 'pending')
+  AND (?8 = 0 OR favorite_at IS NOT NULL)
+  AND (?9 = 0
        OR (read_later_at IS NOT NULL AND read_later_done_at IS NULL))
-  AND (?9 = ''
-       OR instr(read_later_via, '"' || ?9 || '"') > 0)
+  AND (?10 = ''
+       OR instr(read_later_via, '"' || ?10 || '"') > 0)
   -- Roots only: the sources no sitemap, feed or wiki page declared. An owned page is a child, not
   -- an arrival; "recently arrived" asks this question so a crawl cannot flood it.
-  AND (?10 = 0
+  AND (?11 = 0
        OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
 ORDER BY imported_at DESC
-LIMIT ?12 OFFSET ?11
+LIMIT ?13 OFFSET ?12
 `
 
 type ListSourcesFilteredParams struct {
@@ -866,6 +882,7 @@ type ListSourcesFilteredParams struct {
 	Attached  interface{} `json:"attached"`
 	Bookmarks interface{} `json:"bookmarks"`
 	Failed    interface{} `json:"failed"`
+	Stale     interface{} `json:"stale"`
 	Favorite  interface{} `json:"favorite"`
 	ReadLater interface{} `json:"read_later"`
 	Interest  interface{} `json:"interest"`
@@ -882,6 +899,7 @@ func (q *Queries) ListSourcesFiltered(ctx context.Context, arg ListSourcesFilter
 		arg.Attached,
 		arg.Bookmarks,
 		arg.Failed,
+		arg.Stale,
 		arg.Favorite,
 		arg.ReadLater,
 		arg.Interest,
@@ -944,7 +962,8 @@ WHERE (?1 = '' OR kind = ?1)
        OR instr(lower(original_name), lower(?2)) > 0
        OR instr(lower(COALESCE(url, '')), lower(?2)) > 0
        OR instr(lower(tags), lower(?2)) > 0
-       OR instr(lower(auto_tags), lower(?2)) > 0)
+       OR instr(lower(auto_tags), lower(?2)) > 0
+       OR instr(hash, lower(?2)) > 0)
   AND (?3 = ''
        OR instr(tags, '"' || ?3 || '"') > 0
        OR instr(auto_tags, '"' || ?3 || '"') > 0)
@@ -954,14 +973,20 @@ WHERE (?1 = '' OR kind = ?1)
                 ELSE '' END) IN ('true', '1'))
   AND (?5 = 0 OR bookmark = 1)
   AND (?6 = 0 OR instr(steps, '"state":"failed"') > 0)
-  AND (?7 = 0 OR favorite_at IS NOT NULL)
+  -- Stale: the distill step STOPPED with work left (a recorded pending). Not failed (that is the
+  -- failed list) and not running (that is work in flight): the other half of Attention.
+  AND (COALESCE(?7, 0) = 0
+       OR (CASE WHEN json_valid(steps)
+                THEN json_extract(steps, '$.distill.state')
+                ELSE '' END) = 'pending')
+  AND (?8 = 0 OR favorite_at IS NOT NULL)
   AND read_later_at IS NOT NULL AND read_later_done_at IS NULL
-  AND (?8 = ''
-       OR instr(read_later_via, '"' || ?8 || '"') > 0)
-  AND (?9 = 0
+  AND (?9 = ''
+       OR instr(read_later_via, '"' || ?9 || '"') > 0)
+  AND (?10 = 0
        OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
 ORDER BY read_later_at ASC, imported_at DESC
-LIMIT ?11 OFFSET ?10
+LIMIT ?12 OFFSET ?11
 `
 
 type ListSourcesQueueParams struct {
@@ -971,6 +996,7 @@ type ListSourcesQueueParams struct {
 	Attached  interface{} `json:"attached"`
 	Bookmarks interface{} `json:"bookmarks"`
 	Failed    interface{} `json:"failed"`
+	Stale     interface{} `json:"stale"`
 	Favorite  interface{} `json:"favorite"`
 	Interest  interface{} `json:"interest"`
 	Roots     interface{} `json:"roots"`
@@ -989,6 +1015,7 @@ func (q *Queries) ListSourcesQueue(ctx context.Context, arg ListSourcesQueuePara
 		arg.Attached,
 		arg.Bookmarks,
 		arg.Failed,
+		arg.Stale,
 		arg.Favorite,
 		arg.Interest,
 		arg.Roots,

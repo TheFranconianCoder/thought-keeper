@@ -30,6 +30,32 @@ func TestSearchFindsClaim(t *testing.T) {
 	}
 }
 
+// TestSearchFindsAClaimByItsIDPrefix: the id on the claim detail is the one thing a reader copies,
+// so a (partial) paste of it must find that claim — even though the stored id is a 16-byte blob and
+// the reader sees a 26-character ULID.
+func TestSearchFindsAClaimByItsIDPrefix(t *testing.T) {
+	ctx := context.Background()
+	db, _, _, _, atomID := seedVault(t)
+	if !persistence.EnsureFTS(db, slog.Default()) {
+		t.Skip("no FTS5")
+	}
+	search := NewSearchRepository(db, true)
+	prefix := atomID.String()[:10]
+
+	hits, err := search.Search(ctx, prefix, "atoms", 10)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(hits) != 1 || hits[0].ID != atomID.String() || hits[0].Kind != "atom" {
+		t.Fatalf("hits = %+v, want the claim %s", hits, atomID)
+	}
+
+	// A prefix that matches nothing must not turn into a scan of every claim.
+	if hits, err := search.Search(ctx, "ZZZZZZ", "atoms", 10); err != nil || len(hits) != 0 {
+		t.Fatalf("unknown prefix: hits=%+v err=%v", hits, err)
+	}
+}
+
 func TestSearchHandlesSymbolTerms(t *testing.T) {
 	ctx := context.Background()
 	db, atoms, _, _, atomID := seedVault(t)

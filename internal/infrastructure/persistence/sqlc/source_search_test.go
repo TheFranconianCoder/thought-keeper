@@ -14,6 +14,51 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/persistence"
 )
 
+// TestSourceSearchFindsAHashPrefix: a source's hash is its identity; a partial paste of it must find
+// the row, in the palette and in the list.
+func TestSourceSearchFindsAHashPrefix(t *testing.T) {
+	ctx := context.Background()
+	db, err := persistence.Open(filepath.Join(t.TempDir(), "index.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := persistence.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if !persistence.EnsureFTS(db, slog.Default()) {
+		t.Skip("SQLite build has no FTS5")
+	}
+	sources := NewSourceRepository(db)
+	hash := strings.Repeat("ab", 32)
+	now := time.UnixMilli(1_700_000_000_000).UTC()
+	if err := sources.UpsertSource(ctx, entities.Source{
+		ID: ulid.Make(), Hash: hash, Kind: entities.SourceKindMD, Ext: ".md",
+		Path: hash + ".md", Title: "A source", Bytes: 3, TreeState: entities.TreeBuilt,
+		ImportedAt: now, Meta: "{}",
+	}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+
+	prefix := hash[:8]
+	search := NewSearchRepository(db, true)
+	hits, err := search.Search(ctx, prefix, "sources", 10)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(hits) != 1 || hits[0].ID != hash || hits[0].Kind != "source" {
+		t.Fatalf("hits = %+v, want the source %s", hits, hash)
+	}
+
+	list, err := sources.ListSources(ctx, entities.SourceFilter{Query: prefix}, 10, 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 1 || list[0].Hash != hash {
+		t.Fatalf("list = %+v, want the source %s", list, hash)
+	}
+}
+
 // TestSourceSearchMatchesTheListFields: the palette's Sources layer uses the same text fields as
 // the Sources list — title, original name, URL, human tags and auto tags — and is case-insensitive.
 func TestSourceSearchMatchesTheListFields(t *testing.T) {

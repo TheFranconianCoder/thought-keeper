@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/oklog/ulid/v2"
+
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 )
 
@@ -34,6 +36,13 @@ func (r *SearchRepository) Search(ctx context.Context, query, layer string, limi
 	}
 	var hits []interfaces.SearchHit
 	if layer == "" || layer == "atoms" {
+		// A pasted id is the one thing a reader copies from the claim detail: it must find that
+		// claim, even partially, and it goes first.
+		byID, err := r.searchAtomID(ctx, q, limit)
+		if err != nil {
+			return nil, err
+		}
+		hits = append(hits, byID...)
 		languages, langErr := r.Languages(ctx)
 		if langErr != nil {
 			languages = nil // the hint only tunes the match
@@ -51,10 +60,78 @@ func (r *SearchRepository) Search(ctx context.Context, query, layer string, limi
 		}
 		hits = append(hits, h...)
 	}
-	if len(hits) > limit {
-		hits = hits[:limit]
+	// One claim can match by id and by text; the palette shows it once.
+	seen := make(map[string]bool, len(hits))
+	out := hits[:0]
+	for _, h := range hits {
+		if seen[h.ID] {
+			continue
+		}
+		seen[h.ID] = true
+		out = append(out, h)
+		if len(out) >= limit {
+			break
+		}
 	}
-	return hits, nil
+	return out, nil
+}
+
+// searchAtomID finds claims by (a prefix of) their ULID. The stored id is 16 bytes; a text prefix of
+// k Crockford characters fixes the first k*5/8 bytes, which narrows the scan to a handful of rows and
+// lets Go do the exact prefix check on the last partial byte.
+func (r *SearchRepository) searchAtomID(ctx context.Context, q string, limit int) ([]interfaces.SearchHit, error) {
+	prefix := strings.ToUpper(strings.TrimSpace(q))
+	if len(prefix) < 6 || len(prefix) > 26 || !isCrockford(prefix) {
+		return nil, nil
+	}
+	// A ULID is 26 characters over 130 bits; the first 16 bytes are the high 128. Padding the prefix
+	// with zeros leaves those bytes untouched, so the decoded value's first n bytes are the ones to
+	// compare.
+	id, err := ulid.Parse(prefix + strings.Repeat("0", 26-len(prefix)))
+	if err != nil {
+		return nil, nil
+	}
+	n := min(len(prefix)*5/8, 16)
+	if n == 0 {
+		return nil, nil
+	}
+	raw := id.Bytes()
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, claim, substr(COALESCE(NULLIF(body, ''), claim), 1, 160)
+		   FROM atoms WHERE substr(id, 1, ?) = ? LIMIT ?`,
+		n, raw[:n], limit)
+	if err != nil {
+		return nil, fmt.Errorf("search atom id: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []interfaces.SearchHit
+	for rows.Next() {
+		var blob []byte
+		var claim, text string
+		if err := rows.Scan(&blob, &claim, &text); err != nil {
+			return nil, err
+		}
+		id, err := ulid.ULID(blob).MarshalText()
+		if err != nil || !strings.HasPrefix(string(id), prefix) {
+			continue
+		}
+		out = append(out, interfaces.SearchHit{
+			ID: string(id), Kind: "atom", Title: claim, Snippet: text,
+		})
+	}
+	return out, rows.Err()
+}
+
+// isCrockford reports whether the text is a ULID prefix: the Crockford alphabet, which omits I, L, O
+// and U so a pasted id cannot be confused with a word.
+func isCrockford(s string) bool {
+	const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+	for _, c := range s {
+		if !strings.ContainsRune(alphabet, c) {
+			return false
+		}
+	}
+	return true
 }
 
 // SearchInSource searches the claims of ONE source: the same lexical ladder as Search, restricted
@@ -90,9 +167,10 @@ func (r *SearchRepository) searchSources(ctx context.Context, q string, limit in
 		   OR instr(lower(COALESCE(url, '')), lower(?)) > 0
 		   OR instr(lower(tags), lower(?)) > 0
 		   OR instr(lower(auto_tags), lower(?)) > 0
+		   OR instr(hash, lower(?)) > 0
 		ORDER BY (instr(lower(title), lower(?)) > 0) DESC, imported_at DESC
 		LIMIT ?`,
-		q, q, q, q, q, q, limit)
+		q, q, q, q, q, q, q, limit)
 	if err != nil {
 		return nil, fmt.Errorf("search sources: %w", err)
 	}
