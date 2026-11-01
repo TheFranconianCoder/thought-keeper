@@ -3720,7 +3720,28 @@ func (a *App) startupRepair() {
 	}
 
 	if needsRepair {
-		a.log.Warn("startup: the association layer is inconsistent — rebuilding it before accepting writes", "reason", reason)
+		a.log.Warn("startup: the association layer is inconsistent", "reason", reason)
+		// A cluster record that names a claim the vault no longer holds is a STALE MEMBER, not a
+		// broken index: a source reset removes claims, and the next cluster pass prunes the
+		// membership. Rebuilding 238k claims for that is out of all proportion, so the cheap prune
+		// runs first and the rebuild is kept for a real disagreement (a record without its row, a
+		// row without its record, a membership table that disagrees).
+		if a.cleanup.ClusterRepo != nil {
+			a.gate.Lock()
+			_, cErr := a.cleanup.Cleanup(context.Background())
+			a.gate.Unlock()
+			if cErr != nil {
+				a.log.Warn("startup: pruning the stale members failed", "err", cErr)
+			} else if again, why, rErr := a.reindex.NeedsRepair(context.Background()); rErr == nil && !again {
+				a.log.Info("startup: pruned the stale members — no rebuild needed", "reason", reason)
+				needsRepair = false
+			} else if rErr == nil {
+				reason = why
+			}
+		}
+	}
+	if needsRepair {
+		a.log.Warn("startup: rebuilding the index before accepting writes", "reason", reason)
 		runReindex(reason)
 	} else if checkErr == nil {
 		// Say that the check RAN, not only when it failed: "no news" is not evidence of a check.
