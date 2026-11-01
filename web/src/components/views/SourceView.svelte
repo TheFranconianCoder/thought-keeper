@@ -37,10 +37,21 @@
 
   const route = $derived(router.current);
   const hash = $derived(route.view === 'source' ? route.id : '');
-  const tab = $derived(route.params.get('tab') || 'snapshot');
+  const selected = $derived(sources.selected);
+  // The overview is the app's own content, so it opens first for every source that will have one.
+  // A bookmark is metadata only and a blocked URL skips distill, so those keep the content first.
+  const summaryTab = $derived(
+    !!selected && !selected.bookmark && selected.steps?.distill?.state !== 'skipped',
+  );
+  const defaultTab = $derived(summaryTab ? 'summary' : 'snapshot');
+  const requestedTab = $derived(route.params.get('tab') ?? '');
+  // An address that names a tab the source does not have (a summary on a bookmark) falls back to
+  // the default instead of rendering a panel whose tab is not there.
+  const tab = $derived(
+    requestedTab && (requestedTab !== 'summary' || summaryTab) ? requestedTab : defaultTab,
+  );
   const partID = $derived(route.params.get('part') ?? '');
   const fileParam = $derived(route.params.get('file') ?? '');
-  const selected = $derived(sources.selected);
   const sidecars = $derived(selected?.sidecars ?? []);
 
   const isPDF = $derived(selected?.ext === '.pdf');
@@ -312,7 +323,7 @@
     if (!hash) return;
     const params = new URLSearchParams();
     const nextTab = next.tab ?? tab;
-    if (nextTab && nextTab !== 'snapshot') params.set('tab', nextTab);
+    if (nextTab && nextTab !== defaultTab) params.set('tab', nextTab);
     if (next.part) params.set('part', next.part);
     if (next.file) params.set('file', next.file);
     const query = params.toString();
@@ -523,6 +534,9 @@
       <div class="source-layout">
         <section class="source-content">
           <div class="tabs" role="tablist" aria-label={t('source.viewAria')}>
+            {#if summaryTab}
+              <button class="tab" class:on={tab === 'summary'} onclick={() => setTab('summary')}>{t('source.tabSummary')}</button>
+            {/if}
             {#if isURLSource}
               <button class="tab" class:on={tab === 'snapshot'} onclick={() => setTab('snapshot')}>{t('source.tabSnapshot')}</button>
               <button class="tab" class:on={tab === 'live'} onclick={() => setTab('live')}>{t('source.tabLive')}</button>
@@ -533,9 +547,6 @@
               {#if isPDF}
                 <button class="tab" class:on={tab === 'pdf'} onclick={() => setTab('pdf')}>PDF</button>
               {/if}
-            {/if}
-            {#if !selected.bookmark && selected.steps?.distill?.state !== 'skipped'}
-              <button class="tab" class:on={tab === 'summary'} onclick={() => setTab('summary')}>{t('source.tabSummary')}</button>
             {/if}
             <button class="tab" class:on={tab === 'log'} onclick={() => setTab('log')}>{t('source.tabLog')}</button>
             <button class="tab" class:on={tab === 'files'} onclick={() => setTab('files')}>{t('source.tabFiles')}</button>
@@ -1204,7 +1215,7 @@
   .source-content {
     min-width: 0;
     border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius);
     background: var(--bg-elevated);
     box-shadow: var(--shadow-1);
     overflow: hidden;

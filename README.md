@@ -160,9 +160,10 @@ line. A new vault starts with "add the first source" here.
   source; a wiki page's representation is the other deliberately in-place exception.
 - Every source is one folder entry with its whole story: the object, the capture rendering, the step
   record, the outline, the summary and its own append-only **log**.
-- **A source page has tabs**: content/PDF, the live page (URLs), the log, the files, the summary, and
-  sub-sources. URL addresses are clickable — in the frontmatter, the rail and the **Open URL**
-  action. Every text field has a clear (×) button.
+- **A source page opens on its summary**, the app's own account of what the source says; its other
+  tabs are content/PDF, the live page (URLs), the log, the files and sub-sources. URL addresses are
+  clickable — in the frontmatter, the rail and the **Open URL** action. Every text field has a clear
+  (×) button.
 - **Sitemaps and RSS/Atom feeds** expand into page sources they own. A sitemap is a complete list, so
   it is reconciled 1:1 (a page that leaves it is removed); a feed only ever extends — a page that
   leaves it stays, and only deleting the feed removes its pages. **A feed that carries the post solves

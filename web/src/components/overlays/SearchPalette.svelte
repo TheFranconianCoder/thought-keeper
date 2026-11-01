@@ -186,7 +186,7 @@
     width: min(650px, 100%);
     overflow: hidden;
     border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius);
     background: var(--bg-elevated);
     box-shadow: var(--shadow-pop);
     animation: palette-in 0.16s var(--ease);

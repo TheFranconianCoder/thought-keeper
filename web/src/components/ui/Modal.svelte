@@ -109,7 +109,7 @@
     display: flex;
     flex-direction: column;
     border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius);
     background: var(--bg-elevated);
     box-shadow: var(--shadow-pop);
     outline: none;

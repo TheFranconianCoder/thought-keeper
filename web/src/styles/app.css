@@ -44,8 +44,8 @@
   --shadow-pop: 0 0 0 1px rgb(31 26 20 / 7%), 0 20px 60px rgb(31 26 20 / 20%);
 
   --radius-sm: 6px;
+  /* The box radius. 9px is the ceiling: the Status page's boxes set it, and no surface is rounder. */
   --radius: 9px;
-  --radius-lg: 13px;
   --radius-pill: 999px;
 
   --sidebar-w: 264px;
@@ -271,7 +271,7 @@ img {
 .detail-frame {
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-1);
   padding: 26px 28px 32px;
@@ -1295,7 +1295,7 @@ button.chip:hover {
 
 .panel {
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-1);
 }
