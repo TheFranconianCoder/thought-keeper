@@ -211,7 +211,45 @@ func (uc Trees) execute(ctx context.Context, hash string) (TreeResult, error) {
 		}
 		reopened = uc.rearmParts(ctx, hash, src, nodes, keep)
 	}
+	// A rebuilt outline can leave work owed even when the TEXT did not change: the references were
+	// re-located (a page rewritten under the old ones), and a part that never got a record is still
+	// underived. The distill step must not keep saying "through" over it — the pump would never run.
+	uc.reopenOwedParts(ctx, hash, src, nodes)
 	return TreeResult{Hash: hash, Nodes: len(nodes) - 1, Pages: pages, Title: title, OCR: ocr, Reopened: reopened}, nil
+}
+
+// reopenOwedParts records the distill step as pending when a rebuilt outline leaves a text-bearing
+// node without a finished part record. It is the step the pump reads: without it, a source whose
+// outline was rebuilt to fix its references would sit "through" over parts nobody derived.
+func (uc Trees) reopenOwedParts(ctx context.Context, hash string, src entities.Source, nodes []entities.SourceNode) {
+	if uc.Parts == nil || uc.Steps == nil {
+		return
+	}
+	states, err := uc.Parts.PartStates(ctx, src.ID)
+	if err != nil {
+		return
+	}
+	owed := 0
+	for _, n := range nodes {
+		if n.TextHash == "" {
+			continue
+		}
+		if st, ok := states[n.NodeID]; !ok || !st.Finished() {
+			owed++
+		}
+	}
+	if owed == 0 {
+		return
+	}
+	if err := uc.Steps.Record(ctx, hash, entities.StepDistill, entities.StepStatus{
+		State: entities.StepPending, At: uc.Clock.Now(),
+		Detail: fmt.Sprintf("the outline was rebuilt — %d part(s) to derive", owed),
+	}); err != nil {
+		uc.logSource(ctx, hash, "warn", "tree", "could not reopen the distill step", map[string]any{"err": err})
+		return
+	}
+	uc.logSource(ctx, hash, "info", "tree", "the distill step was reopened: the rebuilt outline owes parts",
+		map[string]any{"parts": owed})
 }
 
 // parts reads the parts the outline works from: the capture rendering when there is one

@@ -579,12 +579,37 @@ func (a *App) stepBarrierAllows(step entities.Step) bool {
 			if prior == step {
 				break
 			}
-			if !a.stepComplete(hash, rec, prior) {
+			if !a.stepThrough(hash, rec, prior) {
 				return false
 			}
 		}
 	}
 	return true
+}
+
+// stepThrough reports whether a source is DONE with a step for the purpose of the barrier: ok,
+// skipped, or failed. A failed step is over for this source; it must not hold the rest of the vault
+// (one unreadable page must not stop the cluster pass for 238k claims), and its retry is the retry
+// scheduler's job, not the barrier's.
+func (a *App) stepThrough(hash string, rec entities.SourceRecord, step entities.Step) bool {
+	if a.stepComplete(hash, rec, step) {
+		return true
+	}
+	return rec.Steps.State(step) == entities.StepFailed
+}
+
+// sourceCannotReach reports whether an EARLIER step of this source failed: the source cannot proceed
+// to `step`, so the pump must not queue it there.
+func (a *App) sourceCannotReach(rec entities.SourceRecord, step entities.Step) bool {
+	for _, prior := range entities.PipelineSteps {
+		if prior == step {
+			break
+		}
+		if rec.Steps.State(prior) == entities.StepFailed {
+			return true
+		}
+	}
+	return false
 }
 
 // stepComplete reports whether one source has completed one step (ok or skipped).
@@ -740,7 +765,7 @@ func (a *App) pumpOnce(reason string) {
 				// whose bytes are final go on, and this one is queued again when its fetch ends.
 				continue
 			}
-			if !a.stepComplete(hash, rec, step) {
+			if !a.stepThrough(hash, rec, step) {
 				all = false
 				break
 			}
@@ -763,6 +788,9 @@ func (a *App) pumpOnce(reason string) {
 			}
 			if a.urlFetchPending(hash) {
 				continue // its snapshot is about to be replaced — no document step on it yet
+			}
+			if a.sourceCannotReach(rec, step) {
+				continue // an earlier step failed: the source cannot proceed, and does not hold us
 			}
 			if a.stepComplete(hash, rec, step) {
 				continue
@@ -3832,6 +3860,9 @@ func (a *App) startupRepair() {
 // startupSweep makes a fresh start self-healing: it repairs referential damage, builds trees
 // for sources that never got one, then derives sources that have a tree but no atoms.
 func (a *App) startupSweep() {
+	// The consistency walk runs once at start: a derivation that stopped (a failed distill with parts
+	// missing) is reopened without waiting a whole interval, and the pump derives it.
+	a.reconcile("startup")
 	// Ask records written before citations became ordinary Markdown still carry [[claim:...]]
 	// in their raw files; normalise them once at start, so the vault is right on disk.
 	if a.query.Asks != nil {

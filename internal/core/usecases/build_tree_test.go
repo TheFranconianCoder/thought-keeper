@@ -13,6 +13,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/extract"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/gateways"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/objects"
+	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/sourcemeta"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
@@ -36,6 +37,40 @@ func (f *fakeTreeStore) Read(_ context.Context, hash string) ([]entities.SourceN
 func (f *fakeTreeStore) Remove(_ context.Context, hash string) error {
 	delete(f.m, hash)
 	return nil
+}
+
+// TestBuildTreeReopensTheDistillStepForOwedParts: a rebuilt outline whose text-bearing nodes have no
+// finished part record leaves work owed. The distill step must not keep saying "through" over it —
+// the pump reads that step, and a source whose outline was rebuilt to fix its references would
+// otherwise sit there for ever.
+func TestBuildTreeReopensTheDistillStepForOwedParts(t *testing.T) {
+	ctx := context.Background()
+	store := objects.New(t.TempDir())
+	idx := newFakeIndex()
+	trees := &fakeTreeStore{m: map[string][]entities.SourceNode{}}
+	extractor := extract.New(gateways.ExecRunner{}, extract.Config{})
+	steps := sourcemeta.NewTracker(sourcemeta.New(t.TempDir()), nil, nil)
+
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx,
+		usecases.IntakeInput{Name: "notes.md", Reader: strings.NewReader("# Alpha\nintro\n## Beta\nbody\n")})
+	if err != nil {
+		t.Fatalf("intake: %v", err)
+	}
+	bt := usecases.Trees{
+		Store: store, Index: idx, Trees: trees, Extractor: extractor,
+		Parts: &fakeSections{}, Steps: steps, Clock: fixedClock{},
+	}
+	if _, err := bt.Build(ctx, src.Hash); err != nil {
+		t.Fatalf("build tree: %v", err)
+	}
+
+	rec, err := steps.Steps(src.Hash)
+	if err != nil {
+		t.Fatalf("steps: %v", err)
+	}
+	if got := rec.State(entities.StepDistill); got != entities.StepPending {
+		t.Fatalf("distill = %s, want pending (the rebuilt outline owes parts)", got)
+	}
 }
 
 func TestBuildTreeFromMarkdown(t *testing.T) {

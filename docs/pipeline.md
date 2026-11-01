@@ -239,8 +239,12 @@ merge, not a target. **Identity is the claim, never a title.**
 **The order is enforced, and a failure blocks what follows.** A step may only run when every step
 before it is `ok` (or `skipped`, for a bookmark, a blocked URL or a feed/sitemap). The rule is one
 function (`entities.StepSet.Ready`) and one lock (the gate). The scheduler is `App.pumpPipeline`; the
-workers re-check the barrier on the way in. A failure is a barrier, not an invitation to run the
-next step for the other sources.
+workers re-check the barrier on the way in.
+
+**A failure is over for its source, not a barrier for the vault.** One page that cannot be read must
+not stop the cluster pass for every claim: a failed step counts as *through* for the barrier, while
+the source itself cannot reach a later step (the pump skips it) until it is repaired. Its retry is
+the retry scheduler's job, bounded by the stall guard.
 
 **The further forward something changes, the more loses its validity.** A new capture invalidates
 the outline, the distill and the cluster memberships that drew on its atoms. Steps 1–3 can run for

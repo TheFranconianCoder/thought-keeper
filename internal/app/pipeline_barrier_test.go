@@ -58,6 +58,46 @@ func TestFeedAndSitemapAreNeverTheBarrier(t *testing.T) {
 	}
 }
 
+// TestAFailedStepDoesNotHoldTheBarrier: one unreadable page must not stop the cluster pass for the
+// whole vault. A failed step is over for its source (it does not hold the others); the source itself
+// cannot reach a later step until it is repaired, and its retry is the retry scheduler's job.
+func TestAFailedStepDoesNotHoldTheBarrier(t *testing.T) {
+	ok := entities.StepStatus{State: entities.StepOK}
+	failed := entities.StepStatus{State: entities.StepFailed}
+	recs := barrierSteps{
+		"a.pdf": {
+			Identity: entities.SourceIdentity{Kind: entities.SourceKindPDF},
+			Steps:    entities.NewStepSet().With(entities.StepCapture, ok).With(entities.StepOutline, ok).With(entities.StepDistill, ok),
+		},
+		"b.pdf": {
+			Identity: entities.SourceIdentity{Kind: entities.SourceKindPDF},
+			Steps:    entities.NewStepSet().With(entities.StepCapture, ok).With(entities.StepOutline, ok).With(entities.StepDistill, failed),
+		},
+	}
+	a := &App{steps: recs}
+
+	if !a.stepBarrierAllows(entities.StepCluster) {
+		t.Error("a failed distill must not hold the cluster step")
+	}
+	if a.sourceCannotReach(recs["b.pdf"], entities.StepDistill) {
+		t.Error("a failed DISTILL must still be retried, not skipped")
+	}
+
+	broken := barrierSteps{
+		"b.pdf": {
+			Identity: entities.SourceIdentity{Kind: entities.SourceKindPDF},
+			Steps:    entities.NewStepSet().With(entities.StepCapture, ok).With(entities.StepOutline, failed),
+		},
+	}
+	a = &App{steps: broken}
+	if !a.stepBarrierAllows(entities.StepDistill) {
+		t.Error("a failed outline must not hold another source's distill")
+	}
+	if !a.sourceCannotReach(broken["b.pdf"], entities.StepDistill) {
+		t.Error("a source whose outline failed cannot reach the distill")
+	}
+}
+
 // TestAPendingPageFetchIsNotTheBarrier: a source whose page is being fetched is not derived yet and
 // must not hold the vault. A derivation built on the copy that is leaving would be wrong the moment
 // the page arrives, so the source waits — alone.

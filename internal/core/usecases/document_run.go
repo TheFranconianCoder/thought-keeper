@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -81,13 +80,13 @@ func (uc Derivation) Run(ctx context.Context, runID ulid.ULID, hash string, rese
 		r, rErr := uc.Reset(ctx, hash)
 		cleaned = CleanResult{Atoms: r.Atoms}
 		if rErr != nil {
-			return DocumentRunResult{}, uc.fail(ctx, run, "reset: "+rErr.Error())
+			return DocumentRunResult{}, uc.fail(ctx, run, fmt.Errorf("reset: %w", rErr))
 		}
 		// Capture is step 1, so it may run here — it is earlier than the barrier, not later. The
 		// outline and distill are NOT run here: the pump rebuilds them when every source is ready.
 		if uc.Index != nil && needsCapture(ctx, uc.Index, hash) {
 			if _, cErr := uc.Capture(ctx, hash); cErr != nil {
-				return DocumentRunResult{Cleaned: cleaned}, uc.fail(ctx, run, "capture: "+cErr.Error())
+				return DocumentRunResult{Cleaned: cleaned}, uc.fail(ctx, run, fmt.Errorf("capture: %w", cErr))
 			}
 		}
 		run.Answer = "reset: the source's derivation was cleared; the pipeline will rebuild it"
@@ -100,7 +99,7 @@ func (uc Derivation) Run(ctx context.Context, runID ulid.ULID, hash string, rese
 	run.TotalTokens = a.TotalTokens
 	if aErr != nil {
 		return DocumentRunResult{Atoms: a.Atoms, Cleaned: cleaned, Iterations: run.Iterations, TotalTokens: run.TotalTokens},
-			uc.fail(ctx, run, aErr.Error())
+			uc.fail(ctx, run, aErr)
 	}
 
 	pending := a.PartsLeft > 0
@@ -127,11 +126,13 @@ func (uc Derivation) Run(ctx context.Context, runID ulid.ULID, hash string, rese
 // caller must learn that this run failed, or the UI reports a dead run as succeeded and the
 // user only finds out by reading the log. `finish` returns the error of the *recording*, which
 // is almost always nil — hence this wrapper.
-func (uc Derivation) fail(ctx context.Context, run entities.Run, errMsg string) error {
-	if recErr := uc.finish(ctx, run, entities.RunFailed, errMsg); recErr != nil {
-		return fmt.Errorf("%s (recording the failure: %w)", errMsg, recErr)
+func (uc Derivation) fail(ctx context.Context, run entities.Run, cause error) error {
+	if recErr := uc.finish(ctx, run, entities.RunFailed, cause.Error()); recErr != nil {
+		// Both stay in the chain: the caller acts on the CAUSE (a stale outline is rebuilt), and the
+		// recording error is still there to be read.
+		return fmt.Errorf("%w (recording the failure: %w)", cause, recErr)
 	}
-	return errors.New(errMsg)
+	return cause
 }
 
 func (uc Derivation) finish(ctx context.Context, run entities.Run, status entities.RunStatus, errMsg string) error {

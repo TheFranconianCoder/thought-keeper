@@ -50,7 +50,9 @@ func (uc Maintenance) reopenStaleDistill(ctx context.Context, src entities.Sourc
 		return false
 	}
 	switch src.Steps.State(entities.StepDistill) {
-	case entities.StepOK, entities.StepPending:
+	case entities.StepOK, entities.StepPending, entities.StepFailed:
+		// A failed distill with parts missing is retried here; one whose parts are all recorded keeps
+		// its failure (the run said why, and a retry would say the same).
 	default:
 		return false
 	}
