@@ -14,9 +14,9 @@ import (
 // mutation is refused with 503 and a Retry-After. Reads keep working — that is the point of serving
 // early at all.
 func TestReadOnlyWhileRebuilding(t *testing.T) {
-	ready := false
+	repairing := false
 	r := chi.NewRouter()
-	r.Use(readOnlyWhileRebuilding(func() bool { return ready }))
+	r.Use(readOnlyWhileRebuilding(func() bool { return repairing }))
 	r.Get("/api/v1/status", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	r.Post("/api/v1/reindex", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) })
 
@@ -26,6 +26,10 @@ func TestReadOnlyWhileRebuilding(t *testing.T) {
 		return rec
 	}
 
+	if got := do(http.MethodPost, "/api/v1/reindex"); got.Code != http.StatusAccepted {
+		t.Fatalf("write while idle = %d, want 202", got.Code)
+	}
+	repairing = true
 	if got := do(http.MethodGet, "/api/v1/status"); got.Code != http.StatusOK {
 		t.Fatalf("read while rebuilding = %d, want 200", got.Code)
 	}
@@ -40,7 +44,7 @@ func TestReadOnlyWhileRebuilding(t *testing.T) {
 		t.Errorf("body = %s, want the repairing code", blocked.Body.String())
 	}
 
-	ready = true
+	repairing = false
 	if got := do(http.MethodPost, "/api/v1/reindex"); got.Code != http.StatusAccepted {
 		t.Fatalf("write after the rebuild = %d, want 202", got.Code)
 	}

@@ -411,10 +411,10 @@ func Build(
 		},
 		Query:  handlers.QueryHandler{Query: scheduler},
 		Lint:   handlers.LintHandler{Lint: scheduler, Findings: lintUC.Findings, Mark: scheduler},
-		Events: handlers.SSEHandler{Hub: hub},
-		Gate:   gate,
-		Ready:  repairing,
-		Log:    log,
+		Events:    handlers.SSEHandler{Hub: hub},
+		Gate:      gate,
+		Repairing: repairing,
+		Log:       log,
 	}, web.Handler())
 
 	return Deps{
