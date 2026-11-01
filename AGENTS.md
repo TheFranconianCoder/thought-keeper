@@ -148,7 +148,7 @@ index table, no model, no second grouping.
 | **favorite** | The reader's star on a source or a wiki page: "this belongs to me". No lifecycle, no label, never a ranking signal. | the source record / the page frontmatter |
 | **read later** | The reader's queue of sources. Open until marked done; otherwise a filter of the Sources list, ordered oldest entry first. | the source record + `?readlater=1` |
 | **interest** | A standing rule the reader writes: terms that make a NEW source join the read-later queue. A strong match queues; a weak one is only a suggestion. | `interests/<slug>.md` |
-| **reconcile / reindex / cleanup** | The repairs: check records against the vault; rebuild the index from the vault; prune dead cluster members. | Status → Vault |
+| **reconcile / reindex / cleanup** | The repairs: check records against the vault; rebuild the index from the vault; prune dead cluster members. The first two are buttons in Status → Vault; cleanup settles every cluster pass by itself. | Status → Vault |
 
 **The URL is the truth about UI state — with one exception that is deliberate.** A command's address
 names its record (`#/sources?command=<id>`), and that record expires; a link into an assistant

@@ -81,28 +81,6 @@ type LintHandler struct {
 	Lint     LintScheduler
 	Findings usecases.FindingLister
 	Mark     MaintenanceMarker
-	Cleanup  usecases.Cleaning
-}
-
-// CleanupPost serves POST /api/v1/cleanup.
-func (h LintHandler) CleanupPost(w http.ResponseWriter, r *http.Request) {
-	if h.Mark != nil {
-		defer h.Mark.MarkMaintenance("cleanup", "")()
-	}
-	if h.Cleanup == nil {
-		payloads.WriteError(w, types.New("not_implemented", "cleanup is not configured", types.ErrNotImplemented))
-		return
-	}
-	res, err := h.Cleanup(r.Context())
-	if err != nil {
-		payloads.WriteError(w, err)
-		return
-	}
-	payloads.WriteJSON(w, http.StatusOK, payloads.CleanupResult{
-		ClustersPruned:  res.ClustersPruned,
-		ClustersRemoved: res.ClustersRemoved,
-		Findings:        res.Findings,
-	})
 }
 
 // Post schedules a lint run.

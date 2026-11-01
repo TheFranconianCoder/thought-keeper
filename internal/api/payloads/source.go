@@ -183,24 +183,6 @@ type ReindexResult struct {
 	Orphans     int `json:"orphans"`
 }
 
-// URLAddressesResult is the read-only preview of the URL address migration: what is still on the old
-// address.
-type URLAddressesResult struct {
-	Checked int      `json:"checked"`
-	Count   int      `json:"count"`
-	Pending []string `json:"pending,omitempty"`
-}
-
-// URLMigrateResult reports the move: what it looked at, what it moved, and how many claims it
-// re-pointed. Nothing was derived again — it is a rename.
-type URLMigrateResult struct {
-	Checked int      `json:"checked"`
-	Moved   int      `json:"moved"`
-	Atoms   int      `json:"atoms_repointed"`
-	Skipped int      `json:"skipped"`
-	Pending []string `json:"pending,omitempty"`
-}
-
 // RefreshResult is the response of POST /api/v1/refresh-urls.
 type RefreshResult struct {
 	Checked int `json:"checked"`

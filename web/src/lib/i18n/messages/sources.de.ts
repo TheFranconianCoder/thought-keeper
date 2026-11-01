@@ -104,8 +104,6 @@ export const sourcesDe: Record<string, string> = {
   'sources.counts.nodes.many': '{count} Knoten',
   'sources.counts.pages.one': '{count} Seite',
   'sources.counts.pages.many': '{count} Seiten',
-  'sources.counts.urlSources.one': '{count} URL-Quelle',
-  'sources.counts.urlSources.many': '{count} URL-Quellen',
   'sources.counts.newPages.one': '{count} neue Seite',
   'sources.counts.newPages.many': '{count} neue Seiten',
 
@@ -126,11 +124,9 @@ export const sourcesDe: Record<string, string> = {
   'sources.job.vocabulary': 'Namen kuratieren',
   'sources.job.reindex': 'neu indizieren',
   'sources.job.reconcile': 'abgleichen',
-  'sources.job.cleanup': 'aufräumen',
   'sources.job.rebuildTrees': 'Gliederungen neu aufbauen',
   'sources.job.refreshUrls': 'URLs aktualisieren',
   'sources.job.refreshSource': 'Quelle aktualisieren',
-  'sources.job.fixUrls': 'URLs reparieren',
 
   // Eine Quelle hinzufügen: ein Link, viele Links, Dateien, ein angehängter Schnappschuss.
   'sources.fetchingLink': 'Der Link wird abgerufen…',
@@ -227,13 +223,6 @@ export const sourcesDe: Record<string, string> = {
   'sources.noteRemoved': '{count} entfernt',
   'sources.urlsChecked': 'URLs geprüft {checked} · geändert {changed} · fehlgeschlagen {failed}{notes}.',
   'sources.urlRefreshFailed': 'Das Aktualisieren der URLs ist fehlgeschlagen: {error}',
-  'sources.repaired': '{fixed} von {checked} Quellen repariert — sie sind wieder URL-Quellen.',
-  'sources.nothingToRepair.one': 'Nichts zu reparieren: {count} Markdown-Quelle geprüft.',
-  'sources.nothingToRepair.many': 'Nichts zu reparieren: {count} Markdown-Quellen geprüft.',
-  'sources.urlRepairFailed': 'Die URL-Reparatur ist fehlgeschlagen: {error}',
-  'sources.migrateNothing': 'Jede URL-Quelle hat bereits ihre URL-Adresse.',
-  'sources.migrateDone': '{moved} verschoben · {claims} neu zugeordnet.',
-  'sources.migrateFailed': 'Die Migration der URL-Adressen ist fehlgeschlagen: {error}',
 
   // Die eigenen Marken: Stern und Warteschlange.
   'sources.readLater': 'Später lesen',

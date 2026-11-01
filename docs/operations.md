@@ -43,7 +43,6 @@ sync when a knob changes. Sections:
 | `fetch` | timeout, max bytes, user agent, `allow_private` (SSRF guard) |
 | `pdf` | text tool, max bytes, max pages |
 | `ocr` | enabled, rasterizer, tesseract, languages, dpi, per-page threshold, max pages, timeout |
-| `lint` | `programmatic_on_compile` |
 | `language` | `ui` (the PWA's default language), `claims` and `summary` (the language the agent writes in); every one defaults to `en` |
 
 The UI language is only a default: a reader who switches it in the top bar keeps that choice in the
@@ -88,7 +87,6 @@ a **client of the running instance**. The instance is found through the runtime 
 | `lint [--wait] [--kind K]` | run id, or the findings summary with `--wait` |
 | `reindex` | counts of indexed/added/removed |
 | `rebuild-trees` | count of trees (re)built |
-| `quote-claim-code` | counts of scanned/repaired claims and wrapped bracket spans |
 | `models [--config PATH]` | models the endpoint serves |
 | `version` | version string |
 | `help` | usage |
@@ -173,7 +171,7 @@ commit and the build time into `internal/version` via `-ldflags`, builds
   the reason names the REAL holder (the cluster pass, the consistency job, a curation), never a
   guess. A step is marked executing BEFORE the status is published, and running rows come first.
 - **The Running list shows EVERY piece of work**, including maintenance passes (reindex, reconcile,
-  cleanup, rebuild outlines, URL refresh, curation).
+  rebuild outlines, URL refresh, curation).
 
 ## 6. The gate, scheduling and runs
 
@@ -321,22 +319,24 @@ from the inbox.
 
 ## 11. Maintenance and recovery
 
-Status → Vault offers every repair as a **button that says what it will do** before it is pressed:
+Status → Vault offers the repairs as a **button that says what it will do** before it is pressed:
 
 | Action | What it does |
 | --- | --- |
-| `POST /lint` | programmatic health check → findings |
-| `POST /cleanup` | prune dead cluster members, refresh the findings |
 | `POST /reconcile` | check step records against disk, invalidate what is missing, restore a row's lost owner from its record |
 | `POST /reindex` | rebuild the index from the vault |
 | `POST /rebuild-trees` | rebuild every outline from captured sources |
-| `POST /atoms/reorganize` | move claims into `atoms/<ab>/<cd>/<id>.md` |
-| `POST /atoms/collapse` | keep one copy of each duplicate |
-| `POST /atoms/quote-code` | quote the bracket syntax in claim bodies as inline code (one-time, idempotent) |
-| `POST /fix-urls` | repair URL identity from the snapshot's own frontmatter |
-| `POST /urls/migrate` | move old URL sources onto their URL address |
 | `POST /refresh-urls` | check every known URL now (attached snapshots are left alone; `POST /sources/{hash}/refetch` is the explicit per-source retry) |
+| `POST /atoms/collapse` | keep one copy of each duplicate — offered only while the duplicate report has a group |
 | `POST /vocabulary/curate` · `/retopic` | merge names · re-derive claim topics |
+
+**The rest is automatic.** A finished cluster pass settles itself: dead members are pruned and the
+programmatic findings are refreshed, so that pass has no button of its own. The findings are read in
+**Attention**, and `thought-keeper lint` (`POST /lint`) re-runs the programmatic check when a human
+wants a fresh report.
+
+A claim body that quotes bracket syntax is written as inline code by the distill, and the URL address
+of a source is the URL's hash by construction — there is nothing left to migrate.
 
 **Backup.** The real backup is the vault: `sources/` + `atoms/` + `wiki/` + `clusters/` +
 `interests/` (or git history). The index is rebuildable, so it does not need a backup. For a live copy, use SQLite's

@@ -317,16 +317,12 @@ export function jobStepLabel(step: string): string {
       return t('sources.job.reindex');
     case 'reconcile':
       return t('sources.job.reconcile');
-    case 'cleanup':
-      return t('sources.job.cleanup');
     case 'rebuild-trees':
       return t('sources.job.rebuildTrees');
     case 'refresh-urls':
       return t('sources.job.refreshUrls');
     case 'refresh-source':
       return t('sources.job.refreshSource');
-    case 'fix-urls':
-      return t('sources.job.fixUrls');
     default:
       return step;
   }

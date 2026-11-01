@@ -3,12 +3,9 @@ import type {
   AskList,
   Atom,
   AtomDuplicates,
-  AtomLayout,
   AtomList,
   AtomRelated,
   CaptureResult,
-  ClaimCode,
-  CleanupResult,
   ClusterResult,
   Command,
   CommandContext,
@@ -130,13 +127,6 @@ export const api = {
   // refetchSource tries the URL again for a snapshot the human attached by hand; a wall keeps it.
   refetchSource: (hash: string) =>
     request<RefetchResult>(`/sources/${enc(hash)}/refetch`, { method: 'POST' }),
-  fixURLs: () => request<{ checked: number; fixed: number }>('/fix-urls', { method: 'POST' }),
-  urlAddresses: () => request<{ checked: number; count: number; pending?: string[] }>('/urls/addresses'),
-  migrateURLAddresses: () =>
-    request<{ checked: number; moved: number; atoms_repointed: number; skipped: number; pending?: string[] }>(
-      '/urls/migrate',
-      { method: 'POST' },
-    ),
 
   capture: (hash: string) => request<CaptureResult>(`/sources/${enc(hash)}/capture`, { method: 'POST' }),
   distill: (hash: string, reset = false) =>
@@ -212,7 +202,6 @@ export const api = {
   // ── System ─────────────────────────────────────────────────────────────
   findings: (kind = '') => request<FindingList>(withQuery('/lint/findings', { kind })),
   lint: () => request<DistillResponse>('/lint', { method: 'POST' }),
-  cleanup: () => request<CleanupResult>('/cleanup', { method: 'POST' }),
   reindex: () => request<ReindexResult>('/reindex', { method: 'POST' }),
   rebuildTrees: () =>
     request<{ sources: number; built: number; failed: number }>('/rebuild-trees', { method: 'POST' }),
@@ -225,11 +214,8 @@ export const api = {
   retopicClaims: () =>
     request<{ run_id: string; status: string }>('/vocabulary/retopic', { method: 'POST' }),
 
-  atomLayout: () => request<AtomLayout>('/atoms/layout'),
-  reorganizeAtoms: () => request<AtomLayout>('/atoms/reorganize', { method: 'POST' }),
   atomDuplicates: () => request<AtomDuplicates>('/atoms/duplicates'),
   collapseAtoms: () => request<AtomDuplicates>('/atoms/collapse', { method: 'POST' }),
-  quoteClaimCode: () => request<ClaimCode>('/atoms/quote-code', { method: 'POST' }),
 };
 
 export type { Status, Pipeline, Source, Atom, WikiPage, Run, SavedAsk };

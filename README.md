@@ -61,7 +61,7 @@ navigation.
 | ![The Sources lens](docs/screenshots/desktop-sources.png) | **Sources.** Markdown, PDF, EPUB, text and URL snapshots in one list, with a persistent search, type and attachment filter; a hand-attached snapshot carries a paperclip badge. |
 | ![The assistant](docs/screenshots/desktop-assistant.png) | **The assistant.** One request resolves to a lens, a filter and a set; the result is an ordinary list with a banner that says how it was read. |
 | ![An Ask answer](docs/screenshots/desktop-ask.png) | **Ask.** Questions answered from claims, with inline citations, saved as notes with automatic tags. |
-| ![The Status lens](docs/screenshots/desktop-status.png) | **Status.** Counts, job queue, maintenance actions, vocabulary health, live and peak memory. |
+| ![The Status lens](docs/screenshots/desktop-status.png) | **Status.** Counts, job queue, maintenance actions and vocabulary health. |
 
 <p align="center">
   <img src="docs/screenshots/mobile-start.png" alt="Start on a phone" width="240">
@@ -269,11 +269,10 @@ keep their HTTP status, favicon and last check, and stay out of the derivation p
   and which source it is about.
 - The **summary backfill** while it runs: how many overviews are missing, queued and running, and
   when the backlog was measured.
-- Maintenance actions (reindex, rebuild trees, consistency check, cleanup, duplicate collapse,
-  cluster pass, vocabulary curation).
+- The repairs (reindex, rebuild trees, consistency check, URL refresh, duplicate collapse while a
+  duplicate exists, cluster pass, vocabulary curation).
 - Vocabulary health per namespace: canonical names, what they absorbed, near-duplicate families and
   broad tokens.
-- **Memory**: live heap, peak heap and which pass caused the peak.
 - All of it is also served by `GET /api/v1/status`, so the CLI doctor and the PWA cannot disagree.
 
 ### Vocabulary
@@ -342,8 +341,8 @@ The interesting documents are big and the vault grows. The app takes that seriou
   page, sitemap or feed it belongs to.
 - **No silent writes and no invented records.** A failed step is recorded; a dead link is listed; a
   missing file is a visible red light, not a blank page.
-- `app.memory_limit_mb` sets a soft Go heap ceiling, and Status reports the peak with the pass that
-  caused it.
+- `app.memory_limit_mb` sets a soft Go heap ceiling; `thought-keeper status` reports the peak with
+  the pass that caused it.
 
 ---
 
@@ -596,7 +595,7 @@ A small JSON API on loopback, serving the PWA and the CLI. Highlights:
 - `GET /api/v1/atoms…` — claims, topics, related (`peers` + `same_topic`); duplicates and collapse
   (`GET …/duplicates`, `POST …/collapse`).
 - `POST /api/v1/query` — Ask; every long operation is a run you can query by id.
-- Maintenance: `reconcile`, `reindex`, `rebuild-trees`, `cluster`, `lint`, `cleanup`.
+- Maintenance: `reconcile`, `reindex`, `rebuild-trees`, `cluster`, `lint`.
 
 No token and no CORS: the service binds to loopback and is meant for one desktop user. The full
 table, error format and event shapes are in [`docs/api.md`](docs/api.md).

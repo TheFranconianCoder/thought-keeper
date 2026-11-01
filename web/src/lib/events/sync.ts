@@ -62,7 +62,7 @@ const viewIs = (...views: string[]): boolean => views.includes(router.current.vi
 const claimsVisible = (): boolean => viewIs('claims');
 const topicsVisible = (): boolean => viewIs('claims', 'ask');
 const sourceDetailVisible = (): boolean => viewIs('source');
-const findingsVisible = (): boolean => viewIs('attention', 'status');
+const findingsVisible = (): boolean => viewIs('attention');
 const vaultVisible = (): boolean => viewIs('status');
 
 function schedule(scope: Scope): void {

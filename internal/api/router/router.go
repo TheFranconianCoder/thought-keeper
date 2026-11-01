@@ -139,7 +139,6 @@ func New(deps Deps, web http.Handler) http.Handler {
 		r.With(deps.Gate.Exclusive).Post("/sources/{hash}/reset", deps.Sources.ResetSource)
 		r.Get("/sources/{hash}/nodes/{node}", deps.Tree.GetNode)
 		r.Get("/sources/{hash}/atoms", deps.Atoms.ListSourceAtoms)
-		r.With(deps.Gate.Shared).Post("/fix-urls", deps.Sources.FixURLs)
 		r.Get("/sources/{hash}/raw", deps.Sources.Raw)
 		r.Get("/sources/{hash}/log", deps.Sources.LogText)
 		r.Get("/sources/{hash}/favicon", deps.Sources.FaviconServe)
@@ -149,8 +148,6 @@ func New(deps Deps, web http.Handler) http.Handler {
 		r.With(deps.Gate.Exclusive).Post("/reindex", deps.Reindex.Post)
 		r.With(deps.Gate.Exclusive).Post("/rebuild-trees", deps.Tree.Rebuild)
 		r.With(deps.Gate.Shared).Post("/refresh-urls", deps.URL.Post)
-		r.Get("/urls/addresses", deps.URL.GetAddresses)
-		r.With(deps.Gate.Exclusive).Post("/urls/migrate", deps.URL.PostMigrate)
 
 		r.Get("/vocabulary", deps.Vocabulary.Get)
 		r.Post("/vocabulary/curate", deps.Vocabulary.Curate)
@@ -177,16 +174,9 @@ func New(deps Deps, web http.Handler) http.Handler {
 		r.With(deps.Gate.Shared).Put("/interests/{slug}/sources/{hash}", deps.Interests.PutSource)
 		r.Get("/topics/claims", deps.Atoms.ListClaimTopics)
 		r.Get("/atoms", deps.Atoms.ListAtoms)
-		// The claim LAYOUT: what a vault still holds in the old branch folders (GET) and the move to
-		// the ID layout (POST). A button, not a start-up habit — the vault is the user's.
-		r.Get("/atoms/layout", deps.Atoms.GetAtomLayout)
-		r.With(deps.Gate.Exclusive).Post("/atoms/reorganize", deps.Atoms.PostAtomReorganize)
 		// The same claim written more than once: what is there (GET) and the collapse (POST).
 		r.Get("/atoms/duplicates", deps.Atoms.GetAtomDuplicates)
 		r.With(deps.Gate.Exclusive).Post("/atoms/collapse", deps.Atoms.PostAtomCollapse)
-		// One-time repair: a body written while a claim body was still parsed for links carries its
-		// quoted bracket syntax bare. It becomes inline code; it never becomes an edge.
-		r.With(deps.Gate.Exclusive).Post("/atoms/quote-code", deps.Atoms.PostQuoteCode)
 		r.Get("/atoms/{id}", deps.Atoms.Get)
 		r.Get("/atoms/{id}/related", deps.Atoms.GetRelated)
 		// The claim's cluster PEERS. There is no cluster view: a cluster is an association, not a
@@ -209,7 +199,6 @@ func New(deps Deps, web http.Handler) http.Handler {
 		r.Get("/search", deps.Search.Get)
 		r.Post("/query", deps.Query.Post)
 		r.Post("/lint", deps.Lint.Post)
-		r.With(deps.Gate.Exclusive).Post("/cleanup", deps.Lint.CleanupPost)
 		r.Get("/lint/findings", deps.Lint.ListFindings)
 		r.Get("/events", deps.Events.Stream)
 	})

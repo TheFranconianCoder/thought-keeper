@@ -298,7 +298,8 @@ numbers is amber.
   `POST /api/v1/lint` and `POST /api/v1/query` (read-only, never gated, answered by a pool of
   `pipeline.parallel_queries` workers).
 - **Vault housekeeping (Status → Vault):** the repairs listed in `operations.md`. Every one is a
-  BUTTON that says what it will do before it is pressed.
+  BUTTON that says what it will do before it is pressed; the cluster pass settles itself, so the
+  dead-member prune and the findings refresh need no button at all.
 - Every run names its step (`runs.step`).
 
 ## 6. Jobs, gate and automation

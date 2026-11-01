@@ -3,7 +3,6 @@ export const statusEn: Record<string, string> = {
   // The page head.
   'status.sub': 'The vault, the index and the work in flight.',
   'status.subLine': 'Thought Keeper {version} · up {uptime} · {addr}',
-  'status.pid': 'PID {pid}',
   'status.notLoaded': 'Nothing loaded',
   'status.notLoadedText':
     'Thought Keeper is not reachable. Start the app and this page reconnects by itself.',
@@ -14,7 +13,6 @@ export const statusEn: Record<string, string> = {
   'status.statClaims': 'claims',
   'status.statClusters': 'clusters',
   'status.statUnclustered': 'unclustered',
-  'status.statRuns': 'runs',
 
   // The capability chips.
   'status.capAgent': 'Agent',
@@ -91,12 +89,6 @@ export const statusEn: Record<string, string> = {
   'status.duplicates.many': '{count} claim files in {groups} exist more than once',
   'status.duplicatesExample': ' — e.g. “{example}”',
   'status.duplicatesNote': 'The copies are indistinguishable; collapsing keeps one.',
-  'status.legacyLayout.one': '{count} claim is still in the legacy folder layout',
-  'status.legacyLayout.many': '{count} claims are still in the legacy folder layout',
-  'status.legacyFolders.one': '{count} legacy folder',
-  'status.legacyFolders.many': '{count} legacy folders',
-  'status.legacyLayoutNote':
-    'Claims are addressed by their ID now; moving them changes only the file names.',
 
   // The maintenance actions.
   'status.reconcile': 'Check consistency',
@@ -108,35 +100,12 @@ export const statusEn: Record<string, string> = {
   'status.rebuildOutlines': 'Rebuild outlines',
   'status.rebuildOutlinesHint':
     'Rebuild every source’s outline (step 2) from its capture — no extraction, no model.',
-  'status.fixUrls': 'Fix URLs',
-  'status.fixUrlsHint':
-    'Repair sources that lost the fact that they are URL snapshots. Their frontmatter still names the address.',
   'status.refreshUrls': 'Refresh URL sources',
   'status.refreshUrlsHint':
     'Re-fetch every known URL once. A changed page is corrected through its existing source.',
   'status.collapseDuplicates': 'Collapse duplicate claims',
   'status.collapseDuplicatesHint':
     'Keep one copy of every claim that exists more than once and move the indistinguishable copies to the trash.',
-  'status.quoteClaimCode': 'Quote claim code',
-  'status.quoteClaimCodeHint':
-    'Wrap the bracket syntax a claim body quotes from its source (a C attribute, a shell test, a grammar fragment) in inline code. A claim has no links; this repairs the bodies written before that rule.',
-  'status.migrateUrls': 'Move URL sources to their URL address',
-  'status.migrateUrlsHint':
-    'A URL source is addressed by its URL now. This is a rename; nothing is derived again.',
-  'status.reorganizeClaims': 'Reorganize claims',
-  'status.reorganizeClaimsHint':
-    'Move claims out of legacy topic folders to atoms/<ab>/<cd>/<id>.md and remove the folders that empty out.',
-
-  // Knowledge health.
-  'status.health': 'Knowledge health',
-  'status.runLint': 'Run lint',
-  'status.cleanup': 'Cleanup',
-  'status.noFindings': 'No findings.',
-  'status.openSubject': 'Open the {kind}',
-  'status.subjectClaim': 'claim',
-  'status.subjectSource': 'source',
-  'status.infoFindings.one': '{count} informational finding',
-  'status.infoFindings.many': '{count} informational findings',
 
   // Vault details.
   'status.vaultDetails': 'Vault details',
@@ -144,15 +113,9 @@ export const statusEn: Record<string, string> = {
   'status.kvIndex': 'index',
   'status.kvSources': 'sources',
   'status.kvInbox': 'inbox',
-  'status.kvStarted': 'started',
-  'status.kvAgent': 'agent',
   'status.kvLanguageUI': 'interface language',
   'status.kvLanguageClaims': 'claims language',
   'status.kvLanguageSummary': 'summary language',
-  'status.kvMemory': 'memory',
-  'status.kvPdf': 'pdf',
-  'status.kvOcr': 'ocr',
-  'status.memoryLine': 'heap {heap} MB · peak {peak} MB',
 
   // A failed run and the maintenance notices. The server's own text stays; only the prefix is ours.
   'status.run': 'run',
@@ -192,34 +155,10 @@ export const statusEn: Record<string, string> = {
   'status.outlinesRebuilt': 'Outlines rebuilt: {built}/{sources}{failed}.',
   'status.failedCount': ' · {count} failed',
   'status.outlinesFailed': 'Outline rebuild failed: {error}',
-  'status.lintNotice': 'Running the health checks…',
-  'status.findings.one': '{count} finding',
-  'status.findings.many': '{count} findings',
-  'status.lintStatus': 'Lint {status}{error}',
-  'status.lintTimeout': 'Lint did not finish in time.',
-  'status.lintFailed': 'Lint failed: {error}',
-  'status.cleanupNotice': 'Cleaning up the association layer…',
-  'status.clustersPruned.one': '{count} cluster pruned',
-  'status.clustersPruned.many': '{count} clusters pruned',
-  'status.clustersRemoved.one': '{count} cluster removed',
-  'status.clustersRemoved.many': '{count} clusters removed',
-  'status.cleanupDone': 'Cleanup: {pruned} pruned · {removed} removed · {findings}.',
-  'status.cleanupFailed': 'Cleanup failed: {error}',
   'status.curateStarted': 'Curating the claim-topic vocabulary…',
   'status.curateFailed': 'Vocabulary curation failed: {error}',
   'status.retopicStarted': 'Re-deriving claim topics from the claim texts…',
   'status.retopicFailed': 'Topic re-derivation failed: {error}',
-  'status.reorganizeNothing': 'Nothing to move — no claim is in the legacy folder layout.',
-  'status.folders.one': '{count} folder',
-  'status.folders.many': '{count} folders',
-  'status.reorganizeMoved': 'Moved {claims} out of {folders}.',
-  'status.reorganizeFailed': 'Reorganize failed: {error}',
-  'status.quoteNotice': 'Quoting bracket syntax in claim bodies…',
-  'status.quoteNothing': 'Nothing to quote — no claim body carries a bare bracket pair.',
-  'status.bracketSpans.one': '{count} bracket span',
-  'status.bracketSpans.many': '{count} bracket spans',
-  'status.quoted': 'Quoted {spans} in {claims}{skipped}.',
-  'status.quoteFailed': 'Quote claim code failed: {error}',
   'status.collapseNothing': 'Nothing to collapse — every claim exists once.',
   'status.collapseTitle.one': 'Collapse {count} duplicate group?',
   'status.collapseTitle.many': 'Collapse {count} duplicate groups?',

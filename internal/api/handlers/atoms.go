@@ -32,52 +32,14 @@ type AtomHandler struct {
 	AtomRelated usecases.AtomRelated
 	SourceAtoms usecases.SourceAtomLister
 	Runs        usecases.RunGetter
-	// AtomLayout is what a vault still holds in the old layout; AtomReorganize moves it.
-	AtomLayout     usecases.AtomLayoutReader
-	AtomReorganize usecases.AtomLayoutWriter
 	// AtomDuplicates is what exists more than once; AtomCollapse keeps one copy of each claim.
 	AtomDuplicates AtomDuplicateReader
 	AtomCollapse   AtomDuplicateCollapser
-	// QuoteCode wraps bracket syntax in claim bodies in inline code (a one-time repair).
-	QuoteCode usecases.ClaimCodeQuoter
 	// Mark shows a synchronous pass in the Running list while it works.
 	Mark MaintenanceMarker
 	// Commands resolves an assistant result (?command=<id>) into claims. Nil means the address is
 	// not understood here; the named criteria beside it still filter.
 	Commands usecases.CommandAtomSet
-}
-
-// GetAtomLayout serves GET /api/v1/atoms/layout: the legacy topic folders a vault written before the ID
-// layout still holds, so a reader can see whether the reorganize has anything to do.
-func (h AtomHandler) GetAtomLayout(w http.ResponseWriter, r *http.Request) {
-	if h.AtomLayout == nil {
-		payloads.WriteJSON(w, http.StatusOK, payloads.AtomLayout{})
-		return
-	}
-	res, err := h.AtomLayout(r.Context())
-	if err != nil {
-		payloads.WriteError(w, err)
-		return
-	}
-	payloads.WriteJSON(w, http.StatusOK, atomLayoutFromPartial(res))
-}
-
-// PostAtomReorganize serves POST /api/v1/atoms/reorganize: move every claim out of the legacy topic folders
-// to its canonical path and remove the folders that empty out. Idempotent.
-func (h AtomHandler) PostAtomReorganize(w http.ResponseWriter, r *http.Request) {
-	if h.Mark != nil {
-		defer h.Mark.MarkMaintenance("reorganize-atoms", "")()
-	}
-	if h.AtomReorganize == nil {
-		payloads.WriteError(w, types.New("not_implemented", "reorganize is not configured", types.ErrNotImplemented))
-		return
-	}
-	res, err := h.AtomReorganize(r.Context())
-	if err != nil {
-		payloads.WriteError(w, err)
-		return
-	}
-	payloads.WriteJSON(w, http.StatusOK, atomLayoutFromPartial(res))
 }
 
 // GetAtomDuplicates serves GET /api/v1/atoms/duplicates: the claims that exist more than once, so a
@@ -113,36 +75,8 @@ func (h AtomHandler) PostAtomCollapse(w http.ResponseWriter, r *http.Request) {
 	payloads.WriteJSON(w, http.StatusOK, atomDuplicatesFromPartial(res))
 }
 
-// PostQuoteCode serves POST /api/v1/atoms/quote-code: wrap the bracket syntax a claim body quotes
-// from its source in inline code. Idempotent, and it changes no claim, topic or provenance.
-func (h AtomHandler) PostQuoteCode(w http.ResponseWriter, r *http.Request) {
-	if h.Mark != nil {
-		defer h.Mark.MarkMaintenance("quote-claim-code", "")()
-	}
-	if h.QuoteCode == nil {
-		payloads.WriteError(w, types.New("not_implemented", "quote claim code is not configured", types.ErrNotImplemented))
-		return
-	}
-	res, err := h.QuoteCode(r.Context())
-	if err != nil {
-		payloads.WriteError(w, err)
-		return
-	}
-	payloads.WriteJSON(w, http.StatusOK, payloads.ClaimCode{
-		Scanned: res.Scanned, Repaired: res.Repaired, Fragments: res.Fragments, Skipped: res.Skipped,
-	})
-}
-
 func atomDuplicatesFromPartial(p partialentities.PartialAtomDuplicates) payloads.AtomDuplicates {
 	return payloads.AtomDuplicates{Groups: p.Groups, Files: p.Files, Collapsed: p.Collapsed, Example: p.Example}
-}
-
-func atomLayoutFromPartial(p partialentities.PartialAtomLayout) payloads.AtomLayout {
-	return payloads.AtomLayout{
-		Folders: p.Folders, Claims: p.Claims, Indexes: p.Indexes,
-		Moved: p.Moved, Removed: p.Removed, IndexesRemoved: p.IndexesRemoved,
-		Skipped: p.Skipped, Kept: p.Kept,
-	}
 }
 
 // ListSourceAtoms serves GET /api/v1/sources/{hash}/atoms.

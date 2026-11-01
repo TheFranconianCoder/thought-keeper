@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
-	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/markdown"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
@@ -142,23 +141,6 @@ func SidecarPath(root, hash, suffix string) string {
 		return filepath.Join(root, hash+suffix)
 	}
 	return filepath.Join(root, hash[:2], hash[2:4], hash+suffix)
-}
-
-// DeclaredURL reads the URL a source's object declares in its YAML header (see
-// markdown.SourceDeclaredURL). Only the head of the file is read: the header is at the top, and a
-// snapshot can be megabytes.
-func (s *Store) DeclaredURL(_ context.Context, hash, ext string) (string, error) {
-	if !entities.IsSHA256Hex(hash) {
-		return "", types.New("invalid_hash", "hash must be a 64-character hex SHA-256", types.ErrInvalidHash)
-	}
-	f, err := os.Open(filepath.Join(s.root, relPath(hash, strings.ToLower(ext))))
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = f.Close() }() //nolint:errcheck // a close or an unlock has nothing left to report
-	head := make([]byte, 8<<10)
-	n, _ := io.ReadFull(f, head) //nolint:errcheck // a short read is the expected outcome; n says how much arrived
-	return markdown.SourceDeclaredURL(string(head[:n])), nil
 }
 
 func (s *Store) StatObject(hash, ext string) (int64, bool) {

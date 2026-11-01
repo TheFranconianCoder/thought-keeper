@@ -174,8 +174,7 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
 - **Name = SHA-256 of the bytes**, sharded `sources/<ab>/<cd>/<full-hash>.<ext>`. Identical bytes
   collapse: re-intake is a no-op.
 - **A URL's address is `sha256("url:" + url)`**, not the hash of its content: the page changes, the
-  address must not. Every fetch writes through it; `POST /api/v1/urls/migrate` moves a vault written
-  with the old first-snapshot address.
+  address must not. Every fetch writes through it.
 - **A captured source stays readable next to its object.** `capture` writes `<hash>.capture.md` for
   a kind that has to be extracted. It is what **outline** reads.
 - **Kinds:** `.md`, `.pdf`, `.txt`, `.epub`; URL snapshots are `.md` with frontmatter. An EPUB is
@@ -248,8 +247,7 @@ code: `cache_key[0]`.
   associations are its cluster, and nothing parses a body into edges.
 - **Code is quoted as code.** A declaration, expression, literal, identifier or grammar fragment from
   the source goes in the body as inline code; `[[unsequenced]]` is one. In the claim sentence the
-  code is named in prose, not quoted raw. The save wraps a bracket pair in a code span, and a body
-  written before that rule is repaired once with `POST /api/v1/atoms/quote-code`.
+  code is named in prose, not quoted raw. The save wraps a bracket pair in a code span.
 - There is no generated atom index: the catalog is SQLite's job (`list_topics`, `list_atoms`,
   `search`).
 - **The cluster membership is not stored beside the atom.** It is in `clusters/` and `cluster_atoms`.

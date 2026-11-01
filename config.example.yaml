@@ -153,9 +153,6 @@ ocr:
     max_pages: 500
     timeout: '5m'
 
-lint:
-    programmatic_on_compile: true          # cheap checks after each cluster pass
-
 language:                                  # the language of what the app WRITES. A source's own
                                            # language is detected per source and only tunes search;
                                            # it never decides the output language. ISO 639-1 (or

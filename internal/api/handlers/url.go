@@ -29,8 +29,6 @@ type URLHandler struct {
 	// OnDiscovered hands the NEW pages a feed or a sitemap declared to the fetch queue. Claiming them
 	// without fetching would list sources that never arrive.
 	OnDiscovered func(children []usecases.DiscoveredChildren)
-	// Addresses is the cleanup task that moves URL sources onto their URL's address.
-	Addresses usecases.URLAddressMigrator
 	// Mark shows a synchronous pass in the Running list while it works.
 	Mark MaintenanceMarker
 }
@@ -53,48 +51,6 @@ func (h URLHandler) PostMany(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	payloads.WriteJSON(w, http.StatusAccepted, payloads.AddURLsResult{Accepted: accepted})
-}
-
-// GetAddresses serves GET /api/v1/urls/addresses: the read-only preview, so the button can say what it
-// would do before it is pressed.
-func (h URLHandler) GetAddresses(w http.ResponseWriter, r *http.Request) {
-	if h.Addresses == nil {
-		payloads.WriteError(w, types.New("not_implemented", "url addresses are not configured", types.ErrNotImplemented))
-		return
-	}
-	res, err := h.Addresses(r.Context(), false)
-	if err != nil {
-		payloads.WriteError(w, err)
-		return
-	}
-	payloads.WriteJSON(w, http.StatusOK, payloads.URLAddressesResult{
-		Checked: res.Checked, Pending: res.Pending, Count: len(res.Pending),
-	})
-}
-
-// PostMigrate serves POST /api/v1/urls/migrate: move every URL source onto its URL's address. It is a
-// rename, not a re-derivation — the claims, their provenance and the derived files all come along.
-func (h URLHandler) PostMigrate(w http.ResponseWriter, r *http.Request) {
-	if h.Mark != nil {
-		defer h.Mark.MarkMaintenance("migrate-urls", "")()
-	}
-	if h.Addresses == nil {
-		payloads.WriteError(w, types.New("not_implemented", "url addresses are not configured", types.ErrNotImplemented))
-		return
-	}
-	res, err := h.Addresses(r.Context(), true)
-	if err != nil {
-		payloads.WriteError(w, err)
-		return
-	}
-	if h.OnChanged != nil {
-		// Every source moved: the list is different now (its rows have other addresses).
-		h.OnChanged("")
-	}
-	payloads.WriteJSON(w, http.StatusOK, payloads.URLMigrateResult{
-		Checked: res.Checked, Moved: res.Moved, Atoms: res.Atoms, Skipped: res.Skipped,
-		Pending: res.Pending,
-	})
 }
 
 // discoveredCount counts the new children across the owners of one pass.

@@ -47,9 +47,6 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `POST` | `/api/v1/add` | Add a source (`{path}` \| `{url}` \| multipart). A URL that is a sitemap or an RSS/Atom feed expands into a parent source; a manual URL is released from any owner it had |
 | `POST` | `/api/v1/add-urls` | Queue URLs for background intake |
 | `POST` | `/api/v1/refresh-urls` | Check every known URL NOW (the configured weekly page/sitemap and daily feed cadences are ignored; attached snapshots are left alone). A changed page's old derivation is rebuilt. Answers `{checked, changed, failed, blocked, attached, discovered, removed}`: `blocked` counts pages that answered with a wall, `attached` counts human-supplied snapshots (never fetched), `discovered` the new pages a sitemap/feed declared, `removed` the pages a sitemap no longer lists |
-| `GET` | `/api/v1/urls/addresses` | Preview the URL address migration (old addresses still in the vault) |
-| `POST` | `/api/v1/urls/migrate` | Move URL sources onto their URL's address |
-| `POST` | `/api/v1/fix-urls` | Repair index rows that lost "this is a URL" (from the snapshot's frontmatter) |
 | `GET` | `/api/v1/wiki` | Wiki pages and their tag cloud |
 | `GET` | `/api/v1/wiki/{id}` | One wiki page (Markdown body included) |
 | `POST` | `/api/v1/wiki` | Create a wiki page (writes its source) |
@@ -67,11 +64,8 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/atoms/{id}` | One claim (provenance, `clusters`, `cluster_count`) |
 | `GET` | `/api/v1/atoms/{id}/related` | Two separate lists: `peers` (same cluster) and `same_topic` |
 | `GET` | `/api/v1/atoms/{id}/cluster` | The same peer answer, named for what it is |
-| `GET` | `/api/v1/atoms/layout` | Legacy claim folders and orphaned records |
 | `GET` | `/api/v1/atoms/duplicates` | Claims that exist more than once |
 | `POST` | `/api/v1/atoms/collapse` | Keep one copy of each duplicate |
-| `POST` | `/api/v1/atoms/reorganize` | Move claims to `atoms/<ab>/<cd>/<id>.md` |
-| `POST` | `/api/v1/atoms/quote-code` | One-time repair: wrap the bracket syntax a claim body quotes from its source in inline code (`{scanned, repaired, fragments, skipped}`) |
 | `GET` | `/api/v1/vocabulary` | The health of the name vocabularies (`topics`, `wiki-tags`, `source-tags`) |
 | `POST` | `/api/v1/vocabulary/curate` | Curate the vocabularies (observes, asks the model, renames) |
 | `POST` | `/api/v1/vocabulary/retopic` | Re-derive claim topics from the claims themselves |
@@ -87,7 +81,6 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `DELETE` | `/api/v1/commands/{id}` | Move one command to `.trash/commands/` |
 | `POST` | `/api/v1/lint` | Run lint → `202 {run_id}` |
 | `GET` | `/api/v1/lint/findings` | Lint findings |
-| `POST` | `/api/v1/cleanup` | Prune dead cluster members and refresh the programmatic findings |
 | `GET` | `/api/v1/runs/{id}` | Run status, tokens, steps, answer, question |
 
 There is no list-all-runs endpoint; the UI follows the `run` events and the pipeline's `jobs`. A run
@@ -99,8 +92,8 @@ is read by id.
   and the vocabulary verbs record a run and return `202 {run_id}`; the client follows
   `GET /runs/{id}` or the event stream.
 - **Fast ones are synchronous.** `POST /add`, `POST /reindex`, `POST /rebuild-trees`,
-  `POST /reconcile`, `POST /cleanup`, `POST /atoms/quote-code`, `POST /sources/{hash}/refetch` and
-  the source verbs do their local work in the request.
+  `POST /reconcile`, `POST /sources/{hash}/refetch` and the source verbs do their local work in the
+  request.
   `POST /cluster` is the exception: it is queued and returns `202` (an empty run id means nothing
   was owed). Adding a source ends at the vault: URLs are queued, never fetched on the request path.
   A URL that answers with a sitemap is stored as a parent source; its pages are claimed and fetched

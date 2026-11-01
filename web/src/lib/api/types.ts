@@ -493,26 +493,6 @@ export interface AtomDuplicates {
   example?: string;
 }
 
-/** The one-time repair that wraps the bracket syntax in claim bodies as inline code. */
-export interface ClaimCode {
-  scanned: number;
-  repaired: number;
-  fragments: number;
-  skipped: number;
-}
-
-export interface AtomLayout {
-  folders?: string[];
-  claims: number;
-  indexes?: number;
-  moved: number;
-  removed: number;
-  folders_removed?: number;
-  indexes_removed?: number;
-  skipped?: number;
-  kept?: string[];
-}
-
 export interface SearchHit {
   id: string;
   kind: string;
@@ -614,12 +594,6 @@ export interface RebuildTreeResult {
   pages: number;
   title: string;
   ocr: boolean;
-}
-
-export interface CleanupResult {
-  clusters_pruned: number;
-  clusters_removed: number;
-  findings: number;
 }
 
 export interface RawResponse {

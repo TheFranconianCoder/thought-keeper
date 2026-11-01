@@ -18,8 +18,10 @@ describe('number localization', () => {
   it('formats numbers inside a sentence, but not an identifier', () => {
     setLocale('de', false);
     expect(t('status.vocabTop', { pct: 1_234 })).toBe('Top 1.234%');
-    // A PID is an identifier, not a quantity: it is passed as a string and stays ungrouped.
-    expect(t('status.pid', { pid: String(12_345) })).toBe('PID 12345');
+    // An address is an identifier, not a quantity: it is passed as a string and stays ungrouped.
+    expect(
+      t('status.subLine', { version: '1.0.0', uptime: '2h', addr: '127.0.0.1:12345' }),
+    ).toBe('Thought Keeper 1.0.0 · seit 2h · 127.0.0.1:12345');
   });
 
   it('writes a byte size with the language decimal separator', () => {

@@ -7,7 +7,6 @@ import { claims } from '../stores/claims.svelte';
 import { bookmarkWindow, failedWindow, sourceWindow } from '../stores/source-window.svelte';
 import { system } from '../stores/system.svelte';
 import { toast } from '../toast.svelte';
-import { waitForRun } from './runs';
 
 /** A vault-wide repair changed the sources: every window is thrown away, and the mounted lens reads
  *  its visible range again. */
@@ -92,49 +91,6 @@ export async function rebuildAllTrees(): Promise<void> {
   }
 }
 
-export async function runLint(): Promise<void> {
-  system.notice = t('status.lintNotice');
-  system.markBanner('lint');
-  try {
-    const { run_id } = await api.lint();
-    const run = await waitForRun(run_id);
-    await system.loadFindings();
-    system.notice =
-      run?.status === 'succeeded'
-        ? run.answer || tn('status.findings', system.findings.length)
-        : run
-          ? t('status.lintStatus', {
-              status: run.status,
-              error: run.error ? `: ${firstLine(run.error)}` : '',
-            })
-          : t('status.lintTimeout');
-  } catch (error) {
-    system.notice = t('status.lintFailed', { error: firstLine(humanError(error)) });
-  } finally {
-    system.clearBanner();
-  }
-}
-
-export async function cleanupClusters(): Promise<void> {
-  system.notice = t('status.cleanupNotice');
-  try {
-    const result = await api.cleanup();
-    toast(
-      t('status.cleanupDone', {
-        pruned: tn('status.clustersPruned', result.clusters_pruned),
-        removed: tn('status.clustersRemoved', result.clusters_removed),
-        findings: tn('status.findings', result.findings),
-      }),
-      'success',
-    );
-    await Promise.all([system.loadFindings(), refreshSourceData(), system.loadStatus()]);
-  } catch (error) {
-    toast(t('status.cleanupFailed', { error: firstLine(humanError(error)) }), 'error');
-  } finally {
-    system.notice = '';
-  }
-}
-
 export async function curateVocabulary(): Promise<void> {
   try {
     await api.curateVocabulary();
@@ -150,49 +106,6 @@ export async function retopicClaims(): Promise<void> {
     toast(t('status.retopicStarted'), 'info');
   } catch (error) {
     toast(t('status.retopicFailed', { error: firstLine(humanError(error)) }), 'error');
-  }
-}
-
-export async function reorganizeClaims(): Promise<void> {
-  try {
-    const result = await api.reorganizeAtoms();
-    toast(
-      result.moved === 0
-        ? t('status.reorganizeNothing')
-        : t('status.reorganizeMoved', {
-            claims: tn('status.claims', result.moved),
-            folders: tn('status.folders', result.folders_removed ?? 0),
-          }),
-      'success',
-    );
-    await system.loadVault();
-  } catch (error) {
-    toast(t('status.reorganizeFailed', { error: firstLine(humanError(error)) }), 'error');
-  }
-}
-
-export async function quoteClaimCode(): Promise<void> {
-  system.notice = t('status.quoteNotice');
-  try {
-    const result = await api.quoteClaimCode();
-    toast(
-      result.repaired === 0
-        ? t('status.quoteNothing')
-        : t('status.quoted', {
-            spans: tn('status.bracketSpans', result.fragments),
-            claims: tn('status.claims', result.repaired),
-            skipped: result.skipped
-              ? ` · ${t('status.skipped', { count: result.skipped })}`
-              : '',
-          }),
-      result.skipped ? 'warning' : 'success',
-    );
-    await Promise.all([claims.refresh(), system.loadFindings(), system.loadStatus()]);
-    if (system.vaultLoaded) await system.loadVault();
-  } catch (error) {
-    toast(t('status.quoteFailed', { error: firstLine(humanError(error)) }), 'error');
-  } finally {
-    system.notice = '';
   }
 }
 

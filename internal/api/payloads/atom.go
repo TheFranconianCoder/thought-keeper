@@ -56,36 +56,6 @@ type SourceTopic struct {
 	Count int    `json:"count"`
 }
 
-// AtomLayout is the response of GET /api/v1/atoms/layout (what a reorganize WOULD move) and of
-// POST /api/v1/atoms/reorganize (what it DID).
-//
-// The app writes claims at `atoms/<ab>/<cd>/<id>.md` — addressed by their ID, as a source is
-// addressed by its hash. A vault written before that keeps them in branch folders; this is the
-// account of moving it.
-type AtomLayout struct {
-	// Folders are the branch folders found, Claims how many claims they carry and Indexes how many
-	// generated branch index files stand beside them.
-	Folders []string `json:"folders,omitempty"`
-	Claims  int      `json:"claims"`
-	Indexes int      `json:"indexes,omitempty"`
-	// Moved/Removed/IndexesRemoved/Skipped are the reorganize's own numbers; Kept names the folders
-	// that still hold something afterwards (an unreadable file is never thrown away).
-	Moved          int      `json:"moved"`
-	Removed        int      `json:"folders_removed"`
-	IndexesRemoved int      `json:"indexes_removed,omitempty"`
-	Skipped        int      `json:"skipped,omitempty"`
-	Kept           []string `json:"kept,omitempty"`
-}
-
-// ClaimCode is the response of POST /api/v1/atoms/quote-code: the one-time repair that wraps the
-// bracket syntax a claim body quotes from its source in inline code.
-type ClaimCode struct {
-	Scanned   int `json:"scanned"`
-	Repaired  int `json:"repaired"`
-	Fragments int `json:"fragments"`
-	Skipped   int `json:"skipped"`
-}
-
 // AtomDuplicates is the response of GET /api/v1/atoms/duplicates (what a collapse WOULD take out) and
 // of POST /api/v1/atoms/collapse (what it DID).
 //

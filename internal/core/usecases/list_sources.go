@@ -23,7 +23,6 @@ type Sources struct {
 	Tags         interfaces.SourceTagStore
 	Shelf        interfaces.ShelfCounter
 	Favicons     interfaces.FaviconStore
-	Declared     interfaces.SourceFrontmatter
 	Trees        interfaces.TreeStore
 	Convert      interfaces.HTMLConverter
 	Extractor    interfaces.Extractor

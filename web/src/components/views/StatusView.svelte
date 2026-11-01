@@ -1,24 +1,17 @@
 <script lang="ts">
   import {
-    cleanupClusters,
     clusterClaims,
     collapseDuplicateClaims,
     curateVocabulary,
-    fixURLs,
-    migrateURLAddresses,
-    quoteClaimCode,
     rebuildAllTrees,
     reconcileVault,
     refreshURLs,
     reindexVault,
-    reorganizeClaims,
     retopicClaims,
-    runLint,
   } from '../../lib/actions';
-  import type { Finding } from '../../lib/api/types';
   import { elapsed, relTime } from '../../lib/format';
   import { n, t, tn } from '../../lib/i18n/index.svelte';
-  import { claimPath, navigate, router, sourcePath } from '../../lib/router.svelte';
+  import { navigate, router, sourcePath } from '../../lib/router.svelte';
   import { sources } from '../../lib/stores/sources.svelte';
   import { system } from '../../lib/stores/system.svelte';
   import { jobStepLabel } from '../../lib/source-state';
@@ -26,8 +19,6 @@
   import Icon from '../ui/Icon.svelte';
 
   const jobs = $derived(system.pipeline?.jobs ?? []);
-  const actionable = $derived(system.findings.filter((finding) => finding.severity !== 'info'));
-  const informational = $derived(system.findings.filter((finding) => finding.severity === 'info'));
   const indexOutdated = $derived(system.status?.index.outdated ?? '');
 
   let clock = $state(Date.now());
@@ -42,9 +33,8 @@
   $effect(() => {
     if (router.current.view !== 'status') return;
     // Entering the view is its catch-up point: live events only refresh the vault report while this
-    // view is visible, so a hidden Status page cannot keep re-reading layout, duplicates and names.
+    // view is visible, so a hidden Status page cannot keep re-reading duplicates and names.
     void system.loadStatus();
-    void system.loadFindings();
     void system.loadVault();
   });
 
@@ -106,11 +96,6 @@
     return parts.replace(' · ', '');
   }
 
-  function openFinding(finding: Finding): void {
-    if (finding.subject_kind === 'atom' && finding.subject_id) navigate(claimPath(finding.subject_id));
-    else if (finding.subject_kind === 'source' && finding.subject_id) navigate(sourcePath(finding.subject_id));
-  }
-
   const clusterActions = $derived([
     {
       label: t('status.clusterClaims'),
@@ -140,52 +125,22 @@
       run: rebuildAllTrees,
     },
     {
-      label: t('status.fixUrls'),
-      job: 'fix-urls',
-      hint: t('status.fixUrlsHint'),
-      run: fixURLs,
-    },
-    {
       label: t('status.refreshUrls'),
       job: 'refresh-urls',
       hint: t('status.refreshUrlsHint'),
       run: refreshURLs,
     },
-    {
-      label: t('status.collapseDuplicates'),
-      job: 'collapse-atoms',
-      hint: t('status.collapseDuplicatesHint'),
-      run: collapseDuplicateClaims,
-    },
-    {
-      label: t('status.quoteClaimCode'),
-      job: 'quote-claim-code',
-      hint: t('status.quoteClaimCodeHint'),
-      run: quoteClaimCode,
-    },
-    {
-      label: t('status.migrateUrls'),
-      job: 'migrate-urls',
-      hint: t('status.migrateUrlsHint'),
-      run: migrateURLAddresses,
-    },
-    {
-      label: t('status.reorganizeClaims'),
-      job: 'reorganize-atoms',
-      hint: t('status.reorganizeClaimsHint'),
-      run: reorganizeClaims,
-    },
   ]);
+
+  // A duplicate claim is the only repair whose button waits for its own report: the writer prevents
+  // one, so a vault that has none must not offer the action.
+  const duplicates = $derived(system.duplicates);
 </script>
 
 <div class="page status-page">
   <div class="page-head">
     <div class="head-row">
       <h1>{t('view.status')}</h1>
-      <span class="spacer"></span>
-      {#if system.status}
-        <span class="chip chip--mono">{t('status.pid', { pid: String(system.status.app.pid) })}</span>
-      {/if}
     </div>
     <p class="sub">
       {#if system.status}
@@ -195,6 +150,10 @@
       {/if}
     </p>
   </div>
+
+  {#if system.notice}
+    <p class="notice page-notice">{system.notice}</p>
+  {/if}
 
   {#if !system.status}
     <EmptyState icon="status" title={t('status.notLoaded')} text={t('status.notLoadedText')} />
@@ -212,7 +171,6 @@
       <div class="stat"><span class="stat-num">{n(status.index.atoms)}</span><span class="stat-label">{t('status.statClaims')}</span></div>
       <div class="stat"><span class="stat-num">{n(status.index.clusters)}</span><span class="stat-label">{t('status.statClusters')}</span></div>
       <div class="stat"><span class="stat-num">{n(status.index.unclustered)}</span><span class="stat-label">{t('status.statUnclustered')}</span></div>
-      <div class="stat"><span class="stat-num">{n(status.index.runs)}</span><span class="stat-label">{t('status.statRuns')}</span></div>
     </div>
 
     <div class="caps">
@@ -359,14 +317,6 @@
           {tn('status.duplicates', system.duplicates.files, { groups: tn('status.groupCount', system.duplicates.groups) })}{#if system.duplicates.example}{t('status.duplicatesExample', { example: system.duplicates.example })}{/if}. {t('status.duplicatesNote')}
         </p>
       {/if}
-      {#if system.layout && (system.layout.folders?.length ?? 0) > 0}
-        <p class="muted small section-note">
-          {tn('status.legacyLayout', system.layout.claims)}
-          ({tn('status.legacyFolders', system.layout.folders?.length ?? 0)}
-          {#if system.layout.folders?.length}: {system.layout.folders.slice(0, 6).join(', ')}{#if system.layout.folders.length > 6}, …{/if}{/if}).
-          {t('status.legacyLayoutNote')}
-        </p>
-      {/if}
       <div class="action-list">
         {#each vaultActions as action (action.label)}
           <div class="action-row">
@@ -376,60 +326,15 @@
             <span class="action-hint">{action.hint}</span>
           </div>
         {/each}
+        {#if duplicates && duplicates.groups > 0}
+          <div class="action-row">
+            <button class="btn btn--secondary" disabled={busy('collapse-atoms')} onclick={() => void collapseDuplicateClaims()}>
+              <span class="btn-text">{t('status.collapseDuplicates')}</span>
+            </button>
+            <span class="action-hint">{t('status.collapseDuplicatesHint')}</span>
+          </div>
+        {/if}
       </div>
-    </section>
-
-    <section class="section">
-      <div class="section-head">
-        <h2>{t('status.health')}</h2>
-        <span class="grow"></span>
-        <button class="btn btn--primary btn--sm" disabled={busy('lint')} onclick={() => void runLint()}>
-          <Icon name="search" size={13} /> <span class="btn-text">{t('status.runLint')}</span>
-        </button>
-        <button class="btn btn--secondary btn--sm" disabled={busy('cleanup')} onclick={() => void cleanupClusters()}>
-          <Icon name="spark" size={13} /> <span class="btn-text">{t('status.cleanup')}</span>
-        </button>
-      </div>
-      {#if system.notice}<p class="muted small section-note">{system.notice}</p>{/if}
-      {#if actionable.length === 0 && informational.length === 0}
-        <p class="muted small">{t('status.noFindings')}</p>
-      {:else}
-        <div class="findings">
-          {#each actionable as finding (finding.id)}
-            <div class="finding">
-              <span class="chip {finding.severity === 'error' ? 'chip--danger' : 'chip--warn'}">{finding.severity}</span>
-              <div class="finding-main">
-                <div class="finding-kind" title={finding.kind}>{finding.kind}</div>
-                <div class="finding-message" title={finding.message}>{finding.message}</div>
-              </div>
-              {#if finding.subject_id && (finding.subject_kind === 'atom' || finding.subject_kind === 'source')}
-                <button class="btn btn--ghost btn--sm" onclick={() => openFinding(finding)}>
-                  <span class="btn-text">{t('status.openSubject', { kind: finding.subject_kind === 'atom' ? t('status.subjectClaim') : t('status.subjectSource') })}</span>
-                </button>
-              {/if}
-            </div>
-          {/each}
-          {#if informational.length > 0}
-            <details class="info-findings">
-              <summary>{tn('status.infoFindings', informational.length)}</summary>
-              {#each informational as finding (finding.id)}
-                <div class="finding">
-                  <span class="chip">{finding.severity}</span>
-                  <div class="finding-main">
-                    <div class="finding-kind" title={finding.kind}>{finding.kind}</div>
-                    <div class="finding-message" title={finding.message}>{finding.message}</div>
-                  </div>
-                  {#if finding.subject_id && (finding.subject_kind === 'atom' || finding.subject_kind === 'source')}
-                    <button class="btn btn--ghost btn--sm" onclick={() => openFinding(finding)}>
-                      <span class="btn-text">{t('status.openSubject', { kind: finding.subject_kind === 'atom' ? t('status.subjectClaim') : t('status.subjectSource') })}</span>
-                    </button>
-                  {/if}
-                </div>
-              {/each}
-            </details>
-          {/if}
-        </div>
-      {/if}
     </section>
 
     <section class="section details-section">
@@ -439,22 +344,9 @@
         <div class="kv"><span class="k">{t('status.kvIndex')}</span><span class="v mono">{status.index.path}</span></div>
         <div class="kv"><span class="k">{t('status.kvSources')}</span><span class="v mono">{status.vault.sources}</span></div>
         <div class="kv"><span class="k">{t('status.kvInbox')}</span><span class="v mono">{status.vault.inbox}</span></div>
-        <div class="kv"><span class="k">{t('status.kvStarted')}</span><span class="v">{relTime(status.app.started_at)}</span></div>
-        <div class="kv"><span class="k">{t('status.kvAgent')}</span><span class="v">{status.agent.model || t('status.notConfigured')}</span></div>
         <div class="kv"><span class="k">{t('status.kvLanguageUI')}</span><span class="v mono">{status.language.ui}</span></div>
         <div class="kv"><span class="k">{t('status.kvLanguageClaims')}</span><span class="v mono">{status.language.claims}</span></div>
         <div class="kv"><span class="k">{t('status.kvLanguageSummary')}</span><span class="v mono">{status.language.summary}</span></div>
-        {#if status.memory}
-          <div class="kv">
-            <span class="k">{t('status.kvMemory')}</span>
-            <span class="v">
-              {t('status.memoryLine', { heap: status.memory.heap_mb, peak: status.memory.heap_peak_mb })}
-              {#if status.memory.peak_work}<em>{status.memory.peak_work}</em>{/if}
-            </span>
-          </div>
-        {/if}
-        <div class="kv"><span class="k">{t('status.kvPdf')}</span><span class="v">{status.tools.text_tool || t('common.none')}</span></div>
-        <div class="kv"><span class="k">{t('status.kvOcr')}</span><span class="v">{status.tools.tesseract || t('common.none')}</span></div>
       </div>
     </section>
   {/if}
@@ -470,9 +362,13 @@
     align-items: center;
   }
 
+  .page-notice {
+    margin-bottom: 16px;
+  }
+
   .stat-grid {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
     margin-bottom: 16px;
   }
@@ -730,56 +626,6 @@
     gap: 4px;
   }
 
-  .findings {
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--bg-elevated);
-    overflow: hidden;
-  }
-
-  .finding {
-    display: flex;
-    align-items: flex-start;
-    gap: 9px;
-    padding: 9px 11px;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .finding:last-child {
-    border-bottom: 0;
-  }
-
-  .finding-main {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .finding-kind {
-    overflow: hidden;
-    color: var(--faint);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .finding-message {
-    overflow: hidden;
-    color: var(--ink-2);
-    font-size: 12.5px;
-    line-height: 1.5;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .info-findings summary {
-    padding: 9px 11px;
-    color: var(--muted);
-    font-size: 11.5px;
-    cursor: pointer;
-    border-bottom: 1px solid var(--line);
-  }
-
   .details-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -794,18 +640,16 @@
     align-items: flex-start;
   }
 
-  .details-grid .kv em {
-    color: var(--text-muted, #7a756d);
-    font-style: normal;
-    font-size: 0.86em;
-  }
-
   .details-grid .v {
     word-break: break-all;
   }
 
   @media (max-width: 860px) {
     .stat-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .stat-grid--three {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
@@ -828,6 +672,10 @@
   @media (max-width: 560px) {
     .stat-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .stat-grid--three {
+      grid-template-columns: repeat(1, minmax(0, 1fr));
     }
 
     .vocab-row {

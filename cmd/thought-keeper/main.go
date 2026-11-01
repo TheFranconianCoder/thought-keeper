@@ -87,8 +87,6 @@ func run(args []string) error {
 		return cmdPost(args[1:], "/reindex", "reindex")
 	case "rebuild-trees":
 		return cmdPost(args[1:], "/rebuild-trees", "rebuild-trees")
-	case "quote-claim-code":
-		return cmdPost(args[1:], "/atoms/quote-code", "quote-claim-code")
 	case "version", "-version", "--version":
 		fmt.Println(version.Full())
 		return nil
@@ -130,7 +128,6 @@ Usage:
   thought-keeper lint [--wait]                            run health checks
   thought-keeper reindex                              rebuild the source index
   thought-keeper rebuild-trees                        rebuild every source tree
-  thought-keeper quote-claim-code                     quote the bracket syntax in claim bodies as inline code
   thought-keeper new-id                               print one ULID
   thought-keeper version                              print the version
 

@@ -402,21 +402,6 @@ func (r *AtomRepository) AtomIDs(ctx context.Context) ([]ulid.ULID, error) {
 	return ids, nil
 }
 
-// AtomsWithBracketSyntax returns the claims whose body still carries a bracket pair — the candidates
-// of the one-time code repair — with the path the index recorded for each, so the repair reads the
-// file the vault actually holds (a legacy folder included).
-func (r *AtomRepository) AtomsWithBracketSyntax(ctx context.Context) ([]entities.Atom, error) {
-	rows, err := r.q.AtomsWithBracketSyntax(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("atoms with bracket syntax: %w", err)
-	}
-	out := make([]entities.Atom, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, entities.Atom{ID: row.ID, Path: row.Path})
-	}
-	return out, nil
-}
-
 // AtomAddresses returns the id and the recorded file path of every claim, so a stale row can remove
 // the FILE it points at. A use case must not learn the store's folder convention to clean up.
 func (r *AtomRepository) AtomAddresses(ctx context.Context) ([]entities.Atom, error) {

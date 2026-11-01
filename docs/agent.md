@@ -254,11 +254,11 @@ order. It never writes a URL, never invents a hash and never answers the request
 - **Programmatic (Go, seconds):** orphan atoms, atoms without provenance, atoms
   whose topic/claim/body are not standalone, vocabulary drift, empty bodies, duplicate ids. The
   vocabulary report is **aggregated** into at most three findings (collisions, near-duplicate
-  families, long tail); it never emits one row per family. `info` findings are collapsed under
-  Status → Knowledge health.
+  families, long tail); it never emits one row per family. `info` findings are collapsed in the
+  Attention lens, beside the failed steps.
 - **Semantic (agent):** deferred. It reuses the query tools plus `report_finding`.
-- `POST /api/v1/cleanup` repairs what lint flags without the agent: dead cluster members are pruned
-  and the programmatic findings are refreshed.
+- **Cleanup runs on its own**: every finished cluster pass prunes the dead members and refreshes the
+  programmatic findings, so the report never describes a membership that no longer exists.
 
 ## 8. Models, patience and audit
 

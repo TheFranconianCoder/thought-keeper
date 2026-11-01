@@ -57,19 +57,6 @@ func (s *Store) Write(ctx context.Context, a entities.Atom) (entities.Atom, erro
 	return s.writePath(a)
 }
 
-// WritePath stores the atom at the path it records, so a repair rewrites a claim in place — a vault
-// written before the ID layout keeps its file where it is instead of gaining a second copy.
-func (s *Store) WritePath(_ context.Context, a entities.Atom) (entities.Atom, error) {
-	a.Topic = coremarkdown.NormalizeTopic(a.Topic)
-	if a.Topic == "" {
-		a.Topic = "inbox"
-	}
-	if a.Path == "" {
-		a.Path = Path(a.ID)
-	}
-	return s.writePath(a)
-}
-
 func (s *Store) writePath(a entities.Atom) (entities.Atom, error) {
 	b, err := mdcodec.EncodeAtom(a)
 	if err != nil {
@@ -90,23 +77,16 @@ func (s *Store) writePath(a entities.Atom) (entities.Atom, error) {
 }
 
 // Read loads an atom by its id.
-func (s *Store) Read(ctx context.Context, id ulid.ULID) (entities.Atom, error) {
-	return s.ReadPath(ctx, Path(id))
-}
-
-// ReadPath loads an atom from a path relative to the atom store's root — the path the index recorded,
-// which is how a claim in the old folder layout is still found.
-func (s *Store) ReadPath(_ context.Context, path string) (entities.Atom, error) {
-	data, err := os.ReadFile(filepath.Join(s.root, filepath.FromSlash(path)))
+func (s *Store) Read(_ context.Context, id ulid.ULID) (entities.Atom, error) {
+	data, err := os.ReadFile(filepath.Join(s.root, filepath.FromSlash(Path(id))))
 	if err != nil {
 		return entities.Atom{}, err
 	}
 	return mdcodec.DecodeAtom(data)
 }
 
-// Scan walks the atom store and returns every atom. Generated index files are skipped, and so is
-// every file whose path is not an atom's canonical one — a vault that still holds the old topic
-// folders is read from there (that is what makes the reorganize possible at all).
+// Scan walks the atom store and returns every atom. Generated index files are skipped; a claim file
+// is read wherever it lies, so a vault whose files are not at their canonical path is still read.
 func (s *Store) Scan(_ context.Context) ([]entities.Atom, error) {
 	var out []entities.Atom
 	err := filepath.WalkDir(s.root, func(path string, d fs.DirEntry, err error) error {
@@ -157,21 +137,4 @@ func (s *Store) Remove(_ context.Context, a entities.Atom) error {
 		return fmt.Errorf("atoms: remove: %w", err)
 	}
 	return nil
-}
-
-// RemoveStaleIndex deletes a generated atoms/index.md left by an older build. The topic catalog is not
-// written any more: the index is SQLite's job, and a second catalog is one more thing to keep in step
-// with it. A file that is not there is not an error — that is the normal case now.
-func (s *Store) RemoveStaleIndex() (bool, error) {
-	path := filepath.Join(s.root, "index.md")
-	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	if err := os.Remove(path); err != nil {
-		return false, fmt.Errorf("atoms: remove stale index: %w", err)
-	}
-	return true, nil
 }

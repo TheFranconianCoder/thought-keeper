@@ -1,6 +1,6 @@
 import { api } from '../api';
 import { humanError } from '../api/errors';
-import type { AtomDuplicates, AtomLayout, Finding, Pipeline, Status, VocabularyHealth } from '../api/types';
+import type { AtomDuplicates, Finding, Pipeline, Status, VocabularyHealth } from '../api/types';
 import { t } from '../i18n/index.svelte';
 import { toast } from '../toast.svelte';
 
@@ -18,7 +18,6 @@ class SystemStore {
   findingsLoaded = $state(false);
   findingsError = $state('');
 
-  layout = $state<AtomLayout | null>(null);
   duplicates = $state<AtomDuplicates | null>(null);
   vocabulary = $state<VocabularyHealth[] | null>(null);
   vaultLoaded = $state(false);
@@ -71,13 +70,11 @@ class SystemStore {
 
   async loadVault(): Promise<void> {
     const seq = ++this.vaultSeq;
-    const [layout, duplicates, vocabulary] = await Promise.allSettled([
-      api.atomLayout(),
+    const [duplicates, vocabulary] = await Promise.allSettled([
       api.atomDuplicates(),
       api.vocabulary(),
     ]);
     if (seq !== this.vaultSeq) return;
-    this.layout = layout.status === 'fulfilled' ? layout.value : null;
     this.duplicates = duplicates.status === 'fulfilled' ? duplicates.value : null;
     this.vocabulary = vocabulary.status === 'fulfilled' ? vocabulary.value.namespaces ?? [] : null;
     this.vaultLoaded = true;

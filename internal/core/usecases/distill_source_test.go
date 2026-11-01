@@ -3,7 +3,6 @@ package usecases_test
 import (
 	"bytes"
 	"context"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -43,9 +42,6 @@ type fakeAtomStore struct {
 	// usage is the atom→pages back-reference (the <id>.meta record).
 	mu sync.Mutex
 	m  map[string]entities.Atom
-	// staleIndexCalls counts the calls that would remove a generated atoms/index.md: the store writes
-	// none, so a distill must not ask for one either.
-	staleIndexCalls int
 }
 
 func (s *fakeAtomStore) Write(_ context.Context, a entities.Atom) (entities.Atom, error) {
@@ -57,43 +53,8 @@ func (s *fakeAtomStore) Write(_ context.Context, a entities.Atom) (entities.Atom
 	return a, nil
 }
 
-func (s *fakeAtomStore) WritePath(_ context.Context, a entities.Atom) (entities.Atom, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.m[a.ID.String()] = a
-	return a, nil
-}
-
 func (s *fakeAtomStore) Read(context.Context, ulid.ULID) (entities.Atom, error) {
 	return entities.Atom{}, nil
-}
-
-func (s *fakeAtomStore) ReadPath(_ context.Context, path string) (entities.Atom, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, a := range s.m {
-		if a.Path == path {
-			return a, nil
-		}
-	}
-	return entities.Atom{}, os.ErrNotExist
-}
-
-// DetectLegacyFolders and Reorganize exist so the fake satisfies the store's contract; the tests that
-// care about the move use the real store (infrastructure/atoms).
-func (s *fakeAtomStore) DetectLegacyFolders() ([]string, int, int, error) {
-	return nil, 0, 0, nil
-}
-
-func (s *fakeAtomStore) Reorganize(context.Context) ([]entities.Atom, int, int, int, []string, error) {
-	return nil, 0, 0, 0, nil, nil
-}
-
-func (s *fakeAtomStore) RemoveStaleIndex() (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.staleIndexCalls++
-	return false, nil
 }
 
 func (s *fakeAtomStore) Trash(_ context.Context, a entities.Atom) error {
@@ -289,19 +250,6 @@ func (r *fakeAtomRepo) AtomAddresses(context.Context) ([]entities.Atom, error) {
 	return out, nil
 }
 
-func (r *fakeAtomRepo) AtomsWithBracketSyntax(context.Context) ([]entities.Atom, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var out []entities.Atom
-	for _, a := range r.saved {
-		if strings.Contains(a.Body, "[[") {
-			out = append(out, entities.Atom{ID: a.ID, Path: a.Path})
-		}
-	}
-	slices.SortFunc(out, byAtomID)
-	return out, nil
-}
-
 // byAtomID is the index order the projection queries promise.
 func byAtomID(a, b entities.Atom) int { return bytes.Compare(a.ID[:], b.ID[:]) }
 
@@ -442,8 +390,5 @@ func TestDistillWritesAtomWithProvenance(t *testing.T) {
 		if st.Tool == "write_atom" {
 			t.Errorf("a write tool was called: %+v", st)
 		}
-	}
-	if atomStore.staleIndexCalls != 0 {
-		t.Errorf("the store must not write a generated index any more (%d calls)", atomStore.staleIndexCalls)
 	}
 }

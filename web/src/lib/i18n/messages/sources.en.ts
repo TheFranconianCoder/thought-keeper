@@ -103,8 +103,6 @@ export const sourcesEn: Record<string, string> = {
   'sources.counts.nodes.many': '{count} nodes',
   'sources.counts.pages.one': '{count} page',
   'sources.counts.pages.many': '{count} pages',
-  'sources.counts.urlSources.one': '{count} URL source',
-  'sources.counts.urlSources.many': '{count} URL sources',
   'sources.counts.newPages.one': '{count} new page',
   'sources.counts.newPages.many': '{count} new pages',
 
@@ -125,11 +123,9 @@ export const sourcesEn: Record<string, string> = {
   'sources.job.vocabulary': 'curate names',
   'sources.job.reindex': 'reindex',
   'sources.job.reconcile': 'reconcile',
-  'sources.job.cleanup': 'cleanup',
   'sources.job.rebuildTrees': 'rebuild outlines',
   'sources.job.refreshUrls': 'refresh URLs',
   'sources.job.refreshSource': 'refresh source',
-  'sources.job.fixUrls': 'fix URLs',
 
   // Adding a source: a link, many links, files, an attached snapshot.
   'sources.fetchingLink': 'Fetching the link…',
@@ -221,13 +217,6 @@ export const sourcesEn: Record<string, string> = {
   'sources.noteRemoved': '{count} removed',
   'sources.urlsChecked': 'URLs checked {checked} · changed {changed} · failed {failed}{notes}.',
   'sources.urlRefreshFailed': 'URL refresh failed: {error}',
-  'sources.repaired': 'Repaired {fixed} of {checked} sources — they are URL sources again.',
-  'sources.nothingToRepair.one': 'Nothing to repair: {count} Markdown source checked.',
-  'sources.nothingToRepair.many': 'Nothing to repair: {count} Markdown sources checked.',
-  'sources.urlRepairFailed': 'URL repair failed: {error}',
-  'sources.migrateNothing': 'Every URL source already has its URL address.',
-  'sources.migrateDone': 'Moved {moved} · {claims} re-pointed.',
-  'sources.migrateFailed': 'URL address migration failed: {error}',
 
   // The reader's marks: the star and the read-later queue.
   'sources.readLater': 'Read later',

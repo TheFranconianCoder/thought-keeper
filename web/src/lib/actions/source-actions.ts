@@ -394,39 +394,6 @@ export async function refreshURLs(): Promise<void> {
   }
 }
 
-export async function fixURLs(): Promise<void> {
-  try {
-    const result = await api.fixURLs();
-    toast(
-      result.fixed > 0
-        ? t('sources.repaired', { fixed: result.fixed, checked: result.checked })
-        : tn('sources.nothingToRepair', result.checked),
-      'success',
-    );
-    await refreshSourceViews();
-  } catch (error) {
-    toast(t('sources.urlRepairFailed', { error: firstLine(humanError(error)) }), 'error');
-  }
-}
-
-export async function migrateURLAddresses(): Promise<void> {
-  try {
-    const result = await api.migrateURLAddresses();
-    toast(
-      result.moved === 0
-        ? t('sources.migrateNothing')
-        : t('sources.migrateDone', {
-            moved: tn('sources.counts.urlSources', result.moved),
-            claims: tn('sources.counts.claims', result.atoms_repointed),
-          }),
-      'success',
-    );
-    await refreshSourceViews();
-  } catch (error) {
-    toast(t('sources.migrateFailed', { error: firstLine(humanError(error)) }), 'error');
-  }
-}
-
 /** openSourceFromHash is the one way a hash becomes a source page. */
 export function openSourceFromHash(hash: string, node?: string): void {
   navigate(sourcePath(hash, node ? { tab: 'snapshot', part: node } : {}));

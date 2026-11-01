@@ -3,7 +3,6 @@ export const statusDe: Record<string, string> = {
   // Der Seitenkopf.
   'status.sub': 'Der Tresor, der Index und die Arbeit, die gerade läuft.',
   'status.subLine': 'Thought Keeper {version} · seit {uptime} · {addr}',
-  'status.pid': 'PID {pid}',
   'status.notLoaded': 'Nichts geladen',
   'status.notLoadedText':
     'Thought Keeper ist nicht erreichbar. Starte die App, dann verbindet sich diese Seite von selbst neu.',
@@ -14,7 +13,6 @@ export const statusDe: Record<string, string> = {
   'status.statClaims': 'Aussagen',
   'status.statClusters': 'Cluster',
   'status.statUnclustered': 'nicht geclustert',
-  'status.statRuns': 'Läufe',
 
   // Die Fähigkeits-Plaketten.
   'status.capAgent': 'Agent',
@@ -92,12 +90,6 @@ export const statusDe: Record<string, string> = {
   'status.duplicates.many': '{count} Aussagendateien in {groups} existieren mehrfach',
   'status.duplicatesExample': ' — z. B. „{example}“',
   'status.duplicatesNote': 'Die Kopien sind ununterscheidbar; das Zusammenfassen behält eine.',
-  'status.legacyLayout.one': '{count} Aussage liegt noch in der alten Ordnerstruktur',
-  'status.legacyLayout.many': '{count} Aussagen liegen noch in der alten Ordnerstruktur',
-  'status.legacyFolders.one': '{count} alter Ordner',
-  'status.legacyFolders.many': '{count} alte Ordner',
-  'status.legacyLayoutNote':
-    'Aussagen werden jetzt über ihre ID adressiert; das Verschieben ändert nur die Dateinamen.',
 
   // Die Wartungsaktionen.
   'status.reconcile': 'Konsistenz prüfen',
@@ -109,35 +101,12 @@ export const statusDe: Record<string, string> = {
   'status.rebuildOutlines': 'Gliederungen neu bauen',
   'status.rebuildOutlinesHint':
     'Die Gliederung jeder Quelle (Schritt 2) aus ihrer Erfassung neu bauen — keine Extraktion, kein Modell.',
-  'status.fixUrls': 'URLs reparieren',
-  'status.fixUrlsHint':
-    'Quellen reparieren, die die Tatsache verloren haben, dass sie URL-Momentaufnahmen sind. Ihr Frontmatter nennt die Adresse noch.',
   'status.refreshUrls': 'URL-Quellen aktualisieren',
   'status.refreshUrlsHint':
     'Jede bekannte URL einmal neu abrufen. Eine geänderte Seite wird über ihre bestehende Quelle korrigiert.',
   'status.collapseDuplicates': 'Doppelte Aussagen zusammenfassen',
   'status.collapseDuplicatesHint':
     'Von jeder Aussage, die mehrfach existiert, eine Kopie behalten und die ununterscheidbaren Kopien in den Papierkorb verschieben.',
-  'status.quoteClaimCode': 'Klammern als Code setzen',
-  'status.quoteClaimCodeHint':
-    'Die Klammer-Syntax, die ein Aussagentext aus seiner Quelle zitiert (ein C-Attribut, ein Shell-Test, ein Grammatikfragment), in Inline-Code setzen. Eine Aussage hat keine Links; das repariert die Texte, die vor dieser Regel geschrieben wurden.',
-  'status.migrateUrls': 'URL-Quellen auf ihre URL-Adresse verschieben',
-  'status.migrateUrlsHint':
-    'Eine URL-Quelle wird jetzt über ihre URL adressiert. Das ist eine Umbenennung; nichts wird neu abgeleitet.',
-  'status.reorganizeClaims': 'Aussagen neu ordnen',
-  'status.reorganizeClaimsHint':
-    'Aussagen aus alten Themenordnern nach atoms/<ab>/<cd>/<id>.md verschieben und die Ordner entfernen, die leer werden.',
-
-  // Wissenszustand.
-  'status.health': 'Wissenszustand',
-  'status.runLint': 'Lint ausführen',
-  'status.cleanup': 'Aufräumen',
-  'status.noFindings': 'Keine Befunde.',
-  'status.openSubject': '{kind} öffnen',
-  'status.subjectClaim': 'Aussage',
-  'status.subjectSource': 'Quelle',
-  'status.infoFindings.one': '{count} informativer Befund',
-  'status.infoFindings.many': '{count} informative Befunde',
 
   // Tresordetails.
   'status.vaultDetails': 'Tresordetails',
@@ -145,15 +114,9 @@ export const statusDe: Record<string, string> = {
   'status.kvIndex': 'Index',
   'status.kvSources': 'Quellen',
   'status.kvInbox': 'Eingang',
-  'status.kvStarted': 'gestartet',
-  'status.kvAgent': 'Agent',
   'status.kvLanguageUI': 'Sprache der Oberfläche',
   'status.kvLanguageClaims': 'Sprache der Aussagen',
   'status.kvLanguageSummary': 'Sprache der Zusammenfassung',
-  'status.kvMemory': 'Speicher',
-  'status.kvPdf': 'pdf',
-  'status.kvOcr': 'ocr',
-  'status.memoryLine': 'Heap {heap} MB · Spitze {peak} MB',
 
   // Ein fehlgeschlagener Lauf und die Wartungshinweise. Der Text des Servers bleibt, nur das Präfix ist unseres.
   'status.run': 'Lauf',
@@ -193,34 +156,10 @@ export const statusDe: Record<string, string> = {
   'status.outlinesRebuilt': 'Gliederungen neu gebaut: {built}/{sources}{failed}.',
   'status.failedCount': ' · {count} fehlgeschlagen',
   'status.outlinesFailed': 'Gliederungen konnten nicht neu gebaut werden: {error}',
-  'status.lintNotice': 'Die Zustandsprüfungen laufen…',
-  'status.findings.one': '{count} Befund',
-  'status.findings.many': '{count} Befunde',
-  'status.lintStatus': 'Lint {status}{error}',
-  'status.lintTimeout': 'Lint wurde nicht rechtzeitig fertig.',
-  'status.lintFailed': 'Lint fehlgeschlagen: {error}',
-  'status.cleanupNotice': 'Die Verknüpfungsebene wird aufgeräumt…',
-  'status.clustersPruned.one': '{count} Cluster bereinigt',
-  'status.clustersPruned.many': '{count} Cluster bereinigt',
-  'status.clustersRemoved.one': '{count} Cluster entfernt',
-  'status.clustersRemoved.many': '{count} Cluster entfernt',
-  'status.cleanupDone': 'Aufräumen: {pruned} bereinigt · {removed} entfernt · {findings}.',
-  'status.cleanupFailed': 'Aufräumen fehlgeschlagen: {error}',
   'status.curateStarted': 'Das Aussagenthemen-Vokabular wird kuratiert…',
   'status.curateFailed': 'Vokabular-Kuratierung fehlgeschlagen: {error}',
   'status.retopicStarted': 'Die Aussagenthemen werden aus den Aussagentexten neu abgeleitet…',
   'status.retopicFailed': 'Themen-Ableitung fehlgeschlagen: {error}',
-  'status.reorganizeNothing': 'Nichts zu verschieben — keine Aussage liegt in der alten Ordnerstruktur.',
-  'status.folders.one': '{count} Ordner',
-  'status.folders.many': '{count} Ordner',
-  'status.reorganizeMoved': '{claims} aus {folders} verschoben.',
-  'status.reorganizeFailed': 'Neuordnen fehlgeschlagen: {error}',
-  'status.quoteNotice': 'Klammern in Aussagentexten werden als Code gesetzt…',
-  'status.quoteNothing': 'Nichts zu setzen — kein Aussagentext enthält ein nacktes Klammernpaar.',
-  'status.bracketSpans.one': '{count} Klammerstelle',
-  'status.bracketSpans.many': '{count} Klammerstellen',
-  'status.quoted': '{spans} in {claims} als Code gesetzt{skipped}.',
-  'status.quoteFailed': 'Klammern als Code setzen fehlgeschlagen: {error}',
   'status.collapseNothing': 'Nichts zusammenzufassen — jede Aussage existiert einmal.',
   'status.collapseTitle.one': '{count} doppelte Gruppe zusammenfassen?',
   'status.collapseTitle.many': '{count} doppelte Gruppen zusammenfassen?',

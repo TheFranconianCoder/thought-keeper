@@ -52,8 +52,4 @@ type AtomRepository interface {
 	// AtomAddresses returns the id and the recorded file path of every claim — what a stale index row
 	// needs in order to remove the file it points at.
 	AtomAddresses(ctx context.Context) ([]entities.Atom, error)
-	// AtomsWithBracketSyntax returns the id and the recorded path of the claims whose body still
-	// carries a [[...]] span: the candidates of the one-time code repair. The repair reads each file
-	// before it writes, so a stale row costs a skip, never a wrong rewrite.
-	AtomsWithBracketSyntax(ctx context.Context) ([]entities.Atom, error)
 }

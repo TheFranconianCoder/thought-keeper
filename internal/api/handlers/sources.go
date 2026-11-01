@@ -181,8 +181,6 @@ type SourcesHandler struct {
 	Rendered usecases.SourceRenderer
 	Sidecar  usecases.SourceSidecarOpener
 	Favicon  usecases.FaviconOpener
-	// FixURLs2 repairs sources that lost the fact that they are URL snapshots.
-	FixURLs2 usecases.URLKindFixer
 	// Log reads the source's own log: everything that was done to it, in one place.
 	Log SourceLogger
 	// Reset throws the source's derivation away (tree, claims) and rebuilds it.
@@ -602,24 +600,6 @@ func (h SourcesHandler) FaviconServe(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, rc) //nolint:errcheck // the client is gone; there is nothing to do
-}
-
-// FixURLs serves POST /api/v1/fix-urls: repair sources whose index entry lost the fact that they are
-// URL snapshots (the snapshot's own frontmatter says so).
-func (h SourcesHandler) FixURLs(w http.ResponseWriter, r *http.Request) {
-	if h.Mark != nil {
-		defer h.Mark.MarkMaintenance("fix-urls", "")()
-	}
-	if h.FixURLs2 == nil {
-		payloads.WriteError(w, types.New("not_implemented", "url repair is not available", types.ErrNotImplemented))
-		return
-	}
-	res, err := h.FixURLs2(r.Context())
-	if err != nil {
-		payloads.WriteError(w, err)
-		return
-	}
-	payloads.WriteJSON(w, http.StatusOK, map[string]int{"checked": res.Checked, "fixed": res.Fixed})
 }
 
 // Raw serves GET /api/v1/sources/{hash}/raw: the snapshot's bytes inline.

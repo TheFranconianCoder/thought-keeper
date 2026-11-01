@@ -43,10 +43,3 @@ type FindingList struct {
 	Findings []Finding `json:"findings"`
 	Count    int       `json:"count"`
 }
-
-// CleanupResult is the response of POST /api/v1/cleanup.
-type CleanupResult struct {
-	ClustersPruned  int `json:"clusters_pruned"`
-	ClustersRemoved int `json:"clusters_removed"`
-	Findings        int `json:"findings"`
-}

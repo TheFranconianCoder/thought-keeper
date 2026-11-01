@@ -30,7 +30,6 @@ type Config struct {
 	Fetch     FetchConfig     `yaml:"fetch"`
 	PDF       PDFConfig       `yaml:"pdf"`
 	OCR       OCRConfig       `yaml:"ocr"`
-	Lint      LintConfig      `yaml:"lint"`
 	// Language holds the language of what the app WRITES: the interface's default, the claims the
 	// distill step derives and the overviews the summary step writes. A source's own language is
 	// detected per source and only tunes search; it never decides the output language.
@@ -253,10 +252,6 @@ type OCRConfig struct {
 	Timeout             string   `yaml:"timeout"`
 }
 
-type LintConfig struct {
-	ProgrammaticOnCompile bool `yaml:"programmatic_on_compile"`
-}
-
 // Defaults returns a fully populated configuration with sensible defaults.
 func Defaults() Config {
 	return Config{
@@ -327,7 +322,6 @@ func Defaults() Config {
 			MaxPages:            500,
 			Timeout:             "5m",
 		},
-		Lint:     LintConfig{ProgrammaticOnCompile: true},
 		Language: LanguageConfig{UI: "en", Claims: "en", Summary: "en"},
 	}
 }
