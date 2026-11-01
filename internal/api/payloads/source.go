@@ -1,5 +1,7 @@
 package payloads
 
+import "github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
+
 // Source is the wire shape of a raw source.
 type Source struct {
 	Hash  string `json:"hash"`
@@ -263,4 +265,25 @@ type SourceReset struct {
 	Atoms    int    `json:"atoms"`
 	Nodes    int    `json:"nodes"`
 	Bookmark bool   `json:"bookmark,omitempty"`
+}
+
+// SourceLink is one resolved link: the address a document wrote and the source the vault holds for
+// it. Only URLs that ARE sources appear in the answer.
+type SourceLink struct {
+	URL  string `json:"url"`
+	Hash string `json:"hash"`
+}
+
+// SourceLinkList is the answer of GET /sources/resolve.
+type SourceLinkList struct {
+	Links []SourceLink `json:"links"`
+}
+
+// SourceLinksFrom is the use case's answer on the wire.
+func SourceLinksFrom(in []entities.SourceLink) SourceLinkList {
+	out := make([]SourceLink, 0, len(in))
+	for _, link := range in {
+		out = append(out, SourceLink{URL: link.URL, Hash: link.Hash})
+	}
+	return SourceLinkList{Links: out}
 }

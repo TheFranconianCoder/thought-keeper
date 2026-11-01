@@ -350,9 +350,10 @@ func Build(
 			Capturer: scheduler, Sidecars: sources.Sidecars, FixURLs2: sources.FixKinds, Attacher: sources.Attach,
 			Content: sources.Content, Rendered: sources.Rendered, Sidecar: sources.Sidecar,
 			Favicon: sources.Favicon, Log: sourceLog, Reset: scheduler, OnRemoved: onRemoved,
-			OnAttached: onAdded,
-			Mark:       scheduler,
-			Commands:   sources.Commands,
+			OnAttached:   onAdded,
+			Mark:         scheduler,
+			Commands:     sources.Commands,
+			LinkResolver: sources.ResolveLinks,
 		},
 		Add: handlers.AddHandler{Intake: sources.Intake, URL: urls.Add, URLManual: urls.AddManual, OnAdded: onAdded, OnReplaced: onReset, Children: scheduler},
 		URL: handlers.URLHandler{

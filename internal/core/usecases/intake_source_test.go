@@ -100,6 +100,20 @@ func (f *fakeIndex) CountSourceChildren(ctx context.Context, parentHash, wikiPag
 	return len(srcs), err
 }
 
+func (f *fakeIndex) ListSourceLinks(_ context.Context, urls []string) ([]entities.SourceLink, error) {
+	wanted := make(map[string]bool, len(urls))
+	for _, raw := range urls {
+		wanted[entities.URLKey(raw)] = true
+	}
+	out := make([]entities.SourceLink, 0, len(urls))
+	for _, src := range f.m {
+		if src.URL != "" && wanted[entities.URLKey(src.URL)] {
+			out = append(out, entities.SourceLink{URL: src.URL, Hash: src.Hash})
+		}
+	}
+	return out, nil
+}
+
 // CountSources mirrors the total behind a page.
 func (f *fakeIndex) CountSources(_ context.Context, filter entities.SourceFilter) (int, error) {
 	n := 0

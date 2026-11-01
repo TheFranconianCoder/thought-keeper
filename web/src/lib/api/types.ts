@@ -177,6 +177,17 @@ export interface SourceList {
   command?: CommandRef;
 }
 
+/** SourceLink is one URL a document links to that already IS a source: the vault's own page for it. */
+export interface SourceLink {
+  url: string;
+  hash: string;
+}
+
+/** SourceLinkList is the answer of /sources/resolve: only the URLs that matched a source. */
+export interface SourceLinkList {
+  links: SourceLink[];
+}
+
 /** SourceListFilter is the server-side narrowing of the Sources window. Empty fields mean "all". */
 export interface SourceListFilter {
   kind?: string;

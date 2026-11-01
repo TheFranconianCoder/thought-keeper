@@ -215,6 +215,10 @@ One SSE connection (`GET /api/v1/events`) replaces polling. Event types:
   summary, the log, the object. The tree is the table of contents; clicking a node opens that part of
   the text.
 - A source's log is shown verbatim in the **Log** tab.
+- **A link that already IS a source opens that source.** In a wiki page's prose and in a sitemap's or
+  feed's snapshot, a link whose address the vault already holds opens `#/sources/<hash>` instead of
+  the web. The addresses are matched by key (a fragment or a trailing slash does not matter), and a
+  link the vault does not hold keeps opening externally. Nothing else is rewritten.
 - **A URL source's address is clickable**: the frontmatter renders its `url:` as a link, the Details rail
   shows the host as one, and the header carries **Open URL** — all open the page in the browser
   (a new tab), distinct from the **Live** tab, which embeds it.

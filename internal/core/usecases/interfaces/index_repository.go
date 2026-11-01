@@ -45,6 +45,10 @@ type IndexRepository interface {
 	// CountSourceChildren is how many sub-sources a source owns — what decides whether the detail
 	// view shows the tab at all.
 	CountSourceChildren(ctx context.Context, parentHash, wikiPage string) (int, error)
+	// ListSourceLinks resolves existing URLs to the sources that hold them. It is the read behind
+	// a rendered link: a wiki page or a sitemap snapshot that points at a page the vault already
+	// has opens the source, not the web.
+	ListSourceLinks(ctx context.Context, urls []string) ([]entities.SourceLink, error)
 	DeleteSourceByHash(ctx context.Context, hash string) error
 	SourceHashes(ctx context.Context) ([]string, error)
 	// SetSourceTags mirrors a source's human labels into the index. The .meta record is the truth.

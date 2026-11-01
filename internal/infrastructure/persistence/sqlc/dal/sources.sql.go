@@ -513,6 +513,54 @@ func (q *Queries) ListSourceKinds(ctx context.Context) ([]ListSourceKindsRow, er
 	return items, nil
 }
 
+const listSourceLinksByURLs = `-- name: ListSourceLinksByURLs :many
+SELECT hash, url FROM sources
+WHERE kind = 'url' AND url IN (/*SLICE:urls*/?)
+ORDER BY imported_at DESC
+`
+
+type ListSourceLinksByURLsRow struct {
+	Hash string         `json:"hash"`
+	Url  sql.NullString `json:"url"`
+}
+
+// The source each known URL already has: one read for the links a page renders, never one per link.
+// The caller compares by URL KEY (fragment and trailing slash ignored), so the address a page
+// links to and the address a source was captured from may differ there. Newest first, so a URL the
+// vault holds twice resolves to its latest snapshot.
+func (q *Queries) ListSourceLinksByURLs(ctx context.Context, urls []sql.NullString) ([]ListSourceLinksByURLsRow, error) {
+	query := listSourceLinksByURLs
+	var queryParams []interface{}
+	if len(urls) > 0 {
+		for _, v := range urls {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:urls*/?", strings.Repeat(",?", len(urls))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:urls*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceLinksByURLsRow
+	for rows.Next() {
+		var i ListSourceLinksByURLsRow
+		if err := rows.Scan(&i.Hash, &i.Url); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSourceTags = `-- name: ListSourceTags :many
 SELECT hash, tags, auto_tags FROM sources ORDER BY hash
 `

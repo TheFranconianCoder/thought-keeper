@@ -172,6 +172,15 @@ SELECT * FROM sources WHERE kind = 'url' ORDER BY imported_at DESC;
 -- name: LatestSourceByURL :one
 SELECT * FROM sources WHERE url = ? ORDER BY imported_at DESC LIMIT 1;
 
+-- name: ListSourceLinksByURLs :many
+-- The source each known URL already has: one read for the links a page renders, never one per link.
+-- The caller compares by URL KEY (fragment and trailing slash ignored), so the address a page
+-- links to and the address a source was captured from may differ there. Newest first, so a URL the
+-- vault holds twice resolves to its latest snapshot.
+SELECT hash, url FROM sources
+WHERE kind = 'url' AND url IN (sqlc.slice('urls'))
+ORDER BY imported_at DESC;
+
 -- name: SourceAtomCount :one
 SELECT count(*)
 FROM atom_sources s

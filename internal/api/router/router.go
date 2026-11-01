@@ -99,6 +99,9 @@ func New(deps Deps, web http.Handler) http.Handler {
 		// The Sources lens's facets: the tag cloud and the attached count. Static, before the
 		// {hash} route, so a hash can never shadow it.
 		r.Get("/sources/facets", deps.Sources.ListFacets)
+		// Whether the URLs a page links to already ARE sources: the read behind rewriting a wiki
+		// page's or a sitemap's links to the vault's own pages. Static, like the facets.
+		r.Get("/sources/resolve", deps.Sources.ResolveLinks)
 		r.Get("/sources/{hash}", deps.Sources.Get)
 		r.Get("/sources/{hash}/tree", deps.Tree.Get)
 		// The Sub-sources tab: sitemap pages or a wiki page's linked URLs.

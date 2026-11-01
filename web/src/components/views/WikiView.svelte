@@ -477,7 +477,7 @@
           {/if}
 
           <div class="page-markdown">
-            <Markdown text={selected.body} />
+            <Markdown text={selected.body} resolveSources />
           </div>
         </article>
       {/if}

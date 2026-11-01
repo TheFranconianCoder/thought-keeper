@@ -32,6 +32,7 @@ import type {
   SearchResult,
   Source,
   SourceFacets,
+  SourceLinkList,
   SourceList,
   SourceListFilter,
   SourceNode,
@@ -89,6 +90,13 @@ export const api = {
     request<AtomList>(`/sources/${enc(hash)}/atoms`, { signal }),
   sourceChildren: (hash: string, signal?: AbortSignal) =>
     request<SourceList>(`/sources/${enc(hash)}/children`, { signal }),
+  /** resolveSourceLinks asks which of these URLs are already sources. The URLs are repeated
+   *  parameters: a link destination may itself contain a comma or a semicolon. */
+  resolveSourceLinks: (urls: string[], signal?: AbortSignal) => {
+    const query = new URLSearchParams();
+    for (const url of urls) query.append('url', url);
+    return request<SourceLinkList>(`/sources/resolve?${query.toString()}`, { signal });
+  },
   sourceSummary: (hash: string, signal?: AbortSignal) =>
     requestText(`/sources/${enc(hash)}/summary`, { signal }),
   generateSourceSummary: (hash: string) =>

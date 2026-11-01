@@ -97,6 +97,14 @@ type SourceFilter struct {
 	RootsOnly bool
 }
 
+// SourceLink is a link that already IS a source: the URL a document wrote and the hash of the
+// snapshot the vault holds for it. It is what a rendered link asks before it decides to open the
+// web — the page may be one the reader already has.
+type SourceLink struct {
+	URL  string
+	Hash string
+}
+
 type Source struct {
 	ID    ulid.ULID
 	Hash  string // sha256 hex = the content address

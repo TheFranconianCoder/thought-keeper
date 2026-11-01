@@ -199,6 +199,9 @@ type SourcesHandler struct {
 	// Commands resolves an assistant result (?command=<id>) into rows. Nil means the address is
 	// not understood here; the named criteria beside it still filter.
 	Commands usecases.CommandSourceSet
+	// LinkResolver answers whether the URLs a page links to already ARE sources (nil = every link
+	// keeps opening the web).
+	LinkResolver usecases.SourceLinkResolver
 }
 
 // List serves GET /api/v1/sources.
@@ -243,6 +246,22 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	payloads.WriteJSON(w, http.StatusOK, payloads.SourceList{Sources: out, Count: total, Total: total, Command: expired})
+}
+
+// ResolveLinks serves GET /api/v1/sources/resolve?url=…: for every URL a rendered document links
+// to, the source the vault already has. The URLs travel as repeated parameters because a link
+// destination may contain a comma or a semicolon, so no separator is safe.
+func (h SourcesHandler) ResolveLinks(w http.ResponseWriter, r *http.Request) {
+	if h.LinkResolver == nil {
+		payloads.WriteJSON(w, http.StatusOK, payloads.SourceLinkList{Links: []payloads.SourceLink{}})
+		return
+	}
+	links, err := h.LinkResolver(r.Context(), r.URL.Query()["url"])
+	if err != nil {
+		payloads.WriteError(w, err)
+		return
+	}
+	payloads.WriteJSON(w, http.StatusOK, payloads.SourceLinksFrom(links))
 }
 
 // serveCommand serves an assistant result. It reports whether it wrote the response, and — when the

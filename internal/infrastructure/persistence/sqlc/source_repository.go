@@ -886,6 +886,26 @@ func (r *SourceRepository) ListURLSources(ctx context.Context) ([]entities.Sourc
 	return out, nil
 }
 
+// ListSourceLinks resolves existing URLs to the sources that own them. One query for the whole set:
+// a rendered page asks once for all its links, never once per link. The caller passes candidate raw
+// forms and matches by URL key, because the stored address and the link may differ in a fragment or
+// a trailing slash.
+func (r *SourceRepository) ListSourceLinks(ctx context.Context, urls []string) ([]entities.SourceLink, error) {
+	params := make([]sql.NullString, 0, len(urls))
+	for _, value := range urls {
+		params = append(params, nullString(value))
+	}
+	rows, err := r.q.ListSourceLinksByURLs(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list source links: %w", err)
+	}
+	out := make([]entities.SourceLink, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, entities.SourceLink{URL: row.Url.String, Hash: row.Hash})
+	}
+	return out, nil
+}
+
 // LatestSourceByURL returns the newest snapshot for a URL.
 func (r *SourceRepository) LatestSourceByURL(ctx context.Context, url string) (entities.Source, error) {
 	row, err := r.q.LatestSourceByURL(ctx, nullString(url))

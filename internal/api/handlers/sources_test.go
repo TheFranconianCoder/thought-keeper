@@ -106,6 +106,38 @@ func TestSourceListParsesTheWindowFilter(t *testing.T) {
 	}
 }
 
+// TestSourceResolveLinksReadsEveryURL: the resolver receives every `url` parameter of the request,
+// in order, and the answer carries only what matched. A link destination may contain a comma, so
+// the URLs cannot be joined into one value.
+func TestSourceResolveLinksReadsEveryURL(t *testing.T) {
+	var got []string
+	h := SourcesHandler{LinkResolver: func(_ context.Context, urls []string) ([]entities.SourceLink, error) {
+		got = urls
+		return []entities.SourceLink{{URL: urls[0], Hash: "abc"}}, nil
+	}}
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		"GET",
+		"/api/v1/sources/resolve?url=https%3A%2F%2Fa.example%2Fx%2Cy&url=https%3A%2F%2Fb.example%2Fz",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	h.ResolveLinks(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(got) != 2 || got[0] != "https://a.example/x,y" || got[1] != "https://b.example/z" {
+		t.Fatalf("urls = %v, want both query values in order", got)
+	}
+	var out payloads.SourceLinkList
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(out.Links) != 1 || out.Links[0].Hash != "abc" {
+		t.Errorf("links = %+v, want the resolver's one match", out.Links)
+	}
+}
+
 type summaryOpener struct {
 	text string
 	err  error

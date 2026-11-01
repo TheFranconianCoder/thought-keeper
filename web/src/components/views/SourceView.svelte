@@ -46,6 +46,14 @@
   const isPDF = $derived(selected?.ext === '.pdf');
   const isEPUB = $derived(selected?.kind === 'epub');
   const isURLSource = $derived(selected?.kind === 'url');
+  // A sitemap's snapshot IS a page list, a feed's items point at pages the vault already owns, and
+  // a wiki page's representation carries the page's own prose: all three read as prose whose links
+  // may already be sources, so they open the source, not the web.
+  const listSource = $derived(
+    selected?.sitemap === true ||
+      selected?.rss === true ||
+      (selected?.original_name?.startsWith('wiki:') ?? false),
+  );
   const markdownView = $derived(
     sources.contentIsRendering || selected?.ext === '.md' || selected?.ext === '.markdown' || selected?.kind === 'url',
   );
@@ -721,7 +729,7 @@
                 {/if}
                 {#if partDoc.front}<Frontmatter text={partDoc.front} />{/if}
                 {#if markdownView}
-                  <Markdown text={partDoc.body} wikilinks={false} />
+                  <Markdown text={partDoc.body} wikilinks={false} resolveSources={listSource} />
                 {:else}
                   <pre class="raw-file">{partDoc.body}</pre>
                 {/if}
@@ -779,7 +787,7 @@
               {/if}
               {#if doc.front}<Frontmatter text={doc.front} />{/if}
               {#if markdownView}
-                <Markdown text={doc.body} wikilinks={false} />
+                <Markdown text={doc.body} wikilinks={false} resolveSources={listSource} />
               {:else}
                 <pre class="raw-file">{preview}</pre>
               {/if}
