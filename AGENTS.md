@@ -279,6 +279,11 @@ instance, not clients of a server you operate.
 - **Port discovery.** The HTTP port is fixed or ephemeral; the running instance writes its address
   and a lock to a runtime file so the CLI finds it.
 - **Loopback only, no token, no CORS.**
+- **The API serves before the vault is ready to be written.** A start that finds the index
+  inconsistent rebuilds it in the background: the server is already up, reads answer from the vault,
+  and every mutation is refused with `503 repairing` until the rebuild is done. The rebuild reports
+  its progress (`repair` in `/status` and `/pipeline`, a bar on the Status lens); the workers that
+  write start only afterwards.
 - **Graceful shutdown.** Quit finishes or aborts running runs, flushes the index and releases the
   vault lock.
 - **The tray is pure Go**, zero CGO. Autostart is opt-in.

@@ -338,7 +338,9 @@ Status → Vault offers the repairs as a **button that says what it will do** be
 | `POST /vocabulary/curate` · `/retopic` | merge names · re-derive claim topics |
 
 **The rest is automatic.** A finished cluster pass settles itself: dead members are pruned and the
-programmatic findings are refreshed, so that pass has no button of its own. The findings are read in
+programmatic findings are refreshed, so that pass has no button of its own. A write that fails there
+fails the pass — a half-pruned layer is returned as an error, never logged and swallowed, because it
+is exactly the disagreement the next start rebuilds the whole index for. The findings are read in
 **Attention**, and `thought-keeper lint` (`POST /lint`) re-runs the programmatic check when a human
 wants a fresh report.
 

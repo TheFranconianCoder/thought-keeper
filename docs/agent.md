@@ -258,7 +258,9 @@ order. It never writes a URL, never invents a hash and never answers the request
   Attention lens, beside the failed steps.
 - **Semantic (agent):** deferred. It reuses the query tools plus `report_finding`.
 - **Cleanup runs on its own**: every finished cluster pass prunes the dead members and refreshes the
-  programmatic findings, so the report never describes a membership that no longer exists.
+  programmatic findings, so the report never describes a membership that no longer exists. A write
+  that fails fails the pass (it is returned, not swallowed): a half-pruned layer would make the next
+  start rebuild the index.
 
 ## 8. Models, patience and audit
 

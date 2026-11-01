@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -20,7 +21,9 @@ type CleanupResult struct {
 // feature is not wired.
 type Cleaning func(ctx context.Context) (CleanupResult, error)
 
-// Cleanup prunes what the derived layer holds for rows that are gone.
+// Cleanup prunes what the derived layer holds for rows that are gone. A write that fails is
+// RETURNED, not swallowed: a half-pruned association layer is exactly the inconsistency the next
+// start rebuilds the whole index for, and a silent success hides the cause.
 func (uc Maintenance) Cleanup(ctx context.Context) (CleanupResult, error) {
 	var res CleanupResult
 	// The existence set only. A cluster record that keeps all its members is not touched at all, so
@@ -60,10 +63,11 @@ func (uc Maintenance) Cleanup(ctx context.Context) (CleanupResult, error) {
 		}
 		if len(kept) == 0 {
 			if err := uc.ClusterStore.RemoveMeta(ctx, rec.ID); err != nil {
-				uc.warn("remove empty cluster", rec.ID, err)
-				continue
+				return res, fmt.Errorf("cleanup: remove the empty cluster record %s: %w", rec.ID, err)
 			}
-			_ = uc.ClusterRepo.DeleteCluster(ctx, rec.ID) //nolint:errcheck // a trash move is best effort; a missing file is the goal
+			if err := uc.ClusterRepo.DeleteCluster(ctx, rec.ID); err != nil {
+				return res, fmt.Errorf("cleanup: delete the empty cluster %s: %w", rec.ID, err)
+			}
 			dropped++
 			continue
 		}
@@ -92,19 +96,23 @@ func (uc Maintenance) Cleanup(ctx context.Context) (CleanupResult, error) {
 			rec.Signature = subjectSignature(atomsFor(lost[i].kept, byID))
 			rec.Updated = now
 			if err := uc.ClusterStore.WriteMeta(ctx, rec); err != nil {
-				uc.warn("rewrite pruned cluster", rec.ID, err)
-				continue
+				return res, fmt.Errorf("cleanup: rewrite the pruned cluster %s: %w", rec.ID, err)
 			}
 			if err := uc.ClusterRepo.SaveCluster(ctx, rec); err != nil {
-				uc.warn("index pruned cluster", rec.ID, err)
-				continue
+				return res, fmt.Errorf("cleanup: index the pruned cluster %s: %w", rec.ID, err)
 			}
 			res.ClustersPruned++
 		}
 	}
 
 	if uc.Lint != nil {
-		if err := uc.Lint.DeleteFindingsByLayer(ctx, entities.FindingProgrammatic); err == nil {
+		if err := uc.Lint.DeleteFindingsByLayer(ctx, entities.FindingProgrammatic); err != nil {
+			// The findings are a REPORT, not a record of the vault: a failed refresh leaves them
+			// stale until the next pass. It is said, not raised.
+			if uc.Log != nil {
+				uc.Log.Warn("cleanup: the findings could not be refreshed", "err", err)
+			}
+		} else {
 			findings := ProgrammaticFindings(ctx, uc.Lint, uc.Atoms, ulid.ULID{}, uc.now())
 			if err := uc.Lint.AddFindings(ctx, findings); err != nil && uc.Log != nil {
 				uc.Log.Warn("cleanup: write findings", "err", err)
@@ -124,10 +132,4 @@ func (uc Maintenance) now() time.Time {
 		return uc.Clock.Now()
 	}
 	return time.Now().UTC()
-}
-
-func (uc Maintenance) warn(what string, id ulid.ULID, err error) {
-	if uc.Log != nil {
-		uc.Log.Warn("cleanup: "+what, "cluster", id.String(), "err", err)
-	}
 }
