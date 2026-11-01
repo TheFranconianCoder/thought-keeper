@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	coretree "github.com/TheFranconianCoder/thought-keeper/internal/core/tree"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
+	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
 // Maintenance is the use case of the vault upkeep: the index rebuild, the reconcile that checks the
@@ -76,6 +78,10 @@ type ReindexResult struct {
 	Clusters int
 	// ClustersRemoved counts cluster rows (or records) that had no claim left.
 	ClustersRemoved int
+	// objects is the set of source hashes the vault's bytes hold. Plumbing for the claim phase: a
+	// source is only gone when neither its record nor its object is there. Unexported — it is not a
+	// number the reader sees.
+	objects map[string]bool
 }
 
 // ReindexService rebuilds the index from the vault. A handler holds this value; nil means the feature
@@ -100,8 +106,12 @@ func (uc Maintenance) Reindex(ctx context.Context) (ReindexResult, error) {
 		}
 	}
 	// The source records (the <hash>.meta files) are the vault's truth about what a source IS and what
-	// it has been through. They are read ONCE and used by both phases below.
-	records := uc.records()
+	// it has been through. They are read ONCE and used by both phases below. Without them the rebuild
+	// must not run: every claim would look like it had lost its source.
+	records, err := uc.records()
+	if err != nil {
+		return ReindexResult{}, err
+	}
 	res, err := uc.sources(ctx, records)
 	res.Orphans = orphans
 	if err != nil {
@@ -109,13 +119,23 @@ func (uc Maintenance) Reindex(ctx context.Context) (ReindexResult, error) {
 	}
 	res = uc.steps(ctx, res, records)
 	res = uc.prunePartRecords(ctx, res)
-	res, err = uc.derived(ctx, res)
+	res, err = uc.derived(ctx, res, records)
 	if err != nil {
 		return res, err
 	}
 	res, err = uc.clusters(ctx, res)
 	if err != nil {
 		return res, err
+	}
+	if res.Skipped > 0 {
+		// A partial atom phase must not re-arm part records: a claim that simply was not indexed
+		// would look like a part that was never derived, and the pipeline would re-distill the whole
+		// document — that is the loop this guard exists to break.
+		if uc.Log != nil {
+			uc.Log.Warn("reindex: the atom phase was incomplete — part records are not re-armed",
+				"skipped", res.Skipped)
+		}
+		return res, nil
 	}
 	return uc.reconcileMeta(ctx, res, records), nil
 }
@@ -216,18 +236,15 @@ func (uc Maintenance) prunePartRecords(ctx context.Context, res ReindexResult) R
 }
 
 // records reads every source's <hash>.meta record, keyed by hash.
-func (uc Maintenance) records() map[string]entities.SourceRecord {
+func (uc Maintenance) records() (map[string]entities.SourceRecord, error) {
 	if uc.Steps == nil {
-		return nil
+		return nil, fmt.Errorf("reindex: the source records are not wired — refusing to rebuild the index")
 	}
 	records, err := uc.Steps.Records()
 	if err != nil {
-		if uc.Log != nil {
-			uc.Log.Warn("reindex: read the source records", "err", err)
-		}
-		return nil
+		return nil, fmt.Errorf("reindex: read the source records: %w", err)
 	}
-	return records
+	return records, nil
 }
 
 // steps mirrors the document-step state of every source from its .meta file into the index, and the
@@ -277,14 +294,53 @@ func (uc Maintenance) steps(ctx context.Context, res ReindexResult, records map[
 	return res
 }
 
-// derived rebuilds the claims from their files.
-func (uc Maintenance) derived(ctx context.Context, res ReindexResult) (ReindexResult, error) {
+// sourceExists reports whether the vault still holds a source: its record, its bytes, or an index row
+// that outlived both. A lookup that FAILS is an error, never "gone" — treating a canceled context as
+// a missing source is what turned one timed-out rebuild into a mass delete.
+func sourceExists(
+	ctx context.Context, index interfaces.IndexRepository,
+	records map[string]entities.SourceRecord, objects map[string]bool, hash string,
+) (bool, error) {
+	if _, ok := records[hash]; ok {
+		return true, nil
+	}
+	if objects[hash] {
+		return true, nil
+	}
+	if index == nil {
+		return false, nil
+	}
+	_, err := index.GetSourceByHash(ctx, hash)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, types.ErrNotFound):
+		return false, nil
+	default:
+		return false, fmt.Errorf("reindex: source lookup failed for %s: %w", hash, err)
+	}
+}
+
+// derived rebuilds the claim index from the files. It is the destructive phase of a rebuild, so
+// every decision it makes comes from the VAULT: the files that are there and the records that say
+// which source they belong to. The index — the thing being rebuilt — never decides that a claim is
+// gone. A missing index row is "not yet indexed", not "lost".
+func (uc Maintenance) derived(ctx context.Context, res ReindexResult, records map[string]entities.SourceRecord) (ReindexResult, error) {
 	if uc.AtomStore == nil || uc.Atoms == nil {
 		return res, nil
 	}
-	atoms, err := uc.AtomStore.Scan(ctx)
+	if records == nil {
+		return res, fmt.Errorf("reindex: no source records — refusing to rebuild the claims")
+	}
+	atoms, unreadable, err := uc.AtomStore.Scan(ctx)
 	if err != nil {
 		return res, err
+	}
+	if len(unreadable) > 0 {
+		// The vault holds claim files this pass cannot read. Dropping their rows — or worse, deleting
+		// the files — would turn a read problem into data loss: refuse the whole rebuild.
+		return res, fmt.Errorf("reindex: %d claim file(s) cannot be read (first: %s) — nothing was rebuilt",
+			len(unreadable), unreadable[0])
 	}
 	// A row whose file is gone is stale: the vault is the truth and `reindex` rebuilds the index FROM
 	// it. It is dropped and counted, so "0 removed" is never a silent lie.
@@ -292,53 +348,54 @@ func (uc Maintenance) derived(ctx context.Context, res ReindexResult) (ReindexRe
 	for _, a := range atoms {
 		known[a.ID.String()] = true
 	}
-	// The address projection: a stale row has to delete the FILE it points at, and the path is the
-	// record's own — recomputing it here would put the store's folder convention in a use case.
-	if existing, err := uc.Atoms.AtomAddresses(ctx); err == nil {
-		for _, a := range existing {
-			if known[a.ID.String()] {
-				continue
-			}
-			if err := uc.Atoms.DeleteAtom(ctx, a.ID); err != nil {
-				res.Skipped++
-				continue
-			}
-			if err := uc.AtomStore.Remove(ctx, a); err != nil && uc.Log != nil {
-				uc.Log.Warn("reindex: stale atom file not removed", "atom", a.ID.String(), "err", err)
-			}
-			res.AtomsRemoved++
-		}
+	existing, err := uc.Atoms.AtomAddresses(ctx)
+	if err != nil {
+		return res, fmt.Errorf("reindex: read the claim rows: %w", err)
 	}
-	// The sources the vault actually holds, resolved once: a provenance entry is only real when its
-	// source is.
-	knownSource := make(map[string]bool, 64)
-	sourceExists := func(hash string) bool {
-		if v, ok := knownSource[hash]; ok {
-			return v
+	for _, a := range existing {
+		if known[a.ID.String()] {
+			continue
 		}
-		_, err := uc.Index.GetSourceByHash(ctx, hash)
-		knownSource[hash] = err == nil
-		return err == nil
+		// The row goes; the FILE is never touched here. If the scan could not read it, this pass
+		// aborted above; if it is really gone, there is nothing left to remove. Deleting a file
+		// because it was not indexed is how a repair destroys the vault.
+		if err := uc.Atoms.DeleteAtom(ctx, a.ID); err != nil {
+			res.Skipped++
+			continue
+		}
+		res.AtomsRemoved++
 	}
 	for _, a := range atoms {
+		if err := ctx.Err(); err != nil {
+			return res, err
+		}
 		// THE PIPELINE IS COMPLETE, OR NOTHING AT THE BACK HANGS ON IT. A claim whose provenance names
-		// a source the vault no longer holds cannot be attributed — it goes (file to .trash/atoms/,
+		// a source the VAULT no longer holds cannot be attributed — it goes (file to .trash/atoms/,
 		// row dropped). A PARTIAL provenance is pruned instead: the claim keeps the sources that
 		// exist, and the FILE is rewritten, or the next reindex reads the dead hash again.
 		if len(a.Sources) > 0 {
 			kept := a.Sources[:0]
 			for _, src := range a.Sources {
-				if sourceExists(src.Hash) {
+				ok, sErr := sourceExists(ctx, uc.Index, records, res.objects, src.Hash)
+				if sErr != nil {
+					// A lookup that FAILED is not a source that is gone. Abort: the claims stay.
+					return res, sErr
+				}
+				if ok {
 					kept = append(kept, src)
 				}
 			}
 			if len(kept) == 0 {
-				if err := uc.AtomStore.Trash(ctx, a); err != nil && uc.Log != nil {
-					uc.Log.Warn("reindex: orphaned claim not trashed", "atom", a.ID.String(), "err", err)
+				if err := uc.AtomStore.Trash(ctx, a); err != nil {
+					if uc.Log != nil {
+						uc.Log.Warn("reindex: orphaned claim not trashed", "atom", a.ID.String(), "err", err)
+					}
+					res.Skipped++
+					continue
 				}
 				res.AtomsOrphaned++
 				if uc.Log != nil {
-					uc.Log.Warn("reindex: claim trashed — every source it cited is gone",
+					uc.Log.Warn("reindex: claim trashed — the vault holds no record of any source it cites",
 						"atom", a.ID.String(), "sources", len(a.Sources), "claim", a.Claim)
 				}
 				continue
@@ -540,6 +597,7 @@ func (uc Maintenance) sources(ctx context.Context, records map[string]entities.S
 
 	res := ReindexResult{Scanned: len(objs)}
 	seen := make(map[string]bool, len(objs))
+	res.objects = seen
 	for _, o := range objs {
 		// WHAT the source IS comes from its record first: a URL snapshot, a Markdown source and a
 		// PDF's readable rendering are all <hash>.md — the record is the only thing that tells them

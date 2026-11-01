@@ -84,6 +84,35 @@ func TestShardSpreadsOneRun(t *testing.T) {
 	}
 }
 
+// TestScanReportsAnUnreadableClaimFile: a rebuild must be able to tell "this claim is not there"
+// from "I could not read it". The file is returned, never skipped — the reindex refuses to run.
+func TestScanReportsAnUnreadableClaimFile(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	s := New(dir)
+	if _, err := s.Write(ctx, sampleAtom("Caching is only safe")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	broken := filepath.Join(dir, "broken.md")
+	if err := os.WriteFile(broken, []byte("not an atom at all"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "no-id.md"), []byte("---\nclaim: no id\n---\n\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	atoms, unreadable, err := s.Scan(ctx)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(atoms) != 1 {
+		t.Fatalf("scan = %d atom(s), want the one readable claim", len(atoms))
+	}
+	if len(unreadable) != 2 {
+		t.Fatalf("unreadable = %v, want the broken file and the file without an id", unreadable)
+	}
+}
+
 // The atoms directory holds claims and nothing else: no generated index. The branch catalog is
 // SQLite's job (list_branches, search_atoms), and a second catalog would be one more thing to keep in
 // step with it.

@@ -464,7 +464,10 @@ func TestReindexAddsAndRemoves(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	uc := usecases.Maintenance{Store: store, Index: idx, Clock: fixedClock{}}
+	uc := usecases.Maintenance{
+		Store: store, Index: idx, Clock: fixedClock{},
+		Steps: sourcemeta.NewTracker(sourcemeta.New(dir), nil, nil),
+	}
 	res, err := uc.Reindex(ctx)
 	if err != nil {
 		t.Fatalf("reindex: %v", err)
@@ -545,7 +548,8 @@ func TestReindexKeepsAURLRecognizableAsAURL(t *testing.T) {
 // so the row wins, not the extension.
 func TestReindexKeepsTheKindTheIndexAlreadyKnows(t *testing.T) {
 	ctx := context.Background()
-	store := objects.New(t.TempDir())
+	dir := t.TempDir()
+	store := objects.New(dir)
 	obj, err := store.Put(ctx, ".md", strings.NewReader("# fetched before the record carried a kind\n"))
 	if err != nil {
 		t.Fatal(err)
@@ -556,7 +560,11 @@ func TestReindexKeepsTheKindTheIndexAlreadyKnows(t *testing.T) {
 		Ext: obj.Ext, Path: obj.Path, URL: "https://example.com/old", ImportedAt: fixedClock{}.Now(),
 	}
 
-	if _, err := (usecases.Maintenance{Store: store, Index: idx, Clock: fixedClock{}}).Reindex(ctx); err != nil {
+	uc := usecases.Maintenance{
+		Store: store, Index: idx, Clock: fixedClock{},
+		Steps: sourcemeta.NewTracker(sourcemeta.New(dir), nil, nil),
+	}
+	if _, err := uc.Reindex(ctx); err != nil {
 		t.Fatalf("reindex: %v", err)
 	}
 	got, err := idx.GetSourceByHash(ctx, obj.Hash)

@@ -10,6 +10,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/clusters"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/objects"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/persistence"
+	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/sourcemeta"
 )
 
 // TestReindexRemovesClusterRowsWithoutRecords is the state a reader creates by deleting clusters/
@@ -37,6 +38,7 @@ func TestReindexRemovesClusterRowsWithoutRecords(t *testing.T) {
 		AtomStore:    atomstore.New(t.TempDir()),
 		ClusterStore: clusters.New(t.TempDir()), ClusterRepo: clusterRepo,
 		Clock: testClock{},
+		Steps: sourcemeta.NewTracker(sourcemeta.New(t.TempDir()), nil, nil),
 	}
 	needs, reason, err := reindex.NeedsRepair(ctx)
 	if err != nil {

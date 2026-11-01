@@ -85,10 +85,16 @@ func (s *Store) Read(_ context.Context, id ulid.ULID) (entities.Atom, error) {
 	return mdcodec.DecodeAtom(data)
 }
 
-// Scan walks the atom store and returns every atom. Generated index files are skipped; a claim file
-// is read wherever it lies, so a vault whose files are not at their canonical path is still read.
-func (s *Store) Scan(_ context.Context) ([]entities.Atom, error) {
+// Scan walks the atom store and returns every readable atom. Generated index files are skipped; a
+// claim file is read wherever it lies, so a vault whose files are not at their canonical path is
+// still read.
+//
+// A file that cannot be decoded — or whose frontmatter carries no id, so it cannot be addressed —
+// is RETURNED, never skipped silently. A rebuild that cannot see a claim must not decide the claim
+// is gone: that is how a repair deletes what it failed to read.
+func (s *Store) Scan(_ context.Context) ([]entities.Atom, []string, error) {
 	var out []entities.Atom
+	var unreadable []string
 	err := filepath.WalkDir(s.root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -105,11 +111,19 @@ func (s *Store) Scan(_ context.Context) ([]entities.Atom, error) {
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
+			if os.IsNotExist(err) {
+				return nil //nolint:nilerr // the file vanished between the walk and the read: not a record any more
+			}
 			return err
 		}
 		a, err := mdcodec.DecodeAtom(data)
 		if err != nil {
-			return nil //nolint:nilerr // an absent file is the zero atom, not an error
+			unreadable = append(unreadable, path)
+			return nil //nolint:nilerr // the file is REPORTED, not skipped: the caller refuses the rebuild
+		}
+		if a.ID == (ulid.ULID{}) {
+			unreadable = append(unreadable, path)
+			return nil
 		}
 		rel, err := filepath.Rel(s.root, path)
 		if err != nil {
@@ -123,9 +137,9 @@ func (s *Store) Scan(_ context.Context) ([]entities.Atom, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("atoms: scan: %w", err)
+		return nil, nil, fmt.Errorf("atoms: scan: %w", err)
 	}
-	return out, nil
+	return out, unreadable, nil
 }
 
 // Remove deletes an atom's Markdown file.

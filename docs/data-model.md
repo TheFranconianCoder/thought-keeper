@@ -153,3 +153,16 @@ index keeps **one** connection — every connection to `:memory:` is a separate 
 
 It never decides from the index alone: the vault is the truth and the index is the cache. The
 append-only audit (`runs`, `run_steps`, `lint_findings`) is not touched.
+
+**A rebuild must not destroy what it cannot read.** Three rules hold it to that, and they exist
+because one timed-out rebuild once trashed thousands of claims:
+
+- **An unreadable claim file aborts the pass.** A file that cannot be decoded (or carries no id) is
+  reported, never skipped — a missing row must never be mistaken for a lost claim.
+- **A failed lookup is not a missing source.** A source is gone only when neither its record nor its
+  object is there. Any other error (a canceled context included) aborts the rebuild.
+- **A partial atom phase never re-arms parts.** If any claim could not be indexed, the part records
+  are left alone: re-arming them would make the pipeline re-distill a document whose claims are
+  still on disk.
+
+The rebuild never deletes a claim FILE: a row whose file is gone is dropped, and that is all.

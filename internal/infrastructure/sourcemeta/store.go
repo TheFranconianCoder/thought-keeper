@@ -266,7 +266,9 @@ func (s *Store) Scan() (map[string]Record, error) {
 		}
 		rec, err := s.Read(hash)
 		if err != nil {
-			return nil //nolint:nilerr // an absent record is the zero value, not an error
+			// A record that cannot be READ is not a source without a record. Skipping it would make
+			// every claim of that source look orphaned to the next index rebuild.
+			return err
 		}
 		out[hash] = rec
 		return nil

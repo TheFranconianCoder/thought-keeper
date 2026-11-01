@@ -22,6 +22,8 @@ type AtomStore interface {
 	// Trash moves an atom's file into the vault's .trash/atoms/. Trash, not delete: a claim that
 	// turned out to be a copy of another one is still recoverable.
 	Trash(ctx context.Context, a entities.Atom) error
-	// Scan walks the atom store and returns every atom (for a rebuild).
-	Scan(ctx context.Context) ([]entities.Atom, error)
+	// Scan walks the atom store and returns every readable atom, plus the paths it could NOT read
+	// (for a rebuild). An unreadable file is reported, never skipped: the index rebuild must refuse
+	// to run over a vault it cannot read completely.
+	Scan(ctx context.Context) (atoms []entities.Atom, unreadable []string, err error)
 }

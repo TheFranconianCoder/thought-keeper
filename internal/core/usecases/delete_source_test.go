@@ -28,9 +28,9 @@ type noVaultWalkAtomStore struct {
 	scans int
 }
 
-func (s *noVaultWalkAtomStore) Scan(context.Context) ([]entities.Atom, error) {
+func (s *noVaultWalkAtomStore) Scan(context.Context) ([]entities.Atom, []string, error) {
 	s.scans++
-	return nil, errors.New("the delete must answer from the index, not from a vault walk")
+	return nil, nil, errors.New("the delete must answer from the index, not from a vault walk")
 }
 
 // TestDeletingASourceDeletesItsWholeStory: a source is ONE folder entry with everything about it —

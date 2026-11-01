@@ -14,6 +14,7 @@ import (
 	atomstore "github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/atoms"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/objects"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/persistence"
+	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/sourcemeta"
 )
 
 // TestSaveAtomKeepsProvenanceWhenSourceIsMissing is the regression guard for the silent
@@ -112,6 +113,7 @@ func TestReindexRestoresAtomProvenanceFromFiles(t *testing.T) {
 	reindex := usecases.Maintenance{
 		Store: store, Index: index, Atoms: atomsRepo,
 		AtomStore: atomStore, Clock: testClock{}, Log: slog.Default(),
+		Steps: sourcemeta.NewTracker(sourcemeta.New(t.TempDir()), nil, nil),
 	}
 	res, err := reindex.Reindex(ctx)
 	if err != nil {

@@ -71,14 +71,14 @@ func (s *fakeAtomStore) Remove(_ context.Context, a entities.Atom) error {
 	return nil
 }
 
-func (s *fakeAtomStore) Scan(context.Context) ([]entities.Atom, error) {
+func (s *fakeAtomStore) Scan(context.Context) ([]entities.Atom, []string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]entities.Atom, 0, len(s.m))
 	for _, a := range s.m {
 		out = append(out, a)
 	}
-	return out, nil
+	return out, nil, nil
 }
 
 type fakeAtomRepo struct {
