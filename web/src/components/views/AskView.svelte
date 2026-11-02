@@ -5,7 +5,7 @@
   import { api } from '../../lib/api';
   import { relTime } from '../../lib/format';
   import { n, t } from '../../lib/i18n/index.svelte';
-  import { askPath, navigate, router, sourcePath, withQuery } from '../../lib/router.svelte';
+  import { askPath, navigate, previousRoute, router, sourcePath, withQuery } from '../../lib/router.svelte';
   import type { AskSummary } from '../../lib/api/types';
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
@@ -126,6 +126,17 @@
 
   function openSaved(id: string): void {
     navigate(askPath(id));
+  }
+
+  /** backToList returns to the saved-query list: a REAL back when the reader came from it, so the
+   *  list keeps its scroll position; anything else targets the list. */
+  function backToList(): void {
+    const previous = previousRoute();
+    if (previous.view === 'ask' && !previous.id) {
+      history.back();
+      return;
+    }
+    navigate('#/ask');
   }
 
   function chooseTag(tag: string): void {
@@ -266,7 +277,9 @@
 
   <section class="ask-main" class:split={detailOpen}>
     {#if detailOpen}
-      <a class="back-link" href="#/ask">{t('ask.back')}</a>
+      <button class="btn btn--ghost btn--sm back-btn" title={t('ask.back')} onclick={backToList}>
+        <Icon name="arrowLeft" size={15} /> <span>{t('common.back')}</span>
+      </button>
     {:else}
       <div class="page-head ask-head">
         <div class="head-row">
@@ -580,11 +593,11 @@
     margin-bottom: 22px;
   }
 
-  .back-link {
+  /* The way back to the list, at the head of the reading surface: a narrow-layout control only, an
+     arrow with the word beside it (the list pane stays on the wide page). */
+  .back-btn {
     display: none;
-    margin-bottom: 12px;
-    color: var(--muted);
-    font-size: 12px;
+    margin: 0 0 12px;
   }
 
   .composer {
@@ -714,8 +727,8 @@
       display: none;
     }
 
-    .back-link {
-      display: inline-block;
+    .back-btn {
+      display: inline-flex;
     }
 
     .ask-list-pane {

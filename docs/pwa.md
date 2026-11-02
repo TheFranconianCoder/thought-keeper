@@ -109,7 +109,10 @@ latest QUESTIONS, which are answers the reader owns.
   `&seed=<source hash>` to prefill a draft from a source) on any route. Free text never enters an
   address, as everywhere else.
 - **The back button on a source page returns to the Sources list at the offset the reader left it**
-  (the list is one page scroller; the new list entry is seeded with that offset).
+  (the list is one page scroller; the new list entry is seeded with that offset). A wiki page and a
+  saved query carry the same arrow on their narrow layout, where the split view's list pane is gone:
+  the word **Back** sits beside it, and it sits **above the card**, never inside the surface the
+  reader is reading. It returns the same way.
 - **A source page is addressable per tab and part:** `?tab=summary|snapshot|pdf|log|files|children`
   and `?part=<nodeId>` / `?file=<name>` are query parameters, so back/forward returns to them and a
   link can be shared. The default tab is the **summary** where the source has one (everything that is
@@ -212,7 +215,9 @@ One SSE connection (`GET /api/v1/events`) replaces polling. Event types:
   **Files** tab and is never mistaken for text.
 - **A source's rail sits under the content when the page is narrow.** The reading surface then keeps
   the full page width for its text and for wide images; the page's maximum width still caps the
-  surface, and an image never grows past it.
+  surface, and an image never grows past it. The head carries a **down arrow at the far end of its
+  actions** whenever the rail is below the content instead of beside it, and it jumps to the
+  metadata; on a wide page the control is not there, because the rail already is.
 - Every derived file of a source is readable in the **Files** tab: the step record, the outline, the
   summary, the log, the object. The tree is the table of contents; clicking a node opens that part of
   the text.

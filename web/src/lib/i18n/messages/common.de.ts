@@ -27,6 +27,7 @@ export const commonDe: Record<string, string> = {
   'common.loading': 'Wird geladen…',
   'common.none': '—',
   'common.scrollTop': 'Nach oben scrollen',
+  'common.back': 'Zurück',
 
   'connection.title': 'Die Oberfläche aktualisiert sich über einen Ereignisstrom',
   'connection.live': 'Online',

@@ -31,6 +31,7 @@ export const commonEn: Record<string, string> = {
   'common.loading': 'Loading…',
   'common.none': '—',
   'common.scrollTop': 'Scroll to top',
+  'common.back': 'Back',
 
   'connection.title': 'The UI updates through one event stream',
   'connection.live': 'Online',

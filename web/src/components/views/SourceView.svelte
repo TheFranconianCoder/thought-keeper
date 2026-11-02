@@ -209,6 +209,18 @@
   let tagsSaving = $state(false);
   let tagsError = $state('');
 
+  // The rail element, so the head's down arrow can reach the metadata when the page puts it under
+  // the content instead of beside it.
+  let railEl = $state<HTMLElement | null>(null);
+
+  /** jumpToDetails brings the metadata rail into view. The rail is below the reading surface on a
+   *  narrow page; scrolling it under the topbar is the whole trip. */
+  function jumpToDetails(): void {
+    if (!railEl) return;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    railEl.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  }
+
   const logTail = $derived(sources.log.length > LOG_CAP ? sources.log.slice(-LOG_CAP) : sources.log);
 
   $effect(() => {
@@ -571,6 +583,16 @@
               <Icon name="trash" size={13} /> <span class="btn-label">{t('common.delete')}</span>
             </button>
           {/if}
+          <!-- The rail is the metadata, and on a narrow page it sits UNDER the content: the head
+               carries the one-tap way down to it, at the far end of the actions. -->
+          <button
+            class="icon-btn source-head-jump"
+            title={t('source.jumpToDetails')}
+            aria-label={t('source.jumpToDetails')}
+            onclick={jumpToDetails}
+          >
+            <Icon name="arrowDown" size={17} />
+          </button>
         </div>
       </header>
 
@@ -856,7 +878,7 @@
           </div>
         </section>
 
-        <aside class="source-rail" aria-label={t('source.detailsAria')}>
+        <aside class="source-rail" bind:this={railEl} aria-label={t('source.detailsAria')}>
           <section class="rail-block">
             <div class="rail-label">{t('source.steps')}</div>
             {#if !selected.bookmark}
@@ -1252,6 +1274,14 @@
     flex: none;
   }
 
+  /* The rail's own way in. It sits beside the content on a wide page and under it once the page
+     gets narrow, so the control only exists where the trip is real — and then it takes the far end
+     of the actions row, exactly opposite the buttons. */
+  .source-head-jump {
+    display: none;
+    margin-left: auto;
+  }
+
   /* A source that could not be read has no head to carry its actions, so the notice keeps the
      place and the actions sit under it, aligned like every other page's. */
   .source-error-actions {
@@ -1616,6 +1646,10 @@
       flex-direction: column;
       align-items: stretch;
       gap: 22px;
+    }
+
+    .source-head-jump {
+      display: inline-flex;
     }
 
     .source-rail {

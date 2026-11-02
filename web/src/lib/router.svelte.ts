@@ -116,6 +116,13 @@ export function previousView(): string {
   return previousKey.split('|')[0] ?? '';
 }
 
+/** previousRoute names the view AND the item the current route was entered from, so a detail view
+ *  can tell a real back (coming from its list) from a hop between two items of the same lens. */
+export function previousRoute(): { view: string; id: string } {
+  const [view = '', id = ''] = previousKey.split('|');
+  return { view, id };
+}
+
 export function buildHash(view: View | 'sources', id = '', params?: URLSearchParams): string {
   const path = view === 'source' ? 'sources' : view;
   const query = params?.toString() ?? '';

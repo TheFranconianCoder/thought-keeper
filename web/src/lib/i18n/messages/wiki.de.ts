@@ -15,7 +15,7 @@ export const wikiDe: Record<string, string> = {
   'wiki.untitled': 'Ohne Titel',
 
   'wiki.detailAria': 'Wiki-Seite',
-  'wiki.backAll': '← Alle Seiten',
+  'wiki.backAll': 'Zurück zu allen Seiten',
   'wiki.kicker': 'Wiki-Seite',
   'wiki.copyLabel': 'Wiki-ID',
   'wiki.updatedAt': '· aktualisiert {date}',

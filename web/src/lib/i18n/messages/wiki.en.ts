@@ -15,7 +15,7 @@ export const wikiEn: Record<string, string> = {
   'wiki.untitled': 'Untitled',
 
   'wiki.detailAria': 'Wiki page',
-  'wiki.backAll': '← All pages',
+  'wiki.backAll': 'Back to all pages',
   'wiki.kicker': 'Wiki page',
   'wiki.copyLabel': 'Wiki ID',
   'wiki.updatedAt': '· updated {date}',

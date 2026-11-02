@@ -2,6 +2,7 @@
 export const sourceDe: Record<string, string> = {
   // Kopfzeile und Aktionen.
   'source.backToSources': 'Zurück zu den Quellen',
+  'source.jumpToDetails': 'Zu den Details springen',
   'source.ask': 'Fragen',
   'source.openUrl': 'URL öffnen',
   'source.refresh': 'Aktualisieren',

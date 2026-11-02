@@ -27,7 +27,7 @@ export const askDe: Record<string, string> = {
   'ask.dismissRun': 'Diese fehlgeschlagene Frage ausblenden',
 
   'ask.kicker': 'Gespeicherte Frage',
-  'ask.back': '← Gespeicherte Fragen',
+  'ask.back': 'Zurück zu den gespeicherten Fragen',
   'ask.idLabel': 'Frage-ID',
   'ask.deleteTitle': 'Diese gespeicherte Frage löschen?',
   'ask.deleteMessage': '„{question}“ und die Antwort wandern nach .trash/asks/.',

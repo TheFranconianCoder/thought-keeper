@@ -26,7 +26,7 @@ export const askEn: Record<string, string> = {
   'ask.dismissRun': 'Dismiss this failed question',
 
   'ask.kicker': 'Saved query',
-  'ask.back': '← Saved queries',
+  'ask.back': 'Back to the saved queries',
   'ask.idLabel': 'Ask ID',
   'ask.deleteTitle': 'Delete this saved query?',
   'ask.deleteMessage': '“{question}” and its answer move to .trash/asks/.',

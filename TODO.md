@@ -172,6 +172,7 @@ are.
 - Wiki / Notes Overlay / Flyover to scribble with links
 - Wiki Pages as basis for LLM suggestions (mixed document)
 - Wiki Folders (with Hierarchy); or with labels (original GMail-style)
+- Overarching "Groups" of sources (can already be marked in a Wiki Page), which will function as Ask contexts
 
 ## The assistant (open work)
 
