@@ -41,13 +41,21 @@ sync when a knob changes. Sections:
 | `assistant` | command `retention` (`168h`), `prune_interval` (`24h`), `max_items` per materialized set, `scan_limit` per resolution |
 | `capture` | URL dedupe, refresh interval (default `168h` — weekly for pages/sitemaps), feed/listing interval (default `24h` — daily), `min_text_chars`, `listing_max_pages` (default 100 — the initial walk of a listing's pagination) |
 | `fetch` | timeout, max bytes, user agent, `allow_private` (SSRF guard) |
+| `browser` | the OPTIONAL local renderer: `path` (empty = `lightpanda` from PATH), `timeout`, `wait`, `wait_until` (default `networkidle` — `load` dumps the shell of a single-page app), `load_stylesheets`, `obey_robots` |
 | `pdf` | text tool, max bytes, max pages |
 | `ocr` | enabled, rasterizer, tesseract, languages, dpi, per-page threshold, max pages, timeout |
 | `language` | `ui` (the PWA's default language), `claims` and `summary` (the language the agent writes in); every one defaults to `en` |
 
+**Optional local tools.** `pdf`, `ocr` and `browser` are tools, not bundled code: the app starts
+without them, names them in `status` (`tools.pdf`, `tools.ocr`, `tools.browser`) and degrades
+honestly. A PDF without poppler is flagged `unsupported_source`; a JavaScript page without the
+browser stays a **bookmark** and is re-read with **Try the page again** once the engine is installed.
+Lightpanda is AGPL-3.0 and is **never shipped** with the app: install it from the project's releases
+(`mise install` picks it up through the `lightpanda` entry in `mise.toml`) or point `browser.path` at
+the binary. There is no Windows build, so a Windows install reads pages from the plain HTTP response.
+
 The UI language is only a default: a reader who switches it in the top bar keeps that choice in the
-browser. The PWA ships **English and German**; another `language.ui` value falls back to English.
-The content languages are the vault's: a claim is written in `language.claims` and an
+browser. The PWA ships **English and German**; another `language.ui` value falls back to English.The content languages are the vault's: a claim is written in `language.claims` and an
 overview in `language.summary`, whatever language each source arrived in. A value is an ISO 639-1
 code (ISO 639-3 when no 639-1 exists). Changing a content language affects **new** runs: existing
 claims and overviews are records written in the old language and are never rewritten behind the

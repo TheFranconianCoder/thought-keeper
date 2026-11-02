@@ -50,9 +50,11 @@ export interface Status {
   tools: {
     pdf: boolean;
     ocr: boolean;
+    browser: boolean;
     text_tool: string;
     rasterizer: string;
     tesseract: string;
+    browser_tool: string;
   };
   agent: { configured: boolean; model: string; base_url?: string };
   /** The language of what the app writes: the UI default, the claims and the source overviews. */

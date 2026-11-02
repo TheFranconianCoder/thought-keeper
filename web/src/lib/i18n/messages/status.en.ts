@@ -29,6 +29,11 @@ export const statusEn: Record<string, string> = {
   'status.capVault': 'Vault',
   'status.capSearch': 'Search',
   'status.capInbox': 'Inbox',
+  // The local browser that renders a page before it is read. Optional: Windows has no build, and
+  // the app says so instead of pretending the page was read.
+  'status.capBrowser': 'Browser',
+  'status.capBrowserWhy':
+    'No Lightpanda binary: JavaScript pages are collected as links and never distilled.',
   'status.ready': 'ready',
   'status.missing': 'missing',
   'status.notConfigured': 'not configured',

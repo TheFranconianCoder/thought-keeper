@@ -153,10 +153,11 @@ func (h URLHandler) PostOne(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Refetch serves POST /api/v1/sources/{hash}/refetch: try the URL again even when its snapshot was
-// attached by hand. A readable page replaces the attachment and clears the marker; a wall or a
-// failure keeps the human's snapshot exactly as it was. The explicit counterpart to the automatic
-// refresh, which never fetches an attached source.
+// Refetch serves POST /api/v1/sources/{hash}/refetch: try the URL again for a source whose snapshot is
+// not a normal page — attached by hand, or a COLLECTED LINK (a bookmark). A readable page replaces the
+// attachment or turns the link into an indexed source; a wall, a thin page or a failure keeps what is
+// there. The explicit counterpart to the automatic refresh, which never fetches an attached source
+// and leaves a bookmark alone.
 func (h URLHandler) Refetch(w http.ResponseWriter, r *http.Request) {
 	hash := chi.URLParam(r, "hash")
 	if !entities.IsSHA256Hex(hash) {

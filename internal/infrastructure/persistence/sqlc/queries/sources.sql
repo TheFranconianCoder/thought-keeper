@@ -174,6 +174,11 @@ UPDATE sources SET kind = 'url', ext = ?, path = ?, bytes = ?, title = ?, origin
 -- name: SetSourceURLState :exec
 UPDATE sources SET url_status = ?, url_checked_at = ? WHERE hash = ?;
 
+-- name: SetSourceBookmark :exec
+-- A bookmark that a rendered read finally made readable stops being one; a page that was readable and
+-- is not any more becomes one. The column is the list's filter, so the fetch that read the page owns it.
+UPDATE sources SET bookmark = ? WHERE hash = ?;
+
 -- name: ListURLSources :many
 SELECT * FROM sources WHERE kind = 'url' ORDER BY imported_at DESC;
 

@@ -74,6 +74,12 @@
       { label: 'PDF', ok: status.tools.pdf, text: status.tools.pdf ? t('status.ready') : t('status.missing') },
       { label: 'OCR', ok: status.tools.ocr, text: status.tools.ocr ? t('status.ready') : t('status.missing') },
       {
+        label: t('status.capBrowser'),
+        ok: status.tools.browser,
+        text: status.tools.browser ? status.tools.browser_tool || t('status.ready') : t('status.missing'),
+        why: status.tools.browser ? undefined : t('status.capBrowserWhy'),
+      },
+      {
         label: t('status.capAgent'),
         ok: status.agent.configured,
         text: status.agent.configured ? status.agent.model || t('status.ready') : t('status.notConfigured'),

@@ -392,6 +392,14 @@ func (f *fakeIndex) SourcesWithNoTree(context.Context) ([]entities.Source, error
 	return nil, nil
 }
 
+func (f *fakeIndex) SetSourceBookmark(_ context.Context, hash string, bookmark bool) error {
+	if s, ok := f.m[hash]; ok {
+		s.Bookmark = bookmark
+		f.m[hash] = s
+	}
+	return nil
+}
+
 func (f *fakeIndex) SetSourceURLState(_ context.Context, hash string, status int, checkedAt time.Time) error {
 	if s, ok := f.m[hash]; ok {
 		s.URLStatus = status

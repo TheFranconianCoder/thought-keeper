@@ -781,6 +781,7 @@ func printStatus(s payloads.Status) {
 		s.Index.Sources, s.Index.Atoms, s.Index.Clusters, s.Index.Unclustered, s.Index.Runs)
 	fmt.Printf("  pdf        %s (%s)\n", mark(s.Tools.PDF), s.Tools.TextTool)
 	fmt.Printf("  ocr        %s (%s + %s)\n", mark(s.Tools.OCR), s.Tools.Rasterizer, s.Tools.Tesseract)
+	fmt.Printf("  browser    %s (%s)\n", mark(s.Tools.Browser), s.Tools.BrowserTool)
 	fmt.Printf("  agent      %s (%s)\n", mark(s.Agent.Configured), s.Agent.Model)
 	peak := fmt.Sprintf("heap=%d MB peak=%d MB", s.Memory.HeapMB, s.Memory.PeakHeapMB)
 	if s.Memory.PeakWork != "" {

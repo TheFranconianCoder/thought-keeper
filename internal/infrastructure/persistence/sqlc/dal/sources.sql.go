@@ -1424,6 +1424,22 @@ func (q *Queries) SetSourceAutoTags(ctx context.Context, arg SetSourceAutoTagsPa
 	return err
 }
 
+const setSourceBookmark = `-- name: SetSourceBookmark :exec
+UPDATE sources SET bookmark = ? WHERE hash = ?
+`
+
+type SetSourceBookmarkParams struct {
+	Bookmark int64  `json:"bookmark"`
+	Hash     string `json:"hash"`
+}
+
+// A bookmark that a rendered read finally made readable stops being one; a page that was readable and
+// is not any more becomes one. The column is the list's filter, so the fetch that read the page owns it.
+func (q *Queries) SetSourceBookmark(ctx context.Context, arg SetSourceBookmarkParams) error {
+	_, err := q.db.ExecContext(ctx, setSourceBookmark, arg.Bookmark, arg.Hash)
+	return err
+}
+
 const setSourceFavorite = `-- name: SetSourceFavorite :exec
 UPDATE sources SET favorite_at = ?1 WHERE hash = ?2
 `

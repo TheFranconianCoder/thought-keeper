@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"log/slog"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/handlers"
@@ -87,6 +89,10 @@ type Deps struct {
 	// the reader's rules and a strong match joins the read-later queue.
 	MatchSourceInterests usecases.ReadLater
 	AgentAvailable       bool
+	// BrowserAvailable says whether the local rendering engine was found. The reader sees it in
+	// Status, and it explains why a JavaScript page is a bookmark.
+	BrowserAvailable bool
+	BrowserTool      string
 }
 
 // Readiness is the start's repair state: the API is up while the index is rebuilt, reads answer from
@@ -149,6 +155,32 @@ func Build(
 		MinTextChars: cfg.Capture.MinTextChars,
 	})
 	converter := gateways.ReadabilityConverter{}
+
+	// The browser is OPTIONAL and is used whenever it is installed: a JavaScript page is read from
+	// its rendered DOM, and the converter above writes the Markdown either way. nil here means the
+	// platform has no engine (Windows) and the plain fetch stays the whole story.
+	browserTimeout := durationOr(cfg.Browser.Timeout, 30*time.Second, log, "browser.timeout")
+	browserWait := durationOr(cfg.Browser.Wait, 5*time.Second, log, "browser.wait")
+	engine := gateways.NewLightpanda(gateways.LightpandaConfig{
+		Path:            cfg.Browser.Path,
+		Timeout:         browserTimeout,
+		Wait:            browserWait,
+		WaitUntil:       cfg.Browser.WaitUntil,
+		MaxBytes:        cfg.Fetch.MaxBytes,
+		UserAgent:       cfg.Fetch.UserAgent,
+		AllowPrivate:    cfg.Fetch.AllowPrivate,
+		ObeyRobots:      cfg.Browser.ObeyRobots,
+		LoadStylesheets: cfg.Browser.LoadStylesheets,
+		MinTextChars:    cfg.Capture.MinTextChars,
+	}, runner)
+	var renderer interfaces.Renderer
+	if engine != nil {
+		renderer = engine
+		log.Info("browser rendering is on", "engine", engine.Name())
+	} else {
+		log.Info("browser rendering is off: no lightpanda binary",
+			"path", cfg.Browser.Path, "hint", "install lightpanda or set browser.path")
+	}
 
 	extractor := extract.New(runner, extract.Config{
 		PDFTextTool:         cfg.PDF.TextTool,
@@ -263,7 +295,7 @@ func Build(
 		MaxBytes: cfg.PDF.MaxBytes,
 	}
 	urls := usecases.URLs{
-		Fetch: fetcher, Convert: converter, Links: gateways.HTMLLinkExtractor{}, Store: store, Index: index,
+		Fetch: fetcher, Convert: converter, Render: renderer, Links: gateways.HTMLLinkExtractor{}, Store: store, Index: index,
 		Atoms: atomRepo, AtomStore: atomStore,
 		Favicons: faviconStore, Steps: steps, Languages: languages, SourceLog: sourceLog,
 		Clock: clock, Log: log, MinTextChars: cfg.Capture.MinTextChars,
@@ -455,10 +487,22 @@ func Build(
 		PruneWikiLinks:         wiki,
 		MatchSourceInterests:   readLater,
 		AgentAvailable:         agentOK,
+		BrowserAvailable:       renderer != nil,
+		BrowserTool:            browserToolName(cfg.Browser.Path),
 	}
 }
 
 var _ = entities.StepCluster
+
+// browserToolName is the binary the status report names: the configured path's file name, or the
+// engine's own name when the default lookup is used. The status is a capability report, not a path
+// listing; the full path is in the start-up log.
+func browserToolName(configured string) string {
+	if name := strings.TrimSpace(configured); name != "" {
+		return filepath.Base(name)
+	}
+	return gateways.EngineLightpanda
+}
 
 // durationOr reads a configured duration. A value that does not parse is reported and replaced by
 // the sane default: a typo in the YAML must not silently disable a cadence.

@@ -51,6 +51,9 @@ type urlMeta struct {
 	// TextChars is the rune count of a feed copy's readable body. It lets a later page attempt
 	// compare the page's text with the copy: the richer text wins.
 	TextChars int `json:"text_chars,omitempty"`
+	// Rendered names the browser engine whose DOM the text was read from ("lightpanda"). Empty
+	// means the page was read from the plain HTTP response.
+	Rendered string `json:"rendered,omitempty"`
 }
 
 // faviconMeta locates a source's stored icon.
@@ -233,6 +236,16 @@ func metaWithError(raw, url, msg string) string {
 	return metaWith(raw, map[string]any{"url": url, "last_error": msg})
 }
 
+// nilIfEmpty turns an empty string into a nil map value, which metaWith reads as "remove this key".
+// Provenance has two states — read from the response, read from a rendered DOM — and a written
+// `"rendered": ""` would be a third one nobody means.
+func nilIfEmpty(v string) any {
+	if v == "" {
+		return nil
+	}
+	return v
+}
+
 // metaWith merges keys into a source's metadata WITHOUT dropping the keys it does not know. The same
 // record also holds the language and the wiki page that owns the link, and a snapshot write that
 // rebuilt the JSON from urlMeta used to erase both — with the origin went the answer to "may removing
@@ -307,8 +320,11 @@ func metaWithIdentity(raw string, src entities.Source) string {
 // URLs is the use case of the URL sources: adding a link (page, sitemap, feed or listing),
 // refreshing what the cadence finds due, and recording a fetch that failed.
 type URLs struct {
-	Fetch        interfaces.Fetcher
-	Convert      interfaces.HTMLConverter
+	Fetch   interfaces.Fetcher
+	Convert interfaces.HTMLConverter
+	// Render is the OPTIONAL local browser. When it is set, every page is also loaded in it and the
+	// richer reading wins; nil keeps the plain HTTP response as the only source of text.
+	Render       interfaces.Renderer
 	Links        interfaces.LinkExtractor
 	Store        interfaces.SourceStore
 	Index        interfaces.IndexRepository
@@ -400,19 +416,28 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, l
 		return partialentities.PartialSource{}, types.New(
 			"unsupported_source", "the URL answered with a feed that could not be read", types.ErrUnsupportedSource)
 	}
-	conv, err := uc.Convert.Convert(ctx, page.Body, rawURL)
+	minChars := uc.MinTextChars
+	if minChars <= 0 {
+		minChars = defaultMinTextChars
+	}
+	rd, err := uc.chooseReading(ctx, rawURL, page, minChars)
 	if err != nil {
 		return partialentities.PartialSource{}, fmt.Errorf("convert %s: %w", rawURL, err)
 	}
+	// The RENDERED page may be a gate the plain response hid behind its scripts: a login form that
+	// only exists after hydration. It is recorded as a wall, not as a thin page.
+	if rd.Wall.Blocks() {
+		blocked := page
+		blocked.Status, blocked.FinalURL, blocked.Wall = rd.Status, rd.FinalURL, rd.Wall
+		return uc.recordWall(ctx, rawURL, blocked)
+	}
+	conv := rd.Conv
+	engine := rd.EngineLabel()
 	title := conv.Title
 	if title == "" {
 		title = rawURL
 	}
 
-	minChars := uc.MinTextChars
-	if minChars <= 0 {
-		minChars = defaultMinTextChars
-	}
 	body := strings.TrimSpace(conv.Markdown)
 	bodyChars := utf8.RuneCountInString(body)
 	bookmark := force || bodyChars < minChars
@@ -505,10 +530,10 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, l
 	favicon := fetchFavicon(ctx, uc.Fetch, uc.Favicons, uc.Log, rawURL, conv.Favicon)
 	var snapshot, contentHash string
 	if bookmark {
-		snapshot = renderBookmarkSnapshot(rawURL, title, conv, page.Status, now)
+		snapshot = renderBookmarkSnapshot(rawURL, title, conv, page.Status, now, engine)
 		contentHash = contentHashOf(title, snapshot)
 	} else {
-		snapshot = renderURLSnapshot(rawURL, title, page.Status, now, body)
+		snapshot = renderURLSnapshot(rawURL, title, page.Status, now, body, engine)
 		contentHash = contentHashOf(title, body)
 	}
 
@@ -536,7 +561,7 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, l
 		existing.FromFeed, existing.FeedHash, existing.Wall = false, "", ""
 		existing.Title, existing.Meta = title, metaWithIdentity(metaJSON(urlMeta{
 			ContentHash: contentHash, Bookmark: bookmark, Excerpt: conv.Excerpt,
-			Site: conv.SiteName, URL: rawURL, Favicon: favicon,
+			Site: conv.SiteName, URL: rawURL, Favicon: favicon, Rendered: engine,
 		}), existing)
 		if err := uc.Index.UpsertSource(ctx, existing); err != nil {
 			return partialentities.PartialSource{}, err
@@ -580,7 +605,7 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, l
 		ImportedAt:   now,
 		Meta: metaJSON(urlMeta{
 			ContentHash: contentHash, Bookmark: bookmark, Excerpt: conv.Excerpt,
-			Site: conv.SiteName, URL: rawURL, Favicon: favicon,
+			Site: conv.SiteName, URL: rawURL, Favicon: favicon, Rendered: engine,
 		}),
 	}
 	if known {
@@ -640,9 +665,18 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, l
 	if err != nil {
 		stored = src
 	}
-	detail := fmt.Sprintf("%s · HTTP %d", conv.SiteName, page.Status)
+	// The detail names what was read: the site when the page declares one, "page" otherwise — a
+	// leading " · HTTP 200" told the reader nothing.
+	name := strings.TrimSpace(conv.SiteName)
+	if name == "" {
+		name = "page"
+	}
+	detail := fmt.Sprintf("%s · HTTP %d", name, page.Status)
 	if bookmark {
 		detail = fmt.Sprintf("bookmark · HTTP %d", page.Status)
+	}
+	if engine != "" {
+		detail += " · " + engine
 	}
 	recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepCapture, entities.StepOK, detail, nil)
 	// A URL snapshot is a .md — exactly like a Markdown source, and like a PDF's readable rendering.
@@ -1190,9 +1224,10 @@ func (uc URLs) RefreshOneForce(ctx context.Context, hash string) (RefreshResult,
 		return RefreshResult{}, types.New("unsupported_source",
 			"a sitemap, a feed or a listing is a list, not a page to attach", types.ErrUnsupportedSource)
 	}
-	if !isAttached(src.Meta) {
+	if !isAttached(src.Meta) && !src.Bookmark {
 		return RefreshResult{}, types.New("unsupported_source",
-			"this snapshot is not attached; refresh the URL instead", types.ErrUnsupportedSource)
+			"this snapshot is not attached and not a collected link; refresh the URL instead",
+			types.ErrUnsupportedSource)
 	}
 	return uc.executeRows(ctx, []entities.Source{src}, false, true)
 }
@@ -1372,7 +1407,11 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 			continue
 		}
 
-		conv, convErr := uc.Convert.Convert(ctx, page.Body, s.URL)
+		minChars := uc.MinTextChars
+		if minChars <= 0 {
+			minChars = defaultMinTextChars
+		}
+		rd, convErr := uc.chooseReading(ctx, s.URL, page, minChars)
 		if convErr != nil {
 			res.Failed++
 			res.LastError = convErr.Error()
@@ -1391,12 +1430,20 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 			}
 			continue
 		}
+		// The rendered page may be a gate the plain response hid behind its scripts.
+		if rd.Wall.Blocks() {
+			blocked := page
+			blocked.Status, blocked.FinalURL, blocked.Wall = rd.Status, rd.FinalURL, rd.Wall
+			if partial, wallErr := uc.recordWall(ctx, s.URL, blocked); wallErr == nil {
+				res.Blocked++
+				res.Sources = append(res.Sources, partial)
+			}
+			continue
+		}
+		conv := rd.Conv
+		engine := rd.EngineLabel()
 		body := strings.TrimSpace(conv.Markdown)
 		bodyChars := utf8.RuneCountInString(body)
-		minChars := uc.MinTextChars
-		if minChars <= 0 {
-			minChars = defaultMinTextChars
-		}
 		title := conv.Title
 		if title == "" {
 			title = s.URL
@@ -1466,8 +1513,9 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 			}
 		}
 
-		// A bookmark stays a bookmark: only its status is refreshed.
-		if s.Bookmark {
+		// A bookmark stays a bookmark: only its status is refreshed (the explicit "try the page
+		// again" is the way to re-read one — ignoreAttached is that call).
+		if s.Bookmark && !ignoreAttached {
 			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if uc.Log != nil {
 				uc.Log.Debug("bookmark refreshed", "url", s.URL, "status", page.Status)
@@ -1536,7 +1584,7 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 			continue
 		}
 
-		snapshot := renderURLSnapshot(s.URL, title, page.Status, now, body)
+		snapshot := renderURLSnapshot(s.URL, title, page.Status, now, body, engine)
 		// The snapshot is refreshed IN PLACE, at the address the source already has. A changed page is
 		// not a new source: filing one made a duplicate row — and a second, from-scratch derivation —
 		// for every page that changed, so a page with hundreds of parts paid for it again each time.
@@ -1556,6 +1604,9 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		// goes. The wall describes the LAST fetch, not the bytes: a successful read clears it too.
 		meta = metaWith(meta, map[string]any{
 			"from_feed": nil, "feed_hash": nil, "wall": nil, "last_error": nil, "text_chars": nil,
+			// Which engine produced the text. A plain read clears it, so the record never keeps a
+			// render that a later fetch replaced.
+			"rendered": nilIfEmpty(engine),
 		})
 		if attached {
 			// The fetched page is the source now, not the human's workaround. Clearing the marker is
@@ -1564,10 +1615,22 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 				"attached": nil, "attached_from": nil, "attached_hash": nil,
 			})
 		}
+		// A COLLECTED LINK that the render finally made readable stops being a bookmark: the page is
+		// indexed from now on, and the record says why it changed. This is the explicit "try the page
+		// again" only — the weekly pass leaves a bookmark alone.
+		becamePage := s.Bookmark && ignoreAttached
+		if becamePage {
+			meta = metaWith(meta, map[string]any{"bookmark": nil})
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "info",
+				"the page is readable — the collected link became a page", map[string]any{
+					"chars": bodyChars, "http_status": page.Status, "rendered": nilIfEmpty(engine),
+				})
+		}
 		updated := s
 		updated.Ext, updated.Path, updated.Bytes = obj.Ext, obj.Path, obj.Bytes
 		updated.Title, updated.Meta = title, meta
 		updated.Language = language
+		updated.Bookmark = false
 		updated.Attached, updated.AttachedFrom = false, ""
 		// The page is the source now: neither the feed marker nor the wall survives a successful read.
 		updated.FromFeed, updated.FeedHash, updated.Wall = false, "", ""
@@ -1584,6 +1647,11 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		if err := uc.Index.SetSourceMeta(ctx, s.Hash, meta); err != nil && uc.Log != nil {
 			uc.Log.Warn("url refresh: meta", "url", s.URL, "err", err)
 		}
+		if becamePage {
+			if err := uc.Index.SetSourceBookmark(ctx, s.Hash, false); err != nil && uc.Log != nil {
+				uc.Log.Warn("url refresh: bookmark", "url", s.URL, "err", err)
+			}
+		}
 		if language != "" {
 			_ = uc.Index.SetSourceLanguage(ctx, s.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		}
@@ -1598,8 +1666,11 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		if s.Path == "" && uc.Steps != nil {
 			_ = uc.Steps.Reset(s.Hash) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		}
-		recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK,
-			fmt.Sprintf("HTTP %d · refetched", page.Status), nil)
+		captureDetail := fmt.Sprintf("HTTP %d · refetched", page.Status)
+		if engine != "" {
+			captureDetail += " · " + engine
+		}
+		recordStep(ctx, uc.Steps, uc.Clock, s.Hash, entities.StepCapture, entities.StepOK, captureDetail, nil)
 		if uc.Steps != nil {
 			_ = uc.Steps.SetIdentity(s.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
 				Kind: entities.SourceKindURL, URL: s.URL, Language: language, OriginalName: s.URL,
@@ -1632,6 +1703,8 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		if !sameContent && s.Path != "" && !attached {
 			reason := "the page changed — the derivation was rebuilt"
 			switch {
+			case becamePage:
+				reason = "the collected link became a page — the derivation was rebuilt"
 			case fromFeed:
 				reason = "the page replaced the feed copy — the derivation was rebuilt"
 			case wasWalled:
@@ -1995,13 +2068,139 @@ func metaJSON(m urlMeta) string {
 	return string(b)
 }
 
-func renderURLSnapshot(rawURL, title string, status int, fetchedAt time.Time, body string) string {
+// reading is one page as the vault will store it: the conversion, and whether a browser render
+// produced it. Engine is empty for a plain HTTP read.
+type reading struct {
+	Conv     interfaces.ConvertedPage
+	Rendered bool
+	Engine   string
+	Status   int
+	FinalURL string
+	// Wall names a gate the RENDERED page revealed and the plain response hid (a login form that
+	// only exists after the scripts ran). Empty otherwise.
+	Wall entities.WallKind
+}
+
+// chooseReading converts the plain response and, when the local browser is installed, converts the
+// rendered DOM as well. The richer reading wins — a rendered page can LOSE text (a site whose
+// scripts rewrite the article), and a vault that silently traded a complete page for a shorter one
+// would be the worse kind of clever.
+func (uc URLs) chooseReading(ctx context.Context, rawURL string, page interfaces.FetchedPage, minChars int) (reading, error) {
+	plain, err := uc.Convert.Convert(ctx, page.Body, rawURL)
+	if err != nil {
+		return reading{}, err
+	}
+	best := reading{Conv: plain, Status: page.Status, FinalURL: page.FinalURL}
+	bestChars := utf8.RuneCountInString(strings.TrimSpace(plain.Markdown))
+	if uc.Render == nil || !looksLikeHTML(page.ContentType) {
+		return best, nil
+	}
+	rendered, renderErr := uc.Render.Render(ctx, rawURL)
+	if renderErr != nil {
+		// A broken page must never cost the source: the plain reading is already in hand.
+		if uc.Log != nil {
+			uc.Log.Warn("url: the page could not be rendered — the plain fetch is used",
+				"url", rawURL, "err", renderErr)
+		}
+		if uc.SourceLog != nil && uc.Clock != nil {
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, entities.URLHash(rawURL), "warn",
+				"the page could not be rendered — the plain fetch is used",
+				map[string]any{"error": renderErr.Error()})
+		}
+		return best, nil
+	}
+	if !looksLikeHTML(rendered.ContentType) {
+		return best, nil
+	}
+	if rendered.Challenge != "" {
+		// The site answered with a bot challenge: the page is thin because the site said so, not
+		// because the app failed to read it.
+		if uc.Log != nil {
+			uc.Log.Warn("url: the site answered with a bot challenge",
+				"url", rawURL, "challenge", rendered.Challenge)
+		}
+		if uc.SourceLog != nil && uc.Clock != nil {
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, entities.URLHash(rawURL), "warn",
+				"the site answered with a bot challenge", map[string]any{"challenge": rendered.Challenge})
+		}
+	}
+	if rendered.Wall.Blocks() {
+		// The gate was invisible without the scripts. It replaces the reading only when the plain
+		// text was thin: a page that carries a real article keeps it.
+		if bestChars < minChars {
+			best.Wall, best.Status, best.FinalURL = rendered.Wall, rendered.Status, rendered.FinalURL
+		}
+		return best, nil
+	}
+	pageURL := rendered.FinalURL
+	if pageURL == "" {
+		pageURL = rawURL
+	}
+	conv, convErr := uc.Convert.Convert(ctx, rendered.HTML, pageURL)
+	if convErr != nil {
+		if uc.Log != nil {
+			uc.Log.Warn("url: the rendered page could not be converted — the plain fetch is used",
+				"url", rawURL, "err", convErr)
+		}
+		return best, nil
+	}
+	renderedChars := utf8.RuneCountInString(strings.TrimSpace(conv.Markdown))
+	if renderedChars <= bestChars {
+		// A rendered page that is not richer is still a fact about the read: the reader sees that the
+		// browser was tried and what it produced, instead of a silent fallback.
+		if uc.SourceLog != nil && uc.Clock != nil {
+			fields := map[string]any{
+				"engine": rendered.Engine, "chars": renderedChars, "plain_chars": bestChars,
+			}
+			if rendered.Challenge != "" {
+				fields["challenge"] = rendered.Challenge
+			}
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, entities.URLHash(rawURL), "info",
+				"the rendered page carried no more text — the plain fetch is used", fields)
+		}
+		if uc.Log != nil {
+			uc.Log.Debug("url: the rendered DOM did not add text — the plain fetch is kept",
+				"url", rawURL, "rendered_chars", renderedChars, "plain_chars", bestChars)
+		}
+		return best, nil
+	}
+	if uc.SourceLog != nil && uc.Clock != nil {
+		// The reader sees WHERE the text came from: a render is a different reading of the page, not
+		// an invisible improvement.
+		appendSourceLog(ctx, uc.SourceLog, uc.Clock, entities.URLHash(rawURL), "info",
+			"the page was read from its rendered DOM", map[string]any{
+				"engine": rendered.Engine, "chars": renderedChars, "plain_chars": bestChars,
+			})
+	}
+	return reading{
+		Conv: conv, Rendered: true, Engine: rendered.Engine,
+		Status: rendered.Status, FinalURL: rendered.FinalURL,
+	}, nil
+}
+
+// Engine is the label the snapshot and the record carry: the engine's name when the text came from
+// a rendered DOM, empty when it came from the plain response.
+func (r reading) EngineLabel() string {
+	if !r.Rendered {
+		return ""
+	}
+	if r.Engine == "" {
+		return "browser"
+	}
+	return r.Engine
+}
+
+func renderURLSnapshot(rawURL, title string, status int, fetchedAt time.Time, body, engine string) string {
 	var b strings.Builder
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "url: %s\n", rawURL)
 	fmt.Fprintf(&b, "fetched_at: %s\n", fetchedAt.UTC().Format(time.RFC3339))
 	fmt.Fprintf(&b, "http_status: %d\n", status)
 	fmt.Fprintf(&b, "title: %s\n", yamlScalar(title))
+	if engine != "" {
+		// Provenance, not decoration: the page was READ from a rendered DOM, and the record says so.
+		fmt.Fprintf(&b, "rendered: %s\n", yamlScalar(engine))
+	}
 	b.WriteString("---\n\n")
 	b.WriteString(body)
 	b.WriteString("\n")
@@ -2010,7 +2209,7 @@ func renderURLSnapshot(rawURL, title string, status int, fetchedAt time.Time, bo
 
 // renderBookmarkSnapshot is what we keep for a link we cannot index: the metadata,
 // an excerpt, and an honest note. It is never distilled.
-func renderBookmarkSnapshot(rawURL, title string, conv interfaces.ConvertedPage, status int, fetchedAt time.Time) string {
+func renderBookmarkSnapshot(rawURL, title string, conv interfaces.ConvertedPage, status int, fetchedAt time.Time, engine string) string {
 	var b strings.Builder
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "url: %s\n", rawURL)
@@ -2022,6 +2221,9 @@ func renderBookmarkSnapshot(rawURL, title string, conv interfaces.ConvertedPage,
 	}
 	if conv.Language != "" {
 		fmt.Fprintf(&b, "language: %s\n", conv.Language)
+	}
+	if engine != "" {
+		fmt.Fprintf(&b, "rendered: %s\n", yamlScalar(engine))
 	}
 	b.WriteString("bookmark: true\n")
 	b.WriteString("---\n\n")

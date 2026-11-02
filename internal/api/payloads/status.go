@@ -193,9 +193,14 @@ type IndexInfo struct {
 }
 
 type ToolsInfo struct {
-	PDF        bool   `json:"pdf"`
-	OCR        bool   `json:"ocr"`
-	TextTool   string `json:"text_tool"`
-	Rasterizer string `json:"rasterizer"`
-	Tesseract  string `json:"tesseract"`
+	PDF bool `json:"pdf"`
+	OCR bool `json:"ocr"`
+	// Browser is the local rendering engine: a page with JavaScript is read from its rendered DOM
+	// when it is true, and from the plain HTTP response when it is not (a Windows install has no
+	// Lightpanda build).
+	Browser     bool   `json:"browser"`
+	TextTool    string `json:"text_tool"`
+	Rasterizer  string `json:"rasterizer"`
+	Tesseract   string `json:"tesseract"`
+	BrowserTool string `json:"browser_tool"`
 }

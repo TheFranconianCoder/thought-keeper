@@ -29,6 +29,9 @@ export const statusDe: Record<string, string> = {
   'status.capVault': 'Tresor',
   'status.capSearch': 'Suche',
   'status.capInbox': 'Eingang',
+  'status.capBrowser': 'Browser',
+  'status.capBrowserWhy':
+    'Keine Lightpanda-Binary: JavaScript-Seiten werden als Links gesammelt und nie destilliert.',
   'status.ready': 'bereit',
   'status.missing': 'fehlt',
   'status.notConfigured': 'nicht konfiguriert',

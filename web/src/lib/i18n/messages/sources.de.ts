@@ -214,6 +214,10 @@ export const sourcesDe: Record<string, string> = {
   'sources.refetchFailedDetail':
     'Der Abruf ist fehlgeschlagen — der angehängte Schnappschuss bleibt unverändert: {error}.',
   'sources.refetchNoContent': 'Die URL hat keinen neuen Inhalt geliefert; nichts wurde ersetzt.',
+  'sources.refetchIndexed': 'Die Seite ist lesbar — der gesammelte Link ist jetzt eine Quelle.',
+  'sources.refetchStillThin':
+    'Weiterhin zu wenig Text — es bleibt ein gesammelter Link. Hänge die Seite an, wenn sie eine Anmeldung braucht.',
+  'sources.refetchLinkFailed': 'Der Abruf ist fehlgeschlagen — der gesammelte Link bleibt unverändert.',
   'sources.refetchError': 'Der erneute Abruf ist fehlgeschlagen: {error}',
 
   // Zurücksetzen und neu aufbauen.

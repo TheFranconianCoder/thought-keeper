@@ -24,6 +24,10 @@ type Config struct {
 	Pipeline PipelineConfig `yaml:"pipeline"`
 	Cluster  ClusterConfig  `yaml:"cluster"`
 	Capture  CaptureConfig  `yaml:"capture"`
+	// Browser is the OPTIONAL local browser that renders a page before the converter reads it. It
+	// is nil-free by construction: an absent binary means every page is read from the plain HTTP
+	// response, exactly as before.
+	Browser BrowserConfig `yaml:"browser"`
 	// Assistant is the command assistant: how long its records live, how big a materialized set may
 	// get, and how many rows one resolution may look at.
 	Assistant AssistantConfig `yaml:"assistant"`
@@ -239,6 +243,29 @@ type FetchConfig struct {
 	AllowPrivate bool   `yaml:"allow_private"`
 }
 
+// BrowserConfig is the local rendering engine. There is exactly one engine (Lightpanda); the
+// section exists so its binary, its patience and its honesty are configurable, not because the
+// engine is pluggable.
+type BrowserConfig struct {
+	// Path is the binary. Empty means "lightpanda from PATH". A missing binary is not an error:
+	// the app reports it in Status and reads pages from the plain HTTP response.
+	Path string `yaml:"path"`
+	// Timeout is the ceiling for one rendered page: navigation, scripts and the dump.
+	Timeout string `yaml:"timeout"`
+	// Wait is how long a page may take after it loaded before the DOM is dumped.
+	Wait string `yaml:"wait"`
+	// WaitUntil is the event the dump waits for: `load` stops at the shell of a single-page app,
+	// `networkidle` (the default) waits for the data its scripts fetched, `done` for full quiescence
+	// (a page with constant background activity runs to `wait` instead).
+	WaitUntil string `yaml:"wait_until"`
+	// LoadStylesheets fetches CSS, so content hidden by a stylesheet is hidden in the DOM too. It
+	// costs requests; images, iframes and workers stay off.
+	LoadStylesheets bool `yaml:"load_stylesheets"`
+	// ObeyRobots lets the browser honour the site's robots.txt. Off by default: the reader asked
+	// for ONE page, and the app never crawls on its own.
+	ObeyRobots bool `yaml:"obey_robots"`
+}
+
 type PDFConfig struct {
 	TextTool string `yaml:"text_tool"`
 	MaxBytes int64  `yaml:"max_bytes"`
@@ -314,6 +341,9 @@ func Defaults() Config {
 			Timeout:   "20s",
 			MaxBytes:  5 << 20,
 			UserAgent: "thought-keeper/0.1 (+local)",
+		},
+		Browser: BrowserConfig{
+			Timeout: "30s", Wait: "5s", WaitUntil: "networkidle", LoadStylesheets: true,
 		},
 		PDF: PDFConfig{TextTool: "pdftotext", MaxBytes: 50 << 20, MaxPages: 2000},
 		OCR: OCRConfig{
@@ -461,6 +491,15 @@ func applyDefaults(c *Config) {
 	}
 	if c.PDF.TextTool == "" {
 		c.PDF.TextTool = d.PDF.TextTool
+	}
+	if c.Browser.Timeout == "" {
+		c.Browser.Timeout = d.Browser.Timeout
+	}
+	if c.Browser.Wait == "" {
+		c.Browser.Wait = d.Browser.Wait
+	}
+	if c.Browser.WaitUntil == "" {
+		c.Browser.WaitUntil = d.Browser.WaitUntil
 	}
 	if c.OCR.Rasterizer == "" {
 		c.OCR.Rasterizer = d.OCR.Rasterizer

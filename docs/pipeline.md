@@ -59,8 +59,19 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   listing's snapshot is rewritten after every page. A refresh reads **page 1 only** — a blog index and
   a newsletter archive are newest-first, so a new article is always there — and merges it into the
   articles the listing already declares. A listing is a WINDOW like a feed: an article that rotates
-  out of the pagination is kept, and only deleting the listing removes its articles. There is no "load more" XHR and no infinite scroll: those would need a browser
-  (a locked non-goal).
+  out of the pagination is kept, and only deleting the listing removes its articles. The walk
+  follows the links the pages DECLARE (`rel="next"`, then a pager anchor): a "load more" button that
+  only fetches more cards over XHR is not clicked, even though the page itself is rendered.
+- **A page is read twice when a browser is installed.** The plain HTTP response and — with the
+  optional Lightpanda engine — the rendered DOM both go through the same converter, and the **richer
+  text wins**: rendering ADDS what scripts build (a JavaScript page's prose) and can also LOSE text
+  (a site whose scripts rebuild the article), so neither reading is trusted blindly. The DOM is taken
+  after the page's network settles (`browser.wait_until`, `networkidle` by default): `load` would dump
+  the empty shell of a single-page app. The snapshot's
+  frontmatter names the engine (`rendered: lightpanda`) when the text came from the DOM, the source
+  log records the choice, and a page the engine cannot render is read from the response exactly as
+  before. The engine is a TOOL like poppler: optional, never bundled, reported in Status — Windows
+  has no build and keeps the plain read.
 - **A feed, a sitemap or a listing is a LIST, not a document.** Its capture is the fetch that produced
   the list; outline, distill and the association step do not apply and are recorded (and shown)
   `skipped` — grey lights, never pending. The document pipeline never queues a step for a list: it has
@@ -88,8 +99,7 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
 - **Two URLs that differ only by a trailing slash are one source.** Existence checks (wiki save,
   sitemap/feed/listing claim, re-add) compare `entities.URLKey` — path trailing slash and fragment
   ignored. The stored address stays the URL as it was given.
-- **A URL that does not answer with itself is `blocked`, not a failure and never content.** A login
-  wall (`401`/`403`, a redirect to a sign-in, a password form **on a page without substantial article
+- **A URL that does not answer with itself is `blocked`, not a failure and never content.** A login  wall (`401`/`403`, a redirect to a sign-in, a password form **on a page without substantial article
   text**), a paywall (a teaser instead of the article) and a consent gate are named as such
   (`login_required`, `paywalled`, `consent_required`) and recorded where the reader sees them: a red
   capture light with the reason, the `wall` key in the snapshot's frontmatter and in the source's
@@ -109,11 +119,18 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   **replace** the file (a new attach; the old derivation is reset) or **try the URL again**
   (`POST /sources/{hash}/refetch`): a readable page replaces the snapshot and clears the marker (a
   changed text also resets the old derivation), a wall or a failure keeps the attachment.
+- **A collected link is re-read on demand.** A bookmark (a page that gave too little text: a
+  JavaScript app, a video) is otherwise left alone by the cadence — only its HTTP status is checked.
+  The same `refetch` call re-reads it: a page that is readable now (often because the browser
+  rendered it) replaces the collected link, clears the marker in the record, index and identity and
+  resets the derivation so the page is outlined and distilled; a page that stays thin leaves the
+  link exactly as it was.
 - **A page or sitemap is refreshed once a week, a feed and a listing once a day**
   (`capture.refresh_interval: '168h'`, `capture.feed_refresh_interval: '24h'`), manually at any time. The cadence belongs to the
   source (`url_checked_at`), not to the process. Attached sources are not fetched by the cadence; an
   explicit refetch may try one, and a walled normal source is attempted again on the same cadence,
-  because it may become readable.
+  because it may become readable. A bookmark is not re-read automatically: it is a collected link
+  until the reader says "try the page again".
 - **A changed page is a changed source.** When a refresh writes different text — a normal page, a
   feed copy replaced by its page, or a wall that cleared — the old derivation is thrown away and
   built again from the new bytes (capture survives). The refresh reports the source for a reset; the

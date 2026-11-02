@@ -171,7 +171,14 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
   URL once: a readable 2xx with text replaces the snapshot and clears the attachment marker in the
   record/index/identity (a changed text also resets the derivation); a wall, a dead host or an empty
   page keeps the attached bytes and marker exactly as they are. `Reset` remains derivation-only and
-  never replaces an attachment.
+  never replaces an attachment. The same call re-reads a **bookmark**: a page that is readable now
+  (often because the browser rendered it) replaces the collected link — the `bookmark` marker goes
+  from the record, the index column and the snapshot, and the derivation is reset so the page is
+  outlined and distilled; a page that stays thin leaves the link untouched.
+- **A rendered page says so.** When the optional Lightpanda engine supplied the DOM the text was read
+  from, the snapshot's frontmatter carries `rendered: lightpanda` (a bookmark's snapshot too) and the
+  record's `rendered` key names the same engine. A plain read writes neither: the provenance of a
+  snapshot is a fact, not a default.
 - **A changed page is a changed source.** A refresh that writes DIFFERENT text reports the source for
   a derivation rebuild; the app resets tree/claims/steps under the exclusive gate (capture survives)
   and derives the new bytes again. The source log records why the derivation was rebuilt. The same

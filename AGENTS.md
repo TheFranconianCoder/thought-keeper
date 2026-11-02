@@ -98,9 +98,11 @@ index table, no model, no second grouping.
   association layer and lexical search. `similarity ≠ relevance`.
 - **Only four source kinds: Markdown, PDF, TXT and EPUB — plus URLs.** No `.docx`, no images, no
   audio/video, and no archive reader: an EPUB is a book we read, `.zip` and `.tar` are still refused.
-- **No credentials and no browser automation.** The app never stores a login, reads your browser's
-  cookies or drives a headless browser. A URL behind a login or a paywall is reported as **blocked**,
-  and the human may attach the page they can see (HTML or PDF); the URL stays the source's address.
+- **No credentials and no browser session.** The app never stores a login, reads your browser's
+  cookies or drives YOUR browser. It does render a page locally with the optional **Lightpanda**
+  engine (no session, no cookie jar, one process per page), so a JavaScript page gives up its text.
+  A URL behind a login or a paywall is still reported as **blocked**, and the human may attach the
+  page they can see (HTML or PDF); the URL stays the source's address.
 - **No silent OCR.** Local OCR is supported; if it is unavailable and a PDF has no text layer, the
   source is flagged `unsupported_source`, never silently empty.
 - **No rendered claim pages.** Clusters are associations, not documents: no cluster page, no cluster
@@ -177,7 +179,9 @@ scheduling: `docs/pipeline.md`.
 
 - **Capture** makes the source readable locally (bytes are already readable for Markdown/text/URL;
   a PDF gets its text layer or OCR, an EPUB's chapters are read out of the container) and leaves a
-  static snapshot. A URL that answers with a login,
+  static snapshot. A URL is fetched over HTTP and, when the optional Lightpanda engine is installed,
+  also rendered; the richer text wins and the app writes the Markdown in both cases. A URL that
+  answers with a login,
   a paywall or a consent gate is **blocked**: reported with the reason, never read — and the human
   may attach the page they can see (HTML or PDF), which becomes the snapshot at the same URL address.
 - **Outline** reads that snapshot and builds the hierarchical tree of parts; it never extracts.
@@ -216,7 +220,8 @@ Derived things are caches (`outline`, `index.db`, `clusters/`); records are the 
 | PDF text | poppler `pdftotext` | no CGO, no daemon |
 | PDF OCR | poppler `pdftocairo` + `tesseract` | local |
 | EPUB text | stdlib `archive/zip` + `x/net/html` + `html-to-markdown` | pure Go, no tool to install |
-| HTML → MD | `go-shiori/go-readability` + `html-to-markdown` + `x/net/html` | main-content extraction |
+| HTML → MD | `go-shiori/go-readability` + `html-to-markdown` (incl. tables) + `x/net/html` | main-content extraction |
+| Page rendering | `lightpanda` (optional, AGPL, never bundled) | the DOM of a JavaScript page |
 | Config | YAML + `${ENV}` expansion | `config.example.yaml` |
 | Frontmatter | YAML decoded only in the file adapters (`markdown`, `wiki`, `asks`) | keeps YAML out of the core |
 | IDs | ULID, 16-byte `BLOB` | claims, clusters, wiki pages, runs; sources by SHA-256 |

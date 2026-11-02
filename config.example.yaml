@@ -141,6 +141,21 @@ fetch:
     user_agent: 'thought-keeper/0.1 (+local)'
     allow_private: false                   # SSRF guard stays on by default
 
+browser:                                   # the OPTIONAL local browser that renders a page before
+                                           # it is read: a JavaScript page is fetched from its DOM,
+                                           # and the Markdown is still written by the app's own
+                                           # converter. Without the binary (e.g. on Windows) pages
+                                           # are read from the plain HTTP response
+    path: ''                               # empty = 'lightpanda' from PATH
+    timeout: '30s'                         # ceiling for one rendered page (navigation + scripts)
+    wait: '5s'                             # how long the page may take after load before the dump
+    wait_until: 'networkidle'              # load | domcontentloaded | networkalmostidle |
+                                           # networkidle | done. `load` dumps the SHELL of a
+                                           # single-page app; `networkidle` waits for the data its
+                                           # scripts fetched (a page that polls runs to `wait`)
+    load_stylesheets: true                 # fetch CSS, so hidden content is hidden in the DOM too
+    obey_robots: false                     # the reader asked for this one page; the app never crawls
+
 pdf:
     text_tool: 'pdftotext'                 # poppler, ad-hoc stdin→stdout
     max_bytes: 52428800                    # 50 MiB

@@ -228,6 +228,8 @@ type App struct {
 	fts5          bool
 	pdfOK         bool
 	ocrOK         bool
+	browserOK     bool
+	browserTool   string
 	vaultWritable bool
 	// schemaOutdated is the sentence a stale index gets: empty when the index has the shape this build
 	// writes (or when it is brand new). It is REPORTED in the status report and in the start-up log,
@@ -418,6 +420,7 @@ func New(opts Options) (*App, error) {
 	a.handler = reg.Handler
 	a.intake = reg.Intake
 	a.capture = reg.Capture
+	a.browserOK, a.browserTool = reg.BrowserAvailable, reg.BrowserTool
 	a.buildTree = reg.BuildTree
 	a.startRun = reg.StartRun
 	a.documentRun = reg.DocumentRun
@@ -972,6 +975,7 @@ func (a *App) Run() error {
 		"addr", a.addr,
 		"vault", a.cfg.VaultRoot(),
 		"fts5", a.fts5, "pdf", a.pdfOK, "ocr", a.ocrOK,
+		"browser", a.browserOK, "browser_tool", a.browserTool,
 		"agent", a.agentAvailable, "agent_model", a.cfg.OpenAI.ModelCompile, "agent_base_url", a.cfg.OpenAI.BaseURL,
 		"headless", a.headless,
 	)
@@ -1115,11 +1119,13 @@ func (a *App) Status() payloads.Status {
 			LintRunning:     a.lintRunning,
 		},
 		Tools: payloads.ToolsInfo{
-			PDF:        a.pdfOK,
-			OCR:        a.ocrOK,
-			TextTool:   a.cfg.PDF.TextTool,
-			Rasterizer: a.cfg.OCR.Rasterizer,
-			Tesseract:  a.cfg.OCR.Tesseract,
+			PDF:         a.pdfOK,
+			OCR:         a.ocrOK,
+			Browser:     a.browserOK,
+			BrowserTool: a.browserTool,
+			TextTool:    a.cfg.PDF.TextTool,
+			Rasterizer:  a.cfg.OCR.Rasterizer,
+			Tesseract:   a.cfg.OCR.Tesseract,
 		},
 		Agent: payloads.AgentInfo{
 			Configured: a.agentAvailable,

@@ -118,6 +118,9 @@ type IndexRepository interface {
 
 	// SetSourceURLState records the last HTTP status and check time of a URL source.
 	SetSourceURLState(ctx context.Context, hash string, status int, checkedAt time.Time) error
+	// SetSourceBookmark flips the bookmark decision: a rendered read can turn a collected link into
+	// a page, and a page that stopped being readable becomes a bookmark.
+	SetSourceBookmark(ctx context.Context, hash string, bookmark bool) error
 	// ListURLSources lists every URL snapshot (newest first), so the refresher can
 	// re-fetch and the UI can show per-URL status.
 	ListURLSources(ctx context.Context) ([]entities.Source, error)

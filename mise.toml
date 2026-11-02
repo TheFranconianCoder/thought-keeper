@@ -24,3 +24,4 @@ poppler = "26.10.0"            # conda-forge: provides pdftotext, pdftoppm
 "gofumpt" = "go:mvdan.cc/gofumpt"
 "sqlc" = "github:sqlc-dev/sqlc"
 "goose" = "go:github.com/pressly/goose/v3/cmd/goose"
+"lightpanda" = "github:lightpanda-io/browser"

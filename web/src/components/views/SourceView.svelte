@@ -920,16 +920,20 @@
                         : t('source.attachSnapshot')}
                   </span>
                 </button>
-                {#if attached}
+                {#if attached || selected.bookmark}
                   <button
                     class="btn btn--secondary btn--sm btn--action"
                     disabled={refetching}
-                    title={t('source.tryUrlAgain')}
+                    title={attached ? t('source.tryUrlAgain') : t('source.tryPage')}
                     onclick={() => void onRefetch()}
                   >
                     <Icon name="refresh" size={13} />
                     <span class="btn-label"
-                      >{refetching ? t('source.fetching') : t('source.tryUrlAgain')}</span
+                      >{refetching
+                        ? t('source.fetching')
+                        : attached
+                          ? t('source.tryUrlAgain')
+                          : t('source.tryPage')}</span
                     >
                   </button>
                 {/if}

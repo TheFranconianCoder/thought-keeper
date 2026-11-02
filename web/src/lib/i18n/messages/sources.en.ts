@@ -210,6 +210,11 @@ export const sourcesEn: Record<string, string> = {
   'sources.refetchFailedDetail':
     'The fetch failed — the attached snapshot is unchanged: {error}.',
   'sources.refetchNoContent': 'The URL answered with no new content; nothing was replaced.',
+  'sources.refetchIndexed':
+    'The page is readable — the collected link is an indexed source now.',
+  'sources.refetchStillThin':
+    'Still not enough text — it stays a collected link. Attach the page you can see if it needs a login.',
+  'sources.refetchLinkFailed': 'The fetch failed — the collected link is unchanged.',
   'sources.refetchError': 'Refetch failed: {error}',
 
   // Reset and rebuild.

@@ -306,40 +306,50 @@ export async function distillSource(hash: string, reset = false): Promise<void> 
   }
 }
 
-/** refetchSource tries the URL again for an attached snapshot. If the page is readable, the fresh
- *  snapshot replaces the attachment and the claims are rebuilt; a wall or a failure keeps it. */
+/** refetchSource reads a URL again for a snapshot that is not a normal page: an attached one (the
+ *  page was walled) or a COLLECTED LINK (the app could not read it). A readable page replaces the
+ *  attachment or turns the link into an indexed source; a wall or a failure keeps what is there. */
 export async function refetchSource(hash: string): Promise<void> {
   const source = findSource(hash);
   const label = labelOf(source, hash);
-  const attachedFrom = source?.attached_from ? ` (${source.attached_from})` : '';
-  const confirmed = await confirm({
-    title: t('sources.refetchTitle', { label }),
-    message: t('sources.refetchMessage', { from: attachedFrom }),
-    confirmLabel: t('sources.refetchConfirm'),
-  });
-  if (!confirmed) return;
+  const bookmark = source?.bookmark === true;
+  if (!bookmark) {
+    // Replacing a human's attachment is a loss worth confirming. Re-reading a collected link is
+    // just a fetch — asking first would be ceremony, not safety.
+    const attachedFrom = source?.attached_from ? ` (${source.attached_from})` : '';
+    const confirmed = await confirm({
+      title: t('sources.refetchTitle', { label }),
+      message: t('sources.refetchMessage', { from: attachedFrom }),
+      confirmLabel: t('sources.refetchConfirm'),
+    });
+    if (!confirmed) return;
+  }
 
   system.notice = t('sources.refetching');
   try {
     const result = await api.refetchSource(hash);
     if (result.replaced) {
-      toast(t('sources.refetchReplaced'), 'success');
+      toast(bookmark ? t('sources.refetchIndexed') : t('sources.refetchReplaced'), 'success');
     } else if (result.blocked) {
       toast(
         result.detail
           ? t('sources.refetchStillBlockedDetail', { error: result.detail })
-          : t('sources.refetchStillBlocked'),
+          : bookmark
+            ? t('sources.refetchStillThin')
+            : t('sources.refetchStillBlocked'),
         'warning',
       );
     } else if (result.failed) {
       toast(
         result.detail
           ? t('sources.refetchFailedDetail', { error: firstLine(result.detail) })
-          : t('sources.refetchFailed'),
+          : bookmark
+            ? t('sources.refetchLinkFailed')
+            : t('sources.refetchFailed'),
         'error',
       );
     } else {
-      toast(t('sources.refetchNoContent'), 'info');
+      toast(bookmark ? t('sources.refetchStillThin') : t('sources.refetchNoContent'), 'info');
     }
     await refreshSourceViews(hash);
   } catch (error) {

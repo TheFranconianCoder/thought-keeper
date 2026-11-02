@@ -876,6 +876,19 @@ func (r *SourceRepository) SetSourceURLState(ctx context.Context, hash string, s
 	return nil
 }
 
+// SetSourceBookmark flips the bookmark decision of a URL source. The row's meta is the record and
+// this column is the list filter; the caller writes both.
+func (r *SourceRepository) SetSourceBookmark(ctx context.Context, hash string, bookmark bool) error {
+	value := int64(0)
+	if bookmark {
+		value = 1
+	}
+	if err := r.q.SetSourceBookmark(ctx, dal.SetSourceBookmarkParams{Bookmark: value, Hash: hash}); err != nil {
+		return fmt.Errorf("set source bookmark: %w", err)
+	}
+	return nil
+}
+
 // ListURLSources lists every URL snapshot (newest first).
 func (r *SourceRepository) ListURLSources(ctx context.Context) ([]entities.Source, error) {
 	rows, err := r.q.ListURLSources(ctx)
