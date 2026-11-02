@@ -47,7 +47,7 @@ func (r *SearchRepository) Search(ctx context.Context, query, layer string, limi
 		if langErr != nil {
 			languages = nil // the hint only tunes the match
 		}
-		h, err := r.searchTable(ctx, "atoms_fts", "atoms", "claim", q, limit, "atom", languages, "")
+		h, err := r.searchTable(ctx, "atoms_fts", "atoms", "claim", q, limit, "atom", languages, "", false)
 		if err != nil {
 			return nil, err
 		}
@@ -74,6 +74,39 @@ func (r *SearchRepository) Search(ctx context.Context, query, layer string, limi
 		}
 	}
 	return out, nil
+}
+
+// SearchExact is the strict lexical form: every word must occur, and no OR, variant or raw-phrase
+// fallback is used. The source layer is the same metadata predicate as the list (a title/URL/tag
+// substring); the claim layer is the strict FTS5 AND.
+func (r *SearchRepository) SearchExact(ctx context.Context, query, layer string, limit int) ([]interfaces.SearchHit, error) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	var hits []interfaces.SearchHit
+	if layer == "" || layer == "atoms" {
+		languages, langErr := r.Languages(ctx)
+		if langErr != nil {
+			languages = nil // the hint only tunes the match
+		}
+		h, err := r.searchTable(ctx, "atoms_fts", "atoms", "claim", q, limit, "atom", languages, "", true)
+		if err != nil {
+			return nil, err
+		}
+		hits = append(hits, h...)
+	}
+	if layer == "" || layer == "sources" {
+		h, err := r.searchSources(ctx, q, limit)
+		if err != nil {
+			return nil, err
+		}
+		hits = append(hits, h...)
+	}
+	return hits, nil
 }
 
 // searchAtomID finds claims by (a prefix of) their ULID. The stored id is 16 bytes; a text prefix of
@@ -149,7 +182,7 @@ func (r *SearchRepository) SearchInSource(ctx context.Context, query, sourceHash
 	if langErr != nil {
 		languages = nil // the hint only tunes the match
 	}
-	return r.searchTable(ctx, "atoms_fts", "atoms", "claim", q, limit, "atom", languages, hash)
+	return r.searchTable(ctx, "atoms_fts", "atoms", "claim", q, limit, "atom", languages, hash, false)
 }
 
 // searchSources matches the Sources lens predicate: title, original name, URL and both tag
@@ -190,7 +223,7 @@ func scanSourceHits(rows *sql.Rows) ([]interfaces.SearchHit, error) {
 	return out, rows.Err()
 }
 
-func (r *SearchRepository) searchTable(ctx context.Context, ftsTable, contentTable, titleCol, q string, limit int, kind string, languages []string, scope string) ([]interfaces.SearchHit, error) {
+func (r *SearchRepository) searchTable(ctx context.Context, ftsTable, contentTable, titleCol, q string, limit int, kind string, languages []string, scope string, strict bool) ([]interfaces.SearchHit, error) {
 	words, symbols := queryParts(q)
 	var out []interfaces.SearchHit
 	seen := map[string]bool{}
@@ -205,6 +238,27 @@ func (r *SearchRepository) searchTable(ctx context.Context, ftsTable, contentTab
 			seen[h.ID] = true
 			out = append(out, h)
 		}
+	}
+
+	// Strict: one AND, one pass. A "mentions X" channel must not turn an absent name into an
+	// approximate match; an empty answer is the honest one.
+	if strict {
+		if len(symbols) > 0 {
+			combo := append(append([]string(nil), symbols...), words...)
+			hits, err := r.likeTerms(ctx, contentTable, titleCol, combo, limit, true, scope)
+			if err != nil {
+				return nil, err
+			}
+			add(hits)
+		}
+		if len(words) > 0 && len(out) < limit {
+			hits, err := r.ftsSearch(ctx, ftsTable, contentTable, titleCol, ftsQuery(words, " AND "), limit, kind, scope)
+			if err != nil {
+				return nil, err
+			}
+			add(hits)
+		}
+		return out, nil
 	}
 
 	// A term such as C++, C# or .NET is not an FTS5 expression: `+` is a syntax error, and the

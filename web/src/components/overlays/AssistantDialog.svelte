@@ -23,6 +23,13 @@
   const suggestion = $derived(
     contextView === 'claims' ? t('assistant.suggest.sourcesOfClaim') : t('assistant.suggest.claimsOfSource'),
   );
+  const examples = $derived([
+    t('assistant.examples.sources'),
+    t('assistant.examples.claims'),
+    t('assistant.examples.person'),
+    t('assistant.examples.reference'),
+    t('assistant.examples.ask'),
+  ]);
   let input: HTMLInputElement | undefined = $state();
   let text = $state('');
 
@@ -124,7 +131,36 @@
             {suggestion}
           </button>
         </div>
-      {:else}
+      {/if}
+
+      {#if !assistant.error}
+        <div class="assistant-guide">
+          <div class="guide-row">
+            <span class="guide-label">{t('assistant.hint.where')}</span>
+            <span>{t('assistant.hint.whereValue')}</span>
+          </div>
+          <div class="guide-row">
+            <span class="guide-label">{t('assistant.hint.what')}</span>
+            <span>{t('assistant.hint.whatValue')}</span>
+          </div>
+          <div class="guide-row">
+            <span class="guide-label">{t('assistant.hint.subject')}</span>
+            <span>{t('assistant.hint.subjectValue')}</span>
+          </div>
+          <div class="guide-row">
+            <span class="guide-label">{t('assistant.hint.reference')}</span>
+            <span>{t('assistant.hint.referenceValue')}</span>
+          </div>
+          <div class="guide-row">
+            <span class="guide-label">{t('assistant.hint.question')}</span>
+            <span>{t('assistant.hint.questionValue')}</span>
+          </div>
+        </div>
+        <div class="assistant-examples">
+          {#each examples as example (example)}
+            <button class="example" type="button" onclick={() => recall(example)}>{example}</button>
+          {/each}
+        </div>
         <p class="assistant-hint">{t('assistant.hint')}</p>
       {/if}
 
@@ -142,7 +178,7 @@
                 <span class="history-meta">
                   {relTime(cmd.created_at)}
                   {#if cmd.resolution === 'mapped' || cmd.resolution === 'research'}· {t('assistant.resolution.mapped')}{/if}
-                  {#each criteriaChips(cmd.criteria).slice(0, 2) as chip (chip.key)}
+                  {#each criteriaChips(cmd.criteria, cmd.lens).slice(0, 2) as chip (chip.key)}
                     · {chip.text}
                   {/each}
                 </span>
@@ -289,6 +325,47 @@
   }
 
   .context-suggestion:hover {
+    border-color: var(--accent);
+    color: var(--ink);
+  }
+
+  .assistant-guide {
+    display: grid;
+    gap: 3px;
+    padding: 0 14px 8px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .guide-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .guide-label {
+    flex: none;
+    width: 58px;
+    color: var(--accent);
+    font-weight: 550;
+  }
+
+  .assistant-examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 0 14px 8px;
+  }
+
+  .example {
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .example:hover {
     border-color: var(--accent);
     color: var(--ink);
   }

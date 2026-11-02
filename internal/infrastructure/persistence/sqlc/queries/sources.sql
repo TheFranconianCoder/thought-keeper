@@ -359,6 +359,10 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
   -- an arrival; "recently arrived" asks this question so a crawl cannot flood it.
   AND (sqlc.arg(roots) = 0
        OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
+  -- The arrival window, in Unix millis. 0 means "no bound"; Until is exclusive. It lives in SQL so
+  -- a window over an older part of the vault is not lost to the scan limit.
+  AND (sqlc.arg(since) = 0 OR imported_at >= sqlc.arg(since))
+  AND (sqlc.arg(until) = 0 OR imported_at < sqlc.arg(until))
 ORDER BY imported_at DESC
 LIMIT sqlc.arg(limit) OFFSET sqlc.arg(offset);
 
@@ -396,6 +400,8 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
        OR instr(read_later_via, '"' || sqlc.arg(interest) || '"') > 0)
   AND (sqlc.arg(roots) = 0
        OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
+  AND (sqlc.arg(since) = 0 OR imported_at >= sqlc.arg(since))
+  AND (sqlc.arg(until) = 0 OR imported_at < sqlc.arg(until))
 ORDER BY read_later_at ASC, imported_at DESC
 LIMIT sqlc.arg(limit) OFFSET sqlc.arg(offset);
 
@@ -430,7 +436,9 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
   AND (sqlc.arg(interest) = ''
        OR instr(read_later_via, '"' || sqlc.arg(interest) || '"') > 0)
   AND (sqlc.arg(roots) = 0
-       OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL));
+       OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
+  AND (sqlc.arg(since) = 0 OR imported_at >= sqlc.arg(since))
+  AND (sqlc.arg(until) = 0 OR imported_at < sqlc.arg(until));
 
 -- name: SetSourceFavorite :exec
 UPDATE sources SET favorite_at = sqlc.arg(favorite_at) WHERE hash = sqlc.arg(hash);

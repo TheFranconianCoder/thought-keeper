@@ -354,7 +354,10 @@ func (r *AtomRepository) AtomTextsForIDs(ctx context.Context, ids []ulid.ULID) (
 			return nil, fmt.Errorf("atom texts: %w", err)
 		}
 		for _, row := range rows {
-			out = append(out, entities.Atom{ID: row.ID, Topic: row.Topic, Claim: row.Claim, Body: row.Body})
+			out = append(out, entities.Atom{
+				ID: row.ID, Topic: row.Topic, Claim: row.Claim, Body: row.Body,
+				CreatedAt: time.UnixMilli(row.CreatedAt).UTC(),
+			})
 		}
 	}
 	// The single-statement query promises id order; the batches are not globally ordered.

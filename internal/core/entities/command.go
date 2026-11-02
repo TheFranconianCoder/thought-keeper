@@ -52,13 +52,35 @@ const (
 	CommandStateDone   CommandState = "done"   // every document step is ok or skipped
 )
 
+// CommandWindow is a command's time window. Spec is the READER'S phrase family ("yesterday",
+// "last-7d", "2026-10-01..2026-10-31") and is what "run again" re-anchors; From and To are the
+// instants that run resolved it to, kept for the audit. The window is always about the vault's own
+// timestamps — arrival for a source, creation for a claim, the last edit for a wiki page — never
+// about publication.
+type CommandWindow struct {
+	Spec     string
+	From     time.Time
+	To       time.Time
+	Timezone string
+}
+
+// Empty reports whether the command named no window at all.
+func (w CommandWindow) Empty() bool { return w.Spec == "" }
+
 // CommandCriteria is what a command MEANT: the criteria the intent was resolved to. It travels with
 // the record so a reader can see the interpretation, and it is what "run again" re-resolves. The
 // members below it are the answer; the criteria are why.
 type CommandCriteria struct {
-	// Text is the free text of a lexical search. It is NEVER written into a URL: an address that
-	// carries the words of a question is a different address every time it is opened.
+	// Text is the words the reader named as words. For a filter it is a literal match over the
+	// source's title/name/URL/tags (and, when that finds nothing, the claims that mention them);
+	// for a mapped subject it is the subject words the lexical channel searches. It is NEVER
+	// written into a URL: an address that carries the words of a question is a different address
+	// every time it is opened.
 	Text string
+	// Terms is the reading's bridge into the vault's vocabulary: the request's own meaningful words
+	// plus the model's expansion. It is evidence, not a filter, and it is what makes a mapping
+	// checkable ("terms: llm, large-language-models, machine-learning").
+	Terms []string
 	// Tag matches one human or derived source tag.
 	Tag string
 	// Kind is one source kind (md, pdf, txt, epub, url).
@@ -78,8 +100,9 @@ type CommandCriteria struct {
 	// the one source, the sources behind that claim, that claim, or that source's claims.
 	Source string
 	Atom   string
-	// Since narrows sources to those that ARRIVED in the vault in the window (never publication).
-	Since time.Duration
+	// Window narrows the lens by the vault's own timestamps: sources by arrival, claims by creation,
+	// wiki pages by their last edit. It is never publication, which the vault does not store.
+	Window CommandWindow
 	// State narrows sources by their derivation's state.
 	State CommandState
 	// Order is the order of the materialized set.
@@ -95,7 +118,7 @@ func (c CommandCriteria) IsEmpty() bool {
 	return c.Text == "" && c.Tag == "" && c.Kind == "" && c.Topic == "" && c.FromTopic == "" &&
 		len(c.Tags) == 0 && len(c.Topics) == 0 &&
 		c.Source == "" && c.Atom == "" &&
-		c.Since == 0 && c.State == CommandStateAny && !c.BookmarksOnly && !c.AttachedOnly
+		c.Window.Empty() && c.State == CommandStateAny && !c.BookmarksOnly && !c.AttachedOnly
 }
 
 // NarrowsSources reports whether this reading says anything about a SOURCE list. A command whose
@@ -105,18 +128,19 @@ func (c CommandCriteria) IsEmpty() bool {
 func (c CommandCriteria) NarrowsSources() bool {
 	return c.Text != "" || c.Tag != "" || c.Kind != "" || c.FromTopic != "" ||
 		len(c.Tags) > 0 || len(c.Topics) > 0 || c.Source != "" || c.Atom != "" ||
-		c.Since > 0 || c.State != CommandStateAny || c.BookmarksOnly || c.AttachedOnly
+		!c.Window.Empty() || c.State != CommandStateAny || c.BookmarksOnly || c.AttachedOnly
 }
 
 // NarrowsClaims reports whether this reading says anything about a CLAIM list.
 func (c CommandCriteria) NarrowsClaims() bool {
-	return c.Text != "" || c.Topic != "" || c.Source != "" || c.Atom != "" || len(c.Topics) > 0
+	return c.Text != "" || c.Topic != "" || c.Source != "" || c.Atom != "" || len(c.Topics) > 0 ||
+		!c.Window.Empty()
 }
 
 // NarrowsWiki reports whether this reading says anything about the reader's OWN pages. A wiki page
-// has a title, tags and prose — text and tag are its only filters.
+// has a title, tags, prose and an edit time — text, tag and window are its filters.
 func (c CommandCriteria) NarrowsWiki() bool {
-	return c.Text != "" || c.Tag != "" || len(c.Tags) > 0
+	return c.Text != "" || c.Tag != "" || len(c.Tags) > 0 || !c.Window.Empty()
 }
 
 // NarrowsAnything reports whether ANY lens could honour this reading. It is the last line of

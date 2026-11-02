@@ -19,7 +19,7 @@ Captures for the README. One vault for the whole set, so counts and names tell t
 | `desktop-start.png` | Start | the Ask box with the last questions, **Continue**, a non-empty **Needs you**, the newest sources with their step lights and the vault pulse |
 | `desktop-sources.png` | Sources | the search/type/tag filter, the tag cloud, rows with human and auto tag chips, step lights, and an **attached** source with its paperclip |
 | `desktop-ask.png` | Ask | a saved answer with inline citations, the answer written in the question's language, and its Ask ID |
-| `desktop-assistant.png` | assistant | the field open over a list **and** the result banner after a request, e.g. `tag cloud · added ≤ 7 days · not finished` |
+| `desktop-assistant.png` | assistant | the field open over a list **and** the result banner after a request, e.g. `tag cloud · added last week · not finished` |
 | `desktop-status.png` | Status | counts, the job queue, memory (live and peak, with the pass that caused the peak) and the maintenance actions |
 
 ## Mobile

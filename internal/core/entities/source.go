@@ -98,6 +98,12 @@ type SourceFilter struct {
 	// wiki page's linked URLs carry a parent hash, the source the human added does not. It is what
 	// "recently arrived" means — a crawl is one addition, not fifty.
 	RootsOnly bool
+	// Since and Until bound the ARRIVAL window (imported_at), inclusive and exclusive. They are
+	// absolute instants resolved from a command's window spec at run time; the zero time means "no
+	// bound". The filter is applied in SQL, so a window over an old part of the vault is not lost to
+	// the list's scan limit.
+	Since time.Time
+	Until time.Time
 }
 
 // SourceLink is a link that already IS a source: the URL a document wrote and the hash of the

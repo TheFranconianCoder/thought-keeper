@@ -182,14 +182,26 @@ class AssistantStore {
 
 /**
  * currentContext is what the reader is looking at, so "this claim" and "this source" have a meaning.
- * Only the two detail lenses carry an id the server can resolve; everything else says nothing.
+ * Only the two detail lenses carry an id the server can resolve; the timezone is ALWAYS sent, because
+ * "yesterday" must mean the reader's yesterday even when the server runs in another zone.
  */
-function currentContext(): CommandContext | undefined {
+function currentContext(): CommandContext {
+  const context: CommandContext = {};
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (timezone) context.timezone = timezone;
+  } catch {
+    // An old browser without Intl: the server falls back to its local zone.
+  }
   const route = router.current;
-  if (!route.id) return undefined;
-  if (route.view === 'source') return { view: 'source', id: route.id };
-  if (route.view === 'claims') return { view: 'claims', id: route.id };
-  return undefined;
+  if (route.id && route.view === 'source') {
+    context.view = 'source';
+    context.id = route.id;
+  } else if (route.id && route.view === 'claims') {
+    context.view = 'claims';
+    context.id = route.id;
+  }
+  return context;
 }
 
 export const assistant = new AssistantStore();

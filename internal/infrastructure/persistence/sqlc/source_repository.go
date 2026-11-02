@@ -490,11 +490,22 @@ func (r *SourceRepository) CountSources(ctx context.Context, filter entities.Sou
 		ReadLater: boolParam(filter.ReadLaterOnly),
 		Interest:  filter.Interest,
 		Roots:     boolParam(filter.RootsOnly),
+		Since:     millisOrZero(filter.Since),
+		Until:     millisOrZero(filter.Until),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("count sources: %w", err)
 	}
 	return int(n), nil
+}
+
+// millisOrZero turns an optional instant into the sentinel the generated query expects: 0 means
+// "no bound". The index stores imported_at in Unix milliseconds.
+func millisOrZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixMilli()
 }
 
 // SetSourceFavorite mirrors the reader's star into the index. The <hash>.meta record is the truth;
@@ -605,6 +616,8 @@ func (r *SourceRepository) ListSources(ctx context.Context, filter entities.Sour
 			Favorite:  boolParam(filter.FavoriteOnly),
 			Interest:  filter.Interest,
 			Roots:     boolParam(filter.RootsOnly),
+			Since:     millisOrZero(filter.Since),
+			Until:     millisOrZero(filter.Until),
 			Limit:     int64(limit),
 			Offset:    int64(offset),
 		})
@@ -621,6 +634,8 @@ func (r *SourceRepository) ListSources(ctx context.Context, filter entities.Sour
 			ReadLater: boolParam(filter.ReadLaterOnly),
 			Interest:  filter.Interest,
 			Roots:     boolParam(filter.RootsOnly),
+			Since:     millisOrZero(filter.Since),
+			Until:     millisOrZero(filter.Until),
 			Limit:     int64(limit),
 			Offset:    int64(offset),
 		})

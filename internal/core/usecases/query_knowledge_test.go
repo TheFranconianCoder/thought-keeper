@@ -18,6 +18,10 @@ func (f fakeSearch) Search(context.Context, string, string, int) ([]interfaces.S
 	return f.hits, nil
 }
 
+func (f fakeSearch) SearchExact(context.Context, string, string, int) ([]interfaces.SearchHit, error) {
+	return f.hits, nil
+}
+
 type fakeAskStore struct{ saved []entities.Ask }
 
 func (f *fakeAskStore) Write(_ context.Context, a entities.Ask) error {

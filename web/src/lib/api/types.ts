@@ -655,9 +655,18 @@ export interface ProgressFrame {
 
 // ── Assistant ─────────────────────────────────────────────────────────────
 
-/** CommandCriteria is what a command MEANT: the reading the banner shows. */
+/** CommandWindow is the reader's phrase family plus the instants this run resolved it to. */
+export interface CommandWindow {
+  spec: string;
+  from?: string;
+  to?: string;
+  timezone?: string;
+}
+
 export interface CommandCriteria {
   text?: string;
+  /** The words the vocabulary match ran with: the request's own words plus the model's expansion. */
+  terms?: string[];
   tag?: string;
   kind?: string;
   topic?: string;
@@ -670,7 +679,8 @@ export interface CommandCriteria {
   source?: string;
   /** The claim the reader pointed at (or pasted). */
   atom?: string;
-  since?: string;
+  /** The time window: arrival for sources, creation for claims, last edit for wiki pages. */
+  window?: CommandWindow;
   state?: string;
   order?: string;
   bookmarks_only?: boolean;
@@ -679,7 +689,7 @@ export interface CommandCriteria {
 
 export interface CommandName {
   name: string;
-  kind: 'tag' | 'topic';
+  kind: 'tag' | 'topic' | 'text';
   /** How often the vault uses the name. */
   count: number;
   /** How many items of THIS set the name produced. */
@@ -726,6 +736,8 @@ export interface Command {
 export interface CommandContext {
   view?: string;
   id?: string;
+  /** The reader's IANA timezone; it decides what "yesterday" and "this week" mean. */
+  timezone?: string;
 }
 
 export interface CommandList {

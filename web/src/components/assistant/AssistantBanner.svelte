@@ -34,14 +34,34 @@
       .catch(() => (cmd = null));
   });
 
-  const chips = $derived(cmd ? criteriaChips(cmd.criteria) : []);
+  const chips = $derived(cmd ? criteriaChips(cmd.criteria, cmd.lens) : []);
+  // The names are shown as their own rows; the other criteria (window, kind, state, reference)
+  // stay a text line beside them. A mapped set must not hide the time window it was read with.
+  const filterChips = $derived(
+    chips.filter((chip) => chip.key !== 'from_topic' && !chip.key.startsWith('tag') && !chip.key.startsWith('topic')),
+  );
   // The reading is ALWAYS a text line under the banner, never pills above the rows: the list is
   // what the reader came for, and the reading is a footnote to it.
-  const chipText = $derived(chips.map((chip) => chip.text).join(' · '));
+  const chipText = $derived(filterChips.map((chip) => chip.text).join(' · '));
   const mapped = $derived(cmd?.mapped ?? []);
   const shown = $derived(cmd?.items?.length ?? 0);
   const cut = $derived(cmd !== null && shown > 0 && shown < cmd.total);
-  const windowed = $derived(cmd !== null && cmd.vault !== undefined && cmd.scanned !== undefined && cmd.vault > cmd.scanned);
+  const windowed = $derived(
+    cmd !== null &&
+      cmd.resolution !== 'mapped' &&
+      cmd.resolution !== 'research' &&
+      cmd.vault !== undefined &&
+      cmd.scanned !== undefined &&
+      cmd.vault > cmd.scanned,
+  );
+  const terms = $derived(cmd?.criteria.terms ?? []);
+  const generated = $derived(
+    cmd?.generated === 'llm'
+      ? t('assistant.generated.llm')
+      : cmd?.generated
+        ? t('assistant.generated.rules')
+        : '',
+  );
 
   function clear(): void {
     // Clearing is not "remove one parameter": the named criteria in the address ARE the assistant's
@@ -55,6 +75,13 @@
   }
 
   const lensLabel = $derived(t(`view.${lens}`));
+
+  /** A text row counts the items of the LENS: sources, claims or pages. */
+  function mappedUnit(kind: string): string {
+    if (kind !== 'text') return `assistant.mapped.unit.${kind}`;
+    const unit = lens === 'claims' ? 'claims' : lens === 'wiki' ? 'wiki' : 'sources';
+    return `assistant.mapped.unit.text.${unit}`;
+  }
 </script>
 
 <div class="assistant-banner" class:banner--expired={expired} role="status">
@@ -94,23 +121,32 @@
 
 {#if mapped.length > 0}
   <div class="assistant-why assistant-why--mapped">
+    <span class="mapped-header">{t('assistant.mapped.header')}</span>
     {#each mapped as m (m.kind + m.name)}
       <span class="mapped-row">
         <span class="mapped-kind">{t(`assistant.mapped.${m.kind}`)}</span>
         <span class="mapped-name">{m.name}</span>
-        <span class="mapped-count">{t(`assistant.mapped.unit.${m.kind}`, { count: m.found })}</span>
+        <span class="mapped-count">{t(mappedUnit(m.kind), { count: m.found })}</span>
       </span>
     {/each}
+    {#if chipText}
+      <span class="why-applied">{t('assistant.applied')}: {chipText}</span>
+    {/if}
+    {#if terms.length > 0}
+      <span class="why-note">{t('assistant.terms', { terms: terms.join(', ') })}</span>
+    {/if}
+    {#if generated}<span class="why-generated">{generated}</span>{/if}
     {#each cmd?.notes ?? [] as note (note)}
       <span class="why-note">{note}</span>
     {/each}
   </div>
-{:else if chipText || cmd?.rationale || (cmd?.notes?.length ?? 0) > 0}
+{:else if chipText || cmd?.rationale || (cmd?.notes?.length ?? 0) > 0 || generated}
   <div class="assistant-why">
     {#if chipText}
       <span class="why-applied">{t('assistant.applied')}: {chipText}</span>
     {/if}
     {#if cmd?.rationale}<span class="why-text">{cmd.rationale}</span>{/if}
+    {#if generated}<span class="why-generated">{generated}</span>{/if}
     {#each cmd?.notes ?? [] as note (note)}
       <span class="why-note">{note}</span>
     {/each}
@@ -197,6 +233,15 @@
     gap: 2px 16px;
   }
 
+  .mapped-header {
+    width: 100%;
+    color: var(--faint);
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
   .mapped-row {
     display: inline-flex;
     align-items: baseline;
@@ -233,6 +278,10 @@
     color: var(--faint);
   }
 
+  .why-generated {
+    color: var(--faint);
+    font-style: italic;
+  }
 
   .banner-count {
     color: var(--muted);

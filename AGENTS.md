@@ -50,8 +50,11 @@ The PWA is **event-driven** (SSE) and **claim-first**: a calm, Notion-flavored r
 is a finite set of lenses — **Start, Sources, Wiki, Bookmarks, Claims, Ask, Attention, Status** — in a
 sidebar on the wide layout and in a **footer navigation** when the window is narrow (no drawer, no menu
 button), with an Attention badge and a connection mark on Status. **The assistant sits in the top bar**
-and is not one of the lenses: it is how the app is driven from outside a click. A command resolves to
-a lens, a filter and a materialized set, and every open window follows the address it hands out. **Start** is the front door: a
+and is not one of the lenses: it is how the app is driven from outside a click. It is a **navigator**,
+not a chat: a command resolves to a lens, a filter and a materialized set, and every open window
+follows the address it hands out. A question that asks which items exist is still a list; only a
+prose question goes to Ask. Time means arrival (source), creation (claim) or last edit (wiki page),
+never publication. **Start** is the front door: a
 vault-pulse line, an Ask box, two thin signals for what runs and what needs you (absent when quiet),
 **Read later** (the oldest open queue entries with the interest that queued each) and the newest
 **roots** — owned pages never count as arrivals — each with its claim count; never a session-restore

@@ -239,6 +239,8 @@ WHERE (?1 = '' OR kind = ?1)
        OR instr(read_later_via, '"' || ?10 || '"') > 0)
   AND (?11 = 0
        OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
+  AND (?12 = 0 OR imported_at >= ?12)
+  AND (?13 = 0 OR imported_at < ?13)
 `
 
 type CountSourcesFilteredParams struct {
@@ -253,6 +255,8 @@ type CountSourcesFilteredParams struct {
 	ReadLater interface{} `json:"read_later"`
 	Interest  interface{} `json:"interest"`
 	Roots     interface{} `json:"roots"`
+	Since     interface{} `json:"since"`
+	Until     interface{} `json:"until"`
 }
 
 func (q *Queries) CountSourcesFiltered(ctx context.Context, arg CountSourcesFilteredParams) (int64, error) {
@@ -268,6 +272,8 @@ func (q *Queries) CountSourcesFiltered(ctx context.Context, arg CountSourcesFilt
 		arg.ReadLater,
 		arg.Interest,
 		arg.Roots,
+		arg.Since,
+		arg.Until,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -879,8 +885,12 @@ WHERE (?1 = '' OR kind = ?1)
   -- an arrival; "recently arrived" asks this question so a crawl cannot flood it.
   AND (?11 = 0
        OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
+  -- The arrival window, in Unix millis. 0 means "no bound"; Until is exclusive. It lives in SQL so
+  -- a window over an older part of the vault is not lost to the scan limit.
+  AND (?12 = 0 OR imported_at >= ?12)
+  AND (?13 = 0 OR imported_at < ?13)
 ORDER BY imported_at DESC
-LIMIT ?13 OFFSET ?12
+LIMIT ?15 OFFSET ?14
 `
 
 type ListSourcesFilteredParams struct {
@@ -895,6 +905,8 @@ type ListSourcesFilteredParams struct {
 	ReadLater interface{} `json:"read_later"`
 	Interest  interface{} `json:"interest"`
 	Roots     interface{} `json:"roots"`
+	Since     interface{} `json:"since"`
+	Until     interface{} `json:"until"`
 	Offset    int64       `json:"offset"`
 	Limit     int64       `json:"limit"`
 }
@@ -912,6 +924,8 @@ func (q *Queries) ListSourcesFiltered(ctx context.Context, arg ListSourcesFilter
 		arg.ReadLater,
 		arg.Interest,
 		arg.Roots,
+		arg.Since,
+		arg.Until,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -993,8 +1007,10 @@ WHERE (?1 = '' OR kind = ?1)
        OR instr(read_later_via, '"' || ?9 || '"') > 0)
   AND (?10 = 0
        OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
+  AND (?11 = 0 OR imported_at >= ?11)
+  AND (?12 = 0 OR imported_at < ?12)
 ORDER BY read_later_at ASC, imported_at DESC
-LIMIT ?12 OFFSET ?11
+LIMIT ?14 OFFSET ?13
 `
 
 type ListSourcesQueueParams struct {
@@ -1008,6 +1024,8 @@ type ListSourcesQueueParams struct {
 	Favorite  interface{} `json:"favorite"`
 	Interest  interface{} `json:"interest"`
 	Roots     interface{} `json:"roots"`
+	Since     interface{} `json:"since"`
+	Until     interface{} `json:"until"`
 	Offset    int64       `json:"offset"`
 	Limit     int64       `json:"limit"`
 }
@@ -1027,6 +1045,8 @@ func (q *Queries) ListSourcesQueue(ctx context.Context, arg ListSourcesQueuePara
 		arg.Favorite,
 		arg.Interest,
 		arg.Roots,
+		arg.Since,
+		arg.Until,
 		arg.Offset,
 		arg.Limit,
 	)

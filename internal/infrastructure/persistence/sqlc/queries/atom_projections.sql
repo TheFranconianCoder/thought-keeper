@@ -26,8 +26,9 @@ SELECT id, topic, claim, body FROM atoms WHERE id > ? ORDER BY id LIMIT ?;
 
 -- name: AtomTextsForIDs :many
 -- The text of EXACTLY these claims: the signature of a touched record is computed from their
--- (id, claim, body), and touching one record per pass is the common case - not 170k reads.
-SELECT id, topic, claim, body FROM atoms WHERE id IN (sqlc.slice('ids')) ORDER BY id;
+-- (id, claim, body), and touching one record per pass is the common case - not 170k reads. The
+-- creation instant travels too: the assistant's claim windows filter on it.
+SELECT id, topic, claim, body, created_at FROM atoms WHERE id IN (sqlc.slice('ids')) ORDER BY id;
 
 -- name: ListAtomIdentityPage :many
 -- One keyset page of everything that makes a claim a CLAIM (the duplicate check's key): id, topic,

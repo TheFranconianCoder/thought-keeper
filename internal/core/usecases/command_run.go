@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,6 +81,13 @@ func (uc Commands) Run(ctx context.Context, text string, refs CommandRefs) (part
 		return partialentities.PartialCommand{}, types.New("unparsed",
 			fmt.Sprintf("this request points at a %s, but none is open — open one or paste its id", parsed.PendingRef), nil)
 	}
+	// The window is a SPEC in the reading; the run turns it into the instants the index compares
+	// against. "Yesterday" must mean the reader's yesterday, not the server's.
+	if !parsed.Criteria.Window.Empty() {
+		if err := resolveCommandWindow(&parsed.Criteria, uc.Clock.Now(), refs.Timezone); err != nil {
+			return partialentities.PartialCommand{}, types.New("unparsed", err.Error(), nil)
+		}
+	}
 	resolution := "filter"
 	switch {
 	case parsed.Lens == entities.CommandAsk:
@@ -112,6 +120,46 @@ func (uc Commands) Run(ctx context.Context, text string, refs CommandRefs) (part
 		}
 	} else if err := uc.resolve(ctx, &cmd); err != nil {
 		return partialentities.PartialCommand{}, err
+	}
+	// An explicit tag that the vault does not carry is not an answer of zero: the user named a
+	// word, and the vocabulary may know the name it grew into ("cloud" → "cloud-computing"). Only
+	// a tag that is genuinely absent falls back; a tag that exists but is excluded by the window or
+	// the kind keeps its honest "no source matches that reading".
+	if cmd.Total == 0 && cmd.Lens == entities.CommandSources && cmd.Criteria.Tag != "" &&
+		cmd.Criteria.Text == "" {
+		if counts, cErr := uc.Index.SourceTagCounts(ctx); cErr == nil && counts[cmd.Criteria.Tag] == 0 {
+			tag := cmd.Criteria.Tag
+			cmd.Notes = parsed.Notes
+			cmd.Criteria.Tag = ""
+			cmd.Criteria.Text = tag
+			cmd.Notes = append(cmd.Notes,
+				fmt.Sprintf("no source carries the tag %q; the word was mapped instead", tag))
+			if err := uc.resolveVocabularyTerms(ctx, &cmd, []string{tag}); err != nil {
+				return partialentities.PartialCommand{}, err
+			}
+			if cmd.Total > 0 {
+				cmd.Resolution = "mapped"
+			}
+		}
+	}
+	// A literal word search with a window that finds nothing may be a SUBJECT the vault names
+	// differently: "llm, added yesterday" is not a title containing "llm", it is the topic
+	// "large-language-models" plus a window. Only the plain text+window shape falls back; a tag,
+	// kind or state that excluded everything keeps its honest zero.
+	if cmd.Total == 0 && cmd.Lens == entities.CommandSources && cmd.Criteria.Text != "" &&
+		!cmd.Criteria.Window.Empty() && cmd.Criteria.Tag == "" && cmd.Criteria.Kind == "" &&
+		cmd.Criteria.State == entities.CommandStateAny && !cmd.Criteria.BookmarksOnly &&
+		!cmd.Criteria.AttachedOnly && cmd.Criteria.FromTopic == "" &&
+		cmd.Criteria.Source == "" && cmd.Criteria.Atom == "" {
+		cmd.Notes = parsed.Notes
+		cmd.Notes = append(cmd.Notes,
+			fmt.Sprintf("no source's text or claims match %q; the words were mapped instead", cmd.Criteria.Text))
+		if err := uc.resolveByVocabulary(ctx, &cmd); err != nil {
+			return partialentities.PartialCommand{}, err
+		}
+		if cmd.Total > 0 {
+			cmd.Resolution = "mapped"
+		}
 	}
 	cmd.Took = time.Since(started)
 	cmd.URL = CommandURL(cmd)
@@ -178,14 +226,15 @@ func reconcileCriteria(parsed *ParsedCommand) {
 		// Source-only dimensions on a claims request are not a claim filter.
 		c.Tag, c.Kind, c.BookmarksOnly, c.AttachedOnly, c.State = "", "", false, false, entities.CommandStateAny
 	case entities.CommandWiki:
-		// A page has a title, tags and prose. Everything else is a source or claim dimension, and
-		// leaving it in the reading would be the silent-drop bug again — so it is removed and NAMED.
+		// A page has a title, tags, prose and an edit time. Everything else is a source or claim
+		// dimension, and leaving it in the reading would be the silent-drop bug again — so it is
+		// removed and NAMED. The window stays: a page is filtered by its last edit.
 		if c.Kind != "" || c.State != entities.CommandStateAny || c.BookmarksOnly || c.AttachedOnly ||
-			c.Source != "" || c.Atom != "" || c.FromTopic != "" || c.Topic != "" || c.Since > 0 {
+			c.Source != "" || c.Atom != "" || c.FromTopic != "" || c.Topic != "" {
 			parsed.Notes = append(parsed.Notes,
-				"a wiki page has a title, tags and prose; the other criteria do not apply to it")
+				"a wiki page has a title, tags, prose and an edit time; the other criteria do not apply to it")
 			c.Kind, c.State, c.BookmarksOnly, c.AttachedOnly = "", entities.CommandStateAny, false, false
-			c.Source, c.Atom, c.FromTopic, c.Topic, c.Since = "", "", "", "", 0
+			c.Source, c.Atom, c.FromTopic, c.Topic = "", "", "", ""
 		}
 	}
 }
@@ -198,7 +247,8 @@ type commandAnswer struct {
 	Tag       string `json:"tag"`
 	Topic     string `json:"topic"`
 	Kind      string `json:"kind"`
-	Since     string `json:"since"`
+	Window    string `json:"window"`
+	Since     string `json:"since"` // legacy: a duration, read as a rolling window
 	State     string `json:"state"`
 	Order     string `json:"order"`
 	Bookmarks bool   `json:"bookmarks"`
@@ -211,7 +261,7 @@ func (uc Commands) interpretWithModel(ctx context.Context, text string, refs Com
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 
-	system, user := agents.CommandMessages(text, uc.topTags(ctx), uc.topTopics(ctx), refs.SourceHash(), refs.AtomID())
+	system, user := agents.CommandMessages(text, uc.topTags(ctx), uc.topTopics(ctx), refs.SourceHash(), refs.AtomID(), refs.Timezone, uc.Clock.Now())
 	resp, err := uc.Gateway.Complete(ctx, interfaces.AgentRequest{
 		Model: uc.Model,
 		Messages: []interfaces.AgentMessage{
@@ -249,9 +299,12 @@ func (uc Commands) interpretWithModel(ctx context.Context, text string, refs Com
 	if !parsed.Lens.Valid() {
 		parsed.Lens = entities.CommandSources
 	}
-	if answer.Since != "" {
+	if answer.Window != "" {
+		parsed.Criteria.Window.Spec = normalizeWindowSpec(answer.Window)
+	} else if answer.Since != "" {
+		// A model that still answers the old schema is read as the rolling window it meant.
 		if d, ok := parseWindowDuration(answer.Since); ok && d > 0 {
-			parsed.Criteria.Since = d
+			parsed.Criteria.Window.Spec = fmt.Sprintf("last-%dh", int(d.Hours()))
 		}
 	}
 	switch parsed.Criteria.Kind {
@@ -301,6 +354,39 @@ func decodeCommandAnswer(content string) (commandAnswer, error) {
 		return commandAnswer{}, err
 	}
 	return answer, nil
+}
+
+// normalizeWindowSpec accepts the model's small variations of the closed vocabulary: "7d" is the
+// same window as "last-7d", and "this week" is "this-week".
+func normalizeWindowSpec(raw string) string {
+	spec := strings.ToLower(strings.TrimSpace(raw))
+	if spec == "" {
+		return ""
+	}
+	switch spec {
+	case "this week":
+		return "this-week"
+	case "last week":
+		return "last-week"
+	case "this month":
+		return "this-month"
+	case "last month":
+		return "last-month"
+	case "since yesterday":
+		return "since-yesterday"
+	}
+	if strings.HasPrefix(spec, "last-") || strings.Contains(spec, "..") {
+		return spec
+	}
+	if len(spec) >= 2 {
+		unit := spec[len(spec)-1]
+		if unit == 'h' || unit == 'd' || unit == 'w' || unit == 'm' {
+			if _, err := strconv.Atoi(spec[:len(spec)-1]); err == nil {
+				return "last-" + spec
+			}
+		}
+	}
+	return spec
 }
 
 // topTags and topTopics are the model's vocabulary: a tag it may pick must be one the vault has, so
@@ -408,13 +494,17 @@ func (uc Commands) resolveSources(ctx context.Context, cmd *entities.Command) er
 	}
 	filter := entities.SourceFilter{
 		Kind: crit.Kind,
-		// The text is matched below, word by word: a substring filter ("Software Architektur") finds
-		// nothing in a vault that says "software" and "architecture" separately, and a request that
-		// returns 0 for a phrase the vault is full of looks like a broken feature.
+		// The words are a LITERAL match over the source's own text fields, in SQL, so a window over
+		// an old part of the vault is not lost to the list's scan limit. When nothing matches there,
+		// the claims that mention the words are the second channel (a person's name usually lives
+		// in the claims, not in a URL).
+		Query:         crit.Text,
 		Tag:           crit.Tag,
 		AttachedOnly:  crit.AttachedOnly,
 		BookmarksOnly: crit.BookmarksOnly,
 		FailedOnly:    cmd.Lens == entities.CommandAttention,
+		Since:         crit.Window.From,
+		Until:         crit.Window.To,
 	}
 	scan := uc.scanLimit()
 
@@ -426,27 +516,25 @@ func (uc Commands) resolveSources(ctx context.Context, cmd *entities.Command) er
 	if err != nil {
 		return err
 	}
-
-	cutoff := time.Time{}
-	if crit.Since > 0 {
-		cutoff = uc.Clock.Now().Add(-crit.Since)
+	if crit.Text != "" && len(srcs) == 0 {
+		mentioned, note, mErr := uc.sourcesMentioningText(ctx, crit.Text, crit, cmd.Lens, scan)
+		if mErr != nil {
+			return mErr
+		}
+		if len(mentioned) > 0 {
+			srcs, vault = mentioned, len(mentioned)
+			if note != "" {
+				cmd.Notes = append(cmd.Notes, note)
+			}
+		}
 	}
+
 	kept := make([]entities.Source, 0, len(srcs))
 	for _, s := range srcs {
-		if !cutoff.IsZero() && s.ImportedAt.Before(cutoff) {
-			continue
-		}
 		if !sourceStateMatches(s, crit.State) {
 			continue
 		}
 		kept = append(kept, s)
-	}
-	if crit.Text != "" {
-		var note string
-		kept, note = matchSourceWords(kept, crit.Text)
-		if note != "" {
-			cmd.Notes = append(cmd.Notes, note)
-		}
 	}
 	orderSources(kept, crit.Order)
 
@@ -459,15 +547,89 @@ func (uc Commands) resolveSources(ctx context.Context, cmd *entities.Command) er
 	}
 	cmd.Items = items
 	if cmd.Total == 0 {
-		cmd.Notes = append(cmd.Notes, "no source matches that reading")
+		if crit.Text != "" {
+			cmd.Notes = append(cmd.Notes,
+				fmt.Sprintf("no source's title, URL or tag and no claim mentions %q", crit.Text))
+		} else {
+			cmd.Notes = append(cmd.Notes, "no source matches that reading")
+		}
 	}
 	return nil
+}
+
+// sourcesMentioningText is the second lexical channel: the claims that mention the words, mapped to
+// the sources that own them. It is strict (every word, no OR fallback), so an absent name returns
+// nothing instead of a page that merely shares a word.
+func (uc Commands) sourcesMentioningText(ctx context.Context, text string, crit entities.CommandCriteria, lens entities.CommandLens, limit int) ([]entities.Source, string, error) {
+	if uc.Lexical == nil {
+		return nil, "", nil
+	}
+	hits, err := uc.Lexical.SearchExact(ctx, text, "atoms", limit)
+	if err != nil {
+		return nil, "", err
+	}
+	ids := make([]ulid.ULID, 0, len(hits))
+	for _, hit := range hits {
+		if id, parseErr := ulid.ParseStrict(hit.ID); parseErr == nil {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, "", nil
+	}
+	// The window belongs to the SOURCE lens (its arrival), not to the claim's creation: a source
+	// imported yesterday may own an old claim that mentions the name.
+	provenance, err := uc.Atoms.SourcesForAtoms(ctx, ids)
+	if err != nil {
+		return nil, "", err
+	}
+	counts := map[string]int{}
+	for _, sources := range provenance {
+		for _, src := range sources {
+			if src.Hash != "" {
+				counts[src.Hash]++
+			}
+		}
+	}
+	type scored struct {
+		src      entities.Source
+		mentions int
+	}
+	kept := make([]scored, 0, len(counts))
+	for hash, mentions := range counts {
+		src, gErr := uc.Index.GetSourceByHash(ctx, hash)
+		if gErr != nil {
+			continue
+		}
+		if lens == entities.CommandAttention && !sourceFailed(src) {
+			continue
+		}
+		if !sourceMatchesCriteria(src, crit) {
+			continue
+		}
+		kept = append(kept, scored{src: src, mentions: mentions})
+	}
+	sort.Slice(kept, func(i, j int) bool {
+		if kept[i].mentions != kept[j].mentions {
+			return kept[i].mentions > kept[j].mentions
+		}
+		return kept[i].src.ImportedAt.After(kept[j].src.ImportedAt)
+	})
+	out := make([]entities.Source, 0, len(kept))
+	for _, item := range kept {
+		out = append(out, item.src)
+	}
+	noun := "claims"
+	if len(ids) == 1 {
+		noun = "claim"
+	}
+	return out, fmt.Sprintf("%d %s mention %q", len(ids), noun, text), nil
 }
 
 // resolveSourcesFromCounts turns "a set of sources, scored" into the command's materialized set.
 // The three ways into it — a topic's claims, one claim's provenance, one named source — all end
 // here, so the filtering, ordering and honest notes cannot drift apart.
-func (uc Commands) resolveSourcesFromCounts(ctx context.Context, cmd *entities.Command, counts map[string]int) error {
+func (uc Commands) resolveSourcesFromCounts(ctx context.Context, cmd *entities.Command, counts map[string]int, mapped bool) error {
 	crit := cmd.Criteria
 
 	type scored struct {
@@ -502,8 +664,13 @@ func (uc Commands) resolveSourcesFromCounts(ctx context.Context, cmd *entities.C
 	})
 
 	cmd.Total = len(kept)
-	cmd.Vault = len(counts)
-	cmd.Scanned = len(counts)
+	// A mapped set is a join over names and claims, not a scan of the vault: pretending its
+	// candidate union is the vault denominator makes the banner lie about completeness.
+	if mapped {
+		cmd.Vault, cmd.Scanned = 0, 0
+	} else {
+		cmd.Vault, cmd.Scanned = len(counts), len(counts)
+	}
 	items := make([]entities.CommandItem, 0, min(len(kept), uc.maxItems()))
 	for _, s := range kept[:min(len(kept), uc.maxItems())] {
 		items = append(items, entities.CommandItem{Ref: s.src.Hash, Title: s.src.Title, Kind: string(s.src.Kind)})
@@ -532,11 +699,15 @@ func (uc Commands) resolveSourcesByTopic(ctx context.Context, cmd *entities.Comm
 			}
 		}
 	}
-	if err := uc.resolveSourcesFromCounts(ctx, cmd, counts); err != nil {
+	if err := uc.resolveSourcesFromCounts(ctx, cmd, counts, false); err != nil {
 		return err
 	}
 	if len(atoms) > 0 {
 		cmd.Notes = append(cmd.Notes, fmt.Sprintf("%d claims carry the topic %q", len(atoms), crit.FromTopic))
+	}
+	if len(atoms) == uc.scanLimit() {
+		cmd.Notes = append(cmd.Notes,
+			fmt.Sprintf("read the newest %d claims of topic %q; the topic may have more", len(atoms), crit.FromTopic))
 	}
 	if cmd.Total == 0 {
 		cmd.Notes = append(cmd.Notes,
@@ -573,7 +744,7 @@ func (uc Commands) resolveSourcesByRefs(ctx context.Context, cmd *entities.Comma
 		counts[crit.Source] = 1
 	}
 
-	if err := uc.resolveSourcesFromCounts(ctx, cmd, counts); err != nil {
+	if err := uc.resolveSourcesFromCounts(ctx, cmd, counts, false); err != nil {
 		return err
 	}
 	if cmd.Total == 0 {
@@ -587,43 +758,6 @@ func truncateClaim(claim string) string {
 		return claim
 	}
 	return claim[:70] + "…"
-}
-
-// matchSourceWords narrows a source window by the request's words. ALL of them must appear in the
-// fields a list row shows (title, original name, URL, tags); if no source has all of them, the
-// ones that have at least one are kept and the relaxation is NAMED — never a silent "nothing".
-func matchSourceWords(srcs []entities.Source, text string) ([]entities.Source, string) {
-	words := strings.Fields(strings.ToLower(text))
-	if len(words) == 0 {
-		return srcs, ""
-	}
-	has := func(s entities.Source, word string) bool {
-		haystack := strings.ToLower(s.Title + " " + s.OriginalName + " " + s.URL + " " + strings.Join(s.Tags, " ") + " " + strings.Join(s.AutoTags, " "))
-		return strings.Contains(haystack, word)
-	}
-	all := make([]entities.Source, 0, len(srcs))
-	matched := make([]entities.Source, 0, len(srcs))
-	for _, s := range srcs {
-		hits := 0
-		for _, w := range words {
-			if has(s, w) {
-				hits++
-			}
-		}
-		switch {
-		case hits == len(words):
-			all = append(all, s)
-		case hits > 0:
-			matched = append(matched, s)
-		}
-	}
-	if len(all) > 0 {
-		return all, ""
-	}
-	if len(matched) > 0 {
-		return matched, fmt.Sprintf("no source has all of %s; these match at least one", strings.Join(words, ", "))
-	}
-	return nil, fmt.Sprintf("no source mentions any of %s", strings.Join(words, ", "))
 }
 
 // sourceFailed is the Attention lens's own rule: it shows what needs a human, so a source without a
@@ -652,15 +786,8 @@ func sourceMatchesCriteria(src entities.Source, crit entities.CommandCriteria) b
 	if crit.BookmarksOnly && !src.Bookmark {
 		return false
 	}
-	if crit.Since > 0 && src.ImportedAt.Before(time.Now().Add(-crit.Since)) {
+	if !WindowContains(src.ImportedAt, crit.Window.From, crit.Window.To) {
 		return false
-	}
-	if crit.Text != "" {
-		needle := strings.ToLower(crit.Text)
-		haystack := strings.ToLower(src.Title + " " + src.OriginalName + " " + src.URL + " " + strings.Join(src.Tags, " "))
-		if !strings.Contains(haystack, needle) {
-			return false
-		}
 	}
 	return sourceStateMatches(src, crit.State)
 }
@@ -678,6 +805,14 @@ func (uc Commands) resolveWiki(ctx context.Context, cmd *entities.Command) error
 	}
 	crit := cmd.Criteria
 	words := strings.Fields(strings.ToLower(crit.Text))
+	wanted := map[string]bool{}
+	for _, tag := range crit.Tags {
+		wanted[strings.ToLower(tag)] = true
+	}
+	if crit.Tag != "" {
+		wanted[strings.ToLower(crit.Tag)] = true
+	}
+	explicitTag := crit.Tag != ""
 
 	type scored struct {
 		page  entities.WikiPage
@@ -685,6 +820,8 @@ func (uc Commands) resolveWiki(ctx context.Context, cmd *entities.Command) error
 	}
 	kept := make([]scored, 0, len(pages))
 	var partial []scored
+	found := map[string]int{}
+	textFound := 0
 	for _, page := range pages {
 		title := strings.ToLower(page.Title)
 		body := strings.ToLower(page.Body)
@@ -692,7 +829,26 @@ func (uc Commands) resolveWiki(ctx context.Context, cmd *entities.Command) error
 		for _, tag := range append(append([]string{}, page.Tags...), page.AutoTags...) {
 			tags = append(tags, strings.ToLower(tag))
 		}
-		if crit.Tag != "" && !slices.Contains(tags, strings.ToLower(crit.Tag)) {
+		tagMatch := false
+		for _, tag := range tags {
+			if wanted[tag] {
+				tagMatch = true
+				found["tag:"+tag]++
+			}
+		}
+		// An explicitly named tag is a hard filter; the mapped tags are a signal beside the text.
+		if explicitTag && !tagMatch {
+			continue
+		}
+		if len(wanted) > 0 && !tagMatch && crit.Text == "" {
+			continue
+		}
+		// A page's own clock is its last edit; an untouched page falls back to its creation.
+		pageTime := page.UpdatedAt
+		if pageTime.IsZero() {
+			pageTime = page.CreatedAt
+		}
+		if !WindowContains(pageTime, crit.Window.From, crit.Window.To) {
 			continue
 		}
 		// Every word must appear SOMEWHERE (title, tag or prose). A generic word in the body was
@@ -710,6 +866,9 @@ func (uc Commands) resolveWiki(ctx context.Context, cmd *entities.Command) error
 			default:
 				matchedAll = false
 			}
+		}
+		if len(words) > 0 && score > 0 {
+			textFound++
 		}
 		if len(words) > 0 && !matchedAll {
 			if score == 0 {
@@ -740,9 +899,27 @@ func (uc Commands) resolveWiki(ctx context.Context, cmd *entities.Command) error
 		items = append(items, entities.CommandItem{Ref: s.page.ID.String(), Title: s.page.Title, Kind: "wiki"})
 	}
 	cmd.Items = items
+	if len(crit.Tags) > 0 {
+		for _, tag := range crit.Tags {
+			if n := found["tag:"+strings.ToLower(tag)]; n > 0 {
+				cmd.Mapped = append(cmd.Mapped, entities.CommandName{
+					Name: tag, Kind: "tag", Count: n, Found: n,
+				})
+			}
+		}
+		if crit.Text != "" && textFound > 0 {
+			cmd.Mapped = append(cmd.Mapped, entities.CommandName{
+				Name: crit.Text, Kind: "text", Count: textFound, Found: textFound,
+			})
+		}
+		sortMapped(cmd.Mapped)
+	}
 	if relaxed {
 		cmd.Notes = append(cmd.Notes,
 			fmt.Sprintf("no page has all of %s; these match at least one", strings.Join(words, ", ")))
+	}
+	if cmd.Total == 0 {
+		cmd.Notes = append(cmd.Notes, "no wiki page matches that reading")
 	}
 	return nil
 }
@@ -761,6 +938,11 @@ func (uc Commands) resolveClaims(ctx context.Context, cmd *entities.Command) err
 		if err != nil {
 			return err
 		}
+		if !WindowContains(atom.CreatedAt, crit.Window.From, crit.Window.To) {
+			cmd.Total, cmd.Vault, cmd.Scanned = 0, 1, 1
+			cmd.Notes = append(cmd.Notes, "the referenced claim is outside the time window")
+			return nil
+		}
 		cmd.Items = []entities.CommandItem{{Ref: atom.ID.String(), Title: atom.Claim, Kind: atom.Topic}}
 		cmd.Total, cmd.Vault, cmd.Scanned = 1, 1, 1
 		return nil
@@ -773,6 +955,7 @@ func (uc Commands) resolveClaims(ctx context.Context, cmd *entities.Command) err
 		if err != nil {
 			return err
 		}
+		atoms = filterAtomsByWindow(atoms, crit.Window.From, crit.Window.To)
 		if crit.Order == entities.CommandOrderOldest {
 			slices.Reverse(atoms)
 		}
@@ -790,21 +973,49 @@ func (uc Commands) resolveClaims(ctx context.Context, cmd *entities.Command) err
 
 	items := make([]entities.CommandItem, 0, uc.maxItems())
 	if crit.Text != "" {
+		if uc.Lexical == nil {
+			cmd.Total, cmd.Vault, cmd.Scanned = 0, 0, 0
+			cmd.Notes = append(cmd.Notes, "the lexical search is not configured")
+			return nil
+		}
 		hits, err := uc.Lexical.Search(ctx, crit.Text, "atoms", scan)
 		if err != nil {
 			return err
 		}
 		cmd.Scanned = len(hits)
+		ids := make([]ulid.ULID, 0, len(hits))
+		for _, hit := range hits {
+			if id, parseErr := ulid.ParseStrict(hit.ID); parseErr == nil {
+				ids = append(ids, id)
+			}
+		}
+		byID := map[ulid.ULID]entities.Atom{}
+		if atoms, aErr := uc.Atoms.AtomTextsForIDs(ctx, ids); aErr == nil {
+			for _, atom := range atoms {
+				byID[atom.ID] = atom
+			}
+		}
 		matched := 0
 		for _, hit := range hits {
-			if crit.Topic != "" && !uc.claimHasTopic(ctx, hit.ID, crit.Topic) {
+			id, parseErr := ulid.ParseStrict(hit.ID)
+			if parseErr != nil {
+				continue
+			}
+			atom, ok := byID[id]
+			if !ok {
+				continue
+			}
+			if crit.Topic != "" && !strings.EqualFold(atom.Topic, crit.Topic) {
+				continue
+			}
+			if !WindowContains(atom.CreatedAt, crit.Window.From, crit.Window.To) {
 				continue
 			}
 			matched++
 			if len(items) >= uc.maxItems() {
 				continue
 			}
-			items = append(items, entities.CommandItem{Ref: hit.ID, Title: hit.Title, Kind: "claim"})
+			items = append(items, entities.CommandItem{Ref: hit.ID, Title: hit.Title, Kind: atom.Topic})
 		}
 		cmd.Total = matched
 	} else {
@@ -813,6 +1024,7 @@ func (uc Commands) resolveClaims(ctx context.Context, cmd *entities.Command) err
 			return err
 		}
 		cmd.Scanned = len(atoms)
+		atoms = filterAtomsByWindow(atoms, crit.Window.From, crit.Window.To)
 		if crit.Order == entities.CommandOrderOldest {
 			slices.Reverse(atoms)
 		}
@@ -826,6 +1038,10 @@ func (uc Commands) resolveClaims(ctx context.Context, cmd *entities.Command) err
 			}
 			items = append(items, entities.CommandItem{Ref: a.ID.String(), Title: a.Claim, Kind: a.Topic})
 		}
+		if len(atoms) == scan {
+			cmd.Notes = append(cmd.Notes,
+				fmt.Sprintf("read the newest %d claims; a wider window may have more", scan))
+		}
 	}
 	cmd.Items = items
 	cmd.Vault = cmd.Scanned
@@ -835,18 +1051,19 @@ func (uc Commands) resolveClaims(ctx context.Context, cmd *entities.Command) err
 	return nil
 }
 
-// claimHasTopic re-reads one claim to check the topic. A lexical hit carries no topic, and a claim
-// that does not carry the requested topic is not part of the set.
-func (uc Commands) claimHasTopic(ctx context.Context, id, topic string) bool {
-	parsed, err := ulid.ParseStrict(id)
-	if err != nil {
-		return false
+// filterAtomsByWindow keeps the claims created inside the window. A claim's clock is its creation,
+// not its source's arrival; the two lenses answer different questions.
+func filterAtomsByWindow(atoms []entities.Atom, from, to time.Time) []entities.Atom {
+	if from.IsZero() && to.IsZero() {
+		return atoms
 	}
-	atom, err := uc.Atoms.GetAtom(ctx, parsed)
-	if err != nil {
-		return false
+	out := atoms[:0]
+	for _, atom := range atoms {
+		if WindowContains(atom.CreatedAt, from, to) {
+			out = append(out, atom)
+		}
 	}
-	return strings.EqualFold(atom.Topic, topic)
+	return out
 }
 
 // sourceStateMatches reads the traffic lights: "open" means the derivation is not finished and has
@@ -972,11 +1189,16 @@ func PartialFromCommand(c entities.Command) partialentities.PartialCommand {
 		Total:  c.Total, Vault: c.Vault, Scanned: c.Scanned, Generated: c.Generated,
 		CreatedAt: c.CreatedAt, Items: items,
 		Criteria: partialentities.PartialCommandCriteria{
-			Text: c.Criteria.Text, Tag: c.Criteria.Tag, Kind: c.Criteria.Kind,
+			Text: c.Criteria.Text, Terms: c.Criteria.Terms,
+			Tag: c.Criteria.Tag, Kind: c.Criteria.Kind,
 			Topic: c.Criteria.Topic, FromTopic: c.Criteria.FromTopic,
 			Tags: c.Criteria.Tags, Topics: c.Criteria.Topics,
 			Source: c.Criteria.Source, Atom: c.Criteria.Atom,
-			Since: c.Criteria.Since, State: string(c.Criteria.State),
+			Window: partialentities.PartialCommandWindow{
+				Spec: c.Criteria.Window.Spec, From: c.Criteria.Window.From,
+				To: c.Criteria.Window.To, Timezone: c.Criteria.Window.Timezone,
+			},
+			State: string(c.Criteria.State),
 			Order: string(c.Criteria.Order), BookmarksOnly: c.Criteria.BookmarksOnly,
 			AttachedOnly: c.Criteria.AttachedOnly,
 		},

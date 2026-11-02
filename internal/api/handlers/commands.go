@@ -45,7 +45,7 @@ func (h CommandHandler) Post(w http.ResponseWriter, r *http.Request) {
 	}
 	refs := usecases.CommandRefs{}
 	if req.Context != nil {
-		refs.View, refs.ID = req.Context.View, req.Context.ID
+		refs.View, refs.ID, refs.Timezone = req.Context.View, req.Context.ID, req.Context.Timezone
 	}
 	cmd, err := h.Runner(r.Context(), req.Text, refs)
 	if err != nil {
@@ -118,12 +118,13 @@ func commandPayload(c partialentities.PartialCommand, withItems bool) payloads.C
 		TookMs:    c.Took.Milliseconds(),
 		CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339),
 		Criteria: payloads.CommandCriteria{
-			Text: c.Criteria.Text, Tag: c.Criteria.Tag, Kind: c.Criteria.Kind,
+			Text: c.Criteria.Text, Terms: c.Criteria.Terms,
+			Tag: c.Criteria.Tag, Kind: c.Criteria.Kind,
 			Topic: c.Criteria.Topic, FromTopic: c.Criteria.FromTopic,
 			Tags: c.Criteria.Tags, Topics: c.Criteria.Topics,
 			Source: c.Criteria.Source, Atom: c.Criteria.Atom,
-			Since: durationField(c.Criteria.Since),
-			State: c.Criteria.State, Order: c.Criteria.Order,
+			Window: commandWindowPayload(c.Criteria.Window),
+			State:  c.Criteria.State, Order: c.Criteria.Order,
 			BookmarksOnly: c.Criteria.BookmarksOnly, AttachedOnly: c.Criteria.AttachedOnly,
 		},
 	}
@@ -142,10 +143,17 @@ func commandPayload(c partialentities.PartialCommand, withItems bool) payloads.C
 	return out
 }
 
-// durationField writes a window as the same shape a config uses ("168h"), or empty for "no window".
-func durationField(d time.Duration) string {
-	if d <= 0 {
-		return ""
+// commandWindowPayload writes the window as the spec plus the instants this run resolved it to.
+func commandWindowPayload(w partialentities.PartialCommandWindow) *payloads.CommandWindow {
+	if w.Spec == "" {
+		return nil
 	}
-	return d.String()
+	out := &payloads.CommandWindow{Spec: w.Spec, Timezone: w.Timezone}
+	if !w.From.IsZero() {
+		out.From = w.From.UTC().Format(time.RFC3339)
+	}
+	if !w.To.IsZero() {
+		out.To = w.To.UTC().Format(time.RFC3339)
+	}
+	return out
 }

@@ -27,10 +27,16 @@ func fixture() entities.Command {
 		Total:      2,
 		Vault:      40,
 		Scanned:    40,
+		Took:       1200 * time.Millisecond,
 		CreatedAt:  time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC),
 		Criteria: entities.CommandCriteria{
 			Tag: "cloud", FromTopic: "cloud", Kind: "pdf", State: entities.CommandStateOpen,
-			Since: 7 * 24 * time.Hour, Order: entities.CommandOrderNewest,
+			Window: entities.CommandWindow{
+				Spec: "last-week", Timezone: "Europe/Berlin",
+				From: time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC),
+				To:   time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC),
+			},
+			Order: entities.CommandOrderNewest,
 		},
 		Items: []entities.CommandItem{
 			{Ref: strings.Repeat("a", 64), Title: "Cloud Architecture", Kind: "pdf"},
@@ -55,7 +61,11 @@ func TestStoreRoundTrip(t *testing.T) {
 	if got.Text != want.Text || got.Lens != want.Lens || got.URL != want.URL {
 		t.Fatalf("record = %+v", got)
 	}
-	if got.Criteria.Tag != "cloud" || got.Criteria.Kind != "pdf" || got.Criteria.Since != want.Criteria.Since {
+	if got.Criteria.Tag != "cloud" || got.Criteria.Kind != "pdf" ||
+		got.Criteria.Window.Spec != want.Criteria.Window.Spec ||
+		got.Criteria.Window.Timezone != want.Criteria.Window.Timezone ||
+		!got.Criteria.Window.From.Equal(want.Criteria.Window.From) ||
+		!got.Criteria.Window.To.Equal(want.Criteria.Window.To) {
 		t.Fatalf("criteria = %+v", got.Criteria)
 	}
 	if got.Criteria.FromTopic != "cloud" {
@@ -70,6 +80,9 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	if !got.CreatedAt.Equal(want.CreatedAt) {
 		t.Fatalf("created = %v, want %v", got.CreatedAt, want.CreatedAt)
+	}
+	if got.Took != want.Took {
+		t.Fatalf("took = %v, want %v", got.Took, want.Took)
 	}
 }
 

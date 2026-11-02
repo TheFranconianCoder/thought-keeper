@@ -3,7 +3,6 @@ package usecases
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 
@@ -16,6 +15,7 @@ func TestParseCommand(t *testing.T) {
 	cases := []struct {
 		text  string
 		lens  entities.CommandLens
+		route string
 		check func(t *testing.T, c entities.CommandCriteria)
 	}{
 		{
@@ -34,14 +34,59 @@ func TestParseCommand(t *testing.T) {
 			check: func(t *testing.T, c entities.CommandCriteria) { same(t, "tag", c.Tag, "cloud") },
 		},
 		{
-			text: "zeige mir alle quellen, die ich letzte woche hinzugefügt habe und die noch nicht destilliert sind",
-			lens: entities.CommandSources,
+			text:  "zeige mir alle quellen, die ich letzte woche hinzugefügt habe und die noch nicht destilliert sind",
+			lens:  entities.CommandSources,
+			route: "filter",
 			check: func(t *testing.T, c entities.CommandCriteria) {
 				same(t, "state", string(c.State), string(entities.CommandStateOpen))
-				if c.Since != 7*24*time.Hour {
-					t.Fatalf("since = %v, want a week", c.Since)
-				}
+				same(t, "window", c.Window.Spec, "last-week")
 				same(t, "text", c.Text, "")
+			},
+		},
+		{
+			text:  "Sources der letzten 2 Tage",
+			lens:  entities.CommandSources,
+			route: "filter",
+			check: func(t *testing.T, c entities.CommandCriteria) {
+				same(t, "window", c.Window.Spec, "last-2d")
+			},
+		},
+		{
+			// A question-shaped LIST request is still a list: "what do I have from X?" names
+			// words, not a request for prose.
+			text:  "Was haben wir von DHH?",
+			lens:  entities.CommandSources,
+			route: "filter",
+			check: func(t *testing.T, c entities.CommandCriteria) {
+				same(t, "text", c.Text, "DHH")
+			},
+		},
+		{
+			text:  "Quellen von Alistair Cockburn",
+			lens:  entities.CommandSources,
+			route: "filter",
+			check: func(t *testing.T, c entities.CommandCriteria) {
+				same(t, "text", c.Text, "Alistair Cockburn")
+			},
+		},
+		{
+			text:  "show me sourecs tagged cloud added this week",
+			lens:  entities.CommandSources,
+			route: "filter",
+			check: func(t *testing.T, c entities.CommandCriteria) {
+				same(t, "tag", c.Tag, "cloud")
+				same(t, "window", c.Window.Spec, "this-week")
+				same(t, "text", c.Text, "")
+			},
+		},
+		{
+			text:  "Was sagen die Quellen über Remote Work?",
+			lens:  entities.CommandAsk,
+			route: "ask",
+			check: func(t *testing.T, c entities.CommandCriteria) {
+				if c.Text == "" {
+					t.Fatal("a question keeps its wording")
+				}
 			},
 		},
 		{
@@ -50,12 +95,12 @@ func TestParseCommand(t *testing.T) {
 			check: func(t *testing.T, c entities.CommandCriteria) { same(t, "topic", c.Topic, "caching") },
 		},
 		{
-			text: "welche quellen sind fehlgeschlagen?",
-			lens: entities.CommandAsk,
+			// "Which sources failed?" is the Attention list, not a request for prose.
+			text:  "welche quellen sind fehlgeschlagen?",
+			lens:  entities.CommandAttention,
+			route: "filter",
 			check: func(t *testing.T, c entities.CommandCriteria) {
-				if c.Text == "" {
-					t.Fatal("a question keeps its wording")
-				}
+				same(t, "state", string(c.State), string(entities.CommandStateFailed))
 			},
 		},
 		{
@@ -92,6 +137,9 @@ func TestParseCommand(t *testing.T) {
 				t.Fatalf("ParseCommand: %v", err)
 			}
 			same(t, "lens", string(parsed.Lens), string(tc.lens))
+			if tc.route != "" {
+				same(t, "route", parsed.Route, tc.route)
+			}
 			tc.check(t, parsed.Criteria)
 		})
 	}
@@ -214,13 +262,15 @@ func TestWikiAndStatusNarrowing(t *testing.T) {
 		t.Fatal("a source kind narrows a source list")
 	}
 
-	// The reading is translated for the wiki too, and the translation is recorded.
+	// The reading is translated for the wiki too, and the translation is recorded. A wiki page has
+	// its own edit time, so the window is NOT one of the removed criteria.
 	parsed := ParsedCommand{Lens: entities.CommandWiki, Criteria: entities.CommandCriteria{
-		Text: "github", Kind: "pdf", Since: 24 * time.Hour,
+		Text: "github", Kind: "pdf", Window: entities.CommandWindow{Spec: "last-week"},
 	}}
 	reconcileCriteria(&parsed)
 	same(t, "text", parsed.Criteria.Text, "github")
 	same(t, "kind", parsed.Criteria.Kind, "")
+	same(t, "window", parsed.Criteria.Window.Spec, "last-week")
 	if len(parsed.Notes) == 0 {
 		t.Fatal("the removed criteria were not named")
 	}

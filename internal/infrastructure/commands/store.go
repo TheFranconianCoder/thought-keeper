@@ -44,6 +44,7 @@ type itemFrontmatter struct {
 
 type criteriaFrontmatter struct {
 	Text          string   `yaml:"text,omitempty"`
+	Terms         []string `yaml:"terms,omitempty"`
 	Tag           string   `yaml:"tag,omitempty"`
 	Kind          string   `yaml:"kind,omitempty"`
 	Topic         string   `yaml:"topic,omitempty"`
@@ -52,7 +53,11 @@ type criteriaFrontmatter struct {
 	FromTopic     string   `yaml:"from_topic,omitempty"`
 	Source        string   `yaml:"source,omitempty"`
 	Atom          string   `yaml:"atom,omitempty"`
-	Since         string   `yaml:"since,omitempty"`
+	Window        string   `yaml:"window,omitempty"`
+	WindowFrom    string   `yaml:"window_from,omitempty"`
+	WindowTo      string   `yaml:"window_to,omitempty"`
+	WindowZone    string   `yaml:"window_timezone,omitempty"`
+	Since         string   `yaml:"since,omitempty"` // legacy: a duration, read as a rolling window
 	State         string   `yaml:"state,omitempty"`
 	Order         string   `yaml:"order,omitempty"`
 	BookmarksOnly bool     `yaml:"bookmarks_only,omitempty"`
@@ -71,6 +76,7 @@ type commandFrontmatter struct {
 	Total      int                 `yaml:"total"`
 	Vault      int                 `yaml:"vault,omitempty"`
 	Scanned    int                 `yaml:"scanned,omitempty"`
+	TookMs     int64               `yaml:"took_ms,omitempty"`
 	Created    string              `yaml:"created"`
 	Criteria   criteriaFrontmatter `yaml:"criteria"`
 	Mapped     []mappedFrontmatter `yaml:"mapped,omitempty"`
@@ -241,13 +247,16 @@ func encode(c entities.Command) ([]byte, error) {
 		ID: c.ID.String(), Text: c.Text, Lens: string(c.Lens), URL: c.URL,
 		Resolution: c.Resolution, Rationale: c.Rationale, Notes: c.Notes,
 		Generated: c.Generated, Total: c.Total, Vault: c.Vault, Scanned: c.Scanned,
+		TookMs:  c.Took.Milliseconds(),
 		Created: c.CreatedAt.UTC().Format(time.RFC3339),
 		Criteria: criteriaFrontmatter{
-			Text: c.Criteria.Text, Tag: c.Criteria.Tag, Kind: c.Criteria.Kind,
+			Text: c.Criteria.Text, Terms: c.Criteria.Terms,
+			Tag: c.Criteria.Tag, Kind: c.Criteria.Kind,
 			Topic: c.Criteria.Topic, FromTopic: c.Criteria.FromTopic,
 			Tags: c.Criteria.Tags, Topics: c.Criteria.Topics,
 			Source: c.Criteria.Source, Atom: c.Criteria.Atom,
-			Since: durationString(c.Criteria.Since),
+			Window: c.Criteria.Window.Spec, WindowFrom: timeString(c.Criteria.Window.From),
+			WindowTo: timeString(c.Criteria.Window.To), WindowZone: c.Criteria.Window.Timezone,
 			State: string(c.Criteria.State), Order: string(c.Criteria.Order),
 			BookmarksOnly: c.Criteria.BookmarksOnly, AttachedOnly: c.Criteria.AttachedOnly,
 		},
@@ -284,11 +293,23 @@ func renderBody(c entities.Command) string {
 	if len(c.Mapped) > 0 {
 		b.WriteString("\n")
 	}
+	if c.Criteria.Window.Spec != "" {
+		fmt.Fprintf(&b, "- window %s (%s .. %s, %s)\n",
+			c.Criteria.Window.Spec,
+			timeString(c.Criteria.Window.From), timeString(c.Criteria.Window.To),
+			c.Criteria.Window.Timezone)
+	}
+	if len(c.Criteria.Terms) > 0 {
+		fmt.Fprintf(&b, "- terms %s\n", strings.Join(c.Criteria.Terms, ", "))
+	}
 	for _, note := range c.Notes {
 		fmt.Fprintf(&b, "- %s\n", note)
 	}
-	if len(c.Notes) > 0 {
+	if len(c.Notes) > 0 || c.Criteria.Window.Spec != "" || len(c.Criteria.Terms) > 0 {
 		b.WriteString("\n")
+	}
+	if c.Took > 0 {
+		fmt.Fprintf(&b, "took %s\n", c.Took.Round(time.Millisecond))
 	}
 	fmt.Fprintf(&b, "%d of %d shown", len(c.Items), c.Total)
 	if c.Scanned > 0 && c.Vault > c.Scanned {
@@ -335,13 +356,20 @@ func decode(b []byte) (entities.Command, error) {
 		ID: id, Text: fm.Text, Lens: entities.CommandLens(fm.Lens), URL: fm.URL,
 		Resolution: fm.Resolution, Rationale: fm.Rationale, Notes: fm.Notes,
 		Generated: fm.Generated, Total: fm.Total, Vault: fm.Vault, Scanned: fm.Scanned,
+		Took:      time.Duration(fm.TookMs) * time.Millisecond,
 		CreatedAt: created,
 		Criteria: entities.CommandCriteria{
-			Text: fm.Criteria.Text, Tag: fm.Criteria.Tag, Kind: fm.Criteria.Kind,
+			Text: fm.Criteria.Text, Terms: fm.Criteria.Terms,
+			Tag: fm.Criteria.Tag, Kind: fm.Criteria.Kind,
 			Topic: fm.Criteria.Topic, FromTopic: fm.Criteria.FromTopic,
 			Tags: fm.Criteria.Tags, Topics: fm.Criteria.Topics,
 			Source: fm.Criteria.Source, Atom: fm.Criteria.Atom,
-			Since: parseDuration(fm.Criteria.Since),
+			Window: entities.CommandWindow{
+				Spec:     windowSpec(fm.Criteria.Window, fm.Criteria.Since),
+				From:     parseOptionalTime(fm.Criteria.WindowFrom),
+				To:       parseOptionalTime(fm.Criteria.WindowTo),
+				Timezone: fm.Criteria.WindowZone,
+			},
 			State: entities.CommandState(fm.Criteria.State), Order: entities.CommandOrder(fm.Criteria.Order),
 			BookmarksOnly: fm.Criteria.BookmarksOnly, AttachedOnly: fm.Criteria.AttachedOnly,
 		},
@@ -350,22 +378,37 @@ func decode(b []byte) (entities.Command, error) {
 	}, nil
 }
 
-func durationString(d time.Duration) string {
-	if d <= 0 {
+// timeString writes an optional instant; the empty string is the zero time.
+func timeString(t time.Time) string {
+	if t.IsZero() {
 		return ""
 	}
-	return d.String()
+	return t.UTC().Format(time.RFC3339)
 }
 
-func parseDuration(s string) time.Duration {
-	if s == "" {
-		return 0
+// windowSpec prefers the explicit spec; an old record's `since` duration is the fallback.
+func windowSpec(spec, legacy string) string {
+	if spec != "" {
+		return spec
 	}
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return 0
+	return legacyWindowSpec(legacy)
+}
+
+// legacyWindowSpec reads a record written before the window spec existed. The old `since` was a
+// rolling duration, so "24h0m0s" becomes "last-24h"; a non-whole hour is rounded up to the hour.
+func legacyWindowSpec(raw string) string {
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return ""
 	}
-	return d
+	hours := int(d / time.Hour)
+	if d%time.Hour != 0 {
+		hours++
+	}
+	if hours <= 0 {
+		hours = 1
+	}
+	return fmt.Sprintf("last-%dh", hours)
 }
 
 // parseOptionalTime reads a frontmatter timestamp. An empty or malformed value is the zero time: the

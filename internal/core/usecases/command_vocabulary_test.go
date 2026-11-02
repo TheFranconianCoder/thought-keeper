@@ -29,7 +29,7 @@ func realVocabulary() map[string]int {
 // other software-* tag. That is what inverse document frequency is for: "software" is in three
 // names and identifies none of them, "architecture" is in one.
 func TestMatchNamesPrefersTheSpecificWord(t *testing.T) {
-	got := matchNames([]string{"software", "architecture", "architektur"}, realVocabulary())
+	got := matchNames([]string{"software", "architecture", "architektur"}, realVocabulary(), nil, 0)
 	if len(got) == 0 {
 		t.Fatal("nothing matched")
 	}
@@ -41,7 +41,7 @@ func TestMatchNamesPrefersTheSpecificWord(t *testing.T) {
 // The same word in another language is a MATCH, not a coincidence: "Architektur" and "architecture"
 // are two edits apart, and a loanword pair like that is exactly what the matcher should catch.
 func TestMatchNamesBridgesLoanwords(t *testing.T) {
-	got := matchNames([]string{"architektur"}, realVocabulary())
+	got := matchNames([]string{"architektur"}, realVocabulary(), nil, 0)
 	if len(got) == 0 || got[0].Name != "software-architecture" {
 		t.Fatalf("a German loanword did not reach its English name: %+v", got)
 	}
@@ -50,7 +50,7 @@ func TestMatchNamesBridgesLoanwords(t *testing.T) {
 // Recall must not become noise: an unrelated word matches nothing, however it would be spelled.
 func TestMatchNamesKeepsUnrelatedWordsOut(t *testing.T) {
 	for _, term := range []string{"urlaub", "quux", "zzz"} {
-		for _, m := range matchNames([]string{term}, realVocabulary()) {
+		for _, m := range matchNames([]string{term}, realVocabulary(), nil, 0) {
 			t.Fatalf("%q matched %q", term, m.Name)
 		}
 	}
@@ -100,11 +100,11 @@ func (f fakeVocab) Write(entities.Vocabulary) error { return nil }
 
 // The tag a human put on a source and the topic an agent gave a claim are matched the same way.
 func TestMatchNamesHandlesHyphenatedNames(t *testing.T) {
-	got := matchNames([]string{"software architecture"}, realVocabulary())
+	got := matchNames([]string{"software architecture"}, realVocabulary(), nil, 0)
 	if len(got) == 0 || got[0].Name != "software-architecture" {
 		t.Fatalf("a hyphenated name was not matched: %+v", got)
 	}
-	got = matchNames([]string{"tooling"}, realVocabulary())
+	got = matchNames([]string{"tooling"}, realVocabulary(), nil, 0)
 	if len(got) == 0 || got[0].Name != "tooling" {
 		t.Fatalf("an exact name was not matched: %+v", got)
 	}
@@ -112,8 +112,54 @@ func TestMatchNamesHandlesHyphenatedNames(t *testing.T) {
 
 // Nothing in the vocabulary → nothing. An honest empty answer beats a vague one.
 func TestMatchNamesReturnsNothingForNonsense(t *testing.T) {
-	if got := matchNames([]string{"quux", "zzz"}, realVocabulary()); len(got) != 0 {
+	if got := matchNames([]string{"quux", "zzz"}, realVocabulary(), nil, 0); len(got) != 0 {
 		t.Fatalf("nonsense matched %+v", got)
+	}
+}
+
+// A shared token in two multi-word names is not a name: "machine-learning" must not drag in the
+// generic tag "learning", and "artificial-intelligence" must not drag in "intelligence-community".
+func TestMatchNamesRejectsTheGenericNameTrap(t *testing.T) {
+	names := map[string]int{
+		"learning":                64,
+		"machine-learning":        15,
+		"intelligence-community":  4,
+		"artificial-intelligence": 4,
+	}
+	got := matchNames([]string{"machine-learning"}, names, nil, 0)
+	if len(got) != 1 || got[0].Name != "machine-learning" {
+		t.Fatalf("machine-learning matched %+v, want only the compound name", got)
+	}
+	got = matchNames([]string{"artificial-intelligence"}, names, nil, 0)
+	if len(got) != 1 || got[0].Name != "artificial-intelligence" {
+		t.Fatalf("artificial-intelligence matched %+v, want only the compound name", got)
+	}
+}
+
+// A name the vault uses for a large part of itself is a field, not an answer — unless the reader
+// named its words. "agile" must not drag in "agile-development"; "open source" may keep it.
+func TestMatchNamesRefusesBroadNamesUnlessNamed(t *testing.T) {
+	names := map[string]int{
+		"agile":             141,
+		"agile-development": 417,
+		"agile-coaching":    54,
+		"open-source":       138,
+	}
+	got := matchNames([]string{"agile", "agile-development"}, names, map[string]bool{"agile": true}, 1554)
+	for _, m := range got {
+		if m.Name == "agile-development" {
+			t.Fatalf("a broad name was kept without being named: %+v", got)
+		}
+	}
+	got = matchNames([]string{"open-source"}, names, map[string]bool{"open-source": true}, 1554)
+	found := false
+	for _, m := range got {
+		if m.Name == "open-source" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("a name the reader named was dropped: %+v", got)
 	}
 }
 

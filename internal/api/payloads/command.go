@@ -12,25 +12,38 @@ type CommandRequest struct {
 type CommandContext struct {
 	View string `json:"view,omitempty"`
 	ID   string `json:"id,omitempty"`
+	// Timezone is the reader's IANA timezone (Intl.DateTimeFormat().resolvedOptions().timeZone).
+	// It decides what "yesterday" and "this week" mean for the command's window.
+	Timezone string `json:"timezone,omitempty"`
+}
+
+// CommandWindow is a command's time window: the reader's phrase family, the instants it resolved to
+// for this run, and the timezone that decided the calendar.
+type CommandWindow struct {
+	Spec     string `json:"spec,omitempty"`
+	From     string `json:"from,omitempty"`
+	To       string `json:"to,omitempty"`
+	Timezone string `json:"timezone,omitempty"`
 }
 
 // CommandCriteria is the interpretation the command was resolved from. The banner shows it, so a
 // reader can tell a good reading from a bad one instead of trusting a list.
 type CommandCriteria struct {
-	Text          string   `json:"text,omitempty"`
-	Tag           string   `json:"tag,omitempty"`
-	Kind          string   `json:"kind,omitempty"`
-	Topic         string   `json:"topic,omitempty"`
-	Tags          []string `json:"tags,omitempty"`
-	Topics        []string `json:"topics,omitempty"`
-	FromTopic     string   `json:"from_topic,omitempty"`
-	Source        string   `json:"source,omitempty"`
-	Atom          string   `json:"atom,omitempty"`
-	Since         string   `json:"since,omitempty"`
-	State         string   `json:"state,omitempty"`
-	Order         string   `json:"order,omitempty"`
-	BookmarksOnly bool     `json:"bookmarks_only,omitempty"`
-	AttachedOnly  bool     `json:"attached_only,omitempty"`
+	Text          string         `json:"text,omitempty"`
+	Terms         []string       `json:"terms,omitempty"`
+	Tag           string         `json:"tag,omitempty"`
+	Kind          string         `json:"kind,omitempty"`
+	Topic         string         `json:"topic,omitempty"`
+	Tags          []string       `json:"tags,omitempty"`
+	Topics        []string       `json:"topics,omitempty"`
+	FromTopic     string         `json:"from_topic,omitempty"`
+	Source        string         `json:"source,omitempty"`
+	Atom          string         `json:"atom,omitempty"`
+	Window        *CommandWindow `json:"window,omitempty"`
+	State         string         `json:"state,omitempty"`
+	Order         string         `json:"order,omitempty"`
+	BookmarksOnly bool           `json:"bookmarks_only,omitempty"`
+	AttachedOnly  bool           `json:"attached_only,omitempty"`
 }
 
 // CommandName is one mapped vocabulary name and what it contributed.

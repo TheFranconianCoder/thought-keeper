@@ -75,7 +75,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/asks/{id}` | One saved question and answer |
 | `DELETE` | `/api/v1/asks/{id}` | Move a saved Ask to `.trash/asks/` |
 | `POST` | `/api/v1/query` | Ask the claims `{question, source?}` → `202 {run_id}` |
-| `POST` | `/api/v1/commands` | **The assistant.** `{text, context?}` (`context: {view, id}` names the surface the request was made from, so "this claim" resolves) → `201` with the command record (`id, lens, url, criteria, total, vault, scanned, items`). Synchronous: the reading plus one bounded completion. An utterance that names no lens and no criterion answers `422 unparsed` — never "the whole vault". Publishes the `command` event (`running` → `done`) so every open window follows it |
+| `POST` | `/api/v1/commands` | **The assistant.** `{text, context?}` (`context: {view, id, timezone?}` names the surface the request was made from, so "this claim" resolves and "yesterday" uses the reader's calendar) → `201` with the command record (`id, lens, url, criteria` incl. `criteria.window`/`criteria.terms`, `total, vault, scanned, took_ms, items`). Synchronous: the reading plus one bounded completion. An utterance that names no lens and no criterion answers `422 unparsed` — never "the whole vault". Publishes the `command` event (`running` → `done`) so every open window follows it |
 | `GET` | `/api/v1/commands` | The command history, newest first (`limit, offset`) |
 | `GET` | `/api/v1/commands/{id}` | One command, its criteria and its materialized set |
 | `DELETE` | `/api/v1/commands/{id}` | Move one command to `.trash/commands/` |
@@ -134,6 +134,13 @@ bounded live tail. The PWA patches only the containers each event names. See `pw
 when it has been resolved, `{status:"failed", error}` when it could not be read. Every open window
 follows the address once per command id — that is what makes the assistant a remote control, and
 why the event is keyed by the command's id instead of being coalesced by type.
+
+A command's `criteria.window` is `{spec, from, to, timezone}`: `spec` is the reader's phrase family
+(`yesterday`, `last-7d`, `2026-10-01..2026-10-31`), `from`/`to` are the instants this run resolved
+it to, and `timezone` is the zone that decided the calendar. `criteria.terms` is the vocabulary
+bridge, `mapped` is what the names and mentions contributed, and `took_ms` is persisted with the
+record. A question that asks which items exist is a list (`resolution: filter` or `mapped`), not
+Ask; only a prose question gets `resolution: ask`.
 
 ## Error format
 

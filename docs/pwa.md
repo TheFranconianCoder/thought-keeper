@@ -86,17 +86,25 @@ The field sends what the reader is looking at with the request, so a claim or a 
 referenced as "this one" without typing its id; on a claim's page the field offers "the sources of
 this claim" as a starting point. The wiki honours an assistant result too (`?command=`) and shows
 the record's pages in the record's order, with the same banner; typing in its search field takes the
-filter back. **The assistant is a command line, not a chat.** A permanent button in the top bar (`⌘J`) opens one
-field: say what to show, and the app resolves it to a lens, a filter and a set. It is not a
+filter back. **The assistant is a navigator, not a chat.** A permanent button in the top bar (`⌘J`)
+opens one field: say what to show, and the app resolves it to a lens, a filter and a set. It is not a
 conversation — one request, one GUI state — and it is not a second brain: the request is read once
-and the result is an ordinary list. While a command is in flight the button pulses, including when
-another window or the CLI sent it. A list that is an assistant result carries a **banner** above the
-rows: the utterance, the criteria the request was actually read as (`tag cloud · added ≤ 7 days ·
-not finished`), the count, "run again", "keep as a filter" (only when the reading has named facets)
-and a close button. The same banner appears when an old request is opened again — it is the same
-address, so it is the same view. There is no history lens, and no command is kept forever — the
-assistant's field lists the recent commands while it is open, and the Start lens lists the three
-latest QUESTIONS, which are answers the reader owns.
+and the result is an ordinary list. The field explains the shapes: **where** (sources, claims,
+wiki, attention, status), **what** (tag, kind, time, state, bookmarks, attached), **subject** (a tag
+or topic, or words that name one), **reference** ("this claim", "this source"), and the **question**
+rule. A question is
+not automatically Ask: a question that asks WHICH items exist is a list ("Was haben wir von DHH?"
+is a Sources filter, "Welche Quellen sind fehlgeschlagen?" is Attention); only a question that wants
+prose goes to Ask. The vault stores no authors, so "from/by X" is read as "about X". Time means
+when a source ARRIVED, when a claim was CREATED or when a wiki page was last EDITED — never
+publication. While a command is in flight the button pulses, including when another window or the
+CLI sent it. A list that is an assistant result carries a **banner** above the rows: the utterance,
+the criteria the request was actually read as (`tag cloud · added yesterday · not finished`), the
+count, "run again" and a close button. A mapped result shows the vault's names and the lexical
+mentions it used, with their counts, plus the terms that bridged them; the same banner appears when
+an old request is opened again — it is the same address, so it is the same view. There is no history
+lens, and no command is kept forever — the assistant's field lists the recent commands while it is
+open, and the Start lens lists the three latest QUESTIONS, which are answers the reader owns.
 
 ## 2. Routes and state
 
@@ -133,8 +141,8 @@ latest QUESTIONS, which are answers the reader owns.
   count, its pages and its scroll height exactly as with a tag filter.
 - **That address expires.** `assistant.retention` (a week by default) prunes the records on its own
   daily cadence (`assistant.prune_interval`), so a bookmark on an assistant result dies with it —
-  and says so. "Keep as a filter" is the escape: it
-  drops the id and leaves an address that means the same thing forever.
+  and says so. The named facets beside the id still filter after the record is gone; a set built
+  from free text or a time window lives only in the record and dies with it.
 - **Lists are flat indexes.** Claims, Wiki, Sources, Ask and Bookmarks share one row grammar
   (leading icon, title, secondary line, trailing metadata/actions). Grouping — a host in Bookmarks,
   a tag in Ask — is a section header, not a card; framed cards belong to detail pages.

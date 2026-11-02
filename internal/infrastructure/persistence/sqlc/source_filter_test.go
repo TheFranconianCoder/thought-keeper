@@ -103,6 +103,20 @@ func TestSourceListWindowFiltersTheCount(t *testing.T) {
 	check("bookmark + query", entities.SourceFilter{BookmarksOnly: true, Query: "saved"}, 1)
 	check("no match", entities.SourceFilter{Query: "no-such-source"}, 0)
 
+	// The arrival window is part of the FILTER, in both the list and the count. An older source is
+	// added after the checks above so the "all" count stays the baseline.
+	hashOld := strings.Repeat("77", 32)
+	if err := repo.UpsertSource(ctx, entities.Source{
+		ID: ulid.Make(), Hash: hashOld, Kind: entities.SourceKindMD, Ext: ".md",
+		Path: hashOld + ".md", Title: "An older source", Bytes: 1, TreeState: entities.TreeNone,
+		ImportedAt: now.Add(-48 * time.Hour), Meta: `{"language":"en"}`,
+	}); err != nil {
+		t.Fatalf("old source: %v", err)
+	}
+	check("since 24h", entities.SourceFilter{Since: now.Add(-24 * time.Hour)}, 6)
+	check("since 48h", entities.SourceFilter{Since: now.Add(-48 * time.Hour)}, 7)
+	check("until 24h", entities.SourceFilter{Until: now.Add(-24 * time.Hour)}, 1)
+
 	// A page's count is the filtered total even when only one row was asked for.
 	list, err := repo.ListSources(ctx, entities.SourceFilter{Query: "rust"}, 1, 0)
 	if err != nil {

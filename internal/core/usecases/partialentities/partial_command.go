@@ -22,10 +22,20 @@ type PartialCommandItem struct {
 	Why   string
 }
 
+// PartialCommandWindow is the window a command was read with: the spec the reader's phrase family
+// maps to, the instants it resolved to, and the timezone that decided the calendar.
+type PartialCommandWindow struct {
+	Spec     string
+	From     time.Time
+	To       time.Time
+	Timezone string
+}
+
 // PartialCommandCriteria is the interpretation a command was resolved from: what the banner shows
-// ("applied: tag cloud · added ≤ 7 days · plant open") and what "run again" re-resolves.
+// ("applied: tag cloud · added yesterday · plant open") and what "run again" re-resolves.
 type PartialCommandCriteria struct {
 	Text          string
+	Terms         []string
 	Tag           string
 	Kind          string
 	Topic         string
@@ -34,7 +44,7 @@ type PartialCommandCriteria struct {
 	Topics        []string
 	Source        string
 	Atom          string
-	Since         time.Duration
+	Window        PartialCommandWindow
 	State         string
 	Order         string
 	BookmarksOnly bool

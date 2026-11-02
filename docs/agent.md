@@ -161,9 +161,11 @@ it. The model's only job is the READING — which lens, which of the app's own d
 order. It never writes a URL, never invents a hash and never answers the request.
 
 - **A closed schema.** `lens` (`sources|claims|wiki|status|attention|ask`), `text`, `tag`, `topic`,
-  `kind` (`md|pdf|txt|epub|url`), `since`, `state` (`open|failed|done`), `order`, `bookmarks`,
+  `kind` (`md|pdf|txt|epub|url`), `window`, `state` (`open|failed|done`), `order`, `bookmarks`,
   `attached`. Every field is optional; unknown fields are dropped, and an unknown clause is not
-  silently accepted — the reading is validated field by field in Go.
+  silently accepted — the reading is validated field by field in Go. `window` is one of `today`,
+  `yesterday`, `this-week`, `last-week`, `this-month`, `last-month`, `last-<N>h|d|w|m` or
+  `YYYY-MM-DD..YYYY-MM-DD`.
 - **The vault's own vocabulary goes in.** The prompt carries the known source tags and claim topics
   (bounded), so a plausible word cannot become a filter that matches nothing. A word that is not in
   them stays free text and goes to the lexical search.
@@ -177,40 +179,63 @@ order. It never writes a URL, never invents a hash and never answers the request
   request that would need the model to look at the content — is research, even when the lens is as
   small as the wiki. Word-matching is the no-model fallback, not the answer: a page that says
   "projects" once is not a page ABOUT projects, and only a reading can tell the two apart.
+- **A question is not automatically Ask.** `ask` is for PROSE: an explanation, a synthesis, a
+  comparison, an answer. A question that asks WHICH items exist is still a list: "Was haben wir von
+  DHH?" is a Sources filter, "Welche Quellen sind fehlgeschlagen?" is the Attention list. A question
+  mark alone never routes to Ask.
+- **A person is a subject, never an author.** The vault stores no authors. "Sources from/by X" is
+  read as "sources about X": the name goes into `text`, the server searches the claims and titles,
+  and may also map the person's core ideas (the vault's own topics/tags) when the name itself is
+  sparse. The assistant never claims that a source was written by a person.
 - **Two routes, and the model picks one.** `filter` is for a request that is EXACTLY expressible
   with the vault's own fields (tag, kind, arrival window, step state, bookmarks, attached, a literal
   word search): the resolution is deterministic, exact and complete. `research` is for everything
   that needs judgement about what the content says — "sources about 37signals" is not a source field,
-  it is a question about the claims. `ask` delegates a question to the query agent.
+  it is a question about the claims; its resolution is `mapped`. `ask` delegates a prose question to
+  the query agent.
 - **A subject request is mapped onto the vault's OWN semantic layer.** Every source carries tags an
   LLM derived from its claims; every claim carries a flat topic. Those names are the index a subject
   request is answered from: the tag `software-architecture` covers 67 sources without reading one.
-  The flow is `words → terms → NAMES → the set`:
-  - the model turns the reader's words into 3–6 search terms (translation, the established domain
+  The flow is `words → terms → NAMES + mentions → the set`:
+  - the model turns the reader's words into 2–4 search terms (translation, the established domain
     noun, hyphenated forms). It never names a tag or a topic — the vocabulary is the authority on
-    names, and a model that invents one produces a filter for nothing;
+    names, and a model that invents one produces a filter for nothing. The terms must REPLACE the
+    reader's words, not add related concepts: "LLM" must not add "open-source";
   - the server matches those terms (and the request's own words) against the real names, in Go, with
     word-level matching and inverse document frequency: "architecture" identifies a name that
-    "software" (in three names) does not. Four similarity rules, weakest last: exact name, the same
-    word after a plural/German suffix, one edit away (two in a long word), and the same Cologne
-    phonetic code — which is what carries "Müller/Miller". The curated ALIAS table is consulted
-    first, so a name a curation merged away still lands on the one the vault uses now;
-  - the set is a JOIN: tagged sources, plus the sources whose claims carry the mapped topics.
-  Both are index reads. No content is read, no candidate is judged with an excerpt, nothing is
-  summarized. Reading content was the earlier design: slow, unreproducible, and worse than the
-  metadata the vault already had.
+    "software" (in three names) does not. Exact and full-phrase matches beat a partial one; a single
+    shared token in two multi-word names is not a name ("learning" is not "machine-learning", and
+    "intelligence-community" is not "artificial-intelligence"). A model-only term is downweighted;
+  - a BROAD name is refused unless the reader named its words themselves: `agile-development` (417
+    sources) is a field, not the answer to "agile"; `open-source` survives "open source" and not an
+    "LLM" expansion. The terms are recorded with the command, so a mapping is checkable;
+  - the set is a JOIN: tagged sources, the sources whose claims carry the mapped topics, and the
+    LEXICAL channel. The lexical channel is a strict AND over `atoms_fts` (the claims that mention
+    the words, mapped to their sources) plus the source's own title/URL/tag text. It is what carries
+    a person's name when the vault has no author metadata. No source content is read, no candidate
+    is judged with an excerpt, nothing is summarized. Reading content was the earlier design: slow,
+    unreproducible, and worse than the metadata the vault already had.
 - **Without a model the same matcher runs on the request's own words.** When the wording agrees with
   the vault's names it still finds them; when it does not, the record says the match ran without the
   model instead of pretending the vault is empty.
-- **The text of a filter is matched WORD BY WORD, not as a substring.** "Software Architektur" must
-  not depend on that exact phrase appearing in a title: every word must be found (in a source's
-  title/name/URL/tags, in a wiki page's title/tags/prose), and only when nothing has all of them is
-  the reading relaxed to "any word" — with a note that says so. Its one-sentence rationale is
-  stored with the set and shown in the banner: a curated set is a different promise from an exact
-  filter, and the reader must be able to tell them apart.
+- **The text of a filter is literal, and it has two channels.** A source's words are matched in SQL
+  over title, original name, URL and tags; when nothing matches there, the strict claims channel
+  finds the claims that mention the words and maps their provenance to sources. A wiki page is
+  matched word by word over title/tags/prose. The reading is stored with the set: a curated set is a
+  different promise from an exact filter, and the reader must be able to tell them apart.
+- **A time window is a SPEC, not a pair of instants.** `yesterday` must mean the reader's yesterday,
+  and "run again" must re-anchor it. Calendar terms use the reader's IANA timezone (the PWA sends
+  it): `today` is local midnight to now, `yesterday` the previous local day, `this-week` Monday to
+  now, `last-week` the previous Monday–Sunday, `this-month`/`last-month` the local month.
+  `last-Nh|d|w|m` are rolling windows. The vault knows ARRIVAL (a source), CREATION (a claim) and the
+  last EDIT (a wiki page) — never publication. A source FILTER applies its window in SQL
+  (`imported_at`), so a window over an old part of the vault is not lost to a scan limit; a mapped
+  set applies it to the joined sources.
 - **The set is materialized** (`commands/<id>.md`), which is what makes "what was true then" and
   "what is true now" two different, honest things: the record keeps its members, a deleted source
-  stops resolving, and "run again" re-resolves the criteria into a new record.
+  stops resolving, and "run again" re-resolves the criteria into a new record. The record also keeps
+  the resolved window (`from`/`to`/`timezone`), the vocabulary `terms` and the end-to-end `took_ms`,
+  so a run can be audited after the fact.
 - **No tools and no run row of its own.** It is one bounded completion, like the summary: the
   command record IS the audit (the utterance, the criteria, `generated: llm|rules`). It writes no
   claim, no source and no wiki page.

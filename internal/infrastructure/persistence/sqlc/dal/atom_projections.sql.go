@@ -86,18 +86,20 @@ func (q *Queries) AllAtomIDs(ctx context.Context) ([]ulid.ULID, error) {
 }
 
 const atomTextsForIDs = `-- name: AtomTextsForIDs :many
-SELECT id, topic, claim, body FROM atoms WHERE id IN (/*SLICE:ids*/?) ORDER BY id
+SELECT id, topic, claim, body, created_at FROM atoms WHERE id IN (/*SLICE:ids*/?) ORDER BY id
 `
 
 type AtomTextsForIDsRow struct {
-	ID    ulid.ULID `json:"id"`
-	Topic string    `json:"topic"`
-	Claim string    `json:"claim"`
-	Body  string    `json:"body"`
+	ID        ulid.ULID `json:"id"`
+	Topic     string    `json:"topic"`
+	Claim     string    `json:"claim"`
+	Body      string    `json:"body"`
+	CreatedAt int64     `json:"created_at"`
 }
 
 // The text of EXACTLY these claims: the signature of a touched record is computed from their
-// (id, claim, body), and touching one record per pass is the common case - not 170k reads.
+// (id, claim, body), and touching one record per pass is the common case - not 170k reads. The
+// creation instant travels too: the assistant's claim windows filter on it.
 func (q *Queries) AtomTextsForIDs(ctx context.Context, ids []ulid.ULID) ([]AtomTextsForIDsRow, error) {
 	query := atomTextsForIDs
 	var queryParams []interface{}
@@ -122,6 +124,7 @@ func (q *Queries) AtomTextsForIDs(ctx context.Context, ids []ulid.ULID) ([]AtomT
 			&i.Topic,
 			&i.Claim,
 			&i.Body,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

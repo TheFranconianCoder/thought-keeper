@@ -1,10 +1,11 @@
 package usecases
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 
@@ -44,6 +45,26 @@ var (
 	// The marker words are matched after a space, not with \b: Go's word boundary is ASCII-only, so
 	// "\büber" never matches.
 	reAbout = regexp.MustCompile(`(?i)(?:^|\s)(?:zu\s+dem|über|ueber|about|zu)\s+([\p{L}\p{N}_-]+)`)
+	// A list question is still a LIST. "Was haben wir von DHH?" asks which sources exist, not for
+	// prose; the same is true of "what do I have about X?". Ask is for an explanation, never for
+	// "which items do I have?".
+	reHaveFrom  = regexp.MustCompile(`(?i)^\s*(?:was\s+(?:haben|habe)\s+(?:wir|ich)\s+von|was\s+gibt\s+es\s+von|what\s+do\s+(?:we|i)\s+have\s+(?:from|by))\s+(.+)$`)
+	reHaveAbout = regexp.MustCompile(`(?i)^\s*(?:was\s+(?:haben|habe)\s+(?:wir|ich)\s+über|was\s+gibt\s+es\s+über|what\s+do\s+(?:we|i)\s+have\s+about)\s+(.+)$`)
+	// Time phrases. The order matters: "seit gestern" before "gestern", the numbered window before
+	// the bare "letzte Woche" (which has no number and must stay a calendar week).
+	reWindowSinceYesterday = regexp.MustCompile(`(?i)\b(?:seit\s+gestern|since\s+yesterday)\b`)
+	reWindowToday          = regexp.MustCompile(`(?i)\b(?:heute|today)\b`)
+	reWindowYesterday      = regexp.MustCompile(`(?i)\b(?:gestern|yesterday)\b`)
+	reWindowThisWeek       = regexp.MustCompile(`(?i)\b(?:diese\s+woche|this\s+week)\b`)
+	reWindowLastWeek       = regexp.MustCompile(`(?i)\b(?:letzte\s+woche|last\s+week)\b`)
+	reWindowThisMonth      = regexp.MustCompile(`(?i)\b(?:diesen\s+monat|dieser\s+monat|this\s+month)\b`)
+	reWindowLastMonth      = regexp.MustCompile(`(?i)\b(?:letzten\s+monat|letzter\s+monat|last\s+month)\b`)
+	reWindowLastHour       = regexp.MustCompile(`(?i)\b(?:letzte\s+stunde|last\s+hour)\b`)
+	reWindowPastWeek       = regexp.MustCompile(`(?i)\b(?:past\s+week|vergangene\s+woche)\b`)
+	reWindowPastMonth      = regexp.MustCompile(`(?i)\b(?:past\s+month|vergangener\s+monat)\b`)
+	reWindowLast24         = regexp.MustCompile(`(?i)\b(?:letzte[nr]?\s+24|last\s+24)\b`)
+	reWindowLastN          = regexp.MustCompile(`(?i)\b(?:letzte[nr]?\s+|last\s+)(\d+)\s*(stunden?|hours?|tage?n?|days?|wochen?|weeks?|monate?n?|months?)\b`)
+	reWindowDuration       = regexp.MustCompile(`(?i)\b(\d+)(h|d|w)\b`)
 )
 
 // lensWords maps the words that name a lens. The order matters: a question beats a list, and a
@@ -52,7 +73,6 @@ var lensWords = []struct {
 	lens entities.CommandLens
 	word []string
 }{
-	{entities.CommandAsk, []string{"frage", "question", "was sagt", "was sagen", "erklär", "explain", "why", "warum", "weshalb", "wie ", "how "}},
 	{entities.CommandAttention, []string{"attention", "fehlgeschlagen", "failed", "fehler", "error", "problem"}},
 	{entities.CommandClaims, []string{"claim", "claims", "aussage", "aussagen", "atom", "atoms", "behauptung"}},
 	{entities.CommandWiki, []string{"wiki", "seite", "seiten", "page", "pages"}},
@@ -86,11 +106,13 @@ var commandStopwords = map[string]bool{
 	"a": true, "added": true, "all": true, "alle": true, "allen": true, "alles": true,
 	"alphabetisch": true, "als": true, "an": true, "and": true, "angehaengt": true, "angehängt": true,
 	"are": true, "atom": true, "atoms": true, "attached": true, "auch": true, "auf": true,
-	"aus": true, "bitte": true, "bookmarks": true, "claim": true, "claims": true, "complete": true,
+	"aus": true, "bitte": true, "bookmarks": true, "by": true, "claim": true, "claims": true, "complete": true,
 	"das": true, "day": true, "days": true, "dazu": true, "dem": true, "den": true,
-	"der": true, "des": true, "destilliert": true, "die": true, "distilled": true, "done": true,
+	"der": true, "des": true, "destilliert": true, "did": true, "die": true, "distilled": true,
+	"do": true, "does": true, "done": true,
 	"ein": true, "eine": true, "einem": true, "einen": true, "einer": true, "failed": true,
-	"fehlgeschlagen": true, "fertig": true, "find": true, "finde": true, "for": true, "from": true,
+	"fehlgeschlagen": true, "fertig": true, "find": true, "finde": true, "for": true, "frage": true,
+	"from": true, "question": true,
 	"fuer": true, "für": true, "habe": true, "haben": true, "has": true, "hat": true,
 	"have": true, "hinzugefuegt": true, "hinzugefügt": true, "hinzugekommen": true, "hour": true, "hours": true,
 	"i": true, "ich": true, "im": true, "in": true, "is": true, "ist": true,
@@ -106,6 +128,7 @@ var commandStopwords = map[string]bool{
 	"tagen": true, "text": true, "the": true, "titel": true, "title": true, "to": true,
 	"und": true, "url": true, "urls": true, "vom": true, "von": true, "war": true,
 	"waren": true, "was": true, "week": true, "weeks": true, "welche": true, "welcher": true,
+	"what":    true,
 	"welches": true, "were": true, "which": true, "with": true, "without": true, "woche": true,
 	"wochen": true, "yet": true, "zeig": true, "zeige": true, "zum": true, "zur": true,
 	"älteste": true,
@@ -117,6 +140,9 @@ var commandStopwords = map[string]bool{
 type CommandRefs struct {
 	View string
 	ID   string
+	// Timezone is the reader's IANA timezone (the PWA sends it). It decides what "yesterday" and
+	// "this week" mean; an empty value falls back to the server's local zone.
+	Timezone string
 }
 
 // SourceHash is the referenced source, when the reader stands on one.
@@ -218,13 +244,23 @@ func ParseCommand(text string, refs CommandRefs) (ParsedCommand, error) {
 		}
 	}
 
-	// A question is answered, not filtered: Ask writes prose and cites what it used. This is tested
-	// BEFORE the lens words, because "what do the sources say about X?" is a question even though it
-	// names the source list.
-	if isQuestion(lower) {
+	// Ask is for PROSE. A question that asks which items exist is still a list: "Was haben wir von
+	// DHH?" is a Sources filter, not an answer. The list-question shapes are read deterministically
+	// so the no-model path is as good as the model path.
+	if isAsk(lower) {
 		out.Lens = entities.CommandAsk
 		out.Criteria.Text = strings.TrimSpace(raw)
+		out.Route = "ask"
 		return out, nil
+	}
+	if m := reHaveFrom.FindStringSubmatch(rest); len(m) == 2 {
+		out.Lens = entities.CommandSources
+		rest = strings.TrimSpace(m[1])
+		recognised = true
+	} else if m := reHaveAbout.FindStringSubmatch(rest); len(m) == 2 {
+		out.Lens = entities.CommandSources
+		rest = strings.TrimSpace(m[1])
+		recognised = true
 	}
 
 	// The lens is decided by what is LEFT after the reference: in "the sources of this claim" the
@@ -289,10 +325,12 @@ func ParseCommand(text string, refs CommandRefs) (ParsedCommand, error) {
 		}
 	}
 
-	// A time window. It is the vault-arrival window, exactly like the query agent's: "added to the
-	// vault", never "published".
-	if d, ok := readWindow(lower); ok {
-		out.Criteria.Since = d
+	// A time window. It is the vault's own timestamp — arrival for a source, creation for a claim,
+	// the last edit for a wiki page — never publication. The parser only records the SPEC; the run
+	// resolves it against the reader's clock and timezone.
+	if spec, next, ok := readWindowSpec(rest); ok {
+		out.Criteria.Window.Spec = spec
+		rest = next
 		recognised = true
 	}
 
@@ -340,61 +378,123 @@ func ParseCommand(text string, refs CommandRefs) (ParsedCommand, error) {
 	// the question, not from a keyword soup.
 	if out.Lens == entities.CommandAsk {
 		out.Criteria.Text = strings.TrimSpace(rest)
+		out.Route = "ask"
 		return out, nil
 	}
 	out.Criteria.Text = residualText(rest)
 
-	// An enumerated filter — a tag, a kind, a step state, a bookmarks/attached flag, a reference —
-	// with no free text is decidable here, exactly. It needs no model and must not wait for one.
+	// An enumerated filter — a tag, a kind, a step state, a bookmarks/attached flag, a reference,
+	// a time window — with no free text is decidable here, exactly. It needs no model and must not
+	// wait for one.
 	if out.Route == "" && out.Criteria.Text == "" &&
 		(out.Criteria.Tag != "" || out.Criteria.Kind != "" || out.Criteria.State != entities.CommandStateAny ||
 			out.Criteria.BookmarksOnly || out.Criteria.AttachedOnly ||
-			out.Criteria.Source != "" || out.Criteria.Atom != "") {
+			out.Criteria.Source != "" || out.Criteria.Atom != "" ||
+			!out.Criteria.Window.Empty()) {
+		out.Route = "filter"
+	}
+	// Words the reader named as words are a FILTER, not a subject: "Quellen von DHH" matches the
+	// words, it does not map a subject. A subject marker ("about", "über", "zum Thema") still wins
+	// and sends the request to the mapped route.
+	if out.Route == "" && out.Criteria.Text != "" && out.Lens != entities.CommandAsk &&
+		!containsAny(lower, subjectMarkers...) {
 		out.Route = "filter"
 	}
 	return out, nil
 }
 
-// isQuestion reports whether an utterance asks for prose rather than for a list. A question mark is
-// the clearest signal; the opening word catches dictation, which often loses the punctuation.
-func isQuestion(lower string) bool {
-	if strings.Contains(lower, "?") {
-		return true
-	}
-	for _, opener := range []string{
-		"was ", "wie ", "warum", "weshalb", "wann", "wer ", "welche", "welcher", "welches",
-		"erzähl", "erzaehl", "erklär", "erklaer", "fass ", "zusammenfass",
-		"what ", "why", "how ", "when ", "who ", "which ", "explain", "summarise", "summarize", "tell me",
+// isAsk reports whether the reader wants PROSE. A question mark alone is not enough: "Was haben wir
+// von DHH?" is a list request. The markers are checked at the START of the utterance: "why" or
+// "warum" inside a title ("Quellen über Why We Sleep") is part of the subject, not a question.
+func isAsk(lower string) bool {
+	trimmed := strings.TrimSpace(lower)
+	for _, marker := range []string{
+		"frage", "question",
+		"erklär", "erklaer", "erzähl", "erzaehl", "fass zusammen", "zusammenfass",
+		"warum", "weshalb", "wieso", "was sagt", "was sagen", "was wissen wir",
+		"was sind die claims", "what are the claims",
+		"wie hängt", "wie haengt", "wie funktioniert", "vergleich",
+		"kannst du", "könntest du", "can you", "could you",
+		"explain", "tell me about", "summarize", "summarise", "why", "how does", "how do",
+		"what do the sources say", "what do the claims say",
 	} {
-		if strings.HasPrefix(lower, opener) {
+		if strings.HasPrefix(trimmed, marker) {
 			return true
 		}
 	}
 	return false
 }
 
-// readWindow turns the phrases people use into a duration. The set is small on purpose: a wrong
-// window silently answers a different question.
-func readWindow(lower string) (time.Duration, bool) {
-	switch {
-	case containsAny(lower, "heute", "today", "letzte stunde", "last hour"):
-		return time.Hour, true
-	case containsAny(lower, "letzte 24", "letzten 24", "last 24", "gestern", "yesterday"):
-		return 24 * time.Hour, true
-	case containsAny(lower, "letzte woche", "letzten woche", "letzten 7", "letzte 7", "last week",
-		"past week", "letzten sieben", "letzte sieben", "diese woche", "this week"):
-		return 7 * 24 * time.Hour, true
-	case containsAny(lower, "letzten monat", "letzter monat", "last month", "letzte 30",
-		"letzten 30", "last 30"):
-		return 30 * 24 * time.Hour, true
-	}
-	// An explicit duration ("48h", "2d", "1w") is taken as written.
-	for field := range strings.FieldsSeq(lower) {
-		if d, ok := parseWindowDuration(strings.Trim(field, ".,;:")); ok && d > 0 {
-			return d, true
+// readWindowSpec turns the phrases people use into a window SPEC and removes the phrase from the
+// text. The spec is resolved later against the reader's clock and timezone; the parser must stay
+// pure. The set is small on purpose: a wrong window silently answers a different question.
+func readWindowSpec(text string) (spec, rest string, ok bool) {
+	rest = text
+	// "letzte 2 Tage" / "last 3 weeks" first: it carries a number and must not be read as the bare
+	// "letzte Woche" (which is a calendar week, not a rolling one).
+	if m := reWindowLastN.FindStringSubmatch(rest); m != nil {
+		n, parseErr := strconv.Atoi(m[1])
+		unit := windowUnit(m[2])
+		if parseErr == nil && n > 0 && unit != 0 {
+			return fmt.Sprintf("last-%d%c", n, unit), strings.TrimSpace(reWindowLastN.ReplaceAllString(rest, " ")), true
 		}
 	}
-	return 0, false
+	for _, phrase := range []struct {
+		re   *regexp.Regexp
+		spec string
+	}{
+		{reWindowSinceYesterday, "since-yesterday"},
+		{reWindowToday, "today"},
+		{reWindowYesterday, "yesterday"},
+		{reWindowThisWeek, "this-week"},
+		{reWindowLastWeek, "last-week"},
+		{reWindowThisMonth, "this-month"},
+		{reWindowLastMonth, "last-month"},
+		{reWindowLastHour, "last-1h"},
+		{reWindowPastWeek, "last-7d"},
+		{reWindowPastMonth, "last-30d"},
+		{reWindowLast24, "last-24h"},
+	} {
+		if phrase.re.MatchString(rest) {
+			return phrase.spec, strings.TrimSpace(phrase.re.ReplaceAllString(rest, " ")), true
+		}
+	}
+	// An explicit duration ("48h", "2d", "1w") is taken as written.
+	if m := reWindowDuration.FindStringSubmatch(rest); m != nil {
+		n, parseErr := strconv.Atoi(m[1])
+		if parseErr == nil && n > 0 {
+			return fmt.Sprintf("last-%d%s", n, strings.ToLower(m[2])), strings.TrimSpace(reWindowDuration.ReplaceAllString(rest, " ")), true
+		}
+	}
+	return "", text, false
+}
+
+// windowUnit maps the words a reader uses to the single-letter unit of a window spec.
+func windowUnit(raw string) byte {
+	switch strings.ToLower(raw) {
+	case "stunde", "stunden", "hour", "hours":
+		return 'h'
+	case "tag", "tage", "tagen", "day", "days":
+		return 'd'
+	case "woche", "wochen", "week", "weeks":
+		return 'w'
+	case "monat", "monate", "monaten", "month", "months":
+		return 'm'
+	}
+	return 0
+}
+
+// commandTimeWords are the words a time phrase is built from. They are not search terms: a source
+// titled "Yesterday" is found by quoting it, not by leaving the window's glue in the residual text.
+var commandTimeWords = map[string]bool{
+	"today": true, "yesterday": true, "heute": true, "gestern": true,
+	"this": true, "diese": true, "diesen": true, "dieser": true,
+	"seit": true, "since": true, "past": true, "vergangene": true, "vergangener": true,
+	"hour": true, "hours": true, "stunde": true, "stunden": true,
+	"day": true, "days": true, "tag": true, "tage": true, "tagen": true,
+	"week": true, "weeks": true, "woche": true, "wochen": true,
+	"month": true, "months": true, "monat": true, "monate": true, "monaten": true,
+	"year": true, "years": true, "jahr": true, "jahre": true,
 }
 
 // residualText is what the parser did not consume: the words a lexical search should actually see.
@@ -413,12 +513,58 @@ func residualText(text string) string {
 			continue
 		}
 		lower := strings.ToLower(clean)
-		if commandStopwords[lower] || lensWordSet[lower] {
+		if commandStopwords[lower] || commandTimeWords[lower] || lensWordSet[lower] {
+			continue
+		}
+		// A misspelled lens word is sentence glue, not a search term: "show me sourecs tagged
+		// cloud" must still be a filter for the tag, not a search for "sourecs".
+		if isLensWordTypo(lower) {
 			continue
 		}
 		kept = append(kept, clean)
 	}
 	return strings.Join(kept, " ")
+}
+
+// isLensWordTypo reports whether a word is a close misspelling of a lens word. It is deliberately
+// narrow: one edit, or one adjacent transposition. A real word that merely resembles a lens word
+// ("resource") stays a search term.
+func isLensWordTypo(word string) bool {
+	if len(word) < 5 {
+		return false
+	}
+	for candidate := range lensWordSet {
+		if len(candidate) < 5 {
+			continue
+		}
+		if levenshtein(word, candidate) <= 1 || isAdjacentTransposition(word, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+// isAdjacentTransposition reports whether a and b are the same word with one pair of neighbouring
+// letters swapped — the "sourecs"/"sources" typo that plain edit distance calls two edits.
+func isAdjacentTransposition(a, b string) bool {
+	if len(a) != len(b) || a == b {
+		return false
+	}
+	ra, rb := []rune(a), []rune(b)
+	first := -1
+	for i := range ra {
+		if ra[i] != rb[i] {
+			first = i
+			break
+		}
+	}
+	if first < 0 || first+1 >= len(ra) {
+		return false
+	}
+	if ra[first] != rb[first+1] || ra[first+1] != rb[first] {
+		return false
+	}
+	return string(ra[first+2:]) == string(rb[first+2:])
 }
 
 // hasLensWord reports whether the utterance names a lens; an id alone does not.

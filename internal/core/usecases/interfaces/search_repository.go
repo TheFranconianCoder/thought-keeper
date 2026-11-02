@@ -14,4 +14,8 @@ type SearchHit struct {
 // of sources. Pages are not searched: there are none.
 type SearchRepository interface {
 	Search(ctx context.Context, query string, layer string, limit int) ([]SearchHit, error)
+	// SearchExact is the strict form: every word must occur, and no OR, variant or raw-phrase
+	// fallback is used. It is what a "mentions X" channel needs — a name that is not there must
+	// not be approximated into an unrelated claim.
+	SearchExact(ctx context.Context, query string, layer string, limit int) ([]SearchHit, error)
 }
