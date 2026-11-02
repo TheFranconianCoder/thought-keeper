@@ -471,7 +471,7 @@
                     <span class="source-origin">{subLine(source)}</span>
                   </div>
                   {#if (source.read_later && interestSlugs(source).length > 0) || rowTagInfo.shown.length > 0}
-                    <div class="source-tags">
+                    <div class="source-tags" use:scrollFade={{ axis: 'x', size: 22 }}>
                       {#if source.read_later && interestSlugs(source).length > 0}
                         <span
                           class="tag tag--interest"

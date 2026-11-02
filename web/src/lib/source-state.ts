@@ -185,8 +185,18 @@ export function stepStateLabel(state: StepState): string {
   return t(`sources.state.${state}`);
 }
 
+export interface StatusLabelOptions {
+  /** detail carries the capture failure's reason. A list shows the short word; the source's own
+   *  details say why. A wall keeps its reason in both: it is already the human's sentence. */
+  detail?: boolean;
+}
+
 /** statusLabel names the derivation state in one calm line. */
-export function statusLabel(source: Source, live?: LiveProgress): string {
+export function statusLabel(
+  source: Source,
+  live?: LiveProgress,
+  options: StatusLabelOptions = {},
+): string {
   if (source.bookmark) return t('sources.status.bookmark');
 
   const running = source.running_step;
@@ -210,9 +220,9 @@ export function statusLabel(source: Source, live?: LiveProgress): string {
         return t('sources.status.blocked', { reason: t(WALL_KEYS[detail]) });
       }
       const why = (capture.error || capture.detail || '').split('\n')[0].trim();
-      const short = why.length > 64 ? `${why.slice(0, 64)}…` : why;
-      return short
-        ? t('sources.status.linkFailed', { error: short })
+      if (!options.detail) return t('sources.status.linkFailedShort');
+      return why
+        ? t('sources.status.linkFailed', { error: why })
         : t('sources.status.linkFailedShort');
     }
     if (capture?.state === 'pending' && !source.path) return t('sources.status.fetching');

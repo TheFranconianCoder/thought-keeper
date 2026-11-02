@@ -22,6 +22,13 @@ func (uc Sources) Content(ctx context.Context, hash string) (io.ReadCloser, stri
 	}
 	rc, err := uc.Store.Open(hash, src.Ext)
 	if err != nil {
+		// A source whose bytes never arrived (a link whose fetch failed, a file moved out of the
+		// store) has no snapshot: that is a state the reader is told plainly, never the filesystem's
+		// "no such file or directory" with a path in it.
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, "", "", types.New("not_found",
+				"this source has no readable content", types.ErrNotFound)
+		}
 		return nil, "", "", err
 	}
 	return rc, src.Ext, src.Title, nil

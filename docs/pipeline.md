@@ -339,9 +339,9 @@ for the bar but never starts the distill light.
 
 The **status label** describes the derivation: `complete` only when every part is done and no claim
 is unclustered; everything else is `pending distill`, `partial · …`, `complete · no claims`,
-`bookmark`, `feed · the items are sources`, `sitemap · the pages are sources`,
-`link failed · …`, `blocked · login required` or `queued`. A light that disagrees with its own
-numbers is amber.
+`bookmark`, `feed · the items are sources`, `sitemap · the pages are sources`, `link failed`,
+`blocked · login required` or `queued`. A list shows `link failed` alone; the source's own details
+carry the reason (`link failed · …`). A light that disagrees with its own numbers is amber.
 
 ## 5. Steering
 

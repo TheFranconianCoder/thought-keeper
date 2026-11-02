@@ -98,7 +98,10 @@ describe('source state', () => {
         cluster: { state: 'ok' },
       },
     });
-    expect(statusLabel(dead)).toBe('link failed · dial tcp: no such host');
+    expect(statusLabel(dead)).toBe('link failed');
+    expect(statusLabel(dead, undefined, { detail: true })).toBe(
+      'link failed · dial tcp: no such host',
+    );
   });
 
   it('names a feed and a sitemap as lists, not as documents stuck after step 1', () => {

@@ -226,6 +226,8 @@
                passes), and Svelte refuses duplicate keys — which took the whole Status page down
                while a batch of source resets waited in the queue. -->
           {#each jobRows.rows as job, index (index)}
+            {@const live = liveOf(job.target)}
+            {@const detail = [job.detail, live, live ? '' : (job.why ?? '')].filter(Boolean).join(' · ')}
             <div class="job-row">
               <span class="job-step">{jobStepLabel(job.step)}</span>
               <span class="job-state job-state--{job.state}" title={job.why ?? ''}>
@@ -237,13 +239,10 @@
                   <span class="truncate" title={job.title || job.target}>{job.title || job.target.slice(0, 12)}</span>
                 </button>
               {:else}
-                <span class="muted small">{t('status.wholeVault')}</span>
+                <span class="job-target job-target--none">{t('status.wholeVault')}</span>
               {/if}
-              {#if job.detail}<span class="job-live">{job.detail}</span>{/if}
-              {#if liveOf(job.target)}<span class="job-live">{liveOf(job.target)}</span>{/if}
-              {#if job.why && !liveOf(job.target)}<span class="job-live">{job.why}</span>{/if}
-              <span class="grow"></span>
-              {#if job.since}<span class="job-time" title={job.since}>{elapsed(job.since, clock)}</span>{/if}
+              <span class="job-time" title={job.since ?? ''}>{job.since ? elapsed(job.since, clock) : ''}</span>
+              {#if detail}<span class="job-detail" title={detail}>{detail}</span>{/if}
             </div>
           {/each}
           {#if jobRows.hidden > 0}
@@ -307,12 +306,6 @@
           {#each system.vocabulary as vocab (vocab.namespace)}
             <div class="vocab-row">
               <span class="vocab-name">{vocab.namespace}</span>
-              <span class="vocab-numbers">
-                {tn('status.vocabNames', vocab.names)} · {tn('status.vocabUses', vocab.uses)} · {t('status.vocabSingletons', { count: vocab.singletons })}
-                ({n(Math.round(vocab.singleton_share * 100))}%) · {t('status.vocabTop', { pct: Math.round(vocab.coverage * 100) })}
-                {#if vocab.canonical || vocab.absorbed}· {t('status.vocabCanonical', { canonical: vocab.canonical, absorbed: vocab.absorbed })}{/if}
-                {#if vocab.new?.length}· <b>{t('status.vocabNew', { count: vocab.new.length })}</b>{/if}
-              </span>
               <span class="vocab-flags">
                 {#if vocab.collisions?.length}
                   <span class="chip chip--warn" title={t('status.collisionsTitle')}>
@@ -335,6 +328,12 @@
                   </span>
                 {/if}
               </span>
+              <div class="vocab-numbers">
+                {tn('status.vocabNames', vocab.names)} · {tn('status.vocabUses', vocab.uses)} · {t('status.vocabSingletons', { count: vocab.singletons })}
+                ({n(Math.round(vocab.singleton_share * 100))}%) · {t('status.vocabTop', { pct: Math.round(vocab.coverage * 100) })}
+                {#if vocab.canonical || vocab.absorbed}· {t('status.vocabCanonical', { canonical: vocab.canonical, absorbed: vocab.absorbed })}{/if}
+                {#if vocab.new?.length}· <b>{t('status.vocabNew', { count: vocab.new.length })}</b>{/if}
+              </div>
             </div>
           {/each}
         </div>
@@ -524,12 +523,17 @@
   }
 
   .job-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 105px 76px minmax(0, 1fr) 56px;
+    grid-template-areas:
+      'step state target time'
+      '.    detail detail detail';
     align-items: center;
-    gap: 9px;
+    align-content: center;
+    column-gap: 9px;
+    row-gap: 3px;
     min-width: 0;
     min-height: 35px;
-    overflow: hidden;
     padding: 6px 10px;
     border-bottom: 1px solid var(--line);
     font-size: 12px;
@@ -540,12 +544,12 @@
   }
 
   .job-row--more {
-    color: var(--faint);
+    display: block;
+    min-height: 0;
   }
 
   .job-step {
-    width: 105px;
-    flex: none;
+    grid-area: step;
     overflow: hidden;
     color: var(--ink-2);
     font-weight: 550;
@@ -554,7 +558,8 @@
   }
 
   .job-state {
-    flex: none;
+    grid-area: state;
+    justify-self: start;
     padding: 1px 6px;
     border-radius: var(--radius-pill);
     background: var(--bg-muted);
@@ -577,7 +582,8 @@
   .job-target {
     display: inline-flex;
     align-items: center;
-    flex: 0 1 auto;
+    grid-area: target;
+    justify-self: start;
     gap: 5px;
     min-width: 0;
     max-width: min(260px, 100%);
@@ -591,24 +597,34 @@
     white-space: nowrap;
   }
 
+  .job-target--none {
+    color: var(--faint);
+    font-size: 11.5px;
+  }
+
   .job-target:hover {
     color: var(--accent);
   }
 
-  .job-live {
-    flex: 0 1 auto;
+  .job-detail {
+    grid-area: detail;
     min-width: 0;
     overflow: hidden;
     color: var(--faint);
     font-size: 11px;
+    line-height: 1.4;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .job-time {
+    grid-area: time;
+    justify-self: end;
     color: var(--faint);
     font-family: var(--font-mono);
     font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .action-list {
@@ -668,9 +684,13 @@
   }
 
   .vocab-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name flags'
+      'numbers numbers';
     align-items: center;
-    gap: 12px;
+    gap: 4px 10px;
     padding: 9px 11px;
     border-bottom: 1px solid var(--line);
     font-size: 11.5px;
@@ -681,23 +701,29 @@
   }
 
   .vocab-name {
-    width: 90px;
-    flex: none;
+    grid-area: name;
+    min-width: 0;
+    overflow: hidden;
     color: var(--ink-2);
     font-family: var(--font-mono);
     font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .vocab-numbers {
-    flex: 1;
-    min-width: 0;
+    grid-area: numbers;
     color: var(--muted);
+    line-height: 1.5;
   }
 
   .vocab-flags {
     display: flex;
     flex-wrap: wrap;
+    justify-content: flex-end;
+    grid-area: flags;
     gap: 4px;
+    min-width: 0;
   }
 
   .details-grid {
@@ -752,14 +778,21 @@
       grid-template-columns: repeat(1, minmax(0, 1fr));
     }
 
-    .vocab-row {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 4px;
+    .job-row {
+      grid-template-columns: 78px 70px minmax(0, 1fr) 48px;
     }
 
-    .job-step {
-      width: 78px;
+    /* The very narrow view: the pills get their own third line instead of squeezing the name. */
+    .vocab-row {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+        'name'
+        'numbers'
+        'flags';
+    }
+
+    .vocab-flags {
+      justify-content: flex-start;
     }
   }
 </style>

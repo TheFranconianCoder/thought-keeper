@@ -78,6 +78,7 @@ export const sourceEn: Record<string, string> = {
   'source.untitled': '(untitled)',
   'source.noTextYet':
     'No readable text yet — this source has not been captured, or extraction produced nothing.',
+  'source.snapshotMissing': 'This source has no readable content.',
   'source.noOutlineYet':
     'Showing the first {size} of {total} — this source has no outline yet. Build the outline and it becomes readable part by part.',
 

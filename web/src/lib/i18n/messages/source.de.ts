@@ -78,6 +78,7 @@ export const sourceDe: Record<string, string> = {
   'source.untitled': '(ohne Titel)',
   'source.noTextYet':
     'Noch kein lesbarer Text — diese Quelle wurde nicht erfasst, oder die Extraktion hat nichts ergeben.',
+  'source.snapshotMissing': 'Diese Quelle hat keinen lesbaren Inhalt.',
   'source.noOutlineYet':
     'Die ersten {size} von {total} werden angezeigt — diese Quelle hat noch keine Gliederung. Baue die Gliederung, dann wird sie Teil für Teil lesbar.',
 

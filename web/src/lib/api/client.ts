@@ -48,14 +48,18 @@ async function requestText(path: string, init?: RequestInit): Promise<string> {
   const response = await fetch(BASE + path, { cache: 'no-store', ...init });
   if (!response.ok) {
     const text = await response.text();
+    // The code is the server's, exactly as request() keeps it: a 404 for a missing snapshot is a
+    // state the reader is told plainly, not an internal failure.
+    let code = 'internal';
     let message = response.statusText || `Request failed (${response.status})`;
     try {
       const body = JSON.parse(text) as ErrorBody;
+      if (body.error?.code) code = body.error.code;
       if (body.error?.message) message = body.error.message;
     } catch {
       if (text) message = text;
     }
-    throw new ApiError('internal', message, response.status);
+    throw new ApiError(code, message, response.status);
   }
   return response.text();
 }

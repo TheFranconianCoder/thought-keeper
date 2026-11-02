@@ -819,7 +819,11 @@
               {/if}
             {:else if sources.content === null}
               {#if sources.contentError}
-                <p class="notice notice--error file-notice">{sources.contentError}</p>
+                {#if sources.contentMissing}
+                  <p class="file-notice muted">{sources.contentError}</p>
+                {:else}
+                  <p class="notice notice--error file-notice">{sources.contentError}</p>
+                {/if}
               {:else}
                 <p class="file-notice muted">{t('common.loading')}</p>
               {/if}
@@ -1192,7 +1196,7 @@
                 <span class="k">{t('source.stateLabel')}</span>
                 <span class="v" class:working={!!selected.running_step}>
                   {#if selected.running_step}<span class="spinner"></span>{/if}
-                  {statusLabel(selected, live)}
+                  {statusLabel(selected, live, { detail: true })}
                 </span>
               </div>
               {#if selected.running_step && counts.msg}

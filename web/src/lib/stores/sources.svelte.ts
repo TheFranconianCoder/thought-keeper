@@ -58,6 +58,9 @@ class SourcesStore {
   logError = $state('');
   content = $state<string | null>(null);
   contentError = $state('');
+  /** contentMissing marks a snapshot that simply is not there (a link whose fetch failed) instead of
+   *  a read that broke: the view says so calmly and never prints the filesystem's sentence. */
+  contentMissing = $state(false);
   contentIsRendering = $state(false);
   detailLoading = $state(false);
   detailError = $state('');
@@ -198,6 +201,7 @@ class SourcesStore {
     this.logError = '';
     this.content = null;
     this.contentError = '';
+    this.contentMissing = false;
     this.contentIsRendering = false;
     this.detailError = '';
     this.detailLoading = true;
@@ -323,10 +327,14 @@ class SourcesStore {
         // stable is what stops a background event from flashing the page.
         if (this.content !== text) this.content = text;
         this.contentError = '';
+        this.contentMissing = false;
       } catch (error) {
         if (!still()) return;
         if (this.content === null) {
-          this.contentError = firstLine(readError(error));
+          this.contentMissing = error instanceof ApiError && error.code === 'not_found';
+          this.contentError = this.contentMissing
+            ? t('source.snapshotMissing')
+            : firstLine(readError(error));
           this.content = which === 'render' ? '' : null;
         }
       }
@@ -448,6 +456,8 @@ class SourcesStore {
     this.atomTopics = [];
     this.log = '';
     this.content = null;
+    this.contentError = '';
+    this.contentMissing = false;
     this.detailError = '';
     this.detailLoading = false;
     this.children = [];
