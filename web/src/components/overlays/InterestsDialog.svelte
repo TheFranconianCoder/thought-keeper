@@ -1074,7 +1074,7 @@
 
   @media (max-width: 640px) {
     .interests {
-      max-height: calc(100dvh - 40px);
+      max-height: calc(var(--app-h, 100dvh) - 40px);
     }
 
     .rule-open,

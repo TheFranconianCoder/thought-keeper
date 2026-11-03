@@ -511,7 +511,7 @@
     gap: 38px;
     align-items: start;
     height: auto;
-    min-height: calc(100dvh - var(--topbar-h));
+    min-height: calc(var(--app-h, 100dvh) - var(--topbar-h));
     max-width: 1280px;
     padding-top: 0;
     padding-bottom: 0;
@@ -526,9 +526,9 @@
     top: 0;
     display: flex;
     flex-direction: column;
-    height: calc(100dvh - var(--topbar-h));
+    height: calc(var(--app-h, 100dvh) - var(--topbar-h));
     min-height: 0;
-    max-height: calc(100dvh - var(--topbar-h));
+    max-height: calc(var(--app-h, 100dvh) - var(--topbar-h));
     padding: 24px 0;
   }
 

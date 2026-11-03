@@ -1587,12 +1587,12 @@
   }
 
   .log-file {
-    max-height: calc(100dvh - 260px);
+    max-height: calc(var(--app-h, 100dvh) - 260px);
   }
 
   .frame {
     width: 100%;
-    height: calc(100dvh - 270px);
+    height: calc(var(--app-h, 100dvh) - 270px);
     min-height: 420px;
     border: 1px solid var(--line);
     border-radius: var(--radius-sm);

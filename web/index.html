@@ -2,7 +2,10 @@
 <html lang="en" data-theme="auto">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- viewport-fit=cover: the app draws edge to edge and reserves the system bars itself
+         (safe-area insets in styles/app.css). Without it the insets are zero and an installed PWA
+         whose platform under-applies them — Brave on Android after a reload — loses the bottom. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Thought Keeper</title>
     <meta name="description" content="A local, agentic knowledge base." />
     <meta name="theme-color" content="#f7f5f1" media="(prefers-color-scheme: light)" />

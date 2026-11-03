@@ -86,7 +86,7 @@
       align-items: stretch;
       justify-content: space-around;
       gap: 2px;
-      padding: 5px 6px calc(5px + env(safe-area-inset-bottom, 0px));
+      padding: 5px 6px;
       border-top: 1px solid var(--line);
       background: color-mix(in srgb, var(--bg-sidebar) 95%, transparent);
     }

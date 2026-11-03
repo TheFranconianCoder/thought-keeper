@@ -105,7 +105,7 @@
   .dialog {
     position: relative;
     z-index: 1;
-    max-height: calc(100dvh - 40px);
+    max-height: calc(var(--app-h, 100dvh) - 40px);
     display: flex;
     flex-direction: column;
     border: 1px solid var(--line);

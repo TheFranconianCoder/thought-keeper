@@ -145,6 +145,11 @@ body {
 
 html {
   background: var(--bg);
+  /* The document is never a scroller: the shell and its inner containers own every position
+     (lib/scroll-memory.ts). A document offset the browser restores after a reload is always wrong,
+     and on a phone it pushes the footer navigation below the screen. */
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
@@ -224,7 +229,18 @@ img {
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  /* The shell is the VISIBLE viewport, not `dvh` alone, and it reserves the system bars itself.
+     `--app-h` is the measured visual viewport (lib/viewport.ts): an installed PWA on Android can be
+     laid out against the full display after a reload, which puts the footer navigation under the
+     navigation bar until a rotation re-measures. The insets are real because index.html declares
+     viewport-fit=cover; the shell reserves each of them ONCE — the footer, which sits inside it,
+     must not add the bottom inset again. */
+  height: 100vh;
   height: 100dvh;
+  height: var(--app-h, 100dvh);
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   overflow: hidden;
 }
 

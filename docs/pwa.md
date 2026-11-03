@@ -152,6 +152,13 @@ open, and the Start lens lists the three latest QUESTIONS, which are answers the
 - **Split views keep the list in place.** Claims, Wiki and Ask show a sticky navigation pane beside
   a framed reading surface. The reading content scrolls with the page, so the scrollbar stays at
   the window edge and the list does not move; scrollable clouds and lists fade at their scroll edge.
+- **The shell is the visible viewport.** Its height is the measured visual viewport (`--app-h`,
+  `lib/viewport.ts`), not `dvh` alone, and it reserves the platform's system bars itself: the
+  document declares `viewport-fit=cover` and the shell pads with the safe-area insets. A platform
+  that under-applies those insets after a reload — Android in an installed PWA — must not be able
+  to hide the footer navigation until the device is rotated. The document itself never scrolls;
+  every position belongs to an inner container, so a document offset the browser restores after a
+  reload cannot move the shell.
 - **Scroll follows the history entry, like a normal page.** The shell and reading content, the
   sticky list panes, and the scrollable clouds record their position in the current history entry.
   Back and forward restore it; a direct link or a new page starts at the top. A list that stays on
