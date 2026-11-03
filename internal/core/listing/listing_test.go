@@ -202,8 +202,23 @@ func TestNextPage(t *testing.T) {
 	if got := NextPage(base, []Link{{URL: base + "page/2/", Rel: "next", Text: "2"}}); got != base+"page/2/" {
 		t.Fatalf("rel=next wins, got %q", got)
 	}
+	// A document that declares its pager in the head has no anchor text at all.
+	if got := NextPage(base, []Link{{URL: base + "page/2/", Rel: "next"}}); got != base+"page/2/" {
+		t.Fatalf("a head rel=next is a pager, got %q", got)
+	}
+	// fs.blog words its pager with a verb in front of words the vocabulary knows.
+	if got := NextPage(base, []Link{{URL: base + "page/2/", Text: "See older articles"}}); got != base+"page/2/" {
+		t.Fatalf("a verb-led pager, got %q", got)
+	}
+	if got := NextPage(base, []Link{{URL: base + "page/2/", Text: "See older articles »"}}); got != base+"page/2/" {
+		t.Fatalf("a pager with an arrow, got %q", got)
+	}
 	if got := NextPage(base, []Link{{URL: base + "page/2/", Text: "Load more"}}); got != base+"page/2/" {
 		t.Fatalf("load more with a /page/N address, got %q", got)
+	}
+	// The verb does not make an address a pager: the URL still has to be one.
+	if got := NextPage(base, []Link{{URL: base + "about/", Text: "See older articles"}}); got != "" {
+		t.Fatalf("an address that is not a pager, got %q", got)
 	}
 	if got := NextPage(base, []Link{{URL: "https://other.org/blog/page/2/", Text: "Load more"}}); got != "" {
 		t.Fatalf("another host is not the next page, got %q", got)

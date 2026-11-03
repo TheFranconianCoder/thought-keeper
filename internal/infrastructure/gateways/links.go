@@ -79,6 +79,15 @@ func (HTMLLinkExtractor) Links(_ context.Context, raw []byte, pageURL string) ([
 			// The anchor's own children still yield nothing: an <a> inside an <a> is invalid HTML
 			// and the parser already reparents it.
 		}
+		// The document's own pager declaration lives in the head and is not an anchor at all
+		// (`<link rel="next" href="…">`). A site that writes it there and words its visible pager
+		// with anything the vocabulary does not know (fs.blog: "See older articles") would otherwise
+		// be read as a single page.
+		if n.Type == html.ElementNode && n.Data == "link" {
+			if link, ok := headNext(n, base); ok {
+				out = append(out, link)
+			}
+		}
 		next := ancestors
 		if n.Type == html.ElementNode && n.Data != "a" {
 			next = appendNode(ancestors, n)
@@ -102,26 +111,13 @@ func anchorLink(n *html.Node, ancestors []*html.Node, heading, nav bool, base *u
 	if href == "" || strings.HasPrefix(href, "#") {
 		return listing.Link{}, false
 	}
-	lower := strings.ToLower(href)
-	for _, scheme := range []string{"javascript:", "mailto:", "tel:", "data:"} {
-		if strings.HasPrefix(lower, scheme) {
-			return listing.Link{}, false
-		}
-	}
-	parsed, err := url.Parse(href)
-	if err != nil {
+	resolved, ok := absoluteURL(href, base)
+	if !ok {
 		return listing.Link{}, false
 	}
-	if base != nil {
-		parsed = base.ResolveReference(parsed)
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return listing.Link{}, false
-	}
-	parsed.Fragment = ""
 	// The page's own query and path are kept; only the fragment is noise.
 	link := listing.Link{
-		URL:       parsed.String(),
+		URL:       resolved,
 		Label:     strings.TrimSpace(firstAttr(n, "aria-label", "title")),
 		InHeading: heading,
 		InNav:     nav,
@@ -152,6 +148,47 @@ func anchorLink(n *html.Node, ancestors []*html.Node, heading, nav bool, base *u
 		}
 	}
 	return link, true
+}
+
+// absoluteURL resolves one href against the page and drops the fragment. It reports false for an
+// address that is not a page: a fragment, a script, a mail address, a file.
+func absoluteURL(href string, base *url.URL) (string, bool) {
+	href = strings.TrimSpace(href)
+	if href == "" || strings.HasPrefix(href, "#") {
+		return "", false
+	}
+	lower := strings.ToLower(href)
+	for _, scheme := range []string{"javascript:", "mailto:", "tel:", "data:"} {
+		if strings.HasPrefix(lower, scheme) {
+			return "", false
+		}
+	}
+	parsed, err := url.Parse(href)
+	if err != nil {
+		return "", false
+	}
+	if base != nil {
+		parsed = base.ResolveReference(parsed)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", false
+	}
+	parsed.Fragment = ""
+	return parsed.String(), true
+}
+
+// headNext reads the document's declaration of its next page: `<link rel="next" href="…">` in the
+// head. It carries no text and no card, so it is only ever a pager — the listing rules filter it out
+// of a group and NextPage takes it first.
+func headNext(n *html.Node, base *url.URL) (listing.Link, bool) {
+	if !slices.Contains(strings.Fields(strings.ToLower(firstAttr(n, "rel"))), "next") {
+		return listing.Link{}, false
+	}
+	href, ok := absoluteURL(firstAttr(n, "href"), base)
+	if !ok {
+		return listing.Link{}, false
+	}
+	return listing.Link{URL: href, Rel: "next"}, true
 }
 
 // cardOf finds the block that renders an overlay link's card: the nearest ancestor that declares a

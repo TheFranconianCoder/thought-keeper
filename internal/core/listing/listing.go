@@ -18,6 +18,9 @@
 //     candidates, unless the card around the link lends it a name.
 //   - a JavaScript landing page (thoughtworks.com/…/insights/blog) answers with its MEGA-MENU and
 //     nothing else. Ten navigation tiles with headings looked exactly like ten articles.
+//   - a Genesis blog index (fs.blog/blog) renders 16 cards with heading links and words its pager
+//     "See older articles" — a verb in front of the words. The next page is declared as
+//     `<link rel="next">` in the head and nowhere else an anchor could carry it.
 //
 // So neither "the page has many links" nor "the page has little text" alone is a signal. A group of
 // repeated, article-shaped links is the signal; the readable text decides whether that group is the
@@ -186,18 +189,35 @@ func pagerText(link Link) bool {
 	return isPagerPhrase(link.Text) || isPagerPhrase(link.Label)
 }
 
-// isPagerPhrase answers the vocabulary question for one piece of text.
+// isPagerPhrase answers the vocabulary question for one piece of text. A site may open its pager
+// with a verb ("See older articles" on fs.blog): the verb is what the site chose, not what the link
+// does, so a leading one is dropped before the words are looked up. That is safe because the address
+// still has to be a pager (pagerURL) before NextPage accepts the link.
 func isPagerPhrase(text string) bool {
-	text = strings.ToLower(strings.Join(strings.Fields(text), " "))
+	text = trimPager(text)
+	if lead, rest, ok := strings.Cut(text, " "); ok && pagerLead[lead] {
+		text = trimPager(rest)
+	}
 	switch text {
 	case "load more", "load more posts", "load more articles", "show more", "show more posts",
-		"next", "next page", "next posts", "older", "older posts", "older entries", "previous",
-		"previous page", "newer", "more", "mehr", "mehr laden", "weitere", "weitere beiträge",
+		"next", "next page", "next posts", "older", "older posts", "older entries", "older articles",
+		"previous", "previous page", "newer", "newer posts", "newer articles", "more", "more posts",
+		"more articles", "mehr", "mehr laden", "weitere", "weitere beiträge",
 		"nächste", "nächste seite", "ältere", "ältere beiträge", "vorherige", "neuere":
 		return true
 	}
 	return false
 }
+
+// trimPager normalises a pager label: lower case, single spaces, no leading or trailing punctuation
+// or arrows ("See older articles »").
+func trimPager(text string) string {
+	text = strings.ToLower(strings.Join(strings.Fields(text), " "))
+	return strings.TrimFunc(text, func(r rune) bool { return unicode.IsPunct(r) || unicode.IsSpace(r) })
+}
+
+// pagerLead is the verb a site may put in front of its pager words.
+var pagerLead = map[string]bool{"see": true, "view": true, "show": true, "read": true, "browse": true}
 
 // pagerURL reports whether the candidate address looks like another page of the same listing: the
 // same path with a page query (`?page=2`, `?paged=2`, `?offset=10`), or a `/page/N` suffix.

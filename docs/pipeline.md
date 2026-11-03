@@ -63,18 +63,22 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   (`POST /api/v1/add` with `listing: true`) makes it an owner. The articles become URL sources
   (`origin: listing`, `parent_hash`) and the listing's snapshot is the **rendered list** —
   readability throws a card grid away, so a card grid is never distilled as prose.
-- **The initial capture walks the pagination; a refresh does not.** A listing is read page by page
-  (`rel="next"`, then a "load more"/"older" anchor — whose text or `aria-label` is a pager word —
-  whose address is a pager, a number under `page`/`paged`/`offset`/`start` or a namespaced `…_page`
-  query) up to `capture.listing_max_pages` (default 100); each page's cards are claimed and fetched,
-  and the listing's snapshot is rewritten after every page. A page whose plain response declares no
+- **The initial capture walks the pagination; a refresh does not.** A listing is read page by page —
+  first the document's own `<link rel="next">` in the head (a pager needs no visible anchor), then an
+  anchor whose `rel` is `next` or whose text or `aria-label` is a pager word ("load more",
+  "older posts", "See older articles" — a leading "see"/"view"/"show" is the site's verb, not part of
+  the word) — and whose address is a pager, a number under `page`/`paged`/`offset`/`start` or a
+  namespaced `…_page` query, up to `capture.listing_max_pages` (default 100); each page's cards are
+  claimed and fetched, and the listing's snapshot is rewritten after every page. A page whose plain
+  response declares no
   cards — or no pager — is rendered before the walk gives up, so an archive a script builds is walked
   like any other. A refresh reads **page 1 only** — a blog
   index and a newsletter archive are newest-first, so a new article is always there — and merges it
   into the articles the listing already declares. A listing is a WINDOW like a feed: an article that
   rotates out of the pagination is kept, and only deleting the listing removes its articles. The walk
-  follows the links the pages DECLARE (`rel="next"`, then a pager anchor): a "load more" button that
-  only fetches more cards over XHR is not clicked, even though the page itself is rendered.
+  follows the links the pages DECLARE (the head's `<link rel="next">`, a pager anchor): a "load more"
+  button that only fetches more cards over XHR is not clicked, even though the page itself is
+  rendered.
 - **A page is read twice when a browser is installed.** The plain HTTP response and — with the
   optional Lightpanda engine — the rendered DOM both go through the same converter, and the **richer
   text wins**: rendering ADDS what scripts build (a JavaScript page's prose) and can also LOSE text

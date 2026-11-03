@@ -2,6 +2,7 @@ package gateways
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -184,6 +185,39 @@ func TestLinksReadARoleHeadingCard(t *testing.T) {
 	}
 	if !strings.Contains(card.Text, "June 02, 2025") {
 		t.Errorf("the card's text was not read: %q", card.Text)
+	}
+}
+
+// The shape fs.blog/blog renders: sixteen heading cards, a pager worded "See older articles" and the
+// next page declared only as `<link rel="next">` in the head. Without the head declaration the walk
+// stops after page 1 and the archive is never collected.
+func TestLinksReadsTheHeadPager(t *testing.T) {
+	var cards strings.Builder
+	for i := range 6 {
+		fmt.Fprintf(&cards, `<article><div><h2><a href="/post-%d/">A title long enough to be a card %d</a></h2></div></article>`, i, i)
+	}
+	page := `<!doctype html><html><head>
+  <link rel="next" href="/blog/page/2/">
+  <link rel="alternate" type="application/rss+xml" href="/feed.xml">
+</head><body><main>` + cards.String() + `</main>
+<div class="pagination"><a href="/blog/page/2/">See older articles</a></div>
+</body></html>`
+
+	const address = "https://example.org/blog/"
+	links, err := HTMLLinkExtractor{}.Links(context.Background(), []byte(page), address)
+	if err != nil {
+		t.Fatalf("links: %v", err)
+	}
+	next := findByURL(links, "https://example.org/blog/page/2/")
+	if next == nil {
+		t.Fatal("the head's rel=next was not read")
+	}
+	res := listing.Detect(address, links)
+	if res.Next != "https://example.org/blog/page/2/" {
+		t.Fatalf("next = %q, want the page the head declares", res.Next)
+	}
+	if len(res.Items) != 6 {
+		t.Fatalf("items = %d, want the six cards (the pager is never an article)", len(res.Items))
 	}
 }
 
