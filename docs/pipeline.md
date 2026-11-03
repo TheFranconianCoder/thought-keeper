@@ -88,6 +88,15 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   follows the links the pages DECLARE (the head's `<link rel="next">`, a pager anchor): a "load more"
   button that only fetches more cards over XHR is not clicked, even though the page itself is
   rendered.
+- **The article is not the page's rails.** Readability keeps the sections a page hangs beside its
+  text — a list of the members who liked a post, a grid of an author's books, a tag cloud — and
+  distilling them would write claims about usernames and counts. So a page's **link rows** are
+  dropped before its text is written: a group of at least eight rows of one shape whose rows are
+  link lines rather than sentences (an anchor, at most sixty words, at least half of them inside the
+  anchors). A card grid survives — a card is a link or two and a paragraph of its own, so the words
+  are the bulk of it — and a page whose text would fall below two hundred characters keeps its rows:
+  a directory of links is still a page. This is why a page of one paragraph and ninety member rows
+  reads as the paragraph, not as ninety names.
 - **A page is read twice when a browser is installed.** The plain HTTP response and — with the
   optional Lightpanda engine — the rendered DOM both go through the same converter, and the **richer
   text wins**: rendering ADDS what scripts build (a JavaScript page's prose) and can also LOSE text

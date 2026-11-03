@@ -63,6 +63,16 @@ func (ReadabilityConverter) Convert(_ context.Context, raw []byte, pageURL strin
 		readIcon = strings.TrimSpace(article.Favicon)
 	}
 
+	// Readability keeps the page's link rails — the members who liked a post, a tag cloud, a grid of
+	// the author's books. They are furniture, not the article, and distilling them writes claims
+	// about usernames and counts. They are dropped here, and the original is kept when what remains is
+	// too little to be a page at all (a link directory is still a page).
+	if stripped := stripLinkRails(content); stripped != content {
+		if md, stripErr := markdownConverter.ConvertString(stripped); stripErr == nil && railTextIsSubstantial(md) {
+			content = stripped
+		}
+	}
+
 	out.Title = firstNonEmpty(meta.bestTitle(), readTitle)
 	out.Excerpt = firstNonEmpty(meta.bestDescription(), readExcerpt)
 	out.SiteName = firstNonEmpty(meta.SiteName, readSite)
