@@ -18,8 +18,11 @@ export const homeDe: Record<string, string> = {
   'home.needsUnclustered.one': '{count} Aussage ohne Cluster',
   'home.needsUnclustered.many': '{count} Aussagen ohne Cluster',
 
-  'home.newSources': 'Neu im Tresor',
-  'home.newSourcesEmpty': 'Noch nichts angekommen.',
+  'home.arrivals': 'Angekommen',
+  'home.arrivalsWindow': 'letzte 7 Tage',
+  'home.arrivalsCount.one': '{count} neu',
+  'home.arrivalsCount.many': '{count} neu',
+  'home.arrivalInterests': 'Aus deinen Interessen:',
   'home.allSources': 'Alle Quellen',
   'home.claimsCount.one': '{count} Aussage',
   'home.claimsCount.many': '{count} Aussagen',
@@ -39,7 +42,10 @@ export const homeDe: Record<string, string> = {
   // Die Warteschlange auf der Haustür.
   'home.readLater': 'Später lesen',
   'home.allReadLater': 'Alle',
-  'home.readLaterEmpty': 'Nichts vorgemerkt.',
+  'home.readLaterOpen.one': '{count} offen',
+  'home.readLaterOpen.many': '{count} offen',
+  'home.readLaterFromInterests.one': '{count} aus Interessen',
+  'home.readLaterFromInterests.many': '{count} aus Interessen',
+  'home.readLaterOldest': 'ältester {age}',
   'home.readLaterEmptyAction': 'Interessen anlegen',
-  'home.readLaterDone': 'Erledigt',
 };

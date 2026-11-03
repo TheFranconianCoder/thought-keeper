@@ -197,6 +197,14 @@ export interface SourceList {
   total: number;
   /** Set when the list is an assistant result (see CommandRef). */
   command?: CommandRef;
+  /** The read-later queue's split, present only when the list IS the queue. */
+  queue?: QueueCounts;
+}
+
+/** QueueCounts is the read-later queue's own split: open entries and how many an interest queued. */
+export interface QueueCounts {
+  open: number;
+  from_interests: number;
 }
 
 /** SourceLink is one URL a document links to that already IS a source: the vault's own page for it. */
@@ -226,8 +234,9 @@ export interface SourceListFilter {
   readLaterOnly?: boolean;
   /** One interest's share of the queue (a named filter, like a tag). */
   interest?: string;
-  /** Keep only sources no sitemap, feed or wiki page declared: what "recently arrived" means. */
-  rootsOnly?: boolean;
+  /** The arrival window, as an absolute instant (RFC3339): what entered the vault at or after it.
+   *  The Start page asks for its own week; the server holds no opinion about the length. */
+  since?: string;
   /**
    * command is an assistant result: the server reads the materialized set from the record instead
    * of filtering. It is one filter dimension, so the window (count, pages, scroll height) works

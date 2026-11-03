@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -312,5 +313,67 @@ func TestAttachEndpoint(t *testing.T) {
 	}
 	if got.Title != "The Page" {
 		t.Errorf("source title = %q", got.Title)
+	}
+}
+
+// TestSourceListParsesTheArrivalWindow: `since` is an absolute instant on the filter — never a
+// duration the server could interpret differently tomorrow — and a malformed one is refused instead
+// of silently read as "no window". A queue read also carries the queue's own split, so the Start
+// line needs no tag cloud for two numbers.
+func TestSourceListParsesTheArrivalWindow(t *testing.T) {
+	lister := &pageLister{}
+	h := SourcesHandler{
+		Lister: lister.Execute, Counter: totalCounter{n: 0}.Count,
+		Queue: func(context.Context) (usecases.QueueCounts, error) {
+			return usecases.QueueCounts{Open: 12, FromInterests: 8}, nil
+		},
+	}
+
+	req := httptest.NewRequestWithContext(context.Background(), "GET",
+		"/api/v1/sources?readlater=1&since=2023-11-14T00:00:00Z&limit=8", nil)
+	rec := httptest.NewRecorder()
+	h.List(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	want, err := time.Parse(time.RFC3339, "2023-11-14T00:00:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lister.lastFilter.Since.Equal(want) {
+		t.Errorf("since = %s, want the instant the address named", lister.lastFilter.Since)
+	}
+	if !lister.lastFilter.ReadLaterOnly || lister.lastL != 8 {
+		t.Errorf("filter = %+v limit %d, want the queue read of 8", lister.lastFilter, lister.lastL)
+	}
+	var got payloads.SourceList
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Queue == nil || got.Queue.Open != 12 || got.Queue.FromInterests != 8 {
+		t.Fatalf("queue = %+v, want 12 open / 8 from interests", got.Queue)
+	}
+
+	// The same filter without the queue carries no split: the numbers describe THE QUEUE.
+	req = httptest.NewRequestWithContext(context.Background(), "GET", "/api/v1/sources?limit=8", nil)
+	rec = httptest.NewRecorder()
+	h.List(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var plain payloads.SourceList
+	if err := json.Unmarshal(rec.Body.Bytes(), &plain); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if plain.Queue != nil {
+		t.Errorf("queue = %+v, want none outside the queue", plain.Queue)
+	}
+
+	// A duration is not an instant: the address must mean the same window tomorrow.
+	req = httptest.NewRequestWithContext(context.Background(), "GET", "/api/v1/sources?since=7d", nil)
+	rec = httptest.NewRecorder()
+	h.List(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for a duration", rec.Code)
 	}
 }

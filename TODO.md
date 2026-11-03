@@ -123,11 +123,6 @@ are.
 - **The manual-addition precedence is per URL, not per host.** Adding `https://example.com/a` releases
   that page; a later sitemap refresh that no longer lists it will not delete it, but the sitemap's
   other pages stay owned. A "this site is mine, never own its URLs" rule is not implemented.
-- **A sitemap's newly discovered pages are invisible on Start.** "Recently arrived" reads roots only
-  (`roots=1`), so one crawl is one row and not fifty. The price: pages a sitemap added are not listed
-  as arrivals at all — the container is, and only if it was itself imported recently. The honest
-  shape is a server-side aggregation over `parent_hash` (one row per owner, ordered by its newest
-  child, "example.com · 34 pages"), which is a read of its own, not a filter.
 
 ## Reader marks and interests (open work)
 

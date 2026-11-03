@@ -72,7 +72,7 @@ export const api = {
         favorite: filter.favoriteOnly ? 1 : undefined,
         readlater: filter.readLaterOnly ? 1 : undefined,
         interest: filter.interest,
-        roots: filter.rootsOnly ? 1 : undefined,
+        since: filter.since,
         limit,
         offset,
       }),

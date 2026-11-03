@@ -135,8 +135,8 @@ func TestSourceListWindowFiltersTheCount(t *testing.T) {
 	}
 }
 
-// TestSourceListRoots: "recently arrived" asks for ROOTS. A page a sitemap declared is a child of
-// that addition, not an addition of its own — otherwise one crawl floods the front door. The queue
+// TestSourceListRoots: roots=1 asks for the sources nothing declared. A page a sitemap declared is a
+// child of that addition, not an addition of its own — otherwise one crawl floods a list. The queue
 // applies the same filter, so the two statements cannot disagree.
 func TestSourceListRoots(t *testing.T) {
 	ctx := context.Background()

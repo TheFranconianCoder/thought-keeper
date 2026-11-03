@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oklog/ulid/v2"
@@ -155,6 +156,9 @@ type SourcesHandler struct {
 	Lister usecases.SourceLister
 	// Counter is the total behind the page, so the list can say "200 of 465" and load the rest.
 	Counter usecases.SourceCounter
+	// Queue is the read-later queue's own split (open, and how many of those an interest queued).
+	// The banner and the Start line read it; nil means the answer carries no split.
+	Queue usecases.ReadLaterCounter
 	// Facets is the tag cloud and the attached count (nil = no facets).
 	Facets usecases.SourceFacetLister
 	// ChildLister is the Sub-sources tab: the sources this one owns.
@@ -229,6 +233,17 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 		Interest:      strings.TrimSpace(q.Get("interest")),
 		RootsOnly:     truthy(q.Get("roots")),
 	}
+	// The arrival window, as an absolute instant: the Start page asks for "the last week" and the
+	// server holds no opinion about it (a relative window would make the same address mean a
+	// different list tomorrow).
+	if raw := strings.TrimSpace(q.Get("since")); raw != "" {
+		since, tErr := time.Parse(time.RFC3339, raw)
+		if tErr != nil {
+			payloads.WriteError(w, types.New("invalid_body", "since must be an RFC3339 instant", tErr))
+			return
+		}
+		filter.Since = since
+	}
 	srcs, err := h.Lister(r.Context(), filter, limit, offset)
 	if err != nil {
 		payloads.WriteError(w, err)
@@ -244,7 +259,14 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 			total = n
 		}
 	}
-	payloads.WriteJSON(w, http.StatusOK, payloads.SourceList{Sources: out, Count: total, Total: total, Command: expired})
+	list := payloads.SourceList{Sources: out, Count: total, Total: total, Command: expired}
+	// The queue's split travels with the queue: two counts, never a reason to read the tag cloud.
+	if filter.ReadLaterOnly && h.Queue != nil {
+		if counts, qErr := h.Queue(r.Context()); qErr == nil {
+			list.Queue = &payloads.QueueCounts{Open: counts.Open, FromInterests: counts.FromInterests}
+		}
+	}
+	payloads.WriteJSON(w, http.StatusOK, list)
 }
 
 // ResolveLinks serves GET /api/v1/sources/resolve?url=…: for every URL a rendered document links

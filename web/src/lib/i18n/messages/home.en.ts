@@ -18,8 +18,11 @@ export const homeEn: Record<string, string> = {
   'home.needsUnclustered.one': '{count} claim without a cluster',
   'home.needsUnclustered.many': '{count} claims without a cluster',
 
-  'home.newSources': 'Recently arrived',
-  'home.newSourcesEmpty': 'Nothing has arrived yet.',
+  'home.arrivals': 'Arrived',
+  'home.arrivalsWindow': 'last 7 days',
+  'home.arrivalsCount.one': '{count} new',
+  'home.arrivalsCount.many': '{count} new',
+  'home.arrivalInterests': 'From your interests:',
   'home.allSources': 'All sources',
   'home.claimsCount.one': '{count} claim',
   'home.claimsCount.many': '{count} claims',
@@ -39,7 +42,10 @@ export const homeEn: Record<string, string> = {
   // The read-later queue on the front door.
   'home.readLater': 'Read later',
   'home.allReadLater': 'All',
-  'home.readLaterEmpty': 'Nothing waiting.',
+  'home.readLaterOpen.one': '{count} open',
+  'home.readLaterOpen.many': '{count} open',
+  'home.readLaterFromInterests.one': '{count} from interests',
+  'home.readLaterFromInterests.many': '{count} from interests',
+  'home.readLaterOldest': 'oldest {age}',
   'home.readLaterEmptyAction': 'Set up interests',
-  'home.readLaterDone': 'Done',
 };

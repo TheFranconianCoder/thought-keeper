@@ -2,11 +2,10 @@
   import { clearable } from '../../lib/clearable';
   import { untrack } from 'svelte';
   import { api } from '../../lib/api';
-  import { toggleReadLater } from '../../lib/actions';
   import type { Source } from '../../lib/api/types';
   import { relTime } from '../../lib/format';
-  import { n, t, tn } from '../../lib/i18n/index.svelte';
-  import { openAdd, openInterests } from '../../lib/overlays';
+  import { t, tn } from '../../lib/i18n/index.svelte';
+  import { openAdd } from '../../lib/overlays';
   import { readError, readSignal } from '../../lib/read';
   import { askPath, navigate, router, sourcePath } from '../../lib/router.svelte';
   import { pipelineLabel } from '../../lib/source-state';
@@ -20,17 +19,38 @@
   import SourceLamp from '../sources/SourceLamp.svelte';
 
   let question = $state('');
-  let newest = $state<Source[]>([]);
-  let newestLoaded = $state(false);
-  let newestError = $state('');
-  // The read-later queue is the one place the interests show up before they are read: the three
-  // oldest entries, with the rule that queued each one.
-  let readLater = $state<Source[]>([]);
+  let arrivals = $state<Source[]>([]);
+  let arrivalCount = $state(0);
+  let arrivalsLoaded = $state(false);
+  let arrivalsError = $state('');
+  // The queue is a LINE, not a card: the oldest entry and its numbers say everything the door owes
+  // it, and the arrivals below are the list the reader actually works from.
+  let readLaterOldest = $state<Source | null>(null);
   let readLaterCount = $state(0);
+  let readLaterFromInterests = $state(0);
   let readLaterLoaded = $state(false);
 
   const status = $derived(system.status);
   const recentQuestions = $derived(asks.recent.slice(0, 3));
+  // A card that would only say "nothing came in this week" is one card too many: like the signal
+  // lines it is absent when quiet.
+  const showArrivals = $derived(!arrivalsLoaded || arrivalsError !== '' || arrivals.length > 0);
+
+  // Which rules fired among these arrivals: an interest queues a NEW source, so a hit here is
+  // literally why the queue grew this week. Names, not just a number — the reader wrote the rules.
+  const arrivalRules = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const source of arrivals) {
+      for (const slug of source.read_later_via ?? []) {
+        if (!interests.bySlug(slug)) continue;
+        counts.set(slug, (counts.get(slug) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 3)
+      .map(([slug, count]) => ({ slug, name: interests.nameOf(slug), count }));
+  });
 
   // What the application is doing RIGHT NOW. The front door is the one place a reader looks to
   // see whether a run is alive, so the pipeline speaks here instead of only in the top bar.
@@ -68,12 +88,12 @@
 
   $effect(() => {
     if (router.current.view !== 'home') return;
-    // The Start page does not need the full list, only the newest ROOTS and the queue — but both
-    // change when the vault does. `epoch` moves when the sources are invalidated, never when a page
-    // of some list happens to arrive.
+    // The Start page does not need the full list, only the arrivals and the queue — but both change
+    // when the vault does. `epoch` moves when the sources are invalidated, never when a page of some
+    // list happens to arrive.
     void sourceWindow.epoch;
     untrack(() => {
-      void loadNewest();
+      void loadArrivals();
       void loadReadLater();
     });
   });
@@ -91,38 +111,30 @@
 
   async function loadReadLater(): Promise<void> {
     try {
-      const result = await api.sources({ readLaterOnly: true }, 3, 0);
-      readLater = result.sources ?? [];
-      readLaterCount = result.count ?? readLater.length;
+      // One row is enough: the line names the oldest entry and the numbers come with the answer.
+      const result = await api.sources({ readLaterOnly: true }, 1, 0);
+      readLaterOldest = result.sources?.[0] ?? null;
+      readLaterCount = result.queue?.open ?? result.count ?? 0;
+      readLaterFromInterests = result.queue?.from_interests ?? 0;
       readLaterLoaded = true;
     } catch {
       readLaterLoaded = true;
     }
   }
 
-  async function finishReadLater(hash: string): Promise<void> {
-    await toggleReadLater(hash, false);
-    await loadReadLater();
-  }
-
-  function viaLabel(source: Source): string {
-    // Skip a slug whose rule was deleted: the queue entry stays, the dead label does not.
-    const slugs = (source.read_later_via ?? []).filter((slug) => !!interests.bySlug(slug));
-    if (slugs.length === 0) return '';
-    const first = interests.nameOf(slugs[0]);
-    return slugs.length > 1 ? `${first} +${slugs.length - 1}` : first;
-  }
-
-  async function loadNewest(): Promise<void> {
+  async function loadArrivals(): Promise<void> {
     try {
-      // ROOTS only: a sitemap's pages and a feed's items are one addition, not fifty arrivals.
-      const result = await api.sources({ rootsOnly: true }, 5, 0, readSignal(20_000));
-      newest = result.sources ?? [];
-      newestLoaded = true;
-      newestError = '';
+      // The newest SOURCES of the week, each one a row of its own: a feed's article is an arrival
+      // like a document is, and the window keeps the card from freezing on the newest ever.
+      const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+      const result = await api.sources({ since }, 8, 0, readSignal(20_000));
+      arrivals = result.sources ?? [];
+      arrivalCount = result.count ?? arrivals.length;
+      arrivalsLoaded = true;
+      arrivalsError = '';
     } catch (error) {
-      newestLoaded = true;
-      newestError = readError(error);
+      arrivalsLoaded = true;
+      arrivalsError = readError(error);
     }
   }
 
@@ -187,7 +199,7 @@
     {/if}
   </section>
 
-  {#if live || needs.length > 0}
+  {#if live || needs.length > 0 || readLaterCount > 0}
     <div class="home-signals">
       {#if live}
         <a class="signal signal--live" href="#/status">
@@ -206,6 +218,26 @@
           {/each}
         </div>
       {/if}
+      {#if readLaterLoaded && readLaterCount > 0}
+        <a class="signal signal--queue" href="#/sources?readlater=1">
+          <Icon name="clock" size={13} />
+          <span class="signal-text">{t('home.readLater')}</span>
+          <span class="queue-fact">{tn('home.readLaterOpen', readLaterCount)}</span>
+          {#if readLaterFromInterests > 0}
+            <span class="sep">·</span>
+            <span class="queue-fact">{tn('home.readLaterFromInterests', readLaterFromInterests)}</span>
+          {/if}
+          {#if readLaterOldest}
+            <span class="sep">·</span>
+            <span class="queue-fact">
+              {t('home.readLaterOldest', { age: relTime(readLaterOldest.read_later_at ?? readLaterOldest.imported_at) })}
+            </span>
+          {/if}
+          <span class="queue-open">
+            {t('home.allReadLater')} <Icon name="chevronRight" size={12} />
+          </span>
+        </a>
+      {/if}
     </div>
   {/if}
 
@@ -218,100 +250,57 @@
         <Icon name="plus" size={13} /> {t('home.emptySourcesAction')}
       </button>
     </section>
-  {:else}
-    <div class="home-grid">
-      <section class="home-card" aria-label={t('home.readLater')}>
-        <div class="card-head">
-          <h2>{t('home.readLater')}</h2>
-          {#if readLaterLoaded && readLaterCount > 0}<span class="count">{n(readLaterCount)}</span>{/if}
-          <span class="card-links">
-            {#if readLaterCount > 0}
-              <button
-                class="icon-btn"
-                title={t('interests.manage')}
-                aria-label={t('interests.manage')}
-                onclick={() => openInterests()}
-              ><Icon name="target" size={13} /></button>
-              <a class="card-link" href="#/sources?readlater=1">
-                {t('home.allReadLater')} <Icon name="chevronRight" size={12} />
-              </a>
-            {/if}
-          </span>
-        </div>
-        {#if !readLaterLoaded}
-          <div class="stack">
-            {#each Array(2) as _, index (index)}<span class="skeleton" style="height:36px"></span>{/each}
-          </div>
-        {:else if readLater.length === 0}
-          <p class="quiet-line">
-            {t('home.readLaterEmpty')}
-            <button class="card-link card-link--button" onclick={() => openInterests()}>
-              {t('home.readLaterEmptyAction')} <Icon name="chevronRight" size={12} />
-            </button>
-          </p>
-        {:else}
-          <div class="home-rows">
-            {#each readLater as source (source.hash)}
-              <div class="home-row saved-row">
-                <button class="saved-open" onclick={() => openSource(source)}>
-                  <SourceIcon kind={source.kind} hash={source.hash} size={16} />
-                  <span class="source-main">
-                    <span class="row-title">{source.title || source.hash.slice(0, 12)}</span>
-                    <span class="row-sub">
-                      {#if viaLabel(source)}<span class="saved-via"><Icon name="target" size={9} /> {viaLabel(source)}</span> · {/if}
-                      {relTime(source.read_later_at ?? source.imported_at)}
-                    </span>
-                  </span>
-                </button>
-                <button
-                  class="icon-btn saved-done"
-                  title={t('home.readLaterDone')}
-                  aria-label={t('home.readLaterDone')}
-                  onclick={() => void finishReadLater(source.hash)}
-                ><Icon name="check" size={13} /></button>
-              </div>
-            {/each}
-          </div>
+  {:else if showArrivals}
+    <section class="home-card" aria-label={t('home.arrivals')}>
+      <div class="card-head">
+        <h2>{t('home.arrivals')}</h2>
+        {#if arrivalsLoaded && arrivalCount > 0}
+          <span class="count">{tn('home.arrivalsCount', arrivalCount)}</span>
         {/if}
-      </section>
-
-      <section class="home-card" aria-label={t('home.newSources')}>
-        <div class="card-head">
-          <h2>{t('home.newSources')}</h2>
-          <a class="card-link" href="#/sources">
-            {t('home.allSources')}
-            <Icon name="chevronRight" size={13} />
-          </a>
+        <span class="card-window">{t('home.arrivalsWindow')}</span>
+        <a class="card-link" href="#/sources">
+          {t('home.allSources')}
+          <Icon name="chevronRight" size={13} />
+        </a>
+      </div>
+      {#if arrivalsError}
+        <p class="notice notice--error">{arrivalsError}</p>
+      {/if}
+      {#if !arrivalsLoaded}
+        <div class="stack">
+          {#each Array(4) as _, index (index)}<span class="skeleton" style="height:40px"></span>{/each}
         </div>
-        {#if newestError}
-          <p class="notice notice--error">{newestError}</p>
-        {/if}
-        {#if !newestLoaded}
-          <div class="stack">
-            {#each Array(3) as _, index (index)}<span class="skeleton" style="height:40px"></span>{/each}
-          </div>
-        {:else if newest.length === 0}
-          <p class="quiet-line">{t('home.newSourcesEmpty')}</p>
-        {:else}
-          <div class="home-rows">
-            {#each newest as source (source.hash)}
-              {@const live = sources.progress[source.hash]}
-              <button class="home-row source-row" onclick={() => openSource(source)}>
-                <SourceIcon kind={source.kind} hash={source.hash} size={16} />
-                <span class="source-main">
-                  <span class="row-title">{source.title || source.hash.slice(0, 12)}</span>
-                  <span class="row-sub">
-                    {relTime(source.imported_at)}
-                    {#if source.atom_count > 0} · {tn('home.claimsCount', source.atom_count)}{/if}
-                  </span>
+      {:else}
+        <div class="home-rows">
+          {#each arrivals as source (source.hash)}
+            {@const live = sources.progress[source.hash]}
+            <button class="home-row source-row" onclick={() => openSource(source)}>
+              <SourceIcon kind={source.kind} hash={source.hash} size={16} />
+              <span class="source-main">
+                <span class="row-title">{source.title || source.hash.slice(0, 12)}</span>
+                <span class="row-sub">
+                  {relTime(source.imported_at)}
+                  {#if source.atom_count > 0} · {tn('home.claimsCount', source.atom_count)}{/if}
                 </span>
-                {#if !source.bookmark}<SourceLamp {source} {live} />{/if}
-              </button>
+              </span>
+              {#if !source.bookmark}<SourceLamp {source} {live} />{/if}
+            </button>
+          {/each}
+        </div>
+        {#if arrivalRules.length > 0}
+          <p class="card-foot">
+            <span class="mini-label">{t('home.arrivalInterests')}</span>
+            {#each arrivalRules as rule, index (rule.slug)}
+              {#if index > 0}<span class="sep">·</span>{/if}
+              <a class="rule-link" href="#/sources?readlater=1&interest={rule.slug}">{rule.name} ({rule.count})</a>
             {/each}
-          </div>
+            <a class="card-link" href="#/sources?readlater=1">
+              {t('home.allReadLater')} <Icon name="chevronRight" size={12} />
+            </a>
+          </p>
         {/if}
-      </section>
-    </div>
+      {/if}
+    </section>
   {/if}
 </div>
 
@@ -451,6 +440,58 @@
     text-decoration: underline;
   }
 
+  /* The queue is a STATE of the reader, not a second card: one line with the numbers behind it,
+  and the way into the full list at the end. */
+  .signal--queue {
+    color: var(--ink-2);
+  }
+
+  .queue-fact {
+    flex: none;
+    color: var(--ink-2);
+  }
+
+  .queue-open {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    color: var(--muted);
+  }
+
+  a.signal:hover .queue-open {
+    color: var(--accent);
+  }
+
+  /* The rules that fired among the arrivals: the reader wrote them, so the card names them. */
+  .card-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    margin: 8px 0 0;
+    padding-top: 9px;
+    border-top: 1px solid var(--line);
+    color: var(--faint);
+    font-size: 11.5px;
+  }
+
+  .card-foot .mini-label {
+    margin-right: 2px;
+  }
+
+  .rule-link {
+    color: var(--muted);
+  }
+
+  .rule-link:hover {
+    color: var(--accent);
+  }
+
+  .card-foot .card-link {
+    margin-left: auto;
+  }
+
   .sep {
     color: var(--faint);
   }
@@ -476,14 +517,6 @@
     }
   }
 
-  .home-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-    align-items: start;
-    gap: 14px;
-    margin-bottom: 14px;
-  }
-
   .home-card {
     min-width: 0;
     padding: 15px 17px;
@@ -493,46 +526,11 @@
     box-shadow: var(--shadow-1);
   }
 
-  .card-links {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin-left: auto;
-  }
-
-  .card-links .card-link {
-    margin-left: 0;
-  }
-
-  .card-links .icon-btn {
-    width: 24px;
-    height: 24px;
-    color: var(--faint);
-  }
-
-  .card-links .icon-btn:hover {
-    color: var(--accent);
-  }
-
-  .card-link--button {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    font: inherit;
-    font-size: 11.5px;
-  }
-
-  .card-link--button:hover {
-    color: var(--accent);
-  }
-
   .card-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 4px 8px;
     margin-bottom: 8px;
   }
 
@@ -547,6 +545,13 @@
   .card-head .count {
     color: var(--faint);
     font-size: 11.5px;
+  }
+
+  /* The window the card reads, said instead of assumed: the digest is a week, not "the newest". */
+  .card-window {
+    color: var(--faint);
+    font-size: 11px;
+    letter-spacing: 0.01em;
   }
 
   .card-link {
@@ -604,60 +609,6 @@
     color: var(--faint);
   }
 
-  .saved-row {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 0;
-  }
-
-  .saved-open {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    flex: 1;
-    min-width: 0;
-    padding: 7px 6px;
-    border: 0;
-    background: transparent;
-    color: var(--ink-2);
-    font: inherit;
-    font-size: 12.5px;
-    text-align: left;
-  }
-
-  .saved-open:hover {
-    background: var(--bg-hover);
-    color: var(--ink);
-  }
-
-  .saved-open :global(.ico) {
-    color: var(--faint);
-  }
-
-  .saved-done {
-    width: 26px;
-    height: 26px;
-    margin-right: 4px;
-    opacity: 0;
-  }
-
-  .saved-row:hover .saved-done,
-  .saved-row:focus-within .saved-done {
-    opacity: 1;
-  }
-
-  .saved-via {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    color: var(--accent);
-  }
-
-  .saved-via :global(.ico) {
-    color: var(--accent);
-  }
-
   .row-title {
     flex: 1;
     min-width: 0;
@@ -686,22 +637,6 @@
     white-space: nowrap;
   }
 
-  /* The empty queue is one quiet line, never a box that asks for attention it does not have. */
-  .quiet-line {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    margin: 4px 0 2px;
-    color: var(--faint);
-    font-size: 12px;
-    line-height: 1.5;
-  }
-
-  .quiet-line .card-link {
-    margin-left: 0;
-  }
-
   .onboarding {
     padding: 22px 24px;
   }
@@ -723,12 +658,6 @@
   .empty-text--quiet {
     color: var(--faint);
     font-size: 11.5px;
-  }
-
-  @media (max-width: 860px) {
-    .home-grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
   }
 
   @media (max-width: 640px) {

@@ -392,6 +392,7 @@ func Build(
 		Reconcile: handlers.ReconcileHandler{Runs: reconciler},
 		Sources: handlers.SourcesHandler{
 			Lister: sources.List, Counter: sources.Count, Facets: sources.Facets, ChildLister: sources.Children,
+			Queue:     sources.ReadLaterCounts,
 			TagSetter: sources.Tag,
 			Favorite:  favorites.SetSource, ReadLater: readLater.Set, Interests: readLater.ForSource,
 			Getter: sources.Get, Distill: scheduler, Summary: scheduler, Status: scheduler, Delete: sources.Delete,

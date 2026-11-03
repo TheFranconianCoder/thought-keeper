@@ -85,6 +85,34 @@ type SourceFacetsResult struct {
 	ReadLaterInterests int
 }
 
+// QueueCounts is the read-later queue's own split: how many entries are open and how many of them a
+// rule queued. It describes the QUEUE, never the page a window happens to have loaded.
+type QueueCounts struct {
+	Open          int
+	FromInterests int
+}
+
+// ReadLaterCounter answers the queue's split for the Sources banner and the Start line. A handler
+// holds this value; nil means the answer carries no split.
+type ReadLaterCounter func(ctx context.Context) (QueueCounts, error)
+
+// ReadLaterCounts returns the queue's split: the open entries and how many of them an interest put
+// there. A vault without a shelf answers zeros.
+func (uc Sources) ReadLaterCounts(ctx context.Context) (QueueCounts, error) {
+	if uc.Shelf == nil {
+		return QueueCounts{}, nil
+	}
+	open, err := uc.Shelf.CountReadLater(ctx)
+	if err != nil {
+		return QueueCounts{}, err
+	}
+	from, err := uc.Shelf.CountReadLaterFromInterests(ctx)
+	if err != nil {
+		return QueueCounts{}, err
+	}
+	return QueueCounts{Open: open, FromInterests: from}, nil
+}
+
 // SourceFacetLister returns the tag cloud and the attached count. A handler holds this value; nil
 // means there are no facets.
 type SourceFacetLister func(ctx context.Context) (SourceFacetsResult, error)

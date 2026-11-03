@@ -51,7 +51,7 @@ Captures for the README. One vault for the whole set, so counts and names tell t
 
 Blurred (box blur, only the affected rectangles):
 
-- source and document titles in every list, including `Continue`, `Recently arrived`, the Sources
+- source and document titles in every list, including the Start lens’s `Arrived`, the Sources
   lens and the assistant result list;
 - the URL or filename beneath a source title, because it repeats the title;
 - provenance labels in the detail panes;

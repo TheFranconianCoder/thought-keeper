@@ -121,6 +121,15 @@ type SourceList struct {
 	// Command is set when the list is an assistant result: the record it came from, whether it has
 	// expired, and how many of its members a deleted source took with it.
 	Command *CommandRef `json:"command,omitempty"`
+	// Queue is the read-later queue's split, present only when the list IS the queue: the open
+	// entries and how many of them a rule queued. The list's `count` is the open entries too.
+	Queue *QueueCounts `json:"queue,omitempty"`
+}
+
+// QueueCounts is the queue's own split: open entries, and how many of those an interest queued.
+type QueueCounts struct {
+	Open          int `json:"open"`
+	FromInterests int `json:"from_interests"`
 }
 
 // SourceTagFacet is one tag of the Sources cloud and how many sources carry it.

@@ -55,10 +55,12 @@ not a chat: a command resolves to a lens, a filter and a materialized set, and e
 follows the address it hands out. A question that asks which items exist is still a list; only a
 prose question goes to Ask. Time means arrival (source), creation (claim) or last edit (wiki page),
 never publication. **Start** is the front door: a
-vault-pulse line, an Ask box, two thin signals for what runs and what needs you (absent when quiet),
-**Read later** (the oldest open queue entries with the interest that queued each) and the newest
-**roots** — owned pages never count as arrivals — each with its claim count; never a session-restore
-card and never the newest-claims wall. A **wiki
+vault-pulse line, an Ask box, and three thin signals for what runs, what needs you and what waits in
+the read-later queue (open entries, how many came from interests, the age of the oldest), all absent
+when quiet; then **Arrived** — the eight newest sources that entered the vault in the last
+seven days, one row each (a feed's article is an arrival like a document is), with the interests
+that fired among them in the card's foot; the card is absent when the week is quiet. Never a
+session-restore card and never the newest-claims wall. A **wiki
 page** is user-authored Markdown with tags; saving it writes a source representation and runs the
 document pipeline from capture. The app also tags a page and a source
 (auto tags, kept apart from the human's tags) and curates the three name vocabularies (`topics`,
