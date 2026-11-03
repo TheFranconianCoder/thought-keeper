@@ -32,12 +32,12 @@
 
   const status = $derived(system.status);
   const recentQuestions = $derived(asks.recent.slice(0, 3));
-  // A card that would only say "nothing came in this week" is one card too many: like the signal
+  // A card that would only say "nothing came in this window" is one card too many: like the signal
   // lines it is absent when quiet.
   const showArrivals = $derived(!arrivalsLoaded || arrivalsError !== '' || arrivals.length > 0);
 
   // The rules that fired among these arrivals: an interest queues a NEW source, so a hit here is
-  // literally why the queue grew this week. Names, not just a number — the reader wrote the rules.
+  // literally why the queue grew in this window. Names, not just a number — the reader wrote the rules.
   const arrivalRules = $derived.by(() => {
     const counts = new Map<string, number>();
     for (const source of arrivals) {
@@ -131,9 +131,9 @@
 
   async function loadArrivals(): Promise<void> {
     try {
-      // The newest SOURCES of the week, each one a row of its own: a feed's article is an arrival
+      // The newest SOURCES of the window, each one a row of its own: a feed's article is an arrival
       // like a document is, and the window keeps the card from freezing on the newest ever.
-      const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+      const since = new Date(Date.now() - 3 * 86_400_000).toISOString();
       const result = await api.sources({ since }, 8, 0, readSignal(20_000));
       arrivals = result.sources ?? [];
       arrivalCount = result.count ?? arrivals.length;

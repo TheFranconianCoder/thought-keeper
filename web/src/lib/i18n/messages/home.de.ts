@@ -19,7 +19,7 @@ export const homeDe: Record<string, string> = {
   'home.needsUnclustered.many': '{count} Aussagen ohne Cluster',
 
   'home.arrivals': 'Angekommen',
-  'home.arrivalsWindow': 'letzte 7 Tage',
+  'home.arrivalsWindow': 'letzte 3 Tage',
   'home.arrivalsCount.one': '{count} neu',
   'home.arrivalsCount.many': '{count} neu',
   'home.arrivalInterests': 'Aus deinen Interessen:',
