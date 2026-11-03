@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"net/url"
+	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -231,7 +232,7 @@ func navRegion(n *html.Node) bool {
 	for _, attr := range n.Attr {
 		switch strings.ToLower(attr.Key) {
 		case "role":
-			for _, role := range strings.Fields(strings.ToLower(attr.Val)) {
+			for role := range strings.FieldsSeq(strings.ToLower(attr.Val)) {
 				if navRoles[role] {
 					return true
 				}
@@ -257,13 +258,9 @@ func isHeading(n *html.Node) bool {
 		return true
 	}
 	for _, attr := range n.Attr {
-		if !strings.EqualFold(attr.Key, "role") {
-			continue
-		}
-		for _, role := range strings.Fields(strings.ToLower(attr.Val)) {
-			if role == "heading" {
-				return true
-			}
+		if strings.EqualFold(attr.Key, "role") &&
+			slices.Contains(strings.Fields(strings.ToLower(attr.Val)), "heading") {
+			return true
 		}
 	}
 	return false
