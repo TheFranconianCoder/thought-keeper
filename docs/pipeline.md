@@ -65,11 +65,14 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   `<footer>` and anything with `role="navigation|menu|menubar|search"` (or `aria-hidden`) is the
   page's furniture, however card-like its tiles. The rules read the document the TEXT came from —
   the rendered DOM when the browser read more — so a card grid a script builds is found like one the
-  server sends. The same goes for the readable text: the list is the page when that text is short
-  (readability found no article) or when it carries the cards — their addresses, or their titles (a
-  kept card grid is headings and no links at all). Nothing is reclassified silently: the page is
-  stored as it was and the answer carries how many cards were found; confirming it
-  (`POST /api/v1/add` with `listing: true`) makes it an owner. The articles become URL sources
+  server sends. A **pager is its words AND its address**: a link worded "Read more" that points at an
+  article is the card's link, and only the same words on another page of the list (`?page=2`,
+  `/page/2`) are the pager — otherwise every card whose link says "Read more" (the commonest card
+  label there is) would be dropped. The same goes for the readable text: the list is the page when
+  that text is short (readability found no article) or when it carries the cards — their addresses,
+  or their titles (a kept card grid is headings and no links at all). Nothing is reclassified
+  silently: the page is stored as it was and the answer carries how many cards were found; confirming
+  it (`POST /api/v1/add` with `listing: true`) makes it an owner. The articles become URL sources
   (`origin: listing`, `parent_hash`) and the listing's snapshot is the **rendered list** —
   readability throws a card grid away, so a card grid is never distilled as prose.
 - **The initial capture walks the pagination; a refresh does not.** A listing is read page by page —

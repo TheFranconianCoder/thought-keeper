@@ -191,8 +191,10 @@ func pagerText(link Link) bool {
 
 // isPagerPhrase answers the vocabulary question for one piece of text. A site may open its pager
 // with a verb ("See older articles" on fs.blog): the verb is what the site chose, not what the link
-// does, so a leading one is dropped before the words are looked up. That is safe because the address
-// still has to be a pager (pagerURL) before NextPage accepts the link.
+// does, so a leading one is dropped before the words are looked up. That is safe because the words
+// alone never decide anything — the address still has to be a pager (pagerURL) before NextPage takes
+// the link and before usable drops it. It is also why "Read more" ("read" + "more") is not a pager
+// when it points at an article.
 func isPagerPhrase(text string) bool {
 	text = trimPager(text)
 	if lead, rest, ok := strings.Cut(text, " "); ok && pagerLead[lead] {
@@ -368,11 +370,15 @@ func usable(pageURL string, link Link) bool {
 	if entities.URLKey(link.URL) == entities.URLKey(pageURL) {
 		return false
 	}
-	// A pager link is never an article, whatever its text.
-	if pagerText(link) || strings.Contains(link.Rel, "next") {
+	// A pager is its WORDS and its ADDRESS — the same rule NextPage applies. The words alone are not
+	// enough: "Read more" is the most common card label there is, and the verb-stripping that reads
+	// "See older articles" as a pager also reads "Read more" as one ("read" + "more"). A card's
+	// "Read more" points at its article, so it is the article's link; a pager points at another page
+	// of the list, so it never is.
+	if (pagerText(link) && pagerURL(pageURL, link.URL)) || strings.Contains(link.Rel, "next") {
 		return false
 	}
-	if link.InHeading || link.Card {
+	if link.InHeading || link.Card || strings.TrimSpace(link.Label) != "" {
 		return true
 	}
 	return utf8.RuneCountInString(strings.TrimSpace(link.Text)) >= 25

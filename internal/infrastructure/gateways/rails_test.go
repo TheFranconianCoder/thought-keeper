@@ -16,7 +16,7 @@ func TestStripLinkRailsDropsRepeatedLinkRows(t *testing.T) {
 			<br/><a href="/user/%d/quotes">view quotes</a></p></div>`, i, i, i, i+10, i)
 	}
 	article := `<div class="article"><h1>“Two things are infinite.”</h1>
-		<p>― Albert Einstein</p>` + rows.String() + `</div>`
+		<p>― Someone</p>` + rows.String() + `</div>`
 
 	stripped := stripLinkRails(article)
 	if strings.Contains(stripped, "view quotes") {

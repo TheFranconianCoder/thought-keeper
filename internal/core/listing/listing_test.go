@@ -114,6 +114,53 @@ func TestPagerIsNotAnArticle(t *testing.T) {
 	}
 }
 
+// A pager's words are not a pager on their own: the address decides. "Read more" is a pager's
+// vocabulary ("read" + "more") and the most common card label there is, so the same words on a
+// pager address are dropped and on an article address are the card's link.
+func TestPagerWordsOnAnArticleAddressAreAnArticle(t *testing.T) {
+	links := archiveLinks()
+	links = append(links, Link{
+		URL:   "https://sandeepswadia.beehiiv.com/archive?page=2",
+		Text:  "Read more",
+		Label: "Open current page",
+		Group: "div/div/div",
+	})
+	res := Detect("https://sandeepswadia.beehiiv.com/archive", links)
+	for _, item := range res.Items {
+		if strings.Contains(item.URL, "page=2") {
+			t.Fatal("the pager must never be collected as an article")
+		}
+	}
+}
+
+// readMoreCards is the shape apolloresearch.ai/blog renders: thirteen cards whose ONLY named link
+// is "Read more" (labelled "Open current blog post"), with the title and the date in the card's own
+// <p> elements — no heading, no <time>. Before the address check every one of those links read as a
+// pager and the page had zero candidates: 6,212 characters of card titles, stored and distilled as
+// if it were an article.
+func readMoreCards() []Link {
+	links := make([]Link, 0, 13)
+	for i := range 13 {
+		links = append(links, Link{
+			URL:   fmt.Sprintf("https://www.apolloresearch.ai/blog/post-%d", i),
+			Text:  "Read more",
+			Label: "Open current blog post",
+			Group: "div.blog_card.w-dyn-item",
+		})
+	}
+	return links
+}
+
+func TestReadMoreCardsAreAListing(t *testing.T) {
+	res := Detect("https://www.apolloresearch.ai/blog", readMoreCards())
+	if res.GroupSize != 13 || len(res.Items) != 13 {
+		t.Fatalf("group=%d items=%d, want the thirteen cards", res.GroupSize, len(res.Items))
+	}
+	if !Suggests(res, 6212, 400, 13) {
+		t.Fatal("a card grid whose links are in the readable text is the page's content")
+	}
+}
+
 // overlayLinks is the shape langchain.com/blog renders: six cards whose anchors are EMPTY (the card
 // draws the title and the date beside the link), next to six mega-menu tiles that are in a heading.
 func overlayLinks() []Link {

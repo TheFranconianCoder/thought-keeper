@@ -167,7 +167,7 @@ func countMarks(n *html.Node) marks {
 // two tags is not a word, and counting it would make a rail look like prose.
 func meaningfulWords(text string) int {
 	n := 0
-	for _, token := range strings.Fields(text) {
+	for token := range strings.FieldsSeq(text) {
 		for _, r := range token {
 			if unicode.IsLetter(r) || unicode.IsDigit(r) {
 				n++
