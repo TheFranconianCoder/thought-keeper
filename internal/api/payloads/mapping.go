@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
@@ -62,6 +63,19 @@ func SourceFromPartial(p partialentities.PartialSource) Source {
 	}
 	s.Steps = stepsFromPartial(p)
 	return s
+}
+
+// QueueCountsFrom maps the queue's split to its wire shape. The rules travel as slugs: the client
+// knows the names, and a rule that was deleted must not be invented server-side.
+func QueueCountsFrom(c usecases.QueueCounts) *QueueCounts {
+	out := &QueueCounts{Open: c.Open}
+	if len(c.Interests) > 0 {
+		out.Interests = make([]InterestShare, 0, len(c.Interests))
+		for _, share := range c.Interests {
+			out.Interests = append(out.Interests, InterestShare{Slug: share.Slug, Count: share.Count})
+		}
+	}
+	return out
 }
 
 // wireTime formats an optional timestamp: empty means the mark is absent, never "1970".

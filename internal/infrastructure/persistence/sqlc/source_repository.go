@@ -562,6 +562,25 @@ func (r *SourceRepository) CountReadLaterFromInterests(ctx context.Context) (int
 	return int(n), nil
 }
 
+// CountReadLaterByInterest is how many OPEN queue entries each rule queued. An entry can carry
+// more than one rule, so the counts may sum to more than the queue; that is the honest picture of
+// what fired, not a partition.
+func (r *SourceRepository) CountReadLaterByInterest(ctx context.Context) (map[string]int, error) {
+	rows, err := r.q.ListReadLaterVia(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list read later via: %w", err)
+	}
+	out := make(map[string]int, len(rows))
+	for _, raw := range rows {
+		for _, slug := range decodeSourceTags(raw) {
+			if slug != "" {
+				out[slug]++
+			}
+		}
+	}
+	return out, nil
+}
+
 // CountReadLaterVia is one interest's share of the open queue.
 func (r *SourceRepository) CountReadLaterVia(ctx context.Context, slug string) (int, error) {
 	n, err := r.q.CountReadLaterVia(ctx, sql.NullString{String: slug, Valid: slug != ""})

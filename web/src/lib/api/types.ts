@@ -201,10 +201,18 @@ export interface SourceList {
   queue?: QueueCounts;
 }
 
-/** QueueCounts is the read-later queue's own split: open entries and how many an interest queued. */
+/** InterestShare is one rule's share of the read-later queue. The client knows the rule's name;
+ *  a slug whose rule was deleted stays out of the line, like a queue row's label. */
+export interface InterestShare {
+  slug: string;
+  count: number;
+}
+
+/** QueueCounts is the read-later queue's own split: the open entries and each rule's share. An
+ *  entry can carry more than one rule, so the shares may sum past the open count. */
 export interface QueueCounts {
   open: number;
-  from_interests: number;
+  interests?: InterestShare[];
 }
 
 /** SourceLink is one URL a document links to that already IS a source: the vault's own page for it. */

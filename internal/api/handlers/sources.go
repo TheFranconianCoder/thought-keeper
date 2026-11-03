@@ -263,7 +263,7 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 	// The queue's split travels with the queue: two counts, never a reason to read the tag cloud.
 	if filter.ReadLaterOnly && h.Queue != nil {
 		if counts, qErr := h.Queue(r.Context()); qErr == nil {
-			list.Queue = &payloads.QueueCounts{Open: counts.Open, FromInterests: counts.FromInterests}
+			list.Queue = payloads.QueueCountsFrom(counts)
 		}
 	}
 	payloads.WriteJSON(w, http.StatusOK, list)

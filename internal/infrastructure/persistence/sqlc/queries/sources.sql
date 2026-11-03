@@ -452,7 +452,7 @@ UPDATE sources SET
 WHERE hash = sqlc.arg(hash);
 
 -- name: CountReadLater :one
--- The open queue: the number the Start card's head and the Sources filter chip show.
+-- The open queue: the number the Start line and the Sources filter chip show.
 SELECT COUNT(*) FROM sources
 WHERE read_later_at IS NOT NULL AND read_later_done_at IS NULL;
 
@@ -461,6 +461,12 @@ WHERE read_later_at IS NOT NULL AND read_later_done_at IS NULL;
 SELECT COUNT(*) FROM sources
 WHERE read_later_at IS NOT NULL AND read_later_done_at IS NULL
   AND read_later_via <> '[]';
+
+-- name: ListReadLaterVia :many
+-- The rules that put entries into the OPEN queue, one JSON array per row: the Start line names
+-- them, so it reads the queue itself and never the whole vault.
+SELECT read_later_via FROM sources
+WHERE read_later_at IS NOT NULL AND read_later_done_at IS NULL;
 
 -- name: CountReadLaterVia :one
 -- One interest's share of the open queue (the manager's count).

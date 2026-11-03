@@ -43,7 +43,7 @@ SELECT COUNT(*) FROM sources
 WHERE read_later_at IS NOT NULL AND read_later_done_at IS NULL
 `
 
-// The open queue: the number the Start card's head and the Sources filter chip show.
+// The open queue: the number the Start line and the Sources filter chip show.
 func (q *Queries) CountReadLater(ctx context.Context) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countReadLater)
 	var count int64
@@ -396,6 +396,36 @@ func (q *Queries) LatestSourceByURL(ctx context.Context, url sql.NullString) (So
 		&i.ReadLaterVia,
 	)
 	return i, err
+}
+
+const listReadLaterVia = `-- name: ListReadLaterVia :many
+SELECT read_later_via FROM sources
+WHERE read_later_at IS NOT NULL AND read_later_done_at IS NULL
+`
+
+// The rules that put entries into the OPEN queue, one JSON array per row: the Start line names
+// them, so it reads the queue itself and never the whole vault.
+func (q *Queries) ListReadLaterVia(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listReadLaterVia)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var read_later_via string
+		if err := rows.Scan(&read_later_via); err != nil {
+			return nil, err
+		}
+		items = append(items, read_later_via)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listRecentContentSources = `-- name: ListRecentContentSources :many

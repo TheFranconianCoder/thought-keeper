@@ -52,7 +52,7 @@ func TestShelfFiltersAndQueueOrder(t *testing.T) {
 	if err := repo.SetSourceReadLater(ctx, rust, base.Add(time.Hour), time.Time{}, false, []string{"rust-async"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.SetSourceReadLater(ctx, llm, base.Add(2*time.Hour), time.Time{}, true, nil); err != nil {
+	if err := repo.SetSourceReadLater(ctx, llm, base.Add(2*time.Hour), time.Time{}, false, []string{"rust-async", "llm-agents"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.SetSourceReadLater(ctx, done, base.Add(3*time.Hour), base.Add(4*time.Hour), false, nil); err != nil {
@@ -80,7 +80,7 @@ func TestShelfFiltersAndQueueOrder(t *testing.T) {
 	check("all", entities.SourceFilter{}, 3)
 	check("favorites", entities.SourceFilter{FavoriteOnly: true}, 1)
 	check("read later", entities.SourceFilter{ReadLaterOnly: true}, 2)
-	check("read later / interest", entities.SourceFilter{ReadLaterOnly: true, Interest: "rust-async"}, 1)
+	check("read later / interest", entities.SourceFilter{ReadLaterOnly: true, Interest: "llm-agents"}, 1)
 	check("read later / unknown interest", entities.SourceFilter{ReadLaterOnly: true, Interest: "nope"}, 0)
 
 	queue, err := repo.ListSources(ctx, entities.SourceFilter{ReadLaterOnly: true}, 10, 0)
@@ -94,11 +94,20 @@ func TestShelfFiltersAndQueueOrder(t *testing.T) {
 	if n, err := repo.CountReadLater(ctx); err != nil || n != 2 {
 		t.Fatalf("open queue = %d (%v), want 2", n, err)
 	}
-	if n, err := repo.CountReadLaterFromInterests(ctx); err != nil || n != 1 {
-		t.Fatalf("queue from interests = %d (%v), want 1", n, err)
+	if n, err := repo.CountReadLaterFromInterests(ctx); err != nil || n != 2 {
+		t.Fatalf("queue from interests = %d (%v), want the two entries a rule queued", n, err)
 	}
-	if n, err := repo.CountReadLaterVia(ctx, "rust-async"); err != nil || n != 1 {
-		t.Fatalf("queue via rust-async = %d (%v), want 1", n, err)
+	// The rules NAMED, not just counted: one entry can carry two, which is why the shares may sum
+	// past the number of entries.
+	shares, err := repo.CountReadLaterByInterest(ctx)
+	if err != nil {
+		t.Fatalf("shares: %v", err)
+	}
+	if shares["rust-async"] != 2 || shares["llm-agents"] != 1 || len(shares) != 2 {
+		t.Fatalf("shares = %v, want rust-async 2 and llm-agents 1", shares)
+	}
+	if n, err := repo.CountReadLaterVia(ctx, "rust-async"); err != nil || n != 2 {
+		t.Fatalf("queue via rust-async = %d (%v), want the two entries it queued", n, err)
 	}
 	if n, err := repo.CountFavorites(ctx); err != nil || n != 1 {
 		t.Fatalf("favorites = %d (%v), want 1", n, err)

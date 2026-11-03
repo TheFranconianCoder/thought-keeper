@@ -325,7 +325,10 @@ func TestSourceListParsesTheArrivalWindow(t *testing.T) {
 	h := SourcesHandler{
 		Lister: lister.Execute, Counter: totalCounter{n: 0}.Count,
 		Queue: func(context.Context) (usecases.QueueCounts, error) {
-			return usecases.QueueCounts{Open: 12, FromInterests: 8}, nil
+			return usecases.QueueCounts{
+				Open:      12,
+				Interests: []usecases.QueueInterest{{Slug: "caching", Count: 5}, {Slug: "storage", Count: 3}},
+			}, nil
 		},
 	}
 
@@ -350,8 +353,11 @@ func TestSourceListParsesTheArrivalWindow(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.Queue == nil || got.Queue.Open != 12 || got.Queue.FromInterests != 8 {
-		t.Fatalf("queue = %+v, want 12 open / 8 from interests", got.Queue)
+	if got.Queue == nil || got.Queue.Open != 12 {
+		t.Fatalf("queue = %+v, want 12 open", got.Queue)
+	}
+	if len(got.Queue.Interests) != 2 || got.Queue.Interests[0].Slug != "caching" || got.Queue.Interests[0].Count != 5 {
+		t.Fatalf("interests = %+v, want the rules that queued the entries", got.Queue.Interests)
 	}
 
 	// The same filter without the queue carries no split: the numbers describe THE QUEUE.

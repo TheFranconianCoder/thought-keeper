@@ -85,19 +85,26 @@ type SourceFacetsResult struct {
 	ReadLaterInterests int
 }
 
-// QueueCounts is the read-later queue's own split: how many entries are open and how many of them a
-// rule queued. It describes the QUEUE, never the page a window happens to have loaded.
+// QueueInterest is one rule's share of the queue: how many open entries it queued. An entry can
+// carry more than one rule, so the shares may sum to more than FromInterests.
+type QueueInterest struct {
+	Slug  string
+	Count int
+}
+
+// QueueCounts is the read-later queue's own split: how many entries are open and each rule's share.
+// It describes the QUEUE, never the page a window happens to have loaded.
 type QueueCounts struct {
-	Open          int
-	FromInterests int
+	Open      int
+	Interests []QueueInterest
 }
 
 // ReadLaterCounter answers the queue's split for the Sources banner and the Start line. A handler
 // holds this value; nil means the answer carries no split.
 type ReadLaterCounter func(ctx context.Context) (QueueCounts, error)
 
-// ReadLaterCounts returns the queue's split: the open entries and how many of them an interest put
-// there. A vault without a shelf answers zeros.
+// ReadLaterCounts returns the queue's split: the open entries and the rules that queued them. A
+// vault without a shelf answers zeros.
 func (uc Sources) ReadLaterCounts(ctx context.Context) (QueueCounts, error) {
 	if uc.Shelf == nil {
 		return QueueCounts{}, nil
@@ -106,11 +113,22 @@ func (uc Sources) ReadLaterCounts(ctx context.Context) (QueueCounts, error) {
 	if err != nil {
 		return QueueCounts{}, err
 	}
-	from, err := uc.Shelf.CountReadLaterFromInterests(ctx)
+	byRule, err := uc.Shelf.CountReadLaterByInterest(ctx)
 	if err != nil {
 		return QueueCounts{}, err
 	}
-	return QueueCounts{Open: open, FromInterests: from}, nil
+	shares := make([]QueueInterest, 0, len(byRule))
+	for slug, count := range byRule {
+		shares = append(shares, QueueInterest{Slug: slug, Count: count})
+	}
+	// Biggest share first; the slug breaks a tie, so the same queue reads the same way.
+	sort.Slice(shares, func(i, j int) bool {
+		if shares[i].Count != shares[j].Count {
+			return shares[i].Count > shares[j].Count
+		}
+		return shares[i].Slug < shares[j].Slug
+	})
+	return QueueCounts{Open: open, Interests: shares}, nil
 }
 
 // SourceFacetLister returns the tag cloud and the attached count. A handler holds this value; nil

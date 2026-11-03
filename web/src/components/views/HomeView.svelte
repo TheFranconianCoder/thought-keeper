@@ -2,7 +2,7 @@
   import { clearable } from '../../lib/clearable';
   import { untrack } from 'svelte';
   import { api } from '../../lib/api';
-  import type { Source } from '../../lib/api/types';
+  import type { QueueCounts, Source } from '../../lib/api/types';
   import { relTime } from '../../lib/format';
   import { t, tn } from '../../lib/i18n/index.svelte';
   import { openAdd } from '../../lib/overlays';
@@ -27,7 +27,7 @@
   // it, and the arrivals below are the list the reader actually works from.
   let readLaterOldest = $state<Source | null>(null);
   let readLaterCount = $state(0);
-  let readLaterFromInterests = $state(0);
+  let readLaterQueue = $state<QueueCounts | null>(null);
   let readLaterLoaded = $state(false);
 
   const status = $derived(system.status);
@@ -36,7 +36,7 @@
   // lines it is absent when quiet.
   const showArrivals = $derived(!arrivalsLoaded || arrivalsError !== '' || arrivals.length > 0);
 
-  // Which rules fired among these arrivals: an interest queues a NEW source, so a hit here is
+  // The rules that fired among these arrivals: an interest queues a NEW source, so a hit here is
   // literally why the queue grew this week. Names, not just a number — the reader wrote the rules.
   const arrivalRules = $derived.by(() => {
     const counts = new Map<string, number>();
@@ -48,9 +48,16 @@
     }
     return [...counts.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .slice(0, 3)
       .map(([slug, count]) => ({ slug, name: interests.nameOf(slug), count }));
   });
+
+  // The rules BEHIND the queue, by name and with their share: that is what makes the line say WHY
+  // it is long. A slug whose rule was deleted is dropped, exactly as a queue row drops its label.
+  const readLaterRules = $derived(
+    (readLaterQueue?.interests ?? [])
+      .filter((share) => !!interests.bySlug(share.slug))
+      .map((share) => ({ slug: share.slug, name: interests.nameOf(share.slug), count: share.count })),
+  );
 
   // What the application is doing RIGHT NOW. The front door is the one place a reader looks to
   // see whether a run is alive, so the pipeline speaks here instead of only in the top bar.
@@ -115,7 +122,7 @@
       const result = await api.sources({ readLaterOnly: true }, 1, 0);
       readLaterOldest = result.sources?.[0] ?? null;
       readLaterCount = result.queue?.open ?? result.count ?? 0;
-      readLaterFromInterests = result.queue?.from_interests ?? 0;
+      readLaterQueue = result.queue ?? null;
       readLaterLoaded = true;
     } catch {
       readLaterLoaded = true;
@@ -223,10 +230,10 @@
           <Icon name="clock" size={13} />
           <span class="signal-text">{t('home.readLater')}</span>
           <span class="queue-fact">{tn('home.readLaterOpen', readLaterCount)}</span>
-          {#if readLaterFromInterests > 0}
+          {#each readLaterRules as rule (rule.slug)}
             <span class="sep">·</span>
-            <span class="queue-fact">{tn('home.readLaterFromInterests', readLaterFromInterests)}</span>
-          {/if}
+            <span class="queue-fact">{rule.name} {rule.count}</span>
+          {/each}
           {#if readLaterOldest}
             <span class="sep">·</span>
             <span class="queue-fact">

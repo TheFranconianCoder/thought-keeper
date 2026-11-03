@@ -29,6 +29,9 @@ type ShelfStore interface {
 type ShelfCounter interface {
 	CountReadLater(ctx context.Context) (int, error)
 	CountReadLaterFromInterests(ctx context.Context) (int, error)
+	// CountReadLaterByInterest is each rule's share of the open queue, keyed by slug. The Start
+	// line names the rules, so it reads the queue itself instead of the tag cloud.
+	CountReadLaterByInterest(ctx context.Context) (map[string]int, error)
 	CountReadLaterVia(ctx context.Context, slug string) (int, error)
 	CountFavorites(ctx context.Context) (int, error)
 }

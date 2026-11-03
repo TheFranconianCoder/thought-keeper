@@ -44,8 +44,6 @@ export const homeEn: Record<string, string> = {
   'home.allReadLater': 'All',
   'home.readLaterOpen.one': '{count} open',
   'home.readLaterOpen.many': '{count} open',
-  'home.readLaterFromInterests.one': '{count} from interests',
-  'home.readLaterFromInterests.many': '{count} from interests',
   'home.readLaterOldest': 'oldest {age}',
   'home.readLaterEmptyAction': 'Set up interests',
 };

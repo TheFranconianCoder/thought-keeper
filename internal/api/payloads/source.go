@@ -126,10 +126,18 @@ type SourceList struct {
 	Queue *QueueCounts `json:"queue,omitempty"`
 }
 
-// QueueCounts is the queue's own split: open entries, and how many of those an interest queued.
+// QueueCounts is the queue's own split: the open entries and each rule's share (by slug; the client
+// knows the names). An entry can carry more than one rule, so the shares may sum past the open
+// count — that is what fired, not a partition.
 type QueueCounts struct {
-	Open          int `json:"open"`
-	FromInterests int `json:"from_interests"`
+	Open      int             `json:"open"`
+	Interests []InterestShare `json:"interests,omitempty"`
+}
+
+// InterestShare is one rule's share of the queue.
+type InterestShare struct {
+	Slug  string `json:"slug"`
+	Count int    `json:"count"`
 }
 
 // SourceTagFacet is one tag of the Sources cloud and how many sources carry it.
