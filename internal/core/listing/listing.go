@@ -4,8 +4,8 @@
 // every anchor to a Link. Everything here — the filters, the repeated-block grouping and the
 // thresholds — is a rule about links, so it can be tested without a browser, a network or a model.
 //
-// The rules were calibrated on two real pages, and the difference between them is the reason the
-// package looks the way it does:
+// The rules were calibrated on real pages, and the differences between them are why the package
+// looks the way it does:
 //
 //   - a WordPress blog index (agilealliance.org/blog) renders 20 article cards whose titles are
 //     <h3> links, next to a navigation with 16 links that are NOT in headings. The readable text of
@@ -13,10 +13,16 @@
 //     bookmark.
 //   - a beehiiv archive (sandeepswadia.beehiiv.com/archive) renders 9 cards whose anchors carry a
 //     date and no heading at all. Readability DOES read the grid there (966 characters, 9 links).
+//   - a Webflow blog index (langchain.com/blog) renders 20 cards as OVERLAY links: the anchor is
+//     empty and the title and date sit beside it in the card (`<a class="…-absolute"></a>`). Zero
+//     candidates, unless the card around the link lends it a name.
+//   - a JavaScript landing page (thoughtworks.com/…/insights/blog) answers with its MEGA-MENU and
+//     nothing else. Ten navigation tiles with headings looked exactly like ten articles.
 //
 // So neither "the page has many links" nor "the page has little text" alone is a signal. A group of
 // repeated, article-shaped links is the signal; the readable text decides whether that group is the
-// page (the text is the list) or a rail beside an article (the text is the article).
+// page (the text is the list) or a rail beside an article (the text is the article) — and navigation
+// is never a card.
 package listing
 
 import (
@@ -41,6 +47,14 @@ type Link struct {
 	Label string
 	// InHeading is true when the anchor sits inside h1–h6.
 	InHeading bool
+	// Card is true for an OVERLAY link: an anchor that carries no text of its own because the block
+	// around it draws the card, and that block renders the title as a heading (a Webflow
+	// "absolute link" over the whole tile). It is the heading evidence, borrowed from the card.
+	Card bool
+	// InNav is true when the anchor sits inside the page's navigation: <nav>, <header>, <footer> or
+	// an element that declares role="navigation|menu|menubar|search" (or is aria-hidden). A menu
+	// renders as repeated tiles with headings, and a thin page would read as a list of its own menu.
+	InNav bool
 	// Time is the text of a <time> element inside the anchor (or its datetime attribute), when the
 	// card declares a date that way instead of writing it into the text.
 	Time string
@@ -74,6 +88,9 @@ type Result struct {
 	Dates    int
 	// Next is the address of the listing's next page, or empty.
 	Next string
+	// Analyzed is how many anchors the page offered at all. It is a diagnostic, not a signal: it is
+	// what tells "the page has no repeated block" from "the page has no links".
+	Analyzed int
 }
 
 // Detect runs the rules over one page and returns the articles it found.
@@ -83,7 +100,7 @@ type Result struct {
 // Nothing here reclassifies a page on its own: the caller offers the listing to the human, because a
 // page misread as a list is never distilled.
 func Detect(pageURL string, links []Link) Result {
-	res := Result{Next: NextPage(pageURL, links)}
+	res := Result{Next: NextPage(pageURL, links), Analyzed: len(links)}
 	group := articleGroup(pageURL, links)
 	if len(group) == 0 {
 		return res
@@ -97,7 +114,7 @@ func Detect(pageURL string, links []Link) Result {
 		}
 		seen[key] = true
 		res.Items = append(res.Items, Item{URL: link.URL, Title: titleOf(link), Date: dateOf(link)})
-		if link.InHeading {
+		if link.InHeading || link.Card {
 			res.Headings++
 		}
 		if dateOf(link) != "" {
@@ -154,7 +171,7 @@ func NextPage(pageURL string, links []Link) string {
 		if !isHTTP(link.URL) || entities.URLKey(link.URL) == self {
 			continue
 		}
-		if !pagerText(link.Text) || !pagerURL(pageURL, link.URL) {
+		if !pagerText(link) || !pagerURL(pageURL, link.URL) {
 			continue
 		}
 		return link.URL
@@ -163,8 +180,14 @@ func NextPage(pageURL string, links []Link) string {
 }
 
 // pagerText is the small vocabulary a "next page" anchor uses. Short by nature: an article title is
-// never "load more".
-func pagerText(text string) bool {
+// never "load more". The LABEL is read as well: a pager is often an arrow icon whose words live in
+// aria-label ("Next Page"), and an icon carries no text at all.
+func pagerText(link Link) bool {
+	return isPagerPhrase(link.Text) || isPagerPhrase(link.Label)
+}
+
+// isPagerPhrase answers the vocabulary question for one piece of text.
+func isPagerPhrase(text string) bool {
 	text = strings.ToLower(strings.Join(strings.Fields(text), " "))
 	switch text {
 	case "load more", "load more posts", "load more articles", "show more", "show more posts",
@@ -187,13 +210,26 @@ func pagerURL(pageURL, candidate string) bool {
 	if err != nil || !sameHost(base, next) {
 		return false
 	}
-	query := next.Query()
-	for _, key := range []string{"page", "paged", "offset", "start"} {
-		if query.Get(key) != "" {
+	for key, values := range next.Query() {
+		if len(values) == 0 || !isNumber(strings.TrimSpace(values[0])) {
+			continue
+		}
+		if pagerKey(key) {
 			return true
 		}
 	}
 	return pageSegment(next.Path)
+}
+
+// pagerKey names the query keys that carry a page number: the standard ones, and the namespaced form
+// a CMS writes when several lists share one address (`?8457a1db_page=2` on a Webflow pager).
+func pagerKey(key string) bool {
+	key = strings.ToLower(key)
+	switch key {
+	case "page", "paged", "offset", "start":
+		return true
+	}
+	return strings.HasSuffix(key, "_page") || strings.HasSuffix(key, "_paged")
 }
 
 // pageSegment reports whether a path ends in "/page/2" (or "/2" after a "page" segment).
@@ -264,7 +300,7 @@ func articleish(group []Link) bool {
 	headings, dates, samePrefix := 0, 0, 0
 	prefix := ""
 	for _, link := range group {
-		if link.InHeading {
+		if link.InHeading || link.Card {
 			headings++
 		}
 		if dateOf(link) != "" {
@@ -281,17 +317,24 @@ func articleish(group []Link) bool {
 		}
 	}
 	n := len(group)
+	// A majority is the evidence, not unanimity: one link to another section in the same block
+	// (a "all posts" tile beside the cards) must not turn 20 cards into "not a block".
 	if headings*10 >= n*6 || dates*10 >= n*6 {
 		return true
 	}
-	return samePrefix == n && prefix != ""
+	return samePrefix != 0 && samePrefix*10 >= n*6
 }
 
 // usable applies the per-link filter: a link on the same host, not the page itself, with enough
-// text or a heading. Text length alone is what lets navigation through, so the group rule above
-// does the rest.
+// text or a heading, and never part of the page's navigation. Text length is what lets a menu
+// through, so the group rule above does the rest.
 func usable(pageURL string, link Link) bool {
 	if !isHTTP(link.URL) {
+		return false
+	}
+	// A menu, a header and a footer are the page's furniture: repeated tiles on them are not
+	// articles, whatever they look like.
+	if link.InNav {
 		return false
 	}
 	base, err := url.Parse(pageURL)
@@ -306,10 +349,10 @@ func usable(pageURL string, link Link) bool {
 		return false
 	}
 	// A pager link is never an article, whatever its text.
-	if pagerText(link.Text) || strings.Contains(link.Rel, "next") {
+	if pagerText(link) || strings.Contains(link.Rel, "next") {
 		return false
 	}
-	if link.InHeading {
+	if link.InHeading || link.Card {
 		return true
 	}
 	return utf8.RuneCountInString(strings.TrimSpace(link.Text)) >= 25

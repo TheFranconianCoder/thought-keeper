@@ -2,6 +2,7 @@ package usecases_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
+	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/gateways"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/objects"
 )
 
@@ -250,6 +252,85 @@ func TestRefetchTurnsACollectedLinkIntoAPage(t *testing.T) {
 	}
 	if !log.contains("the collected link became a page") {
 		t.Errorf("the source log does not record the transition: %s", log.joined())
+	}
+}
+
+// TestScriptedListingIsOffered: the cards of a JavaScript archive exist only in the rendered DOM.
+// The plain response is a shell, the DOM after the scripts is the card grid, and the offer is made
+// from the document the text came from.
+func TestScriptedListingIsOffered(t *testing.T) {
+	ctx := context.Background()
+	idx := newFakeIndex()
+	store := objects.New(t.TempDir())
+	cardGrid := `<html><body><main><div class="grid">`
+	for i := range 6 {
+		cardGrid += fmt.Sprintf(
+			`<div class="card"><h3><a href="/blog/post-%d">A scripted card title number %d</a></h3>
+			 <div class="date">Oct %d, 2026</div></div>`, i, i, i+1)
+	}
+	cardGrid += `</div></main></body></html>`
+
+	renderer := htmlRenderer(cardGrid)
+	uc := usecases.URLs{
+		Fetch: &fakeFetcher{page: interfaces.FetchedPage{
+			Status: 200, ContentType: "text/html", Body: []byte("<html><body><div id=app></div></body></html>"),
+		}},
+		Convert: bodyConverter{}, Render: renderer, Links: gateways.HTMLLinkExtractor{},
+		Store: store, Index: idx, Clock: fixedClock{}, MinTextChars: 400,
+	}
+
+	src, err := uc.AddManual(ctx, "https://example.com/blog/", false, usecases.ListingAuto)
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if renderer.calls != 1 {
+		t.Fatalf("the page was rendered %d time(s), want 1", renderer.calls)
+	}
+	if src.ListingCandidates != 6 {
+		t.Fatalf("candidates = %d, want the 6 cards only the DOM declares", src.ListingCandidates)
+	}
+	if !src.Bookmark || src.Listing {
+		t.Errorf("the offer must not reclassify the page: %+v", src)
+	}
+}
+
+// TestListingWalkRendersAPageThatDeclaresNothing: an archive's page 2 is a shell too. The walk has
+// to render it, or the archive stops at the first page a script builds.
+func TestListingWalkRendersAPageThatDeclaresNothing(t *testing.T) {
+	ctx := context.Background()
+	idx := newFakeIndex()
+	blogURL := "https://example.com/blog/"
+	page2 := "https://example.com/blog/page/2"
+	idx.m[entities.URLHash(blogURL)] = entities.Source{
+		ID: ulid.Make(), Hash: entities.URLHash(blogURL), Kind: entities.SourceKindURL, Ext: ".md",
+		Path: "sources/aa/bb/blog.md", URL: blogURL, Title: "Blog", Listing: true,
+		ImportedAt: fixedClock{}.Now(), Meta: `{"url":"` + blogURL + `"}`,
+	}
+
+	pageGrid := `<html><body><main><div class="grid">`
+	for i := range 5 {
+		pageGrid += fmt.Sprintf(
+			`<div class="card"><h3><a href="/blog/old-%d">An older scripted title number %d</a></h3></div>`, i, i)
+	}
+	pageGrid += `</div><a rel="next" href="/blog/page/3">Next</a></main></body></html>`
+
+	uc := usecases.URLs{
+		Fetch: &fakeFetcher{page: interfaces.FetchedPage{
+			Status: 200, ContentType: "text/html", Body: []byte("<html><body></body></html>"),
+		}},
+		Convert: bodyConverter{}, Render: htmlRenderer(pageGrid), Links: gateways.HTMLLinkExtractor{},
+		Store: objects.New(t.TempDir()), Index: idx, Clock: fixedClock{}, MinTextChars: 400,
+	}
+
+	page, err := uc.ExpandListing(ctx, entities.URLHash(blogURL), page2)
+	if err != nil {
+		t.Fatalf("expand: %v", err)
+	}
+	if len(page.Items) != 5 {
+		t.Fatalf("items = %d, want the 5 cards of the rendered page", len(page.Items))
+	}
+	if page.Next != "https://example.com/blog/page/3" {
+		t.Fatalf("next = %q, want the rendered pager", page.Next)
 	}
 }
 

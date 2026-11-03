@@ -114,6 +114,89 @@ func TestPagerIsNotAnArticle(t *testing.T) {
 	}
 }
 
+// overlayLinks is the shape langchain.com/blog renders: six cards whose anchors are EMPTY (the card
+// draws the title and the date beside the link), next to six mega-menu tiles that are in a heading.
+func overlayLinks() []Link {
+	links := make([]Link, 0, 12)
+	for i := range 6 {
+		links = append(links, Link{
+			URL:   fmt.Sprintf("https://www.langchain.com/blog/post-%d", i),
+			Text:  fmt.Sprintf("October %d, 2026A card title the anchor does not carry %d", i+1, i),
+			Label: fmt.Sprintf("A card title the anchor does not carry %d", i),
+			Card:  true,
+			Group: "div/div/div@",
+		})
+	}
+	for i := range 6 {
+		links = append(links, Link{
+			URL:       fmt.Sprintf("https://www.langchain.com/section-%d", i),
+			Text:      fmt.Sprintf("A navigation tile with a heading %d", i),
+			InHeading: true,
+			InNav:     true,
+			Group:     "div/div/div",
+		})
+	}
+	return links
+}
+
+func TestDetectOverlayCards(t *testing.T) {
+	res := Detect("https://www.langchain.com/blog", overlayLinks())
+	if res.GroupSize != 6 || len(res.Items) != 6 {
+		t.Fatalf("group=%d items=%d, want 6/6 (the cards, not the six menu tiles)", res.GroupSize, len(res.Items))
+	}
+	if res.Items[0].Title != "A card title the anchor does not carry 0" {
+		t.Fatalf("title = %q, want the card's own label", res.Items[0].Title)
+	}
+	if res.Items[0].Date != "October 1, 2026" {
+		t.Fatalf("date = %q, want the date the card renders", res.Items[0].Date)
+	}
+	// A grid readability kept: 17 titles and 5k of image addresses. The cards are the page.
+	if !Suggests(res, 7406, 400, 6) {
+		t.Fatal("a grid whose titles are the readable text is the page's content")
+	}
+	if Suggests(res, 7406, 400, 0) {
+		t.Fatal("cards that are neither addresses nor titles in the text are a rail")
+	}
+}
+
+// The mega-menu of a JavaScript landing page: ten tiles with headings, a page whose readable text is
+// 142 characters, and nothing else. This is how thoughtworks.com/de-de/insights/blog became a
+// "listing" of its own navigation.
+func TestMegaMenuIsNotAListing(t *testing.T) {
+	links := make([]Link, 0, 10)
+	for i := range 10 {
+		links = append(links, Link{
+			URL:       fmt.Sprintf("https://www.thoughtworks.com/de-de/insights/section-%d", i),
+			Text:      fmt.Sprintf("Ein Menüeintrag mit Überschrift %d", i),
+			InHeading: true,
+			InNav:     true,
+			Group:     "div/div/div",
+		})
+	}
+	res := Detect("https://www.thoughtworks.com/de-de/insights/blog", links)
+	if len(res.Items) != 0 {
+		t.Fatalf("navigation became articles: %+v", res.Items)
+	}
+	if Suggests(res, 142, 400, 0) {
+		t.Fatal("a thin page whose only repeated block is its menu is not a listing")
+	}
+}
+
+func TestNamespacedPager(t *testing.T) {
+	base := "https://www.langchain.com/blog"
+	next := base + "?8457a1db_page=2"
+	// A Webflow pager is an arrow with no text: the words are in the aria-label.
+	if got := NextPage(base, []Link{{URL: next, Label: "Next Page"}}); got != next {
+		t.Fatalf("an aria-label pager and a namespaced page query, got %q", got)
+	}
+	if got := NextPage(base, []Link{{URL: next, Text: "2"}}); got != "" {
+		t.Fatalf("a bare page number is not a pager: %q", got)
+	}
+	if got := NextPage(base, []Link{{URL: base + "?sort=asc", Label: "Next Page"}}); got != "" {
+		t.Fatalf("a query that is not a page number is not a pager: %q", got)
+	}
+}
+
 func TestNextPage(t *testing.T) {
 	base := "https://example.org/blog/"
 	if got := NextPage(base, []Link{{URL: base + "page/2/", Rel: "next", Text: "2"}}); got != base+"page/2/" {
@@ -161,5 +244,59 @@ func TestOffHostLinksAreIgnored(t *testing.T) {
 	}
 	if res := Detect("https://sandeepswadia.beehiiv.com/archive", links); len(res.Items) != 0 {
 		t.Fatalf("links to another host are not articles, got %d", len(res.Items))
+	}
+}
+
+// The Thoughtworks blog index renders its cards as Coveo search results: the title is an anchor with
+// role="heading", and the block also carries a language switch into another locale. The cards are the
+// majority of the block, so the block is article-shaped — one foreign link does not undo twenty cards.
+func TestRoleHeadingCardsBesideOneForeignLink(t *testing.T) {
+	links := make([]Link, 0, 21)
+	for i := range 20 {
+		links = append(links, Link{
+			URL:       fmt.Sprintf("https://www.thoughtworks.com/de-de/insights/blog/topic/post-%d", i),
+			Text:      fmt.Sprintf("Ein Kartentitel aus dem Suchergebnis %d", i),
+			Label:     fmt.Sprintf("Ein Kartentitel aus dem Suchergebnis %d", i),
+			InHeading: true,
+			Group:     "div/div/div",
+		})
+	}
+	links = append(links, Link{
+		URL:       "https://www.thoughtworks.com/en-de/insights/blog",
+		Text:      "Diese Seite auf Englisch lesen",
+		InHeading: true,
+		Group:     "div/div/div",
+	})
+	res := Detect("https://www.thoughtworks.com/de-de/insights/blog", links)
+	if res.GroupSize != 21 || len(res.Items) != 21 {
+		t.Fatalf("group=%d items=%d, want the 21 links of the block", res.GroupSize, len(res.Items))
+	}
+	if !Suggests(res, 4148, 400, 20) {
+		t.Fatal("twenty card titles in the readable text are the page's content")
+	}
+}
+
+// A block of plain title links in one section is still article-shaped: the shared path is the
+// evidence, and it does not need every last link to agree (a `?sort=` or an "all posts" tile in the
+// same block is not a reason to call twenty cards navigation).
+func TestSharedPrefixToleratesAMinority(t *testing.T) {
+	links := make([]Link, 0, 10)
+	for i := range 8 {
+		links = append(links, Link{
+			URL:   fmt.Sprintf("https://example.org/posts/post-%d", i),
+			Text:  fmt.Sprintf("A plain post title without any date %d", i),
+			Group: "ul/li/a",
+		})
+	}
+	for i := range 2 {
+		links = append(links, Link{
+			URL:   fmt.Sprintf("https://example.org/about/page-%d", i),
+			Text:  fmt.Sprintf("A page of another section entirely %d", i),
+			Group: "ul/li/a",
+		})
+	}
+	res := Detect("https://example.org/posts", links)
+	if len(res.Items) != 10 {
+		t.Fatalf("items = %d, want the ten links of the block", len(res.Items))
 	}
 }

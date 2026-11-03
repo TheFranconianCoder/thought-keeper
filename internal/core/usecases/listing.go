@@ -8,11 +8,13 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/listing"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/textmatch"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
@@ -68,19 +70,78 @@ func (uc URLs) listingResult(ctx context.Context, body []byte, pageURL string) (
 	return listing.Detect(pageURL, links), nil
 }
 
+// renderedListing re-reads a page's cards from its rendered DOM. It is the browser the app already
+// carries, used for the one thing only a browser can see: a listing a script builds. The plain
+// reading stands when there is no browser, when the page is not HTML, or when the render fails —
+// detection must never be a reason to lose a page.
+func (uc URLs) renderedListing(ctx context.Context, rawURL string, plain listing.Result) (listing.Result, bool) {
+	if uc.Render == nil {
+		return plain, false
+	}
+	rendered, err := uc.Render.Render(ctx, rawURL)
+	if err != nil {
+		if uc.Log != nil {
+			uc.Log.Warn("listing: the page could not be rendered — the plain reading stands",
+				"url", rawURL, "err", err)
+		}
+		return plain, false
+	}
+	if rendered.Wall.Blocks() || !looksLikeHTML(rendered.ContentType) {
+		return plain, false
+	}
+	res, err := uc.listingResult(ctx, rendered.HTML, rawURL)
+	if err != nil {
+		return plain, false
+	}
+	if uc.Log != nil {
+		uc.Log.Debug("listing: the cards were read from the rendered DOM",
+			"url", rawURL, "articles", len(res.Items), "plain_articles", len(plain.Items))
+	}
+	return res, true
+}
+
 // linkedInMain counts how many candidates the readable text contains. A card grid that readability
 // kept is the page's content; a related rail it dropped is not.
+//
+// A card's TITLE counts as much as its address. Readability drops an overlay anchor (it carries no
+// text) but keeps the heading the card renders, so a page that is nothing but 17 card titles carries
+// no URL at all — and is still exactly its titles.
 func linkedInMain(items []listing.Item, markdown string) int {
 	if markdown == "" {
 		return 0
 	}
+	// An escaped character in the Markdown (`\*`, `\_`) is the same word as the card's title.
+	plain := strings.ReplaceAll(markdown, `\`, "")
 	n := 0
 	for _, item := range items {
-		if strings.Contains(markdown, item.URL) {
+		if strings.Contains(markdown, item.URL) || titleInText(plain, item.Title) {
 			n++
 		}
 	}
 	return n
+}
+
+// titleProbe is how much of a title has to appear in the readable text to count it. A prefix is
+// enough: a card's title is truncated to the card's width, and a heading carries the whole one.
+const titleProbe = 80
+
+// titleInText reports whether the readable text carries the item's title. Short titles are not
+// evidence of anything (a two-word heading matches half a page), so a minimum length applies.
+func titleInText(text, title string) bool {
+	probe := strings.TrimSuffix(truncateRunes(title, titleProbe), "…")
+	if utf8.RuneCountInString(probe) < 12 {
+		return false
+	}
+	return textmatch.Contains(text, probe)
+}
+
+// truncateRunes keeps the leading runes of a string, never splitting one.
+func truncateRunes(s string, limit int) string {
+	runes := []rune(strings.TrimSpace(s))
+	if len(runes) <= limit {
+		return string(runes)
+	}
+	return string(runes[:limit])
 }
 
 // storeListing writes the page as a source of its own and returns the articles it declared. The
@@ -205,6 +266,13 @@ func (uc URLs) ExpandListing(ctx context.Context, hash, pageURL string) (Listing
 	res, err := uc.listingResult(ctx, page.Body, pageURL)
 	if err != nil {
 		return ListingPage{}, err
+	}
+	// A page whose plain response declares no cards — or no next page — may be a list a script
+	// builds. The browser is the only reader that can see one.
+	if len(res.Items) == 0 || res.Next == "" {
+		if rendered, ok := uc.renderedListing(ctx, pageURL, res); ok {
+			res = rendered
+		}
 	}
 	return ListingPage{Items: res.Items, Next: res.Next, Status: page.Status}, nil
 }

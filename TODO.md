@@ -161,11 +161,6 @@ are.
 4. **The initial walk does not resume.** It runs in the background, page by page, and rewrites the
    listing's snapshot after each page — but a restart mid-walk leaves the rest of the archive
    unread, and nothing queues it again. A job in the URL queue would make it resumable.
-5. **Detection reads the plain response, not the rendered page.** A blog index that builds its
-   cards with JavaScript is not offered as a listing even when the local browser is installed: the
-   card scan (and the pagination walk) still uses the HTTP body. Rendering the listing's page
-   before `listingResult` — and keeping the richer card set — would close the gap, but it changes a
-   detector that must stay conservative.
 
 ## Ideas
 

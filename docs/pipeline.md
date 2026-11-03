@@ -47,19 +47,32 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   the association step are skipped for them.
 - **A page that lists articles is a listing.** A blog index or a newsletter archive has no feed: its
   snapshot is the cards it renders. The app detects **repeated article-shaped links** (a title in a
-  heading, a date on the card, or a shared path prefix — never navigation, whose text is short and
-  whose links are scattered) and offers the page to the reader as a listing. Nothing is reclassified
-  silently: the page is stored as it was and the answer carries how many cards were found; confirming
-  it (`POST /api/v1/add` with `listing: true`) makes it an owner. The articles become URL sources
-  (`origin: listing`, `parent_hash`) and the listing's snapshot is the **rendered list** — readability
-  throws a card grid away, so a card grid is never distilled as prose.
+  heading — an `<hN>` or `role="heading"`, which is how a script-built card marks its title —, a date
+  on the card, or a shared path prefix; a MAJORITY of the block, so one "all posts" tile beside
+  twenty cards does not undo them) and offers the page to the reader as a
+  listing. A card is the BLOCK, not the anchor: a grid whose tile is an empty overlay link
+  (`<a class="…-absolute"></a>` beside the title, as a Webflow blog index renders it) lends the
+  link its heading, its date and its text, and **navigation is never a card** — `<nav>`, `<header>`,
+  `<footer>` and anything with `role="navigation|menu|menubar|search"` (or `aria-hidden`) is the
+  page's furniture, however card-like its tiles. The rules read the document the TEXT came from —
+  the rendered DOM when the browser read more — so a card grid a script builds is found like one the
+  server sends. The same goes for the readable text: the list is the page when that text is short
+  (readability found no article) or when it carries the cards — their addresses, or their titles (a
+  kept card grid is headings and no links at all). Nothing is reclassified silently: the page is
+  stored as it was and the answer carries how many cards were found; confirming it
+  (`POST /api/v1/add` with `listing: true`) makes it an owner. The articles become URL sources
+  (`origin: listing`, `parent_hash`) and the listing's snapshot is the **rendered list** —
+  readability throws a card grid away, so a card grid is never distilled as prose.
 - **The initial capture walks the pagination; a refresh does not.** A listing is read page by page
-  (`rel="next"`, then a "load more"/"older" anchor whose address is a pager) up to
-  `capture.listing_max_pages` (default 100); each page's cards are claimed and fetched, and the
-  listing's snapshot is rewritten after every page. A refresh reads **page 1 only** — a blog index and
-  a newsletter archive are newest-first, so a new article is always there — and merges it into the
-  articles the listing already declares. A listing is a WINDOW like a feed: an article that rotates
-  out of the pagination is kept, and only deleting the listing removes its articles. The walk
+  (`rel="next"`, then a "load more"/"older" anchor — whose text or `aria-label` is a pager word —
+  whose address is a pager, a number under `page`/`paged`/`offset`/`start` or a namespaced `…_page`
+  query) up to `capture.listing_max_pages` (default 100); each page's cards are claimed and fetched,
+  and the listing's snapshot is rewritten after every page. A page whose plain response declares no
+  cards — or no pager — is rendered before the walk gives up, so an archive a script builds is walked
+  like any other. A refresh reads **page 1 only** — a blog
+  index and a newsletter archive are newest-first, so a new article is always there — and merges it
+  into the articles the listing already declares. A listing is a WINDOW like a feed: an article that
+  rotates out of the pagination is kept, and only deleting the listing removes its articles. The walk
   follows the links the pages DECLARE (`rel="next"`, then a pager anchor): a "load more" button that
   only fetches more cards over XHR is not clicked, even though the page itself is rendered.
 - **A page is read twice when a browser is installed.** The plain HTTP response and — with the

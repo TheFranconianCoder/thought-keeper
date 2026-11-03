@@ -483,8 +483,10 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, l
 	// A listing that is already known is RE-READ as a listing, whatever the caller asked: its
 	// snapshot is the article list, and writing a page over it would replace the list with a card
 	// grid (or a bookmark). No pagination walk follows — that is a capture, and this is a re-read.
+	// The rules read `rd.HTML`: the document the text came from, which is the rendered DOM when a
+	// browser was installed and read more — a JavaScript archive's cards exist only there.
 	if known && existing.Listing && uc.Links != nil && looksLikeHTML(page.ContentType) {
-		if res, lErr := uc.listingResult(ctx, page.Body, rawURL); lErr == nil && len(res.Items) > 0 {
+		if res, lErr := uc.listingResult(ctx, rd.HTML, rawURL); lErr == nil && len(res.Items) > 0 {
 			return uc.storeListing(ctx, rawURL, page, res, conv.Title, existing, known)
 		}
 	}
@@ -495,7 +497,7 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, l
 	// never a verdict.
 	var detected listing.Result
 	if manual && listingChoice != ListingNo && uc.Links != nil && looksLikeHTML(page.ContentType) {
-		res, detectErr := uc.listingResult(ctx, page.Body, rawURL)
+		res, detectErr := uc.listingResult(ctx, rd.HTML, rawURL)
 		switch {
 		case detectErr != nil:
 			if uc.Log != nil {
@@ -503,6 +505,14 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, l
 			}
 		case listingChoice == ListingYes:
 			if len(res.Items) == 0 {
+				// The reader asked for a listing and the page has none. The numbers say WHY — "no
+				// repeated block" and "a block that is not article-shaped" look the same from
+				// outside, and the source log is where the reader can look it up.
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, entities.URLHash(rawURL), "warn",
+					"listing: the page declares no article cards", map[string]any{
+						"anchors": res.Analyzed, "group": res.GroupSize, "headings": res.Headings,
+						"dates": res.Dates, "text_chars": bodyChars,
+					})
 				return partialentities.PartialSource{}, types.New("unsupported_source",
 					"no article cards were found on this page — it is not a listing", types.ErrUnsupportedSource)
 			}
@@ -1780,6 +1790,13 @@ func (uc URLs) refreshParent(ctx context.Context, s entities.Source, page interf
 		if rErr != nil {
 			return partialentities.PartialSource{}, nil, 0, rErr
 		}
+		// A JavaScript archive sends a shell: its cards exist only after the scripts ran, so a
+		// refresh of one has to render — the daily check must see the newest article.
+		if len(res.Items) == 0 {
+			if rendered, ok := uc.renderedListing(ctx, s.URL, res); ok {
+				res = rendered
+			}
+		}
 		if len(res.Items) == 0 {
 			return partialentities.PartialSource{}, nil, 0, errors.New("the listing could not be read")
 		}
@@ -2076,6 +2093,10 @@ type reading struct {
 	Engine   string
 	Status   int
 	FinalURL string
+	// HTML is the document this reading was taken from: the plain response, or the rendered DOM when
+	// that one won. The listing rules read the same document the text came from — a card grid a
+	// script builds exists only in the DOM, and a card grid the server sends exists only in the body.
+	HTML []byte
 	// Wall names a gate the RENDERED page revealed and the plain response hid (a login form that
 	// only exists after the scripts ran). Empty otherwise.
 	Wall entities.WallKind
@@ -2090,7 +2111,7 @@ func (uc URLs) chooseReading(ctx context.Context, rawURL string, page interfaces
 	if err != nil {
 		return reading{}, err
 	}
-	best := reading{Conv: plain, Status: page.Status, FinalURL: page.FinalURL}
+	best := reading{Conv: plain, Status: page.Status, FinalURL: page.FinalURL, HTML: page.Body}
 	bestChars := utf8.RuneCountInString(strings.TrimSpace(plain.Markdown))
 	if uc.Render == nil || !looksLikeHTML(page.ContentType) {
 		return best, nil
@@ -2174,7 +2195,7 @@ func (uc URLs) chooseReading(ctx context.Context, rawURL string, page interfaces
 	}
 	return reading{
 		Conv: conv, Rendered: true, Engine: rendered.Engine,
-		Status: rendered.Status, FinalURL: rendered.FinalURL,
+		Status: rendered.Status, FinalURL: rendered.FinalURL, HTML: rendered.HTML,
 	}, nil
 }
 

@@ -205,6 +205,43 @@ func TestAddURLDoesNotOfferAListingForAnArticle(t *testing.T) {
 	}
 }
 
+// An overlay grid leaves the readable text with the card TITLES and not one address: readability
+// keeps the headings and drops the empty anchors (langchain.com/blog). The grid is still the page's
+// content, so it is offered — and kept out of the distill queue until the reader answers.
+func TestAddURLOffersAListingForAnOverlayGrid(t *testing.T) {
+	ctx := context.Background()
+	links := make([]listing.Link, 0, 6)
+	var markdown strings.Builder
+	markdown.WriteString("## Featured stories\n\n")
+	for i := range 6 {
+		title := fmt.Sprintf("An overlay card title number %d", i)
+		links = append(links, listing.Link{
+			URL:   fmt.Sprintf("%s/overlay-%d", strings.TrimSuffix(blogURL, "/"), i),
+			Text:  fmt.Sprintf("October %d, 2026%s", i+1, title),
+			Label: title,
+			Card:  true,
+			Group: "div/div/div@",
+		})
+		fmt.Fprintf(&markdown,
+			"![cover image for the post](https://cdn.example.com/cover-%d-1200x675.png)\n\n## %s\n\n", i, title)
+	}
+	uc, _, idx, _ := newListingUseCase(t, fakeLinks{blogURL: links}, markdown.String())
+	src, err := uc.AddManual(ctx, blogURL, false, usecases.ListingAuto)
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if src.ListingCandidates != 6 {
+		t.Fatalf("candidates = %d, want 6 (the cards whose titles carry the page)", src.ListingCandidates)
+	}
+	stored, err := idx.GetSourceByHash(ctx, entities.URLHash(blogURL))
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if !stored.Bookmark || stored.Listing {
+		t.Errorf("bookmark=%v listing=%v, want a collected link until the reader answers", stored.Bookmark, stored.Listing)
+	}
+}
+
 // A listing is refreshed through its first page only. A new article is on page 1; walking the
 // archive again every day would fetch everything to learn nothing.
 func TestListingRefreshReadsOnlyTheFirstPage(t *testing.T) {

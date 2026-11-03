@@ -2,6 +2,7 @@ package gateways
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/listing"
@@ -91,6 +92,98 @@ func TestLinksSkipsExecutableSchemes(t *testing.T) {
 	}
 	if len(links) != 1 || links[0].URL != "https://example.org/ok/" {
 		t.Fatalf("links = %+v, want the one http address", links)
+	}
+}
+
+// An overlay card is what a Webflow blog index renders: the anchor is EMPTY and the title, the author
+// and the date sit beside it in the same block. Without borrowing the block, a page of twenty perfect
+// cards has zero candidates — which is exactly what langchain.com/blog reported.
+func TestLinksReadOverlayCards(t *testing.T) {
+	page := `<html><body><main><section id="blog">
+  <div role="list" class="blog-list">
+    <div role="listitem" class="blog-item">
+      <div class="blog-link"><h2>How We Built Our Design Agent</h2>
+        <div class="author">Harrison Chase</div><div class="date">October 27, 2026</div></div>
+      <a href="/blog/design-agent" class="blog-link-absolute"></a>
+    </div>
+    <div role="listitem" class="blog-item">
+      <div class="blog-link"><h2>Machine Learning in the News</h2></div>
+      <a href="/blog/ml-in-the-news" class="blog-link-absolute"></a>
+    </div>
+  </div>
+</section></main>
+<header><div class="tile"><h3>Platform</h3><a href="/platform"></a></div></header>
+<nav><ul><li><a href="/pricing">Pricing</a></li></ul></nav>
+</body></html>`
+
+	links, err := HTMLLinkExtractor{}.Links(context.Background(), []byte(page), "https://www.langchain.com/blog")
+	if err != nil {
+		t.Fatalf("links: %v", err)
+	}
+	card := findByURL(links, "https://www.langchain.com/blog/design-agent")
+	if card == nil {
+		t.Fatal("the overlay link was dropped")
+	}
+	if !card.Card {
+		t.Error("an empty anchor whose block renders a heading is a card")
+	}
+	if card.Label != "How We Built Our Design Agent" {
+		t.Errorf("label = %q, want the card's heading", card.Label)
+	}
+	if !strings.Contains(card.Text, "October 27, 2026") || !strings.Contains(card.Text, "Harrison Chase") {
+		t.Errorf("the card's text was not borrowed: %q", card.Text)
+	}
+	if card.InHeading {
+		t.Error("the anchor is not inside a heading: the card's heading is its title")
+	}
+	if !strings.HasSuffix(card.Group, "@") {
+		t.Errorf("group = %q, want the overlay marker so cards do not merge with inline links", card.Group)
+	}
+	if card.InNav {
+		t.Error("the card is in <main>, not in the navigation")
+	}
+
+	// A tile in the header is navigation, however card-shaped it looks.
+	if tile := findByURL(links, "https://www.langchain.com/platform"); tile == nil || !tile.InNav {
+		t.Errorf("a header tile was not marked as navigation: %+v", tile)
+	}
+	// An ordinary nav link is marked too, and keeps its own text.
+	nav := findByURL(links, "https://www.langchain.com/pricing")
+	if nav == nil || !nav.InNav || nav.Card {
+		t.Errorf("a nav link = %+v, want InNav and not a card", nav)
+	}
+}
+
+// TestLinksReadARoleHeadingCard: a card component built by a script marks its title
+// `role="heading"` instead of using an h tag — the Coveo result card of the Thoughtworks blog does
+// exactly that, and a title is a title whichever way it is declared.
+func TestLinksReadARoleHeadingCard(t *testing.T) {
+	page := `<html><body><main><div class="results">
+  <div class="result-item"><a data-testid="result-item__title" role="heading" aria-level="4"
+      href="/de-de/insights/blog/careers/behind-the-scenes" aria-label="Behind the scenes, Mehr erfahren">
+      <div class="result-item__header"><p>Careers</p></div>
+      <span class="result-item__title-text">Behind the scenes of Thoughtworks University</span>
+      <p class="result-item__author"><span>June 02, 2025</span><span>Von Jade Daubney-Bennett</span></p>
+      <p class="result-item__excerpt">Thoughtworks University is back in person.</p>
+    </a></div>
+</div></main></body></html>`
+
+	links, err := HTMLLinkExtractor{}.Links(context.Background(), []byte(page), "https://www.thoughtworks.com/de-de/insights/blog")
+	if err != nil {
+		t.Fatalf("links: %v", err)
+	}
+	card := findByURL(links, "https://www.thoughtworks.com/de-de/insights/blog/careers/behind-the-scenes")
+	if card == nil {
+		t.Fatal("the card link was dropped")
+	}
+	if !card.InHeading {
+		t.Error(`an anchor with role="heading" carries its title as a heading`)
+	}
+	if card.InNav {
+		t.Error("a result card in <main> is not navigation")
+	}
+	if !strings.Contains(card.Text, "June 02, 2025") {
+		t.Errorf("the card's text was not read: %q", card.Text)
 	}
 }
 
