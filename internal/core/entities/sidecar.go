@@ -68,6 +68,10 @@ type SourceRecord struct {
 	Identity SourceIdentity
 	Steps    StepSet
 	Title    string
+	// PublishedAt/PublishedFrom are the date the source declares for itself. They live in the record
+	// so a reindex restores the column instead of re-guessing from a page that may no longer carry it.
+	PublishedAt   time.Time
+	PublishedFrom string
 	// Tags are the HUMAN's labels for the source (the source-tags vocabulary observes them). They are
 	// a record like the title: deleting the source deletes them, and a reindex reads them back.
 	Tags []string

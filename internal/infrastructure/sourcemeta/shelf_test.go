@@ -9,11 +9,13 @@ import (
 )
 
 type shelfIndex struct {
-	favoriteAt time.Time
-	readAt     time.Time
-	doneAt     time.Time
-	manual     bool
-	via        []string
+	publishedAt   time.Time
+	publishedFrom string
+	favoriteAt    time.Time
+	readAt        time.Time
+	doneAt        time.Time
+	manual        bool
+	via           []string
 }
 
 func (i *shelfIndex) SetSourceSteps(context.Context, string, entities.StepSet) error { return nil }
@@ -25,6 +27,11 @@ func (i *shelfIndex) SetSourceOrigin(context.Context, string, string, string, st
 func (i *shelfIndex) ClearSourceOrigin(context.Context, string) error       { return nil }
 func (i *shelfIndex) SetSourceTags(context.Context, string, []string) error { return nil }
 func (i *shelfIndex) SetSourceAutoTags(context.Context, string, []string, time.Time) error {
+	return nil
+}
+
+func (i *shelfIndex) SetSourcePublished(_ context.Context, _ string, at time.Time, from string) error {
+	i.publishedAt, i.publishedFrom = at, from
 	return nil
 }
 
@@ -93,5 +100,40 @@ func TestShelfLivesInTheRecord(t *testing.T) {
 	rec, _ = meta.Read(hash)
 	if rec.ReadLaterDoneAt == 0 {
 		t.Fatal("the done mark was lost")
+	}
+}
+
+// TestPublishedLivesInTheRecord: the date a source declares for itself is a record — a reindex must
+// not re-read a page that may no longer carry it — and the index mirror is what the list reads. A
+// reading that found no date leaves a known one alone.
+func TestPublishedLivesInTheRecord(t *testing.T) {
+	root := t.TempDir()
+	meta := New(root)
+	index := &shelfIndex{}
+	tracker := NewTracker(meta, index, nil)
+	hash := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	at := time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC)
+
+	if err := tracker.SetPublished(hash, at, entities.DateFromMeta); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := meta.Read(hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.PublishedAt != at.UnixMilli() || rec.PublishedFrom != entities.DateFromMeta {
+		t.Fatalf("record = %d/%q, want the date and its layer", rec.PublishedAt, rec.PublishedFrom)
+	}
+	if !index.publishedAt.Equal(at) || index.publishedFrom != entities.DateFromMeta {
+		t.Fatalf("index = %v/%q, want the mirror", index.publishedAt, index.publishedFrom)
+	}
+
+	// A page that stopped declaring its date does not lose the one it declared before.
+	if err := tracker.SetPublished(hash, time.Time{}, ""); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = meta.Read(hash)
+	if rec.PublishedAt != at.UnixMilli() {
+		t.Fatal("a zero date wiped a known one")
 	}
 }

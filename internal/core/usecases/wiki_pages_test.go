@@ -78,6 +78,10 @@ func TestSaveWikiPageOwnsOneStableSource(t *testing.T) {
 	if src.Title != "Go Concurrency" {
 		t.Fatalf("source title = %q", src.Title)
 	}
+	// A wiki page's date is unambiguous: the representation carries the page's last edit.
+	if !src.PublishedAt.Equal(first.Page.UpdatedAt) || src.PublishedFrom != entities.DateFromWiki {
+		t.Fatalf("published = %v/%q, want the page's edit date", src.PublishedAt, src.PublishedFrom)
+	}
 	captured, err := (usecases.Derivation{
 		Store: store, Index: index, Extractor: extract.New(gateways.ExecRunner{}, extract.Config{}),
 		Steps: steps, Clock: wikiClock{},

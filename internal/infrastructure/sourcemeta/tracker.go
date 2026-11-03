@@ -15,6 +15,7 @@ import (
 type StepIndex interface {
 	SetSourceSteps(ctx context.Context, hash string, steps entities.StepSet) error
 	SetSourceTitle(ctx context.Context, hash, title string) error
+	SetSourcePublished(ctx context.Context, hash string, at time.Time, from string) error
 	SetSourceLanguage(ctx context.Context, hash, language string) error
 	SetSourceOrigin(ctx context.Context, hash, origin, wikiPage, parentHash string) error
 	ClearSourceOrigin(ctx context.Context, hash string) error
@@ -105,6 +106,7 @@ func (t *Tracker) Records() (map[string]entities.SourceRecord, error) {
 				FeedHash:     rec.FeedHash,
 			},
 			Steps: rec.Steps, Title: strings.TrimSpace(rec.Title), Tags: rec.Tags,
+			PublishedAt: unixOrZero(rec.PublishedAt), PublishedFrom: rec.PublishedFrom,
 			AutoTags: rec.AutoTags, AutoTagsAt: unixOrZero(rec.AutoTagsAt), Parts: rec.Parts,
 			FavoriteAt:      unixOrZero(rec.FavoriteAt),
 			ReadLaterAt:     unixOrZero(rec.ReadLaterAt),
@@ -404,6 +406,30 @@ func (t *Tracker) SetTitle(hash, title string) error {
 	if t.Index != nil {
 		if err := t.Index.SetSourceTitle(context.Background(), hash, title); err != nil && t.Log != nil {
 			t.Log.Warn("title not mirrored into the index", "hash", hash, "err", err)
+		}
+	}
+	return nil
+}
+
+// SetPublished records the date a source declares for itself — a page's own publication, a feed
+// item's pubDate, a wiki page's last edit — and the layer that found it. A zero date is ignored: a
+// later reading that finds none must never wipe a known one.
+func (t *Tracker) SetPublished(hash string, at time.Time, from string) error {
+	if t == nil || at.IsZero() {
+		return nil
+	}
+	if t.Meta != nil {
+		if _, err := t.Meta.Update(hash, func(rec *Record) error {
+			rec.PublishedAt = at.UnixMilli()
+			rec.PublishedFrom = from
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	if t.Index != nil {
+		if err := t.Index.SetSourcePublished(context.Background(), hash, at, from); err != nil && t.Log != nil {
+			t.Log.Warn("published date not mirrored into the index", "hash", hash, "err", err)
 		}
 	}
 	return nil

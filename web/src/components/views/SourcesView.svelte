@@ -3,7 +3,7 @@
   import { clearable } from '../../lib/clearable';
   import { deleteSource, toggleFavorite, toggleReadLater } from '../../lib/actions';
   import type { Source, SourceListFilter } from '../../lib/api/types';
-  import { fmtBytes, relTime } from '../../lib/format';
+  import { fmtBytes, pubDate, relTime } from '../../lib/format';
   import { n, t } from '../../lib/i18n/index.svelte';
   import { openAdd, openInterests } from '../../lib/overlays';
   import { navigate, router, sourcePath, withQuery, withoutQuery } from '../../lib/router.svelte';
@@ -467,7 +467,11 @@
                     {#if source.origin === 'wiki'}<span class="tag">{t('sources.tagWikiUrl')}</span>{/if}
                   </div>
                   <div class="source-sub">
-                    <span>{source.kind} · {fmtBytes(source.bytes)} · {relTime(source.imported_at)}</span>
+                    <span>
+                      {source.kind} · {fmtBytes(source.bytes)}
+                      {#if source.published_at} · {pubDate(source.published_at)}{/if}
+                      · {relTime(source.imported_at)}
+                    </span>
                     <span class="source-origin">{subLine(source)}</span>
                   </div>
                   {#if (source.read_later && interestSlugs(source).length > 0) || rowTagInfo.shown.length > 0}

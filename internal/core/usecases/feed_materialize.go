@@ -48,6 +48,11 @@ func (m feedMaterializer) expand(ctx context.Context, feed entities.Source, item
 			continue
 		}
 		existing, known := FindURLSource(ctx, m.Index, link)
+		// The feed is the publisher's own announcement of the date, so it is recorded even when the
+		// page needs no fetch. A feed without a date changes nothing.
+		if known {
+			m.recordPublished(existing.Hash, item.Published)
+		}
 		if known && feedCopyNotNeeded(existing) {
 			continue
 		}
@@ -68,6 +73,7 @@ func (m feedMaterializer) expand(ctx context.Context, feed entities.Source, item
 				}
 				continue
 			}
+			m.recordPublished(src.Hash, item.Published)
 		}
 
 		if content != "" {
@@ -102,6 +108,17 @@ func feedCopyNotNeeded(src entities.Source) bool {
 
 // write stores one item's feed copy as the page's snapshot. It returns false (and no error) when the
 // copy is not readable enough: the caller then falls back to fetching the page.
+// recordPublished writes the date the feed announced for one of its items. It is the most reliable
+// layer the vault gets: the feed states the publication itself.
+func (m feedMaterializer) recordPublished(hash string, at time.Time) {
+	if m.Steps == nil || at.IsZero() {
+		return
+	}
+	if err := m.Steps.SetPublished(hash, at, entities.DateFromFeed); err != nil && m.Log != nil {
+		m.Log.Warn("feed: date not recorded", "hash", hash, "err", err)
+	}
+}
+
 func (m feedMaterializer) write(ctx context.Context, src entities.Source, feed entities.Source, item feedItem, content string) (bool, error) {
 	title, body, err := m.convert(ctx, item.Link, content)
 	if err != nil {

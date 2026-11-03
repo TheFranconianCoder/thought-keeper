@@ -37,6 +37,15 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
 
 - Markdown, text and a URL snapshot: the bytes are already readable; intake stores them and capture
   is done. The title is determined here (declared title → first heading → file name → hash).
+- **A source also carries the date it declares for itself**, and capture is where it is found. For a
+  URL the layers are tried in order and the first hit wins: the **feed item's date** when a feed
+  announced the page (`feed`), the page's **declared metadata** — JSON-LD `datePublished`,
+  `article:published_time` and their kin (`meta`) — a **`<time datetime>`** element (`time`), and
+  finally a **full date under the title** (`text`); a modification date is never read as a
+  publication. A wiki page's representation carries the page's last edit (`wiki`). The date lives in
+  the source's `<hash>.meta` record with the layer that found it, is mirrored into the index, and a
+  reading that finds none never wipes a known one. It is **not** the arrival time: `imported_at` is
+  when the vault received the source, and only it decides recency and windows.
 - A URL whose response is a sitemap (`<urlset>` or `<sitemapindex>`) is stored as a parent source
   whose snapshot is the page list; its URLs are claimed with the sitemap as owner and fetched in the
   background. Outline, distill and the association step are skipped for the sitemap itself — its

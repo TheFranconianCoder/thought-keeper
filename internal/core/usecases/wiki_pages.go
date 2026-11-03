@@ -198,6 +198,10 @@ func (uc Wiki) Save(ctx context.Context, in WikiPageInput) (WikiPageResult, erro
 			if err := uc.Pages.Write(ctx, page); err != nil {
 				return WikiPageResult{}, err
 			}
+			// The prose did not change, the page did: its date is the page's date either way.
+			if uc.Steps != nil {
+				_ = uc.Steps.SetPublished(hash, page.UpdatedAt, entities.DateFromWiki) //nolint:errcheck // the index and the step records are a light; the vault is the truth
+			}
 			return res, nil
 		}
 	}
@@ -229,6 +233,8 @@ func (uc Wiki) Save(ctx context.Context, in WikiPageInput) (WikiPageResult, erro
 		Title: title, OriginalName: entities.WikiPrefix + id.String(),
 		Bytes: obj.Bytes, TreeState: entities.TreeNone,
 		ImportedAt: existing.ImportedAt, Meta: "{}",
+		// A wiki page's date is unambiguous: the last edit IS the date of this representation.
+		PublishedAt: page.UpdatedAt, PublishedFrom: entities.DateFromWiki,
 	}
 	if src.ImportedAt.IsZero() {
 		src.ImportedAt = now
@@ -237,6 +243,9 @@ func (uc Wiki) Save(ctx context.Context, in WikiPageInput) (WikiPageResult, erro
 		return WikiPageResult{}, err
 	}
 	if uc.Steps != nil {
+		// UpsertSource keeps a row's existing columns on conflict, so the data goes to the record,
+		// which is the truth and mirrors it into the index.
+		_ = uc.Steps.SetPublished(hash, page.UpdatedAt, entities.DateFromWiki) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		if err := uc.Steps.SetIdentity(hash, entities.SourceIdentity{
 			Kind: entities.SourceKindMD, OriginalName: entities.WikiPrefix + id.String(),
 		}); err != nil && uc.Log != nil {

@@ -1,14 +1,23 @@
 -- name: UpsertSource :exec
+-- The INSERT carries the source's own date; the DO UPDATE deliberately does NOT. A date is set by the
+-- reader of the page or the feed (SetSourcePublished), and a later plain upsert with a zero date must
+-- not wipe it.
 INSERT INTO sources (
-    id, hash, kind, ext, path, url, title, bytes, pages, tree_state, imported_at, meta, bookmark, original_name
+    id, hash, kind, ext, path, url, title, bytes, pages, tree_state, imported_at, meta, bookmark, original_name,
+    published_at, published_from
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
 ON CONFLICT(hash) DO UPDATE SET
     kind = excluded.kind,
     ext = excluded.ext,
     path = excluded.path,
     bytes = excluded.bytes;
+
+-- name: SetSourcePublished :exec
+-- The date a source declares for itself, mirrored from its <hash>.meta record. Nothing is inferred
+-- here: the caller already decided which layer found it.
+UPDATE sources SET published_at = ?, published_from = ? WHERE hash = ?;
 
 -- name: GetSourceByHash :one
 SELECT * FROM sources WHERE hash = ?;

@@ -44,6 +44,8 @@ type PartialSource struct {
 	Tags            []string
 	AutoTags        []string
 	AutoTagsAt      time.Time
+	PublishedAt     time.Time
+	PublishedFrom   string
 	FavoriteAt      time.Time
 	ReadLaterAt     time.Time
 	ReadLaterDoneAt time.Time
@@ -114,6 +116,8 @@ func (p PartialSource) ToEntity() entities.Source {
 		ReadLaterDoneAt: p.ReadLaterDoneAt,
 		ReadLaterManual: p.ReadLaterManual,
 		ReadLaterVia:    p.ReadLaterVia,
+		PublishedAt:     p.PublishedAt,
+		PublishedFrom:   p.PublishedFrom,
 		Steps:           p.Steps,
 		Origin:          p.Origin,
 		WikiPage:        p.WikiPage,
@@ -168,6 +172,8 @@ func PartialFromSource(s entities.Source) PartialSource {
 		ReadLaterDoneAt: s.ReadLaterDoneAt,
 		ReadLaterManual: s.ReadLaterManual,
 		ReadLaterVia:    s.ReadLaterVia,
+		PublishedAt:     s.PublishedAt,
+		PublishedFrom:   s.PublishedFrom,
 		PartsTotal:      s.PartsTotal,
 		PartsDone:       s.PartsDone,
 		PartsDerived:    s.PartsDerived,

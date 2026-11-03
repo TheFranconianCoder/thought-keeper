@@ -72,6 +72,9 @@ type IndexRepository interface {
 	// SetSourceKindURL marks a source as a URL snapshot and records its address (the repair for an
 	// index that lost the fact).
 	SetSourceKindURL(ctx context.Context, hash, url string) error
+	// SetSourcePublished mirrors the date a source declares for itself into the index. The record
+	// (<hash>.meta) is the truth; this column is what the list and the payload read.
+	SetSourcePublished(ctx context.Context, hash string, at time.Time, from string) error
 	// SetSourceTitle records the document's title (an empty title is ignored: a good title is never
 	// wiped).
 	SetSourceTitle(ctx context.Context, hash, title string) error

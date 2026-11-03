@@ -50,6 +50,27 @@ export function elapsed(iso: string | undefined, now = Date.now()): string {
   return `${hours}h ${minutes % 60}m`;
 }
 
+/** pubDate is the date a source declares for itself: "27. Okt. 2026" in German, "27 Oct 2026" in
+ *  English. The year is always shown — an article from 2019 must not read like one from last week.
+ *
+ *  A date WITHOUT a time is stored at midnight UTC; rendering it in the reader's zone would show the
+ *  previous day west of UTC, so such a value is shown in UTC. A value with a real time is the
+ *  publisher's instant and is shown where the reader is. */
+export function pubDate(iso?: string): string {
+  if (!iso) return '';
+  const parsed = Date.parse(iso);
+  if (Number.isNaN(parsed)) return iso;
+  const date = new Date(parsed);
+  const dateOnly =
+    date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0;
+  return date.toLocaleDateString(i18n.locale, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    ...(dateOnly ? { timeZone: 'UTC' } : {}),
+  });
+}
+
 export function shortDate(iso?: string): string {
   if (!iso) return '';
   const parsed = Date.parse(iso);

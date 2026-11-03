@@ -214,3 +214,46 @@ func TestDeletingAFeedSurvivesACanceledRequest(t *testing.T) {
 		t.Errorf("the feed or its items survived: %d rows left", len(idx.m))
 	}
 }
+
+const feedWithDates = `<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <title>Dated Feed</title>
+  <item><title>One</title><link>https://example.com/one</link>
+    <pubDate>Tue, 27 Oct 2026 10:00:00 +0000</pubDate></item>
+  <item><title>Two</title><link>https://example.com/two</link></item>
+</channel></rss>`
+
+// TestFeedItemDateLandsOnTheSource: the feed is the publisher's own announcement, so its item date
+// is recorded on the page it announces — even before the page is fetched. An item without a date
+// changes nothing.
+func TestFeedItemDateLandsOnTheSource(t *testing.T) {
+	ctx := context.Background()
+	idx := newFakeIndex()
+	steps := &fakeSteps{index: idx}
+	uc := usecases.URLs{
+		Fetch:        &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte(feedWithDates), ContentType: "application/rss+xml"}},
+		Convert:      &fakeConverter{title: "Copied", markdown: strings.Repeat("article body ", 60)},
+		Store:        objects.New(t.TempDir()),
+		Index:        idx,
+		Steps:        steps,
+		Clock:        fixedClock{},
+		MinTextChars: 40,
+	}
+	if _, err := uc.AddManual(ctx, "https://example.com/feed.xml", false, usecases.ListingNo); err != nil {
+		t.Fatalf("feed: %v", err)
+	}
+
+	dated := entities.URLHash("https://example.com/one")
+	got, ok := idx.m[dated]
+	if !ok {
+		t.Fatal("the dated item was not claimed")
+	}
+	if got.PublishedAt.Format("2006-01-02") != "2026-10-27" || got.PublishedFrom != entities.DateFromFeed {
+		t.Fatalf("published = %v/%q, want the feed's own date", got.PublishedAt, got.PublishedFrom)
+	}
+
+	undated := entities.URLHash("https://example.com/two")
+	if rec, ok := idx.m[undated]; ok && !rec.PublishedAt.IsZero() {
+		t.Fatalf("undated item = %v, want no invented date", rec.PublishedAt)
+	}
+}

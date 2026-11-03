@@ -115,8 +115,10 @@ the vault as it is; a half-associated vault is still worth asking.
   state and a short excerpt of its overview. Open at most three full overviews
   (`read_source_summary`) when an excerpt is not enough. A source without an overview is still being
   processed: say so, or read its claims with `list_atoms {source}` — never invent its content.
-  - The window is **vault arrival** (`imported_at`), not publication. The answer says "added to the
-    vault", never "published".
+  - The window is **vault arrival** (`imported_at`). A source also carries the date it declares for
+    itself (`published_at`, with the layer that found it), which the list shows: the answer may name
+    that date, but it never reorders or filters the window — "added to the vault" stays what the
+    window means.
   - An empty window is stated plainly; it is never widened silently.
   - The list is a **page**: while `next_offset` is greater than zero the model asks for it, with the
     same `since`, until the whole window has been read. Stopping at the first page is not a digest.
@@ -228,7 +230,8 @@ order. It never writes a URL, never invents a hash and never answers the request
   it): `today` is local midnight to now, `yesterday` the previous local day, `this-week` Monday to
   now, `last-week` the previous Monday–Sunday, `this-month`/`last-month` the local month.
   `last-Nh|d|w|m` are rolling windows. The vault knows ARRIVAL (a source), CREATION (a claim) and the
-  last EDIT (a wiki page) — never publication. A source FILTER applies its window in SQL
+  last EDIT (a wiki page), and a source carries the date it declares for itself — which is shown, not
+  filtered. A source FILTER applies its window in SQL
   (`imported_at`), so a window over an old part of the vault is not lost to a scan limit; a mapped
   set applies it to the joined sources.
 - **The set is materialized** (`commands/<id>.md`), which is what makes "what was true then" and

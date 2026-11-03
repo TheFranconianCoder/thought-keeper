@@ -53,6 +53,12 @@ type Record struct {
 	Bookmark     bool   `json:"bookmark,omitempty"`
 	OriginalName string `json:"original_name,omitempty"`
 	Title        string `json:"title,omitempty"`
+	// PublishedAt is the date the source declares for itself (Unix millis, 0 = unknown) and
+	// PublishedFrom says where it came from: feed, meta, time, text or wiki. A RECORD, because the
+	// vault is the truth and a reindex must not re-read a page to find a date the page may have
+	// dropped since.
+	PublishedAt   int64  `json:"published_at,omitempty"`
+	PublishedFrom string `json:"published_from,omitempty"`
 	// Tags are the human's labels for this source: a RECORD, like the title, not derived state. The
 	// vocabulary observes them under the source-tags namespace.
 	Tags []string `json:"tags,omitempty"`

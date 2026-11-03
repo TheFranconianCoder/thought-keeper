@@ -90,8 +90,10 @@ never consulted).
   `1. [source title](#/sources/<hash>)`). The round parentheses are prose punctuation, not part of
   the link; the claim's wording lives in the bibliography, never in the middle of the answer
   sentence.
-- A recency question is answered from **vault arrival** (`imported_at`), never from a publication
-  date: the vault does not store one, so the answer says "added to the vault".
+- A recency question is answered from **vault arrival** (`imported_at`). A source also carries the
+  date it declares for itself (`published_at`: a feed item, the page's metadata, a `<time>` element,
+  a date under the title, a wiki page's edit) and the list shows it, but the window never reorders or
+  filters by it: the answer says "added to the vault".
 - The reference behaves like a footnote in the UI: clicking `(1)` scrolls to bibliography entry 1
   and flashes it. Only the claim text or source title in the bibliography opens its page. A small
   `↩` on the entry returns to the reference.

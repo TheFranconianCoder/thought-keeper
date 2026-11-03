@@ -85,9 +85,11 @@ are.
   `cache-strategies`. The curation/retopic verbs are the repair; a *naming lock* (ask once per
   document for the topic set, the way tags are curated) is the candidate prevention. Growth makes
   this worse, never better.
-- **Recency is arrival, not publication.** `imported_at` is when a source entered the vault; a
-  document can be years old. Capturing a publication date (HTML meta/JSON-LD, PDF metadata) would let
-  "the newest articles" mean what it says, but it is a new extraction path and a new field.
+- **The publication date has layers it does not read.** A listing card's own date is ignored (the
+  article's page usually declares one), a sitemap's `<lastmod>` is a modification and stays unused,
+  and a PDF's metadata (`CreationDate`) is not read. The text layer understands English and German
+  month names and only a full date under the title, so a page in another language must declare its
+  date in metadata to be seen.
 - **Claim granularity.** "One claim per atom" is a judgement the model makes. Too fine and the
   Zettelkasten drowns; too coarse and provenance blurs. The audit bounds it from below, nothing
   bounds it from above.

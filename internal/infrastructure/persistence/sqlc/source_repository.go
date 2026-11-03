@@ -54,6 +54,11 @@ func (r *SourceRepository) UpsertSource(ctx context.Context, s entities.Source) 
 		// The raw input's own name: without this the column stayed empty and the title silently
 		// stood in for it (a fallback that hid the miss).
 		OriginalName: s.OriginalName,
+		// The date the source declares for itself. It is part of the INSERT because a source is
+		// normally created WITH it; later corrections go through SetSourcePublished, which the
+		// conflict clause above deliberately leaves alone.
+		PublishedAt:   nullTime(s.PublishedAt),
+		PublishedFrom: s.PublishedFrom,
 	})
 	if err != nil {
 		return fmt.Errorf("upsert source: %w", err)
@@ -506,6 +511,17 @@ func millisOrZero(t time.Time) int64 {
 		return 0
 	}
 	return t.UnixMilli()
+}
+
+// SetSourcePublished mirrors the date a source declares for itself into the index. The <hash>.meta
+// record is the truth; this column is what the list and the payload read.
+func (r *SourceRepository) SetSourcePublished(ctx context.Context, hash string, at time.Time, from string) error {
+	if err := r.q.SetSourcePublished(ctx, dal.SetSourcePublishedParams{
+		PublishedAt: nullTime(at), PublishedFrom: from, Hash: hash,
+	}); err != nil {
+		return fmt.Errorf("set source published: %w", err)
+	}
+	return nil
 }
 
 // SetSourceFavorite mirrors the reader's star into the index. The <hash>.meta record is the truth;
@@ -970,31 +986,33 @@ func (r *SourceRepository) LatestSourceByURL(ctx context.Context, url string) (e
 
 func toEntity(row dal.Source) entities.Source {
 	s := entities.Source{
-		ID:           row.ID,
-		Hash:         row.Hash,
-		Kind:         entities.SourceKind(row.Kind),
-		Ext:          row.Ext,
-		Path:         row.Path,
-		Title:        row.Title,
-		Language:     metaLanguage(row.Meta),
-		Origin:       metaField(row.Meta, "origin"),
-		WikiPage:     metaField(row.Meta, "wiki_page"),
-		ParentHash:   metaField(row.Meta, "parent_hash"),
-		Sitemap:      metaField(row.Meta, "sitemap") == "true",
-		RSS:          metaField(row.Meta, "rss") == "true",
-		Listing:      metaField(row.Meta, "listing") == "true",
-		FromFeed:     metaField(row.Meta, "from_feed") == "true",
-		FeedHash:     metaField(row.Meta, "feed_hash"),
-		Wall:         metaField(row.Meta, "wall"),
-		OriginalName: row.OriginalName,
-		Bytes:        row.Bytes,
-		TreeState:    entities.TreeState(row.TreeState),
-		ImportedAt:   time.UnixMilli(row.ImportedAt).UTC(),
-		Meta:         row.Meta,
-		Tags:         decodeSourceTags(row.Tags),
-		AutoTags:     decodeSourceTags(row.AutoTags),
-		AutoTagsAt:   timeFromNull(row.AutoTagsAt),
-		Steps:        decodeStepSet(row.Steps),
+		ID:            row.ID,
+		Hash:          row.Hash,
+		Kind:          entities.SourceKind(row.Kind),
+		Ext:           row.Ext,
+		Path:          row.Path,
+		Title:         row.Title,
+		Language:      metaLanguage(row.Meta),
+		Origin:        metaField(row.Meta, "origin"),
+		WikiPage:      metaField(row.Meta, "wiki_page"),
+		ParentHash:    metaField(row.Meta, "parent_hash"),
+		Sitemap:       metaField(row.Meta, "sitemap") == "true",
+		RSS:           metaField(row.Meta, "rss") == "true",
+		Listing:       metaField(row.Meta, "listing") == "true",
+		FromFeed:      metaField(row.Meta, "from_feed") == "true",
+		FeedHash:      metaField(row.Meta, "feed_hash"),
+		Wall:          metaField(row.Meta, "wall"),
+		OriginalName:  row.OriginalName,
+		Bytes:         row.Bytes,
+		TreeState:     entities.TreeState(row.TreeState),
+		ImportedAt:    time.UnixMilli(row.ImportedAt).UTC(),
+		PublishedAt:   timeFromNull(row.PublishedAt),
+		PublishedFrom: row.PublishedFrom,
+		Meta:          row.Meta,
+		Tags:          decodeSourceTags(row.Tags),
+		AutoTags:      decodeSourceTags(row.AutoTags),
+		AutoTagsAt:    timeFromNull(row.AutoTagsAt),
+		Steps:         decodeStepSet(row.Steps),
 
 		FavoriteAt:      timeFromNull(row.FavoriteAt),
 		ReadLaterAt:     timeFromNull(row.ReadLaterAt),

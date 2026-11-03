@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"time"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 )
@@ -36,6 +37,12 @@ type ConvertedPage struct {
 	Language string
 	// Favicon is the page's declared icon URL (may be relative).
 	Favicon string
+	// PublishedAt is the date the PAGE declares for itself: its metadata (JSON-LD, article meta),
+	// a <time> element, or the date under its title. Zero means the page named none. It is the
+	// page's own statement — never the moment it was fetched.
+	PublishedAt time.Time
+	// PublishedFrom names the layer that found it: meta, time or text.
+	PublishedFrom string
 }
 
 // HTMLConverter turns an HTML document into Markdown (main content) and metadata.

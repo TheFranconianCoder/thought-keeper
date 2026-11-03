@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"time"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 )
@@ -31,6 +32,10 @@ type StepTracker interface {
 	// determines it; the outline may refine it. The file is the truth, so a lost title comes back
 	// with a reindex.
 	SetTitle(hash, title string) error
+	// SetPublished records the date a source declares for itself — a page's own publication, a feed
+	// item's pubDate, a wiki page's last edit — and the layer that found it (feed, meta, time, text,
+	// wiki). A zero date is ignored: a later reading that finds none never wipes a known one.
+	SetPublished(hash string, at time.Time, from string) error
 	// SetIdentity records what a source IS — its original kind, the URL it was fetched from, whether
 	// it is a collected link, its detected language and the name it came in under. The object's file
 	// name cannot carry the kind any more (a URL snapshot and a Markdown source are both <hash>.md),

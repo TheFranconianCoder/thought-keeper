@@ -3,7 +3,7 @@
   import { untrack } from 'svelte';
   import { api } from '../../lib/api';
   import type { QueueCounts, Source } from '../../lib/api/types';
-  import { relTime } from '../../lib/format';
+  import { pubDate, relTime } from '../../lib/format';
   import { t, tn } from '../../lib/i18n/index.svelte';
   import { openAdd } from '../../lib/overlays';
   import { readError, readSignal } from '../../lib/read';
@@ -286,7 +286,8 @@
               <span class="source-main">
                 <span class="row-title">{source.title || source.hash.slice(0, 12)}</span>
                 <span class="row-sub">
-                  {relTime(source.imported_at)}
+                  {#if source.published_at}{pubDate(source.published_at)} · {/if}
+                  {t('home.arrivalAge', { age: relTime(source.imported_at) })}
                   {#if source.atom_count > 0} · {tn('home.claimsCount', source.atom_count)}{/if}
                 </span>
               </span>

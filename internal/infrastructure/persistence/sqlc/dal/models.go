@@ -127,6 +127,8 @@ type Source struct {
 	ReadLaterDoneAt sql.NullInt64  `json:"read_later_done_at"`
 	ReadLaterManual int64          `json:"read_later_manual"`
 	ReadLaterVia    string         `json:"read_later_via"`
+	PublishedAt     sql.NullInt64  `json:"published_at"`
+	PublishedFrom   string         `json:"published_from"`
 }
 
 type SourceNode struct {

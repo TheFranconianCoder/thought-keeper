@@ -53,14 +53,19 @@ type Source struct {
 	ReadLaterManual bool     `json:"read_later_manual,omitempty"`
 	ReadLaterVia    []string `json:"read_later_via,omitempty"`
 	ReadLater       bool     `json:"read_later,omitempty"`
-	PartsTotal      int      `json:"parts_total"`
-	PartsDone       int      `json:"parts_done"`
-	AtomsLeft       int      `json:"atoms_left"`
-	Bytes           int64    `json:"bytes"`
-	Pages           int      `json:"pages,omitempty"`
-	TreeState       string   `json:"tree_state"`
-	AtomCount       int      `json:"atom_count"`
-	ProvenanceRows  int      `json:"provenance_rows"`
+	// PublishedAt is the date the source declares for ITSELF: a page's own publication, a feed
+	// item's pubDate, or a wiki page's last edit (never the arrival time). PublishedFrom names the
+	// layer that found it: feed, meta, time, text or wiki. Empty means no date is known.
+	PublishedAt    string `json:"published_at,omitempty"`
+	PublishedFrom  string `json:"published_from,omitempty"`
+	PartsTotal     int    `json:"parts_total"`
+	PartsDone      int    `json:"parts_done"`
+	AtomsLeft      int    `json:"atoms_left"`
+	Bytes          int64  `json:"bytes"`
+	Pages          int    `json:"pages,omitempty"`
+	TreeState      string `json:"tree_state"`
+	AtomCount      int    `json:"atom_count"`
+	ProvenanceRows int    `json:"provenance_rows"`
 	// Children is how many sub-sources this source owns (a sitemap's pages, a wiki page's linked
 	// URLs). Zero on a list row; only the detail read fills it.
 	Children int `json:"children,omitempty"`

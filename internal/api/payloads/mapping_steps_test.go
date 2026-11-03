@@ -247,3 +247,16 @@ func TestClusterLightIsGreenForAFinishedSourceWithoutClaims(t *testing.T) {
 		t.Error("the green cluster light must say why there was nothing to associate")
 	}
 }
+
+// TestSourcePayloadCarriesTheSourcesOwnDate: the wire names the date and the layer that found it, so
+// a row can show it and the detail can explain it. No date means both fields are absent.
+func TestSourcePayloadCarriesTheSourcesOwnDate(t *testing.T) {
+	at := time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC)
+	out := SourceFromPartial(partialentities.PartialSource{PublishedAt: at, PublishedFrom: "meta"})
+	if out.PublishedAt != "2026-10-27T00:00:00Z" || out.PublishedFrom != "meta" {
+		t.Fatalf("published = %q/%q, want the date and its layer", out.PublishedAt, out.PublishedFrom)
+	}
+	if empty := SourceFromPartial(partialentities.PartialSource{}); empty.PublishedAt != "" || empty.PublishedFrom != "" {
+		t.Fatalf("undated source = %q/%q, want both empty", empty.PublishedAt, empty.PublishedFrom)
+	}
+}

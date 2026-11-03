@@ -51,6 +51,7 @@ index is disposable — deleting it loses nothing but time.
 | `00008_sources_imported_at.sql` | an index on `sources(imported_at)` for the recency window |
 | `00009_sources_kind_epub.sql` | rebuilds `sources` so `kind` also accepts `epub` (a book's chapters are captured like a PDF's pages) |
 | `00010_sources_shelf.sql` | adds the reader's marks to `sources` (`favorite_at`, `read_later_at`, `read_later_done_at`, `read_later_manual`, `read_later_via`) plus the two indexes the queue and the star filter read |
+| `00011_sources_published_at.sql` | adds `published_at` and `published_from`: the date a source declares for itself and the layer that found it (a record, restored by a reindex) |
 
 A schema change is a **new** migration; a change of vocabulary is done in the initial file with the
 database thrown away. The initial file writes the shape marker (`PRAGMA user_version`), and
@@ -65,6 +66,7 @@ sentence — which file it is and what to do ("delete it and reindex; the vault 
 ```sql
 sources(id, hash, kind, ext, path, url, title, original_name, bytes, pages,
         tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta,
+        published_at, published_from,
         tags, auto_tags, auto_tags_at,
         favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via)
 source_nodes(source_id, node_id, parent_id, depth, ord, title, summary,

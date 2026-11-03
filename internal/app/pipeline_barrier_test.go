@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 )
@@ -22,6 +23,7 @@ func (b barrierSteps) Reset(string) error                                { retur
 func (b barrierSteps) Remove(string) error                               { return nil }
 func (b barrierSteps) SetTitle(string, string) error                     { return nil }
 func (b barrierSteps) SetLanguage(string, string) error                  { return nil }
+func (b barrierSteps) SetPublished(string, time.Time, string) error      { return nil }
 func (b barrierSteps) SetOrigin(string, string, string) error            { return nil }
 func (b barrierSteps) Release(string) error                              { return nil }
 func (b barrierSteps) SetIdentity(string, entities.SourceIdentity) error { return nil }

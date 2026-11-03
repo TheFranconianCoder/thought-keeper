@@ -24,6 +24,7 @@ export const homeEn: Record<string, string> = {
   'home.arrivalsCount.many': '{count} new',
   'home.arrivalInterests': 'From your interests:',
   'home.allSources': 'All sources',
+  'home.arrivalAge': 'arrived {age}',
   'home.claimsCount.one': '{count} claim',
   'home.claimsCount.many': '{count} claims',
   'home.emptySourcesTitle': 'No sources yet',

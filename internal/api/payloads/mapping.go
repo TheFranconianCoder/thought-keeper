@@ -41,6 +41,8 @@ func SourceFromPartial(p partialentities.PartialSource) Source {
 		ReadLaterManual:   p.ReadLaterManual,
 		ReadLaterVia:      p.ReadLaterVia,
 		ReadLater:         !p.ReadLaterAt.IsZero() && p.ReadLaterDoneAt.IsZero(),
+		PublishedAt:       wireTime(p.PublishedAt),
+		PublishedFrom:     p.PublishedFrom,
 		Bytes:             p.Bytes,
 		Pages:             p.Pages,
 		TreeState:         p.TreeState,

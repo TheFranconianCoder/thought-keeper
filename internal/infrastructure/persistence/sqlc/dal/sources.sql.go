@@ -325,7 +325,7 @@ func (q *Queries) FillURLSource(ctx context.Context, arg FillURLSourceParams) er
 }
 
 const getSourceByHash = `-- name: GetSourceByHash :one
-SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via FROM sources WHERE hash = ?
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from FROM sources WHERE hash = ?
 `
 
 func (q *Queries) GetSourceByHash(ctx context.Context, hash string) (Source, error) {
@@ -357,12 +357,14 @@ func (q *Queries) GetSourceByHash(ctx context.Context, hash string) (Source, err
 		&i.ReadLaterDoneAt,
 		&i.ReadLaterManual,
 		&i.ReadLaterVia,
+		&i.PublishedAt,
+		&i.PublishedFrom,
 	)
 	return i, err
 }
 
 const latestSourceByURL = `-- name: LatestSourceByURL :one
-SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via FROM sources WHERE url = ? ORDER BY imported_at DESC LIMIT 1
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from FROM sources WHERE url = ? ORDER BY imported_at DESC LIMIT 1
 `
 
 func (q *Queries) LatestSourceByURL(ctx context.Context, url sql.NullString) (Source, error) {
@@ -394,6 +396,8 @@ func (q *Queries) LatestSourceByURL(ctx context.Context, url sql.NullString) (So
 		&i.ReadLaterDoneAt,
 		&i.ReadLaterManual,
 		&i.ReadLaterVia,
+		&i.PublishedAt,
+		&i.PublishedFrom,
 	)
 	return i, err
 }
@@ -429,7 +433,7 @@ func (q *Queries) ListReadLaterVia(ctx context.Context) ([]string, error) {
 }
 
 const listRecentContentSources = `-- name: ListRecentContentSources :many
-SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via FROM sources
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from FROM sources
 WHERE imported_at >= ?1
   AND bookmark = 0
   AND (CASE WHEN json_valid(meta) THEN
@@ -491,6 +495,8 @@ func (q *Queries) ListRecentContentSources(ctx context.Context, arg ListRecentCo
 			&i.ReadLaterDoneAt,
 			&i.ReadLaterManual,
 			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -650,7 +656,7 @@ func (q *Queries) ListSourceTags(ctx context.Context) ([]ListSourceTagsRow, erro
 }
 
 const listSources = `-- name: ListSources :many
-SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via FROM sources ORDER BY imported_at DESC LIMIT ? OFFSET ?
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from FROM sources ORDER BY imported_at DESC LIMIT ? OFFSET ?
 `
 
 type ListSourcesParams struct {
@@ -693,6 +699,8 @@ func (q *Queries) ListSources(ctx context.Context, arg ListSourcesParams) ([]Sou
 			&i.ReadLaterDoneAt,
 			&i.ReadLaterManual,
 			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -708,7 +716,7 @@ func (q *Queries) ListSources(ctx context.Context, arg ListSourcesParams) ([]Sou
 }
 
 const listSourcesByKind = `-- name: ListSourcesByKind :many
-SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via FROM sources WHERE kind = ? ORDER BY imported_at DESC LIMIT ? OFFSET ?
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from FROM sources WHERE kind = ? ORDER BY imported_at DESC LIMIT ? OFFSET ?
 `
 
 type ListSourcesByKindParams struct {
@@ -752,6 +760,8 @@ func (q *Queries) ListSourcesByKind(ctx context.Context, arg ListSourcesByKindPa
 			&i.ReadLaterDoneAt,
 			&i.ReadLaterManual,
 			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -767,7 +777,7 @@ func (q *Queries) ListSourcesByKind(ctx context.Context, arg ListSourcesByKindPa
 }
 
 const listSourcesByParent = `-- name: ListSourcesByParent :many
-SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via FROM sources
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from FROM sources
 WHERE json_valid(meta) AND json_extract(meta, '$.parent_hash') = ?1
 ORDER BY title COLLATE NOCASE, hash
 `
@@ -810,6 +820,8 @@ func (q *Queries) ListSourcesByParent(ctx context.Context, parentHash string) ([
 			&i.ReadLaterDoneAt,
 			&i.ReadLaterManual,
 			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -825,7 +837,7 @@ func (q *Queries) ListSourcesByParent(ctx context.Context, parentHash string) ([
 }
 
 const listSourcesByWikiPage = `-- name: ListSourcesByWikiPage :many
-SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via FROM sources
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from FROM sources
 WHERE json_valid(meta) AND json_extract(meta, '$.wiki_page') = ?1
 ORDER BY title COLLATE NOCASE, hash
 `
@@ -867,6 +879,8 @@ func (q *Queries) ListSourcesByWikiPage(ctx context.Context, wikiPage string) ([
 			&i.ReadLaterDoneAt,
 			&i.ReadLaterManual,
 			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -882,7 +896,7 @@ func (q *Queries) ListSourcesByWikiPage(ctx context.Context, wikiPage string) ([
 }
 
 const listSourcesFiltered = `-- name: ListSourcesFiltered :many
-SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via FROM sources
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from FROM sources
 WHERE (?1 = '' OR kind = ?1)
   AND (?2 = ''
        OR instr(lower(title), lower(?2)) > 0
@@ -992,6 +1006,8 @@ func (q *Queries) ListSourcesFiltered(ctx context.Context, arg ListSourcesFilter
 			&i.ReadLaterDoneAt,
 			&i.ReadLaterManual,
 			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -1007,7 +1023,7 @@ func (q *Queries) ListSourcesFiltered(ctx context.Context, arg ListSourcesFilter
 }
 
 const listSourcesQueue = `-- name: ListSourcesQueue :many
-SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via FROM sources
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from FROM sources
 WHERE (?1 = '' OR kind = ?1)
   AND (?2 = ''
        OR instr(lower(title), lower(?2)) > 0
@@ -1113,6 +1129,8 @@ func (q *Queries) ListSourcesQueue(ctx context.Context, arg ListSourcesQueuePara
 			&i.ReadLaterDoneAt,
 			&i.ReadLaterManual,
 			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -1128,7 +1146,7 @@ func (q *Queries) ListSourcesQueue(ctx context.Context, arg ListSourcesQueuePara
 }
 
 const listSourcesWithNoTree = `-- name: ListSourcesWithNoTree :many
-SELECT s.id, s.hash, s.kind, s.ext, s.path, s.url, s.title, s.original_name, s.bytes, s.pages, s.tree_state, s.steps, s.url_status, s.url_checked_at, s.bookmark, s.imported_at, s.meta, s.tags, s.auto_tags, s.auto_tags_at, s.favorite_at, s.read_later_at, s.read_later_done_at, s.read_later_manual, s.read_later_via FROM sources s
+SELECT s.id, s.hash, s.kind, s.ext, s.path, s.url, s.title, s.original_name, s.bytes, s.pages, s.tree_state, s.steps, s.url_status, s.url_checked_at, s.bookmark, s.imported_at, s.meta, s.tags, s.auto_tags, s.auto_tags_at, s.favorite_at, s.read_later_at, s.read_later_done_at, s.read_later_manual, s.read_later_via, s.published_at, s.published_from FROM sources s
 WHERE s.bookmark = 0
   AND s.tree_state = 'none'
 ORDER BY s.imported_at DESC
@@ -1169,6 +1187,8 @@ func (q *Queries) ListSourcesWithNoTree(ctx context.Context) ([]Source, error) {
 			&i.ReadLaterDoneAt,
 			&i.ReadLaterManual,
 			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -1184,7 +1204,7 @@ func (q *Queries) ListSourcesWithNoTree(ctx context.Context) ([]Source, error) {
 }
 
 const listSourcesWithOpenParts = `-- name: ListSourcesWithOpenParts :many
-SELECT s.id, s.hash, s.kind, s.ext, s.path, s.url, s.title, s.original_name, s.bytes, s.pages, s.tree_state, s.steps, s.url_status, s.url_checked_at, s.bookmark, s.imported_at, s.meta, s.tags, s.auto_tags, s.auto_tags_at, s.favorite_at, s.read_later_at, s.read_later_done_at, s.read_later_manual, s.read_later_via FROM sources s
+SELECT s.id, s.hash, s.kind, s.ext, s.path, s.url, s.title, s.original_name, s.bytes, s.pages, s.tree_state, s.steps, s.url_status, s.url_checked_at, s.bookmark, s.imported_at, s.meta, s.tags, s.auto_tags, s.auto_tags_at, s.favorite_at, s.read_later_at, s.read_later_done_at, s.read_later_manual, s.read_later_via, s.published_at, s.published_from FROM sources s
 WHERE s.bookmark = 0
   AND s.tree_state = 'built'
   AND EXISTS (
@@ -1253,6 +1273,8 @@ func (q *Queries) ListSourcesWithOpenParts(ctx context.Context) ([]Source, error
 			&i.ReadLaterDoneAt,
 			&i.ReadLaterManual,
 			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -1268,7 +1290,7 @@ func (q *Queries) ListSourcesWithOpenParts(ctx context.Context) ([]Source, error
 }
 
 const listSourcesWithUnclustered = `-- name: ListSourcesWithUnclustered :many
-SELECT s.id, s.hash, s.kind, s.ext, s.path, s.url, s.title, s.original_name, s.bytes, s.pages, s.tree_state, s.steps, s.url_status, s.url_checked_at, s.bookmark, s.imported_at, s.meta, s.tags, s.auto_tags, s.auto_tags_at, s.favorite_at, s.read_later_at, s.read_later_done_at, s.read_later_manual, s.read_later_via FROM sources s
+SELECT s.id, s.hash, s.kind, s.ext, s.path, s.url, s.title, s.original_name, s.bytes, s.pages, s.tree_state, s.steps, s.url_status, s.url_checked_at, s.bookmark, s.imported_at, s.meta, s.tags, s.auto_tags, s.auto_tags_at, s.favorite_at, s.read_later_at, s.read_later_done_at, s.read_later_manual, s.read_later_via, s.published_at, s.published_from FROM sources s
 WHERE s.bookmark = 0
   AND s.tree_state = 'built'
   AND EXISTS (SELECT 1 FROM atom_sources a WHERE a.source_id = s.id)
@@ -1318,6 +1340,8 @@ func (q *Queries) ListSourcesWithUnclustered(ctx context.Context) ([]Source, err
 			&i.ReadLaterDoneAt,
 			&i.ReadLaterManual,
 			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -1333,7 +1357,7 @@ func (q *Queries) ListSourcesWithUnclustered(ctx context.Context) ([]Source, err
 }
 
 const listSourcesWithoutAtoms = `-- name: ListSourcesWithoutAtoms :many
-SELECT s.id, s.hash, s.kind, s.ext, s.path, s.url, s.title, s.original_name, s.bytes, s.pages, s.tree_state, s.steps, s.url_status, s.url_checked_at, s.bookmark, s.imported_at, s.meta, s.tags, s.auto_tags, s.auto_tags_at, s.favorite_at, s.read_later_at, s.read_later_done_at, s.read_later_manual, s.read_later_via FROM sources s
+SELECT s.id, s.hash, s.kind, s.ext, s.path, s.url, s.title, s.original_name, s.bytes, s.pages, s.tree_state, s.steps, s.url_status, s.url_checked_at, s.bookmark, s.imported_at, s.meta, s.tags, s.auto_tags, s.auto_tags_at, s.favorite_at, s.read_later_at, s.read_later_done_at, s.read_later_manual, s.read_later_via, s.published_at, s.published_from FROM sources s
 WHERE s.bookmark = 0
   AND s.tree_state = 'built'
   AND NOT EXISTS (SELECT 1 FROM atom_sources a WHERE a.source_id = s.id)
@@ -1375,6 +1399,8 @@ func (q *Queries) ListSourcesWithoutAtoms(ctx context.Context) ([]Source, error)
 			&i.ReadLaterDoneAt,
 			&i.ReadLaterManual,
 			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -1390,7 +1416,7 @@ func (q *Queries) ListSourcesWithoutAtoms(ctx context.Context) ([]Source, error)
 }
 
 const listURLSources = `-- name: ListURLSources :many
-SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via FROM sources WHERE kind = 'url' ORDER BY imported_at DESC
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from FROM sources WHERE kind = 'url' ORDER BY imported_at DESC
 `
 
 func (q *Queries) ListURLSources(ctx context.Context) ([]Source, error) {
@@ -1428,6 +1454,8 @@ func (q *Queries) ListURLSources(ctx context.Context) ([]Source, error) {
 			&i.ReadLaterDoneAt,
 			&i.ReadLaterManual,
 			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -1517,6 +1545,23 @@ type SetSourceKindURLParams struct {
 // index is rebuilt from the vault alone. The snapshot's own frontmatter says where it came from.
 func (q *Queries) SetSourceKindURL(ctx context.Context, arg SetSourceKindURLParams) error {
 	_, err := q.db.ExecContext(ctx, setSourceKindURL, arg.Url, arg.Hash)
+	return err
+}
+
+const setSourcePublished = `-- name: SetSourcePublished :exec
+UPDATE sources SET published_at = ?, published_from = ? WHERE hash = ?
+`
+
+type SetSourcePublishedParams struct {
+	PublishedAt   sql.NullInt64 `json:"published_at"`
+	PublishedFrom string        `json:"published_from"`
+	Hash          string        `json:"hash"`
+}
+
+// The date a source declares for itself, mirrored from its <hash>.meta record. Nothing is inferred
+// here: the caller already decided which layer found it.
+func (q *Queries) SetSourcePublished(ctx context.Context, arg SetSourcePublishedParams) error {
+	_, err := q.db.ExecContext(ctx, setSourcePublished, arg.PublishedAt, arg.PublishedFrom, arg.Hash)
 	return err
 }
 
@@ -1894,9 +1939,10 @@ func (q *Queries) SourceProvenanceCountsForSources(ctx context.Context, ids []ul
 
 const upsertSource = `-- name: UpsertSource :exec
 INSERT INTO sources (
-    id, hash, kind, ext, path, url, title, bytes, pages, tree_state, imported_at, meta, bookmark, original_name
+    id, hash, kind, ext, path, url, title, bytes, pages, tree_state, imported_at, meta, bookmark, original_name,
+    published_at, published_from
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
 ON CONFLICT(hash) DO UPDATE SET
     kind = excluded.kind,
@@ -1906,22 +1952,27 @@ ON CONFLICT(hash) DO UPDATE SET
 `
 
 type UpsertSourceParams struct {
-	ID           ulid.ULID      `json:"id"`
-	Hash         string         `json:"hash"`
-	Kind         string         `json:"kind"`
-	Ext          string         `json:"ext"`
-	Path         string         `json:"path"`
-	Url          sql.NullString `json:"url"`
-	Title        string         `json:"title"`
-	Bytes        int64          `json:"bytes"`
-	Pages        sql.NullInt64  `json:"pages"`
-	TreeState    string         `json:"tree_state"`
-	ImportedAt   int64          `json:"imported_at"`
-	Meta         string         `json:"meta"`
-	Bookmark     int64          `json:"bookmark"`
-	OriginalName string         `json:"original_name"`
+	ID            ulid.ULID      `json:"id"`
+	Hash          string         `json:"hash"`
+	Kind          string         `json:"kind"`
+	Ext           string         `json:"ext"`
+	Path          string         `json:"path"`
+	Url           sql.NullString `json:"url"`
+	Title         string         `json:"title"`
+	Bytes         int64          `json:"bytes"`
+	Pages         sql.NullInt64  `json:"pages"`
+	TreeState     string         `json:"tree_state"`
+	ImportedAt    int64          `json:"imported_at"`
+	Meta          string         `json:"meta"`
+	Bookmark      int64          `json:"bookmark"`
+	OriginalName  string         `json:"original_name"`
+	PublishedAt   sql.NullInt64  `json:"published_at"`
+	PublishedFrom string         `json:"published_from"`
 }
 
+// The INSERT carries the source's own date; the DO UPDATE deliberately does NOT. A date is set by the
+// reader of the page or the feed (SetSourcePublished), and a later plain upsert with a zero date must
+// not wipe it.
 func (q *Queries) UpsertSource(ctx context.Context, arg UpsertSourceParams) error {
 	_, err := q.db.ExecContext(ctx, upsertSource,
 		arg.ID,
@@ -1938,6 +1989,8 @@ func (q *Queries) UpsertSource(ctx context.Context, arg UpsertSourceParams) erro
 		arg.Meta,
 		arg.Bookmark,
 		arg.OriginalName,
+		arg.PublishedAt,
+		arg.PublishedFrom,
 	)
 	return err
 }

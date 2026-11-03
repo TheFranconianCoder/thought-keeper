@@ -65,6 +65,17 @@ func (k SourceKind) NeedsCapture() bool { return k == SourceKindPDF || k == Sour
 // It names the count for the reader: a book has chapters, a PDF has pages.
 func (k SourceKind) HasChapters() bool { return k == SourceKindEPUB }
 
+// Where a source's own date came from. It is the automatism's explanation, like an interest's
+// evidence: a feed's announcement, the page's declared metadata, a <time> element, a date under the
+// title, or a wiki page's last edit. Only the last two are guesses; the reader can tell them apart.
+const (
+	DateFromFeed = "feed"
+	DateFromMeta = "meta"
+	DateFromTime = "time"
+	DateFromText = "text"
+	DateFromWiki = "wiki"
+)
+
 // SourceFilter narrows a source list. Every field is optional; the zero value means "the whole
 // vault". The repository applies the filter in SQL, so a page's COUNT is the count of the FILTERED
 // list — the number the windowed scroller needs for its height.
@@ -194,8 +205,16 @@ type Source struct {
 	// itself and how an interest's filter finds its entries.
 	ReadLaterVia []string
 	ImportedAt   time.Time
-	Meta         string // free-form JSON
-	AtomCount    int    // derived: atoms that cite this source and can be resolved
+	// PublishedAt is the date the source declares for ITSELF: a URL page's own publication (its
+	// metadata, a <time> element, or the date under its title), a feed item's pubDate, or a wiki
+	// page's last edit. It is not the ARRIVAL time (ImportedAt) and it is never read out of the body
+	// of an article. Zero means no date is known.
+	PublishedAt time.Time
+	// PublishedFrom names where PublishedAt came from: feed, meta, time, text or wiki. It is the
+	// automatism's explanation, like an interest's evidence.
+	PublishedFrom string
+	Meta          string // free-form JSON
+	AtomCount     int    // derived: atoms that cite this source and can be resolved
 	// ProvenanceRows is the raw number of atom_sources rows, orphans included. It differs from
 	// AtomCount exactly when the index carries damaged rows — which is a fact worth showing.
 	ProvenanceRows int

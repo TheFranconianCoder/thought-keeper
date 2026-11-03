@@ -175,6 +175,11 @@ export interface Source {
   url_checked_at?: string;
   bookmark?: boolean;
   imported_at: string;
+  /** The date the source declares for itself: a page's publication, a feed item's date, a wiki
+   *  page's last edit. Never the arrival time. */
+  published_at?: string;
+  /** Where that date came from: feed, meta, time, text or wiki. */
+  published_from?: string;
   steps?: Partial<Record<StepName, StepStatus>>;
   sidecars?: Sidecar[];
   /** How many articles a list source declares. It is larger than `children` when another owner

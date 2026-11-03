@@ -243,6 +243,14 @@ func (f *fakeIndex) SourceHashes(_ context.Context) ([]string, error) {
 	return out, nil
 }
 
+func (f *fakeIndex) SetSourcePublished(_ context.Context, hash string, at time.Time, from string) error {
+	if src, ok := f.m[hash]; ok {
+		src.PublishedAt, src.PublishedFrom = at, from
+		f.m[hash] = src
+	}
+	return nil
+}
+
 func (f *fakeIndex) SetSourceKindURL(_ context.Context, hash, url string) error {
 	if src, ok := f.m[hash]; ok {
 		src.Kind, src.URL = entities.SourceKindURL, url

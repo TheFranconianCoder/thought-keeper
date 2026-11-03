@@ -268,6 +268,13 @@ func (uc Maintenance) steps(ctx context.Context, res ReindexResult, records map[
 				uc.Log.Warn("reindex: title not restored", "hash", hash, "err", err)
 			}
 		}
+		// The date the source declares for itself is a record too: a rebuild restores it instead of
+		// re-guessing from a page that may no longer carry it.
+		if !rec.PublishedAt.IsZero() {
+			if err := uc.Index.SetSourcePublished(ctx, hash, rec.PublishedAt, rec.PublishedFrom); err != nil && uc.Log != nil {
+				uc.Log.Warn("reindex: published date not restored", "hash", hash, "err", err)
+			}
+		}
 		// The reader's marks live in the record too. Restore them even when empty: a stale star or
 		// queue entry in a reused index must not survive the rebuild.
 		if uc.Shelf != nil {

@@ -24,6 +24,7 @@ export const homeDe: Record<string, string> = {
   'home.arrivalsCount.many': '{count} neu',
   'home.arrivalInterests': 'Aus deinen Interessen:',
   'home.allSources': 'Alle Quellen',
+  'home.arrivalAge': 'kam {age}',
   'home.claimsCount.one': '{count} Aussage',
   'home.claimsCount.many': '{count} Aussagen',
   'home.emptySourcesTitle': 'Noch keine Quelle',

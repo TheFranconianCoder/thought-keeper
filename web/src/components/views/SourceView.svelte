@@ -14,7 +14,7 @@
     toggleReadLater,
   } from '../../lib/actions';
   import { api } from '../../lib/api';
-  import { fmtBytes, hostOf, prettyJson, relTime, splitFrontmatter } from '../../lib/format';
+  import { fmtBytes, hostOf, prettyJson, pubDate, relTime, splitFrontmatter } from '../../lib/format';
   import { n, t, tn } from '../../lib/i18n/index.svelte';
   import { askSourcePath, navigate, previousView, router, sourcePath, wikiPath } from '../../lib/router.svelte';
   import { openInterests } from '../../lib/overlays';
@@ -974,6 +974,14 @@
               <div class="kv"><span class="k">{t('source.outlineLabel')}</span><span class="v">{selected.tree_state}</span></div>
             {/if}
             <div class="kv"><span class="k">{t('source.addedLabel')}</span><span class="v">{relTime(selected.imported_at)}</span></div>
+            {#if selected.published_at}
+              <div class="kv">
+                <span class="k">{t('source.publishedLabel')}</span>
+                <span class="v">
+                  {pubDate(selected.published_at)}{#if selected.published_from}<span class="muted small"> · {t(`source.publishedFrom.${selected.published_from}`)}</span>{/if}
+                </span>
+              </div>
+            {/if}
             {#if selected.url}
               <div class="kv">
                 <span class="k">{t('source.urlLabel')}</span>

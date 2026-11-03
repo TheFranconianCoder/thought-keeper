@@ -585,6 +585,11 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, l
 				_ = uc.Steps.SetLanguage(existing.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			}
 		}
+		// The date the page declares for itself. It is a record, mirrored into the index; a reading
+		// that found none leaves a known date alone.
+		if uc.Steps != nil {
+			_ = uc.Steps.SetPublished(existing.Hash, conv.PublishedAt, conv.PublishedFrom) //nolint:errcheck // the index and the step records are a light; the vault is the truth
+		}
 		recordStep(ctx, uc.Steps, uc.Clock, existing.Hash, entities.StepCapture, entities.StepOK,
 			fmt.Sprintf("HTTP %d · refetched", page.Status), nil)
 		if uc.Steps != nil {
@@ -687,6 +692,9 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, l
 	}
 	if engine != "" {
 		detail += " · " + engine
+	}
+	if uc.Steps != nil {
+		_ = uc.Steps.SetPublished(src.Hash, conv.PublishedAt, conv.PublishedFrom) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	}
 	recordStep(ctx, uc.Steps, uc.Clock, src.Hash, entities.StepCapture, entities.StepOK, detail, nil)
 	// A URL snapshot is a .md — exactly like a Markdown source, and like a PDF's readable rendering.

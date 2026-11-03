@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 
@@ -47,7 +48,14 @@ func (e explodingExtractor) Extract(context.Context, string, []byte, func(entiti
 }
 
 // fakeSteps records the step transitions a use case makes.
+// publishedDate is one recorded date and the layer that found it.
+type publishedDate struct {
+	at   time.Time
+	from string
+}
+
 type fakeSteps struct {
+	published  map[string]publishedDate
 	seen       map[entities.Step][]entities.StepStatus
 	titles     map[string]string
 	languages  map[string]string
@@ -97,6 +105,20 @@ func (f *fakeSteps) Reset(hash string) error {
 func (f *fakeSteps) Remove(string) error { return nil }
 
 // SetIdentity remembers what the source IS, keyed by hash.
+func (f *fakeSteps) SetPublished(hash string, at time.Time, from string) error {
+	if at.IsZero() {
+		return nil
+	}
+	if f.published == nil {
+		f.published = map[string]publishedDate{}
+	}
+	f.published[hash] = publishedDate{at: at, from: from}
+	if f.index != nil {
+		_ = f.index.SetSourcePublished(context.Background(), hash, at, from)
+	}
+	return nil
+}
+
 func (f *fakeSteps) SetLanguage(hash, language string) error {
 	if f.languages == nil {
 		f.languages = map[string]string{}

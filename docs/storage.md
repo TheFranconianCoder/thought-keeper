@@ -52,7 +52,7 @@ page is a destination, because a human authored it.
 | Sidecar | belongs to | holds | kind |
 | --- | --- | --- | --- |
 | `<hash>.capture.md` | a source whose bytes are not readable (a PDF, an EPUB) or a wiki page representation | the content as readable Markdown | **cache** — re-derivable (`capture`) |
-| `<hash>.meta` | a source | what the source **is** (kind, language, URL, identity), its title, **human tags**, **auto tags** and when they were derived, the reader's **favorite** and **read-later** marks, the state of capture/outline/distill and the part records | **record** — the file IS the truth |
+| `<hash>.meta` | a source | what the source **is** (kind, language, URL, identity), its title, **the date it declares for itself and the layer that found it**, **human tags**, **auto tags** and when they were derived, the reader's **favorite** and **read-later** marks, the state of capture/outline/distill and the part records | **record** — the file IS the truth |
 | `<hash>.outline` | a source | the node tree with references into the readable text | **cache** — re-derivable (`rebuild-trees`) |
 | `<hash>.summary.md` | a source | its **overview**, written from the claims after a complete distill | **cache** — regenerated from the claims (a model writes it, so not byte-identical) |
 | `<hash>.log` | a source | everything done to it | **record** — history |
@@ -114,6 +114,12 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
 
 - **A source is exactly one file — never a folder.** Intake takes single `.md`, `.pdf`, `.txt` or
   `.epub` files (or one URL). A directory path is rejected with `unsupported_source`.
+- **The date is the source's own, never the arrival.** `published_at` is what the source declares
+  about itself — a feed item's `pubDate`, a page's metadata (JSON-LD, `article:published_time`), a
+  `<time datetime>`, a full date under the title, or a wiki page's last edit — and `published_from`
+  names the layer (`feed`, `meta`, `time`, `text`, `wiki`). It is a record, so a reindex restores it
+  instead of re-reading a page that may have dropped it; a reading that finds no date leaves a known
+  one alone. `imported_at` stays what it was: when the vault received the source.
 - **The title and the original name are two different things.** The title is the document's;
   `original_name` is what the source came in under (a dropped file's name, or the URL). An empty
   `original_name` stays empty.

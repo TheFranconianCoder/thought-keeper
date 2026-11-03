@@ -42,13 +42,18 @@ func (f *fakeFetcher) Fetch(_ context.Context, url string) (interfaces.FetchedPa
 }
 
 type fakeConverter struct {
-	title    string
-	markdown string
-	favicon  string
+	title         string
+	markdown      string
+	favicon       string
+	publishedAt   time.Time
+	publishedFrom string
 }
 
 func (f *fakeConverter) Convert(context.Context, []byte, string) (interfaces.ConvertedPage, error) {
-	return interfaces.ConvertedPage{Title: f.title, Markdown: f.markdown, Favicon: f.favicon}, nil
+	return interfaces.ConvertedPage{
+		Title: f.title, Markdown: f.markdown, Favicon: f.favicon,
+		PublishedAt: f.publishedAt, PublishedFrom: f.publishedFrom,
+	}, nil
 }
 
 func TestAddURLStoresLocalSnapshot(t *testing.T) {
@@ -751,5 +756,39 @@ func TestReconcileRestoresAnOwnerTheRowLost(t *testing.T) {
 		if row.Origin != "wiki" || row.WikiPage != pageID {
 			t.Errorf("row %s owner = %q/%q, want the record's wiki page", hash[:8], row.Origin, row.WikiPage)
 		}
+	}
+}
+
+// TestURLCaptureRecordsThePagesOwnDate: the converter found the date the page declares, and the
+// capture records it on the source with the layer that found it — as a record, mirrored into the
+// index, so the list can show it.
+func TestURLCaptureRecordsThePagesOwnDate(t *testing.T) {
+	ctx := context.Background()
+	idx := newFakeIndex()
+	steps := &fakeSteps{index: idx}
+	at := time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC)
+	uc := usecases.URLs{
+		Fetch: &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("<html>…</html>")}},
+		Convert: &fakeConverter{
+			title: "The Page", markdown: strings.Repeat("article body ", 40),
+			publishedAt: at, publishedFrom: entities.DateFromMeta,
+		},
+		Store: objects.New(t.TempDir()),
+		Index: idx,
+		Steps: steps,
+		Clock: fixedClock{},
+	}
+	if _, err := uc.Add(ctx, "https://example.com/dated", false); err != nil {
+		t.Fatalf("add url: %v", err)
+	}
+	got, ok := idx.m[entities.URLHash("https://example.com/dated")]
+	if !ok {
+		t.Fatal("the dated page was not filed")
+	}
+	if !got.PublishedAt.Equal(at) || got.PublishedFrom != entities.DateFromMeta {
+		t.Fatalf("published = %v/%q, want the page's own date", got.PublishedAt, got.PublishedFrom)
+	}
+	if rec := steps.published[got.Hash]; rec.from != entities.DateFromMeta || !rec.at.Equal(at) {
+		t.Fatalf("recorded = %+v, want the date in the record too", rec)
 	}
 }

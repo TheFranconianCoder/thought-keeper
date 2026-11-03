@@ -53,14 +53,16 @@ button), with an Attention badge and a connection mark on Status. **The assistan
 and is not one of the lenses: it is how the app is driven from outside a click. It is a **navigator**,
 not a chat: a command resolves to a lens, a filter and a materialized set, and every open window
 follows the address it hands out. A question that asks which items exist is still a list; only a
-prose question goes to Ask. Time means arrival (source), creation (claim) or last edit (wiki page),
-never publication. **Start** is the front door: a
-vault-pulse line, an Ask box, and three thin signals for what runs, what needs you and what waits in
-the read-later queue (open entries, the interests that queued them by name, the age of the oldest),
-all absent when quiet; then **Arrived** — the eight newest sources that entered the vault in the
-last seven days, one row each (a feed's article is an arrival like a document is), with the
-interests that fired among them in the card's foot; the card is absent when the week is quiet.
-Never a session-restore card and never the newest-claims wall. A **wiki
+prose question goes to Ask. Time means arrival (source), creation (claim) or last edit (wiki page); a
+source also carries the date it declares for itself (a feed item, the page's metadata, a date under
+its title, a wiki page's edit), which is shown beside the arrival but never orders the vault.
+**Start** is the front door: a vault-pulse line, an Ask box, and three thin signals for what runs,
+what needs you and what waits in the read-later queue (open entries, the interests that queued them
+by name, the age of the oldest), all absent when quiet; then **Arrived** — the eight newest sources
+that entered the vault in the last seven days, one row each (a feed's article is an arrival like a
+document is), each with the date its source declares and its arrival age, and the interests that
+fired among them in the card's foot; the card is absent when the week is quiet. Never a session-
+restore card and never the newest-claims wall. A **wiki
 page** is user-authored Markdown with tags; saving it writes a source representation and runs the
 document pipeline from capture. The app also tags a page and a source
 (auto tags, kept apart from the human's tags) and curates the three name vocabularies (`topics`,
