@@ -398,14 +398,19 @@ class SourcesStore {
     if (!force && this.summaryLoaded) return;
     this.summaryLoading = true;
     try {
-      this.summary = await api.sourceSummary(hash, readSignal(LOCAL_READ_TIMEOUT));
+      const text = await api.sourceSummary(hash, readSignal(LOCAL_READ_TIMEOUT));
+      // A read that outlived its source must not paint another source's summary.
+      if (this.selectedHash !== hash) return;
+      this.summary = text;
       this.summaryMissing = false;
       this.summaryError = '';
     } catch (error) {
       if (this.selectedHash !== hash) return;
-      this.summary = '';
       // A source without a summary answers 404: that is the empty state, not a failure to show.
       this.summaryMissing = error instanceof ApiError && error.status === 404;
+      // A FAILED re-read (a timeout, a dropped connection on a remote instance) keeps the summary
+      // that is already on screen: blanking it made the tab flash for one round trip.
+      if (this.summaryMissing) this.summary = '';
       this.summaryError = this.summaryMissing ? '' : firstLine(readError(error));
     } finally {
       if (this.selectedHash === hash) {

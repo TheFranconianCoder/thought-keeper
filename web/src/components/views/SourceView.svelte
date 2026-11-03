@@ -226,6 +226,12 @@
   $effect(() => {
     const current = router.current;
     if (current.view !== 'source' || !current.id) return;
+    // A TAB (or part, or file) change is the SAME source addressed differently: opening it again
+    // re-read every sidecar and bumped the version, which re-ran the summary read and repainted the
+    // panel — the flicker a reader sees when they come back to Summary. Only a new source opens.
+    // A failed first read leaves `selected` empty, so a re-open still retries it.
+    const alreadyOpen = untrack(() => sources.selectedHash === current.id && !!sources.selected);
+    if (alreadyOpen) return;
     // sources.open reads selectedHash; calling it tracked would reload the same source in a loop.
     untrack(() => void sources.open(current.id));
   });
