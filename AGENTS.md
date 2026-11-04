@@ -60,9 +60,10 @@ its title, a wiki page's edit), which is shown beside the arrival but never orde
 what needs you and what waits in the read-later queue (open entries, the interests that queued them
 by name, the age of the oldest), all absent when quiet; then **Arrived** — the eight newest sources
 that entered the vault in the last three days, one row each (a feed's article is an arrival like a
-document is), each with the date its source declares and its arrival age, and the interests that
-fired among them in the card's foot; the card is absent when the window is quiet. Never a session-
-restore card and never the newest-claims wall. A **wiki
+document is), each with the date its source declares and its arrival age, and — where a standing rule
+queued it — the rule's chip on the row (the same chip the Sources rows carry, shown while the entry is
+open); the card is absent when the window is quiet. Never a session-restore card and never the
+newest-claims wall. A **wiki
 page** is user-authored Markdown with tags; saving it writes a source representation and runs the
 document pipeline from capture. The app also tags a page and a source
 (auto tags, kept apart from the human's tags) and curates the three name vocabularies (`topics`,

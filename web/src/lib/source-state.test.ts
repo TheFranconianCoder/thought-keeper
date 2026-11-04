@@ -4,6 +4,8 @@ import {
   canAttachSnapshot,
   canRefreshSource,
   countsOf,
+  interestChipSlugs,
+  knownInterestSlugs,
   matchesSourceFilter,
   overallPercent,
   overallState,
@@ -176,6 +178,21 @@ describe('source state', () => {
     expect(canRefreshSource(source({ kind: 'md' }))).toBe(false);
     expect(canRefreshSource(source({ kind: 'url', rss: true }))).toBe(false);
     expect(canRefreshSource(source({ kind: 'url', sitemap: true }))).toBe(false);
+  });
+
+  it('names the rules behind an OPEN queue entry and drops the ones that are gone', () => {
+    const known = (slug: string) => slug === 'caching' || slug === 'storage';
+    expect(knownInterestSlugs(['caching', 'gone', '', 'storage'], known)).toEqual([
+      'caching',
+      'storage',
+    ]);
+    expect(knownInterestSlugs(undefined, known)).toEqual([]);
+
+    const queued = source({ read_later: true, read_later_via: ['caching', 'gone'] });
+    expect(interestChipSlugs(queued, known)).toEqual(['caching']);
+    // A finished entry keeps its provenance in the source's own rail, not as a chip on a list row.
+    expect(interestChipSlugs({ ...queued, read_later: false }, known)).toEqual([]);
+    expect(interestChipSlugs(source({ read_later: true }), known)).toEqual([]);
   });
 
   it('filters sources by the attachment marker alone and together with the other filters', () => {

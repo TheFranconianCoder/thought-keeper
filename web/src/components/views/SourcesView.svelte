@@ -16,10 +16,11 @@
   import { rememberScroll } from '../../lib/scroll-memory';
   import { scrollFade } from '../../lib/scroll-fade';
   import { rememberSourcesTop } from '../../lib/sources-scroll';
-  import { statusLabel } from '../../lib/source-state';
+  import { interestChipSlugs, statusLabel } from '../../lib/source-state';
   import CloudMore from '../ui/CloudMore.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
+  import InterestChip from '../ui/InterestChip.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
   import SourceLamp from '../sources/SourceLamp.svelte';
   import SourceSteps from '../sources/SourceSteps.svelte';
@@ -153,14 +154,10 @@
     navigate(withQuery(key, '1'));
   }
 
-  function interestSlugs(source: Source): string[] {
-    // A rule the reader deleted leaves a dangling slug in the record; it is not rendered. The queue
-    // entry itself is theirs and stays.
-    return (source.read_later_via ?? []).filter((slug) => !!interests.bySlug(slug));
-  }
-
-  function interestNames(source: Source): string[] {
-    return interestSlugs(source).map((slug) => interests.nameOf(slug));
+  /** hasInterestChip decides whether the row needs the chip line at all; the chip itself renders
+   *  nothing when it has nothing to name (the same helper is its own condition). */
+  function hasInterestChip(source: Source): boolean {
+    return interestChipSlugs(source, (slug) => !!interests.bySlug(slug)).length > 0;
   }
 
   function setKind(next: SourceKindFilter): void {
@@ -474,16 +471,9 @@
                     </span>
                     <span class="source-origin">{subLine(source)}</span>
                   </div>
-                  {#if (source.read_later && interestSlugs(source).length > 0) || rowTagInfo.shown.length > 0}
+                  {#if hasInterestChip(source) || rowTagInfo.shown.length > 0}
                     <div class="source-tags" use:scrollFade={{ axis: 'x', size: 22 }}>
-                      {#if source.read_later && interestSlugs(source).length > 0}
-                        <span
-                          class="tag tag--interest"
-                          title={interestNames(source).join(', ')}
-                        >
-                          <Icon name="target" size={10} /> {interestNames(source)[0]}{#if interestSlugs(source).length > 1}+{interestSlugs(source).length - 1}{/if}
-                        </span>
-                      {/if}
+                      <InterestChip {source} />
                       {#each rowTagInfo.shown as item (item.tag)}
                         <span class="tag" class:tag--auto={item.auto}>{item.tag}</span>
                       {/each}
@@ -859,15 +849,6 @@
   .source-mark {
     display: inline-flex;
     align-items: center;
-  }
-
-  .tag--interest {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    border-color: transparent;
-    background: var(--accent-soft);
-    color: var(--accent);
   }
 
   :global(.source-actions .icon-btn.is-on) {

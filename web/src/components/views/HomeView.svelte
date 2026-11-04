@@ -15,6 +15,7 @@
   import { sourceWindow } from '../../lib/stores/source-window.svelte';
   import { system } from '../../lib/stores/system.svelte';
   import Icon from '../ui/Icon.svelte';
+  import InterestChip from '../ui/InterestChip.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
   import SourceLamp from '../sources/SourceLamp.svelte';
 
@@ -35,21 +36,6 @@
   // A card that would only say "nothing came in this window" is one card too many: like the signal
   // lines it is absent when quiet.
   const showArrivals = $derived(!arrivalsLoaded || arrivalsError !== '' || arrivals.length > 0);
-
-  // The rules that fired among these arrivals: an interest queues a NEW source, so a hit here is
-  // literally why the queue grew in this window. Names, not just a number — the reader wrote the rules.
-  const arrivalRules = $derived.by(() => {
-    const counts = new Map<string, number>();
-    for (const source of arrivals) {
-      for (const slug of source.read_later_via ?? []) {
-        if (!interests.bySlug(slug)) continue;
-        counts.set(slug, (counts.get(slug) ?? 0) + 1);
-      }
-    }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([slug, count]) => ({ slug, name: interests.nameOf(slug), count }));
-  });
 
   // The rules BEHIND the queue, by name and with their share: that is what makes the line say WHY
   // it is long. A slug whose rule was deleted is dropped, exactly as a queue row drops its label.
@@ -286,27 +272,18 @@
               <span class="source-main">
                 <span class="row-title">{source.title || source.hash.slice(0, 12)}</span>
                 <span class="row-sub">
-                  {#if source.published_at}{pubDate(source.published_at)} · {/if}
-                  {t('home.arrivalAge', { age: relTime(source.imported_at) })}
-                  {#if source.atom_count > 0} · {tn('home.claimsCount', source.atom_count)}{/if}
+                  <span class="row-sub-text">
+                    {#if source.published_at}{pubDate(source.published_at)} · {/if}
+                    {t('home.arrivalAge', { age: relTime(source.imported_at) })}
+                    {#if source.atom_count > 0} · {tn('home.claimsCount', source.atom_count)}{/if}
+                  </span>
+                  <InterestChip {source} />
                 </span>
               </span>
               {#if !source.bookmark}<SourceLamp {source} {live} />{/if}
             </button>
           {/each}
         </div>
-        {#if arrivalRules.length > 0}
-          <p class="card-foot">
-            <span class="mini-label">{t('home.arrivalInterests')}</span>
-            {#each arrivalRules as rule, index (rule.slug)}
-              {#if index > 0}<span class="sep">·</span>{/if}
-              <a class="rule-link" href="#/sources?readlater=1&interest={rule.slug}">{rule.name} ({rule.count})</a>
-            {/each}
-            <a class="card-link" href="#/sources?readlater=1">
-              {t('home.allReadLater')} <Icon name="chevronRight" size={12} />
-            </a>
-          </p>
-        {/if}
       {/if}
     </section>
   {/if}
@@ -471,35 +448,6 @@
     color: var(--accent);
   }
 
-  /* The rules that fired among the arrivals: the reader wrote them, so the card names them. */
-  .card-foot {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 5px;
-    margin: 8px 0 0;
-    padding-top: 9px;
-    border-top: 1px solid var(--line);
-    color: var(--faint);
-    font-size: 11.5px;
-  }
-
-  .card-foot .mini-label {
-    margin-right: 2px;
-  }
-
-  .rule-link {
-    color: var(--muted);
-  }
-
-  .rule-link:hover {
-    color: var(--accent);
-  }
-
-  .card-foot .card-link {
-    margin-left: auto;
-  }
-
   .sep {
     color: var(--faint);
   }
@@ -637,10 +585,19 @@
     flex: none;
   }
 
+  /* The sub line is a ROW: the text gives way first, the rule chip keeps its shape. */
   .row-sub {
-    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
     color: var(--faint);
     font-size: 11px;
+  }
+
+  .row-sub-text {
+    overflow: hidden;
+    min-width: 0;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

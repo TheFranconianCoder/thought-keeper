@@ -145,6 +145,27 @@ export function canRefreshSource(source: Source): boolean {
   return source.from_feed === true || !!source.wall || source.steps?.capture?.state === 'failed';
 }
 
+/** knownInterestSlugs keeps the rule slugs a source carries and drops the ones whose rule is gone: a
+ *  deleted interest leaves a dangling slug in the record, and the queue entry itself stays the
+ *  reader's. */
+export function knownInterestSlugs(
+  via: string[] | undefined,
+  isKnown: (slug: string) => boolean,
+): string[] {
+  return (via ?? []).filter((slug) => !!slug && isKnown(slug));
+}
+
+/** interestChipSlugs is what the chip beside a queue entry shows: the reader's rules that put this
+ *  source into the OPEN read-later queue (a finished entry keeps its provenance in the source's own
+ *  rail). Empty means "no chip" — the rule was deleted, or the entry left the queue. */
+export function interestChipSlugs(
+  source: Source,
+  isKnown: (slug: string) => boolean,
+): string[] {
+  if (source.read_later !== true) return [];
+  return knownInterestSlugs(source.read_later_via, isKnown);
+}
+
 /** SourceFilter is the source lens's client-side filter: the search term, the kind selector, one
  *  tag and the "attached snapshots only" switch. The list is loaded whole, so the same predicate
  *  serves every page. */

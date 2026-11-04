@@ -22,7 +22,6 @@ export const homeEn: Record<string, string> = {
   'home.arrivalsWindow': 'last 3 days',
   'home.arrivalsCount.one': '{count} new',
   'home.arrivalsCount.many': '{count} new',
-  'home.arrivalInterests': 'From your interests:',
   'home.allSources': 'All sources',
   'home.arrivalAge': 'arrived {age}',
   'home.claimsCount.one': '{count} claim',
