@@ -128,7 +128,9 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
 - **Three classes of URL — one collection.**
   - A URL whose page yields enough text becomes an indexed **document**.
   - One that does not (a video, a JS app) becomes a **bookmark**: metadata only, never distilled.
-    `add --bookmark` forces this class.
+    Its record carries `outline`/`distill` as `skipped · bookmark`, which is what keeps it out of the
+    pipeline barrier. `add --bookmark` forces this class, and re-adding the same URL keeps it — only
+    an explicit `refetch` may turn a collected link into a page.
   - One that answers with a **wall** — a login (`401`/`403`, a sign-in redirect, a password form **on
     a page without substantial article text**), a paywall (a teaser), a consent gate — becomes
     **blocked**: a snapshot that says what happened (`wall: login_required|paywalled|consent_required`),

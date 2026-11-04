@@ -97,6 +97,16 @@ func (uc Derivation) Reset(ctx context.Context, hash string) (ResetResult, error
 		if err := uc.Steps.Reset(hash); err != nil && uc.Log != nil {
 			uc.Log.Warn("reset: clear the step record", "hash", hash, "err", err)
 		}
+		// A bookmark has no derivation, but it still has a step RECORD: outline and distill are
+		// "skipped · bookmark", and that is what keeps it out of the vault-wide barrier. Reset keeps
+		// only the capture entry, so the two lights have to be put back — losing them (a re-added
+		// collected link did exactly that) left the source looking like a document whose outline was
+		// owed: the pump queued it, the build returned at once, and the retry pinned the outline stage
+		// for the whole vault.
+		if src.Bookmark {
+			recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepOutline, entities.StepSkipped, "bookmark", nil)
+			recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepDistill, entities.StepSkipped, "bookmark", nil)
+		}
 	}
 	if uc.Log != nil {
 		uc.Log.Info("source reset", "hash", hash, "atoms", res.Atoms, "nodes", res.Nodes)

@@ -61,6 +61,43 @@ func TestFeedAndSitemapAreNeverTheBarrier(t *testing.T) {
 	}
 }
 
+// TestACollectedLinkIsNeverTheBarrier: a bookmark is navigation, not knowledge — it has no document,
+// so the outline and distill stages do not apply to it. Its record normally says "skipped · bookmark";
+// a record that lost the entry (a re-add that wrote the fetch's answer over the reader's, then a reset
+// that kept only the capture) must not become a barrier either. The pump would queue a tree build that
+// returns without writing anything and claim it again on the next pass, forever — and that retry holds
+// the outline stage, and behind it the distill of every other source.
+func TestACollectedLinkIsNeverTheBarrier(t *testing.T) {
+	ok := entities.StepStatus{State: entities.StepOK}
+	recs := barrierSteps{
+		"page.pdf": {
+			Identity: entities.SourceIdentity{Kind: entities.SourceKindPDF},
+			Steps:    entities.NewStepSet().With(entities.StepCapture, ok).With(entities.StepOutline, ok).With(entities.StepDistill, ok),
+		},
+		"link": {
+			Identity: entities.SourceIdentity{Kind: entities.SourceKindURL, Bookmark: true},
+			Steps:    entities.NewStepSet().With(entities.StepCapture, ok),
+		},
+	}
+	a := &App{steps: recs}
+
+	for _, step := range []entities.Step{entities.StepOutline, entities.StepDistill, entities.StepCluster} {
+		if !a.stepBarrierAllows(step) {
+			t.Errorf("%s must not wait for a collected link", step)
+		}
+	}
+
+	// The record keeps saying "skipped · bookmark" once it is healed; the answer must not change.
+	link := recs["link"]
+	link.Steps = link.Steps.
+		With(entities.StepOutline, entities.StepStatus{State: entities.StepSkipped}).
+		With(entities.StepDistill, entities.StepStatus{State: entities.StepSkipped})
+	recs["link"] = link
+	if !a.stepBarrierAllows(entities.StepDistill) {
+		t.Error("a bookmark whose lights are recorded as skipped must not hold distill")
+	}
+}
+
 // TestAFailedStepDoesNotHoldTheBarrier: one unreadable page must not stop the cluster pass for the
 // whole vault. A failed step is over for its source (it does not hold the others); the source itself
 // cannot reach a later step until it is repaired, and its retry is the retry scheduler's job.

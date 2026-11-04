@@ -194,8 +194,12 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
 ### 2.2 outline (per source)
 
 - **Reads the rendering; never extracts.**
-- A bookmark and a blocked URL have nothing to outline: the step is recorded `skipped` and a rebuild
-  is a no-op (a tree built from a login page would look like knowledge about the page).
+- **A collected link is not a document.** A bookmark and a blocked URL have nothing to outline: the
+  step is recorded `skipped` and a rebuild is a no-op (a tree built from a login page would look like
+  knowledge about the page). For a bookmark the record also carries `distill: skipped · bookmark`, and
+  that entry is what keeps the source out of the vault-wide barrier — so a rebuild writes it back when
+  it is missing, and a reset restores it instead of leaving the link looking like a document whose
+  outline is owed.
 - `tree.ParseRendering` produces exactly the parts the bytes produced; the tree builder shapes them
   into nodes and writes `sources/<ab>/<cd>/<hash>.outline`.
 - The sidecar stores structure and **references** (byte ranges + text hash), never the text.
@@ -321,6 +325,16 @@ not stop the cluster pass for every claim: a failed step counts as *through* for
 the source itself cannot reach a later step (the pump skips it) until it is repaired. Its retry is
 the retry scheduler's job, bounded by the stall guard.
 
+**A collected link is not a document and never holds the barrier.** A bookmark's outline and distill
+are `skipped · bookmark` in its record — the record, not the grey light the payload paints over it, is
+what the pump reads — and the barrier counts them as through. A record that lost the entry (a re-add
+that recomputed the decision over the reader's, a reset that kept only the capture) is still not work:
+the pump does not queue a tree for it, and the next rebuild writes the two entries back. Without that,
+the outline worker claims the source, builds nothing, releases it and is asked again — a retry loop
+that never ends, which pins the outline stage and with it the distill of every other source. For the
+same reason, re-adding a URL the vault already has keeps the bookmark decision it carries: a fetch
+cannot answer the reader's question.
+
 **The further forward something changes, the more loses its validity.** A new capture invalidates
 the outline, the distill and the cluster memberships that drew on its atoms. Steps 1–3 can run for
 different sources at the same time — but only up to the **global step**: `capture` must be complete
@@ -403,9 +417,11 @@ carry the reason (`link failed · …`). A light that disagrees with its own num
 - **A wait is per STEP, not per source.** "Queued for the outline" and "queued for the distill" are
   different waits; one flag per source let the outline worker erase the distill's and made the
   watchdog release live claims.
-- **A pump pass claims only what the workers can take** (`2 × parallel_runs + 2`). Claiming the
-  backlog blocked a goroutine per overflow and let the watchdog expire claims that were only
-  waiting. The pump runs after every finished run.
+- **A pump pass claims only what the workers can take** (`2 × parallel_runs + 2`) — the window counts
+  the claims that are ALREADY outstanding, not only the ones this pass makes. Claiming the backlog
+  blocked a goroutine per overflow and let the watchdog expire claims that were only waiting; a window
+  that counted from zero every pass did the same thing spread over minutes (the pump runs after every
+  finished run, and each pass added its whole window on top of a queue nobody had drained).
 - **A user-initiated run goes first**, on its own queue. Queueing never blocks.
 - **Automatic continuation is bounded by progress**: a new claim or less work left. Two runs without
   progress stop it and say why.
@@ -423,7 +439,8 @@ carry the reason (`link failed · …`). A light that disagrees with its own num
   it heals a save whose cleanup was lost. A delete inside the save would make every removed link wait
   for a vault walk.
 - **What the app is doing is listed, not just counted.** `GET /pipeline` carries `jobs` with
-  `running` (executing) and `waiting` (blocked by the gate, with the real holder named).
+  `running` (executing), `queued` (waiting in a worker's queue) and `waiting` (taken by a worker that
+  has not started it yet: its own pre-check, or the gate — a holder is named when there is one).
 
 ## 7. Invariants
 

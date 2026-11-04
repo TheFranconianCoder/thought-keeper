@@ -28,6 +28,11 @@ func TestPipelineStatusAnswers(t *testing.T) {
 		if j.Target == "7f3a" && j.State != "queued" {
 			t.Errorf("the queued source is not marked queued: %+v", j)
 		}
+		if j.Target == "bbbb" && j.Why != "taken by its worker: checking the step barrier" {
+			// Nothing holds the gate here. "Waiting for the vault gate" sent a reader looking at the
+			// gate while one collected link was retried, so the fallback says what it can prove.
+			t.Errorf("a job taken but not executing must not blame the vault gate: %+v", j)
+		}
 	}
 	if p.Jobs[0].Since == "" && p.Jobs[1].Since == "" && p.Jobs[2].Since == "" {
 		t.Errorf("no job carries the time it was claimed: %+v", p.Jobs)

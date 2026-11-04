@@ -78,6 +78,12 @@ are.
     (ASCII case folding only) and the tag cloud counts tags by reading two JSON columns. An FTS
     index for source metadata and a cached tag-count table would make both independent of vault
     size.
+14. **A record that lost ONLY its `bookmark` flag is not healed.** The tree build restores a
+    bookmark's two skipped lights, and the writing path that dropped the flag (re-adding a URL
+    recomputed the decision over the reader's) is fixed — but nothing writes `bookmark: true` back
+    from the index, because a `false` in the record is a decision, not a hole. An old record still
+    carrying the divergence stays that way, and a `reindex` would rebuild it as a document with
+    skipped lights. Decide whether the consistency job may heal this one field from the index.
 
 ## Open design questions
 

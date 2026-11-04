@@ -73,6 +73,42 @@ func TestBuildTreeReopensTheDistillStepForOwedParts(t *testing.T) {
 	}
 }
 
+// TestBuildTreeRecordsABookmarkAsSkipped: the outline worker must never leave a bookmark looking like a
+// document whose outline is owed. The RECORD is what the pump reads — the payload masks a bookmark's
+// lights — and a record without the two "skipped · bookmark" entries made the vault retry a tree build
+// that can never produce nodes: claim, no-op, release, claim again. That retry pins the outline stage.
+func TestBuildTreeRecordsABookmarkAsSkipped(t *testing.T) {
+	ctx := context.Background()
+	store := objects.New(t.TempDir())
+	idx := newFakeIndex()
+	hash := entities.URLHash("https://example.com/blog/")
+	idx.m[hash] = entities.Source{
+		ID: ulid.Make(), Hash: hash, Title: "Blog", Kind: entities.SourceKindURL, Ext: ".md",
+		URL: "https://example.com/blog/", Bookmark: true,
+	}
+	steps := sourcemeta.NewTracker(sourcemeta.New(t.TempDir()), nil, nil)
+	bt := usecases.Trees{
+		Store: store, Index: idx, Trees: &fakeTreeStore{m: map[string][]entities.SourceNode{}},
+		Steps: steps, Clock: fixedClock{},
+	}
+	if _, err := bt.Build(ctx, hash); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	rec, err := steps.Steps(hash)
+	if err != nil {
+		t.Fatalf("steps: %v", err)
+	}
+	if got := rec.State(entities.StepOutline); got != entities.StepSkipped {
+		t.Errorf("outline = %s, want skipped (a bookmark has no document)", got)
+	}
+	if got := rec.State(entities.StepDistill); got != entities.StepSkipped {
+		t.Errorf("distill = %s, want skipped (a bookmark has no document)", got)
+	}
+	if got := rec.Get(entities.StepOutline).Detail; got != "bookmark" {
+		t.Errorf("outline detail = %q, want the reason it does not apply", got)
+	}
+}
+
 func TestBuildTreeFromMarkdown(t *testing.T) {
 	ctx := context.Background()
 	store := objects.New(t.TempDir())

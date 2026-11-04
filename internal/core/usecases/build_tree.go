@@ -65,18 +65,29 @@ func (uc Trees) Build(ctx context.Context, hash string) (TreeResult, error) {
 	// LIST of sources: its outline is the list it already is, and a tree built from it would derive
 	// claims about the list instead of the pages it owns.
 	if src, err := uc.Index.GetSourceByHash(ctx, hash); err == nil {
-		if src.Bookmark || src.Steps.State(entities.StepCapture) == entities.StepFailed || src.OwnsChildren() {
-			if src.OwnsChildren() {
-				what := "feed"
-				switch {
-				case src.Sitemap:
-					what = "sitemap"
-				case src.Listing:
-					what = "listing"
-				}
-				recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepOutline, entities.StepSkipped, what, nil)
-				recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepDistill, entities.StepSkipped, what, nil)
+		switch {
+		case src.Bookmark:
+			// A bookmark is metadata by definition: outline and distill do not apply to it. Saying so
+			// in the RECORD — not only in the payload, which masks a bookmark's lights — is what keeps
+			// the vault-wide barrier honest: the pump asks for a tree whenever the outline light is
+			// pending, so a record that lost its "skipped · bookmark" entry would be claimed, built
+			// (a no-op), released and claimed again, forever. That retry pins the OUTLINE stage, and no
+			// source in the vault ever reaches distill.
+			recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepOutline, entities.StepSkipped, "bookmark", nil)
+			recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepDistill, entities.StepSkipped, "bookmark", nil)
+			return TreeResult{Hash: hash}, nil
+		case src.Steps.State(entities.StepCapture) == entities.StepFailed:
+			return TreeResult{Hash: hash}, nil
+		case src.OwnsChildren():
+			what := "feed"
+			switch {
+			case src.Sitemap:
+				what = "sitemap"
+			case src.Listing:
+				what = "listing"
 			}
+			recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepOutline, entities.StepSkipped, what, nil)
+			recordStep(ctx, uc.Steps, uc.Clock, hash, entities.StepDistill, entities.StepSkipped, what, nil)
 			return TreeResult{Hash: hash}, nil
 		}
 	}

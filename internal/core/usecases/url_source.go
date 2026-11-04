@@ -529,6 +529,16 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, l
 		}
 	}
 
+	// A KNOWN source keeps the decision it already carries: re-adding the same address is a refresh,
+	// not a re-classification. The reader decided once (by not confirming the list), and a fetch cannot
+	// decide for them. Writing the fresh "not a bookmark" answer into a collected link's record while
+	// the index kept the old one split the two stores — the payload, the tree build and the sweep said
+	// "collected link", the record said "page", and the reset that followed cleared the two skipped
+	// lights that were keeping the source out of the pipeline barrier.
+	if known && existing.Bookmark {
+		bookmark = true
+	}
+
 	language := ""
 	if uc.Languages != nil {
 		language = uc.Languages.Detect(body)

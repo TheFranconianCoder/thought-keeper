@@ -163,10 +163,16 @@ func (a *App) Jobs() []payloads.Job {
 		case a.isQueued(entities.Step(step), hash):
 			job.State = "queued"
 		default:
-			// Taken, not executing: it waits for the vault's gate. Say WHO holds it — "the cluster
-			// pass" was hardcoded and wrong whenever the consistency job, a curation or a maintenance
-			// pass was the holder, which sends the reader looking at the wrong thing.
-			job.Why = a.gateHolderReason("this step is next in line")
+			// Taken by a worker and not executing yet: the worker owns the source but is inside its own
+			// pre-check (the step barrier) or waiting for the vault's gate. Name the holder when there
+			// IS one — but do not claim the gate explains it. An outline worker that is scanning the
+			// barrier is waiting for nobody, and "waiting for the vault gate" sent the reader looking
+			// at the wrong place while one collected link retried forever.
+			if holder := a.gateHolder(); holder != "" {
+				job.Why = "waiting for " + holder + ": the worker holds this step"
+			} else {
+				job.Why = "taken by its worker: checking the step barrier"
+			}
 		}
 		if !since.IsZero() {
 			job.Since = since.UTC().Format(time.RFC3339)

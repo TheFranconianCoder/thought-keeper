@@ -656,6 +656,14 @@ func (a *App) stepComplete(hash string, rec entities.SourceRecord, step entities
 captureRecorded:
 	st := rec.Steps.State(step)
 	if st != entities.StepOK && st != entities.StepSkipped {
+		// A BOOKMARK is navigation, not knowledge: outline and distill do not apply to it, and its
+		// record says so. A record that lost that entry must not become a barrier either — it is not
+		// work, and the pump would queue a tree build that returns without writing anything, claim it
+		// again on the next pass and retry for as long as the app runs. That retry holds the OUTLINE
+		// stage, and behind it the distill of every other source.
+		if rec.Identity.Bookmark && (step == entities.StepOutline || step == entities.StepDistill) {
+			return true
+		}
 		return false
 	}
 	if step == entities.StepDistill && st == entities.StepOK && a.sourceHasAtoms.Index != nil {
@@ -784,9 +792,12 @@ func (a *App) pumpOnce(reason string) {
 		a.log.Info("pipeline barrier", "current_step", string(step), "reason", reason)
 		// One pass claims only as much of the backlog as the workers can take (plus a small buffer).
 		// Claiming all of it filled the run queue, blocked a goroutine per overflow and made the
-		// watchdog release claims nobody had started; the pump runs again as soon as a run ends.
+		// watchdog release claims nobody had started. The window counts what is ALREADY claimed —
+		// this is what keeps it small: the pump runs after every run, and a pass that counted from
+		// zero added its whole window on top of a queue nobody had drained, which is the same
+		// overflow, only spread over minutes (345 claims for 64 queue slots, observed).
 		window := a.distillWindow()
-		claimed := 0
+		claimed := a.claimedDistills()
 		for hash, rec := range records {
 			if len(known) > 0 && !known[hash] {
 				continue
@@ -1112,7 +1123,7 @@ func (a *App) Status() payloads.Status {
 		},
 		Runs: payloads.RunsInfo{
 			PipelineQueued:  len(a.distillQueue),
-			PipelineRunning: a.runningDistills(),
+			PipelineRunning: a.claimedDistills(),
 			PipelineWorkers: a.cfg.Pipeline.ParallelRuns,
 			QueryQueued:     len(a.queryQueue),
 			LintQueued:      len(a.lintQueue),
@@ -3777,8 +3788,10 @@ func (a *App) ScheduleDiscoveredChildren(children []usecases.DiscoveredChildren)
 	}
 }
 
-// runningDistills counts the sources a document run is in flight for.
-func (a *App) runningDistills() int {
+// claimedDistills counts the sources a document run holds right now: claimed by the pump, waiting for
+// a worker, or executing. It is what the pump's window has to count — a pass that counted only its own
+// claims kept adding a window on top of a queue nobody had drained.
+func (a *App) claimedDistills() int {
 	a.distillMu.Lock()
 	defer a.distillMu.Unlock()
 	return len(a.distillActive)
@@ -4046,7 +4059,8 @@ func (a *App) autoDistill(hash string) bool {
 	return true
 }
 
-// distillWindow is how many sources ONE pump pass may claim for the distill step.
+// distillWindow is how many sources may be CLAIMED for the distill step at once: what one pump pass may
+// take plus what earlier passes already hold.
 //
 // A claim says "this source is being worked on", and the queue hands it to `parallel_runs` workers.
 // Claiming the whole backlog (150 sources for 2 workers) filled the queue (64), left a blocked goroutine
