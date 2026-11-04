@@ -129,12 +129,20 @@ export function canAttachSnapshot(source: Source): boolean {
 
 /** canRefreshSource reports whether a manual Refresh is offered for this URL source. A normal page
  *  is refreshed by the background cadence; only a source the app could not read (a wall, including
- *  one whose readable snapshot survived it) and a feed copy need the explicit action. */
+ *  one whose readable snapshot survived it), a feed copy, and a page whose FETCH failed need the
+ *  explicit action. The last one is the case that looks like a dead end: a failed fetch wrote no
+ *  object at all, so Capture has nothing to re-read and only another request can help. */
 export function canRefreshSource(source: Source): boolean {
-  if (source.kind !== 'url' || source.sitemap === true || source.rss === true || source.attached === true) {
+  if (
+    source.kind !== 'url' ||
+    source.sitemap === true ||
+    source.rss === true ||
+    source.attached === true ||
+    source.bookmark === true
+  ) {
     return false;
   }
-  return source.from_feed === true || !!source.wall;
+  return source.from_feed === true || !!source.wall || source.steps?.capture?.state === 'failed';
 }
 
 /** SourceFilter is the source lens's client-side filter: the search term, the kind selector, one

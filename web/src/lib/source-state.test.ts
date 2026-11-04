@@ -158,11 +158,20 @@ describe('source state', () => {
     expect(canAttachSnapshot(source({ kind: 'url', rss: true }))).toBe(false);
   });
 
-  it('offers a manual refresh only for a feed copy or a walled page', () => {
+  it('offers a manual refresh only for a feed copy, a walled page or a failed fetch', () => {
     expect(canRefreshSource(source({ kind: 'url', from_feed: true }))).toBe(true);
     expect(canRefreshSource(source({ kind: 'url', wall: 'login_required' }))).toBe(true);
+    // A fetch that failed wrote no snapshot: Capture can only re-read an object that is not there.
+    expect(
+      canRefreshSource(source({ kind: 'url', steps: { capture: { state: 'failed' } } })),
+    ).toBe(true);
     expect(canRefreshSource(source({ kind: 'url' }))).toBe(false);
     expect(canRefreshSource(source({ kind: 'url', bookmark: true }))).toBe(false);
+    // A collected link that never yielded text is re-read by refetch (or filled by an attachment),
+    // never by a refresh: refresh leaves a bookmark alone.
+    expect(
+      canRefreshSource(source({ kind: 'url', bookmark: true, steps: { capture: { state: 'failed' } } })),
+    ).toBe(false);
     expect(canRefreshSource(source({ kind: 'url', attached: true, wall: 'login_required' }))).toBe(false);
     expect(canRefreshSource(source({ kind: 'md' }))).toBe(false);
     expect(canRefreshSource(source({ kind: 'url', rss: true }))).toBe(false);

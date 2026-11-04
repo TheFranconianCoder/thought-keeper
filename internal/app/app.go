@@ -2540,6 +2540,12 @@ func (a *App) ScheduleCapture(hash string) (bool, string, error) {
 	if src.RSS || src.Sitemap || src.Listing {
 		return false, "a feed, a sitemap or a listing is a list: refresh it instead of capturing it", nil
 	}
+	if src.Kind == string(entities.SourceKindURL) && src.Path == "" {
+		// The fetch never stored a snapshot — the failure left nothing to read. Capturing again would
+		// open an object that is not there, so say that plainly and name the two ways out: another
+		// request, or the page the human can see.
+		return false, "this URL has no snapshot yet — refresh the page, or attach the one you can see", nil
+	}
 	if !src.ToEntity().NeedsCapture() {
 		return false, "the source is readable as it is — its title comes from the object (reindex restores it)", nil
 	}
