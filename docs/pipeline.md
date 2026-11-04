@@ -234,12 +234,20 @@ and a RESET is not a completion either: it removes the old summary and schedules
 source that correctly produced **no claims** (a cover, a link list) gets a one-line honest file
 without a model call, so it stops being owed. While the consistency job fills a backlog, Status shows
 how many summaries are **missing**, **queued** and **running**; a completed one leaves the backlog
-immediately.
+immediately. The backfill is fed from the **whole backlog** the walk has measured — not from the one
+slice the tick happens to look at, which makes the budget per slice (and therefore per walk) — and it
+is a **watermark, not a rate**: four summaries are kept queued or running, every finished run hands the
+worker the next one, and the rest of the queue stays free for the Summary tab's Generate button. The
+rate is the one worker's own (an overview takes a few seconds). The number itself is the last completed
+walk swapped in when it ends, so it does not dip to "what the first slice found" while a walk runs, and
+a run that failed leaves the backlog too: a deterministic failure waits for the next walk instead of
+being retried every minute.
 
 **A complete distill also earns a source's AUTO TAGS**: the agent reads the claims and proposes 3–6
 coarse labels for the Sources filter, kept apart from the human's. The run lands on the tag worker;
 the consistency job backfills sources that were never tagged (`auto_tags_at` in the record/index is
-the marker), a few per pass. A reset clears the derived labels; the next complete distill writes new
+the marker) from the same kind of backlog, kept topped up two at a time — the rest of that worker's
+queue belongs to wiki pages. A reset clears the derived labels; the next complete distill writes new
 ones. The human tags are records and survive both.
 
 **A source is also read against the reader's INTERESTS** at every point that can reveal evidence:

@@ -160,19 +160,24 @@ type App struct {
 	// finishing during the add-time match): the source changed, so it is matched once more.
 	interestAgain map[string]bool
 	// summaryRemaining is the backlog the consistency walk measured (a set, so a completed summary
-	// leaves it before the next walk) and summaryRunning is what the summary worker executes right
-	// now. Both feed the Status lens while the backfill runs.
+	// leaves it before the next walk), summaryWalk is the walk in flight (swapped into
+	// summaryRemaining when it completes) and summaryRunning is what the summary worker executes
+	// right now. All three feed the Status lens while the backfill runs.
 	summaryRemaining   map[string]bool
+	summaryWalk        map[string]bool
 	summaryRunning     map[string]bool
 	summaryRemainingAt time.Time
 	// sourceTagActive dedupes the auto-tag derivation of a source (after a distill and from the
-	// consistency backfill can both ask for it).
-	sourceTagMu     sync.Mutex
-	sourceTagActive map[string]bool
-	distillQueue    chan runJob
-	queryQueue      chan runJob
-	lintQueue       chan runJob
-	urlQueue        chan urlJob
+	// consistency backfill can both ask for it). sourceTagRemaining is that backfill's backlog: the
+	// never-tagged sources the walk measured, so the tag worker can be fed from it instead of from
+	// the one slice the tick happens to look at.
+	sourceTagMu        sync.Mutex
+	sourceTagActive    map[string]bool
+	sourceTagRemaining map[string]bool
+	distillQueue       chan runJob
+	queryQueue         chan runJob
+	lintQueue          chan runJob
+	urlQueue           chan urlJob
 	// urlPending is the set of sources whose page fetch is queued or in flight. The pipeline must not
 	// outline or distill such a source: its snapshot is about to be replaced, and a derivation built
 	// on the copy that is leaving is wrong the moment the page arrives.
@@ -345,35 +350,36 @@ func New(opts Options) (*App, error) {
 	}
 
 	a := &App{
-		cfg:              cfg,
-		cfgPath:          opts.Path,
-		log:              log,
-		headless:         opts.Headless || !cfg.App.Tray,
-		noOpen:           opts.NoOpen,
-		db:               db,
-		lock:             fl,
-		runner:           gateways.ExecRunner{},
-		addr:             cfg.Server.Addr,
-		startedAt:        time.Now(),
-		vaultWritable:    checkWritable(cfg.VaultRoot()),
-		schemaOutdated:   schemaOutdated,
-		treeQueue:        make(chan string, 256),
-		captureQueue:     make(chan string, 256),
-		distillQueue:     make(chan runJob, 64),
-		clusterQueue:     make(chan runJob, 16),
-		distillFirst:     make(chan runJob, 16),
-		queryQueue:       make(chan runJob, 16),
-		lintQueue:        make(chan runJob, 16),
-		tagQueue:         make(chan runJob, 8),
-		summaryQueue:     make(chan runJob, 16),
-		summaryActive:    make(map[string]bool),
-		summaryRemaining: make(map[string]bool),
-		summaryRunning:   make(map[string]bool),
-		sourceTagActive:  make(map[string]bool),
-		interestQueue:    make(chan string, 256),
-		interestActive:   make(map[string]bool),
-		interestAgain:    make(map[string]bool),
-		vocabularyQueue:  make(chan runJob, 4),
+		cfg:                cfg,
+		cfgPath:            opts.Path,
+		log:                log,
+		headless:           opts.Headless || !cfg.App.Tray,
+		noOpen:             opts.NoOpen,
+		db:                 db,
+		lock:               fl,
+		runner:             gateways.ExecRunner{},
+		addr:               cfg.Server.Addr,
+		startedAt:          time.Now(),
+		vaultWritable:      checkWritable(cfg.VaultRoot()),
+		schemaOutdated:     schemaOutdated,
+		treeQueue:          make(chan string, 256),
+		captureQueue:       make(chan string, 256),
+		distillQueue:       make(chan runJob, 64),
+		clusterQueue:       make(chan runJob, 16),
+		distillFirst:       make(chan runJob, 16),
+		queryQueue:         make(chan runJob, 16),
+		lintQueue:          make(chan runJob, 16),
+		tagQueue:           make(chan runJob, 8),
+		summaryQueue:       make(chan runJob, 16),
+		summaryActive:      make(map[string]bool),
+		summaryRemaining:   make(map[string]bool),
+		summaryRunning:     make(map[string]bool),
+		sourceTagActive:    make(map[string]bool),
+		sourceTagRemaining: make(map[string]bool),
+		interestQueue:      make(chan string, 256),
+		interestActive:     make(map[string]bool),
+		interestAgain:      make(map[string]bool),
+		vocabularyQueue:    make(chan runJob, 4),
 		// The first automatic curation waits one cooldown: a fresh start has work to do before the
 		// names are worth a pass, and a seven-minute model call at minute one is not a good morning.
 		vocabLast:        time.Now(),
@@ -1688,20 +1694,34 @@ func (a *App) requestSummary(hash string) {
 	}
 }
 
-// summaryBackfillPerPass bounds how many missing summaries the consistency job queues in one tick. A
-// vault from before the summary existed owes one per source; writing them all at once would be
-// hundreds of model calls in a row. Two per pass lets the backlog drain in the background while the
-// Summary tab's Generate button serves any single source immediately.
-const summaryBackfillPerPass = 2
+// summaryBackfillOutstanding is how many summaries the backfill keeps queued or running. It is a
+// WATERMARK, not a rate: the queue is topped up after every finished run, so the one summary worker
+// never idles, and the rate is the worker's own (an overview takes ~7 s, so roughly eight a minute).
+// Four leaves most of the 16-place queue for the Summary tab's Generate button, which must never be
+// told "full" because a backlog is draining.
+const summaryBackfillOutstanding = 4
 
-// requestSummaries queues the next few missing summaries.
+// summaryBackfillBudget is how many summaries may still be queued right now.
+func (a *App) summaryBackfillBudget() int {
+	a.summaryMu.Lock()
+	active := len(a.summaryActive)
+	a.summaryMu.Unlock()
+	if active >= summaryBackfillOutstanding {
+		return 0
+	}
+	return summaryBackfillOutstanding - active
+}
+
+// requestSummaries queues missing summaries up to the watermark. The caller passes the whole backlog,
+// so the budget is spent on the OLDEST debt, not on whatever the current slice re-found.
 func (a *App) requestSummaries(missing []string) {
 	if !a.agentAvailable || len(missing) == 0 {
 		return
 	}
+	budget := a.summaryBackfillBudget()
 	queued := 0
 	for _, hash := range missing {
-		if queued >= summaryBackfillPerPass {
+		if queued >= budget {
 			break
 		}
 		if _, err := a.ScheduleSummary(hash); err == nil {
@@ -1711,6 +1731,32 @@ func (a *App) requestSummaries(missing []string) {
 	if queued > 0 {
 		a.log.Info("consistency: summaries queued", "queued", queued, "missing", len(missing))
 	}
+}
+
+// topUpSummaries refills the summary queue to the watermark. Called after every finished summary run
+// (and from the consistency tick): the worker takes ~7 s per overview, so waiting for the next tick to
+// hand it the next one would waste most of the minute.
+func (a *App) topUpSummaries() {
+	a.requestSummaries(a.summaryBacklog())
+}
+
+// summaryBacklog is the sources the current walk has found without a summary — the WHOLE walk, not
+// only the slice this tick looked at.
+//
+// The pass runs every minute but walks the vault in slices (`reconcile_batch`), so a per-pass budget
+// fed from a slice is really a per-SLICE budget: a vault distilled in a burst leaves its overviews
+// owed in a couple of slices (the summary queue was full, so those requests were dropped), and only
+// those two slices hand out their two — four per seven-minute walk, eleven hours for the 385 that were
+// owed. Fed from here it drains at the intended rate of two a minute.
+func (a *App) summaryBacklog() []string {
+	a.summaryMu.Lock()
+	defer a.summaryMu.Unlock()
+	out := make([]string, 0, len(a.summaryRemaining))
+	for hash := range a.summaryRemaining {
+		out = append(out, hash)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // claimSummary marks a source as having a summary run queued or in flight.
@@ -1742,25 +1788,42 @@ func (a *App) markSummaryRunning(hash string, running bool) {
 	a.summaryMu.Unlock()
 }
 
-// resetSummaryMissing starts a new consistency walk: the backlog is measured from scratch, so a
-// summary whose file appeared since the last walk is not reported as missing.
-func (a *App) resetSummaryMissing() {
+// startSummaryWalk begins a new consistency walk: what it finds is measured from scratch, so a
+// summary whose file appeared since the last walk is not reported as missing. The walk is kept APART
+// from the backlog the Status lens shows and swapped in when it completes (finishSummaryWalk): a walk
+// takes several ticks, and reporting its first slice made the number fall from "385 missing" to "86"
+// and climb again, which reads like the app forgot two hundred overviews.
+func (a *App) startSummaryWalk() {
 	a.summaryMu.Lock()
-	a.summaryRemaining = make(map[string]bool)
+	a.summaryWalk = make(map[string]bool)
+	a.summaryMu.Unlock()
+}
+
+// mergeSummaryMissing adds one consistency slice's missing summaries to the walk AND the published
+// backlog. The walk is sliced; merging keeps the whole picture instead of only the last batch.
+func (a *App) mergeSummaryMissing(hashes []string) {
+	a.summaryMu.Lock()
+	for _, hash := range hashes {
+		if hash == "" {
+			continue
+		}
+		if a.summaryWalk != nil {
+			a.summaryWalk[hash] = true
+		}
+		a.summaryRemaining[hash] = true
+	}
 	a.summaryRemainingAt = time.Now()
 	a.summaryMu.Unlock()
 }
 
-// mergeSummaryMissing adds one consistency slice's missing summaries to the backlog. The walk is
-// sliced; merging keeps the whole walk's picture instead of reporting only the last batch.
-func (a *App) mergeSummaryMissing(hashes []string) {
+// finishSummaryWalk publishes the walk that just completed: it is the whole vault's answer, so a
+// source that gained its overview since the last walk leaves the backlog here.
+func (a *App) finishSummaryWalk() {
 	a.summaryMu.Lock()
-	for _, hash := range hashes {
-		if hash != "" {
-			a.summaryRemaining[hash] = true
-		}
+	if a.summaryWalk != nil {
+		a.summaryRemaining = a.summaryWalk
+		a.summaryWalk = nil
 	}
-	a.summaryRemainingAt = time.Now()
 	a.summaryMu.Unlock()
 }
 
@@ -1768,6 +1831,7 @@ func (a *App) mergeSummaryMissing(hashes []string) {
 func (a *App) completeSummary(hash string) {
 	a.summaryMu.Lock()
 	delete(a.summaryRemaining, hash)
+	delete(a.summaryWalk, hash)
 	delete(a.summaryRunning, hash)
 	a.summaryMu.Unlock()
 }
@@ -1790,9 +1854,62 @@ func (a *App) summaryStatus() *payloads.SummaryStatus {
 	return out
 }
 
-// sourceTagBackfillPerPass bounds how many never-tagged sources the consistency job queues per tick:
-// deriving labels is a model call, and a vault from before the feature owes one per source.
-const sourceTagBackfillPerPass = 2
+// sourceTagBackfillOutstanding is how many never-tagged sources the backfill keeps queued or running —
+// a watermark like summaryBackfillOutstanding, topped up after every finished tag run. It is smaller
+// than the summary one because the tag worker is SHARED with wiki-page tagging: two of the eight slots
+// belong to the backfill, the rest stay free for a page the reader just saved.
+const sourceTagBackfillOutstanding = 2
+
+// sourceTagBackfillBudget is how many tag derivations may still be queued right now.
+func (a *App) sourceTagBackfillBudget() int {
+	a.sourceTagMu.Lock()
+	active := len(a.sourceTagActive)
+	a.sourceTagMu.Unlock()
+	if active >= sourceTagBackfillOutstanding {
+		return 0
+	}
+	return sourceTagBackfillOutstanding - active
+}
+
+// sourceTagBacklog is the never-tagged sources the current walk has found — the whole walk, for the
+// same reason summaryBacklog is: a per-pass budget fed from a per-pass SLICE drains a backlog per walk
+// instead of per pass.
+func (a *App) sourceTagBacklog() []string {
+	a.sourceTagMu.Lock()
+	defer a.sourceTagMu.Unlock()
+	out := make([]string, 0, len(a.sourceTagRemaining))
+	for hash := range a.sourceTagRemaining {
+		out = append(out, hash)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// resetSourceTagMissing starts a new consistency walk: the backlog is measured from scratch.
+func (a *App) resetSourceTagMissing() {
+	a.sourceTagMu.Lock()
+	a.sourceTagRemaining = make(map[string]bool)
+	a.sourceTagMu.Unlock()
+}
+
+// mergeSourceTagMissing adds one slice's never-tagged sources to the backlog.
+func (a *App) mergeSourceTagMissing(hashes []string) {
+	a.sourceTagMu.Lock()
+	for _, hash := range hashes {
+		if hash != "" {
+			a.sourceTagRemaining[hash] = true
+		}
+	}
+	a.sourceTagMu.Unlock()
+}
+
+// completeSourceTag drops a source from the tag backlog: it is tagged now, or its run failed and the
+// next walk is the place to try again (a deterministic failure must not be retried every minute).
+func (a *App) completeSourceTag(hash string) {
+	a.sourceTagMu.Lock()
+	delete(a.sourceTagRemaining, hash)
+	a.sourceTagMu.Unlock()
+}
 
 // ScheduleSourceTag derives one source's auto tags. It shares the tag worker with wiki pages; the run
 // row is finished by the use case.
@@ -1892,14 +2009,15 @@ func (a *App) requestSourceTag(hash string) {
 	}
 }
 
-// requestSourceTags queues the next few never-tagged sources of a consistency pass.
+// requestSourceTags queues never-tagged sources up to the watermark.
 func (a *App) requestSourceTags(missing []string) {
 	if !a.agentAvailable || len(missing) == 0 {
 		return
 	}
+	budget := a.sourceTagBackfillBudget()
 	queued := 0
 	for _, hash := range missing {
-		if queued >= sourceTagBackfillPerPass {
+		if queued >= budget {
 			break
 		}
 		if _, err := a.ScheduleSourceTag(hash); err == nil {
@@ -1909,6 +2027,11 @@ func (a *App) requestSourceTags(missing []string) {
 	if queued > 0 {
 		a.log.Info("consistency: source tags queued", "queued", queued, "missing", len(missing))
 	}
+}
+
+// topUpSourceTags refills the tag queue to its watermark after a finished source-tag run.
+func (a *App) topUpSourceTags() {
+	a.requestSourceTags(a.sourceTagBacklog())
 }
 
 func (a *App) claimSourceTag(hash string) bool {
@@ -2446,10 +2569,12 @@ func (a *App) ReconcileNow() (usecases.ReconcileResult, error) {
 			"languages": res.Languages, "identities": res.Identities, "ownerships": res.Ownerships,
 		})
 	}
-	a.resetSummaryMissing()
+	a.startSummaryWalk()
 	a.mergeSummaryMissing(res.MissingSummaries)
-	a.requestSummaries(res.MissingSummaries)
-	a.requestSourceTags(res.MissingSourceTags)
+	a.requestSummaries(a.summaryBacklog())
+	a.resetSourceTagMissing()
+	a.mergeSourceTagMissing(res.MissingSourceTags)
+	a.requestSourceTags(a.sourceTagBacklog())
 	a.pumpPipeline("manual reconcile")
 	return res, nil
 }
@@ -2990,10 +3115,18 @@ func (a *App) runOne(job runJob) {
 			status = "failed"
 			failure = err.Error()
 			a.log.Warn("source summary failed", "hash", job.hash, "run", run, "err", err)
+			// The source still owes a summary, but it leaves the backlog for THIS walk: the next
+			// consistency walk finds it again. Without that, an overview that fails deterministically
+			// (a claims set the model cannot fit) is retried every minute, forever.
+			a.completeSummary(job.hash)
+			a.topUpSummaries()
 			return
 		}
 		a.completeSummary(job.hash)
 		a.publish("source", map[string]any{"hash": job.hash, "summary": sres.Chars})
+		// The worker is the rate limit, so the next overview is asked for the moment this one ends
+		// instead of waiting for the next consistency tick.
+		a.topUpSummaries()
 	case entities.RunQuery:
 		a.publish("run", map[string]any{"run_id": run, "op": string(job.op), "step": string(job.step), "status": "running"})
 		a.enterAsk()
@@ -3035,8 +3168,12 @@ func (a *App) runOne(job runJob) {
 				status = "failed"
 				failure = err.Error()
 				a.log.Warn("source auto tags failed", "hash", job.hash, "run", run, "err", err)
+				a.completeSourceTag(job.hash) // the next walk tries again, not the next minute
+				a.topUpSourceTags()
 				return
 			}
+			a.completeSourceTag(job.hash)
+			a.topUpSourceTags()
 			a.publish("source", map[string]any{"hash": job.hash, "tags": len(sres.Tags)})
 			return
 		}

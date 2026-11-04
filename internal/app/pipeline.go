@@ -448,9 +448,15 @@ func (a *App) reconcile(reason string) {
 		// measurement; every slice of the walk adds what it found, so a sliced walk still shows the
 		// whole picture instead of its last batch.
 		if startOffset == 0 {
-			a.resetSummaryMissing()
+			a.startSummaryWalk()
+			a.resetSourceTagMissing()
 		}
 		a.mergeSummaryMissing(res.MissingSummaries)
+		a.mergeSourceTagMissing(res.MissingSourceTags)
+		if res.Next == 0 {
+			// The walk reached the end of the vault: what it found IS the backlog now.
+			a.finishSummaryWalk()
+		}
 	}
 	if err != nil {
 		a.log.Warn("consistency check failed", "reason", reason, "err", err)
@@ -477,9 +483,10 @@ func (a *App) reconcile(reason string) {
 		}
 	}
 	// The consistency walk found sources whose summary is missing. The pass itself never writes one
-	// (a summary is a model call); the summary worker fills them in, a few per tick.
-	a.requestSummaries(res.MissingSummaries)
-	a.requestSourceTags(res.MissingSourceTags)
+	// (a summary is a model call); the summary worker fills them in, a few per pass — from the whole
+	// backlog, not only from the slice this tick looked at.
+	a.requestSummaries(a.summaryBacklog())
+	a.requestSourceTags(a.sourceTagBacklog())
 	a.pumpPipeline("reconcile")
 	a.requestVocabularyIfDue(reason)
 }
