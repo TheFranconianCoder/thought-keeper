@@ -13,6 +13,7 @@ greppable, worth versioning and backing up. The app never treats a directory as 
 ```
 <vault>/
 ├── index.db                    # SQLite: FTS5, derived counts (rebuildable)
+├── vault.yaml                  # settings that belong to THIS vault (optional, record)
 ├── inbox/                      # drop zone; the watcher intakes files into sources/
 ├── sources/                    # immutable, content-addressed
 │   └── 7f/3a/
@@ -46,6 +47,15 @@ The four directories answer four questions: *what did the source say* (`sources/
 human write* (`wiki/`), *what do we now believe* (`atoms/`), *what travels together* (`clusters/`).
 A cluster is never a destination: it exists to answer "which claims belong with this one?". A wiki
 page is a destination, because a human authored it.
+
+**The vault's own settings.** `vault.yaml` is optional and holds the knobs that describe the corpus
+rather than the machine: the language the agent writes in (`language.claims`, `language.summary`),
+the capture cadences and thresholds (`capture.*`), the OCR languages (`ocr.languages`), the
+assistant's history window (`assistant.retention`) and the whole cluster arithmetic (`cluster.*`).
+A key the file declares wins over the machine's config, so the settings travel with the vault; a key
+it leaves out falls back to the machine, so a vault without the file behaves exactly as before. The
+app writes only the keys a save touched and never rewrites the rest; delete a line — or the whole
+file — to fall back. It is a **record**: version it with the vault.
 
 ## 2. Sidecars
 
@@ -86,8 +96,8 @@ sources/**/*.meta · sources/**/*.outline · sources/**/*.summary.md · sources/
 clusters/**/*.meta
 ```
 
-What stays in the history is the object, the wiki pages, the atoms and the vocabulary — the
-knowledge. `.meta` and `.log` are records but are excluded anyway: they change on every run and are
+What stays in the history is the object, the wiki pages, the atoms, the vocabulary and the vault's
+own config — the knowledge. `.meta` and `.log` are records but are excluded anyway: they change on every run and are
 rebuilt from the vault. `vault.git.enabled` and `commit_on_write` are **not implemented**; the app
 never runs git.
 

@@ -2,16 +2,12 @@
 package config
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Config is the whole application configuration.
@@ -372,42 +368,70 @@ func Load(path string) (Config, error) {
 }
 
 // LoadFull is Load with the provenance the Config overlay needs: the resolved path, whether the file
-// exists, which keys the FILE declared, and which keys the ENVIRONMENT decided (with the variable
-// that decided them). The values are exactly what Load returns — Load is a wrapper around this.
+// exists, which keys the FILE declared, which keys the VAULT file declared, and which keys the
+// ENVIRONMENT decided (with the variable that decided them). The values are exactly what Load
+// returns — Load is a wrapper around this.
+//
+// The effective configuration is the machine file over the defaults, then the vault's own
+// vault.yaml over that. A vault key the vault file declares wins over the machine; a key it leaves
+// out falls back to the machine, so an existing install without vault.yaml keeps working.
 func LoadFull(path string) (Loaded, error) {
-	cfg := Defaults()
 	if path == "" {
 		path = DefaultPath()
 	}
 	resolved := expandHome(path)
-	data, err := os.ReadFile(resolved)
-	if err != nil {
-		if os.IsNotExist(err) {
-			env := applyDefaults(&cfg)
-			return Loaded{Config: cfg, Path: resolved, Env: env}, nil
-		}
-		return Loaded{Config: cfg, Path: resolved}, fmt.Errorf("read config: %w", err)
+	data, readErr := os.ReadFile(resolved)
+	exists := readErr == nil
+	if readErr != nil && !os.IsNotExist(readErr) {
+		cfg := Defaults()
+		env := applyDefaults(&cfg)
+		return Loaded{Config: cfg, Path: resolved, Env: env, VaultPath: VaultPath(cfg)},
+			fmt.Errorf("read config: %w", readErr)
 	}
-	expanded := os.ExpandEnv(string(data))
-	// STRICT: an unknown key is an error, not a silent default. A renamed knob (or a typo) would
-	// otherwise leave the setting at its default while the file says otherwise — the config is read
-	// by a human as the truth, so it has to behave like it.
-	dec := yaml.NewDecoder(strings.NewReader(expanded))
-	dec.KnownFields(true)
-	if err := dec.Decode(&cfg); err != nil {
-		if errors.Is(err, io.EOF) {
+	text := ""
+	if exists {
+		text = os.ExpandEnv(string(data))
+	}
+	cfg, err := machineConfig(data)
+	if err != nil {
+		env := applyDefaults(&cfg)
+		return Loaded{Config: cfg, Path: resolved, Exists: exists, Env: env, VaultPath: VaultPath(cfg)},
+			fmt.Errorf("parse config: %w", err)
+	}
+	vaultPath := VaultPath(cfg)
+	vaultData, vaultErr := os.ReadFile(vaultPath)
+	vaultExists := vaultErr == nil
+	if vaultErr != nil && !os.IsNotExist(vaultErr) {
+		env := applyDefaults(&cfg)
+		return Loaded{
+			Config: cfg, Path: resolved, Exists: exists, Set: declaredKeys(text),
+			Env: env, VaultPath: vaultPath,
+		}, fmt.Errorf("read vault config: %w", vaultErr)
+	}
+	vaultSet := map[string]bool{}
+	if vaultExists {
+		merged := cfg
+		vaultSet, err = mergeVault(&merged, vaultData)
+		if err != nil {
+			// The overlay still shows the running values; the file is what is broken.
 			env := applyDefaults(&cfg)
-			return Loaded{Config: cfg, Path: resolved, Exists: true, Set: map[string]bool{}, Env: env}, nil
+			return Loaded{
+				Config: cfg, Path: resolved, Exists: exists, Set: declaredKeys(text),
+				Env: env, VaultPath: vaultPath, VaultExists: true,
+			}, err
 		}
-		return Loaded{Config: cfg, Path: resolved, Exists: true}, fmt.Errorf("parse config: %w", err)
+		cfg = merged
 	}
 	env := applyDefaults(&cfg)
 	return Loaded{
-		Config: cfg,
-		Path:   resolved,
-		Exists: true,
-		Set:    declaredKeys(expanded),
-		Env:    env,
+		Config:      cfg,
+		Path:        resolved,
+		Exists:      exists,
+		Set:         declaredKeys(text),
+		Env:         env,
+		VaultPath:   vaultPath,
+		VaultExists: vaultExists,
+		VaultSet:    vaultSet,
 	}, nil
 }
 

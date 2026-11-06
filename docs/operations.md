@@ -22,9 +22,22 @@ consistent. The domain model is in `AGENTS.md`, the steps in `pipeline.md`, the 
 
 ## 2. Configuration
 
-One YAML file, `--config PATH` (default `$XDG_CONFIG_HOME/thought-keeper/config.yaml`), with
-`${ENV}` expansion. In development a `.env` is loaded automatically (cwd, next to `--config`,
-`$XDG_CONFIG_HOME/thought-keeper/.env`) and **never overrides real environment variables**.
+Two YAML files, one effective configuration. The **machine's config** is `--config PATH` (default
+`$XDG_CONFIG_HOME/thought-keeper/config.yaml`), with `${ENV}` expansion; in development a `.env` is
+loaded automatically (cwd, next to `--config`, `$XDG_CONFIG_HOME/thought-keeper/.env`) and **never
+overrides real environment variables**. The **vault's config** is `<vault>/vault.yaml` (optional,
+next to `index.db`).
+
+The effective value is: the code's default, then the machine's file, then the vault's file. A vault
+key the vault file declares **wins**, so it travels with the vault and a vault moved to another
+machine keeps its content settings; a key the file leaves out falls back to the machine, so a vault
+without `vault.yaml` behaves exactly as before. The machine's line for a key the vault now declares
+is not deleted: it stays as the fallback if the vault stops declaring that key. Only the knobs that
+describe the corpus live there:
+`language.claims`, `language.summary`, the `capture.*` cadences and thresholds, `ocr.languages`,
+`assistant.retention` and every `cluster.*` value. Everything else — paths, the listener, models,
+parallelism, tools, the assistant prune cadence — belongs to the machine and is refused in
+`vault.yaml`.
 
 **`config.example.yaml` is the reference.** Every section carries comments; keep it and this doc in
 sync when a knob changes. Sections:
@@ -78,11 +91,16 @@ capture thresholds, the whole `cluster.*` arithmetic, the assistant retention/pr
 browser switches, the PDF/OCR tools and page ceilings, and `app.smart_open`. A search shows a match
 whichever set it belongs to.
 
-Saving writes the YAML first (comments preserved, `${VAR}` kept as a reference, the old bytes in
-`<file>.bak`, revalidated) and then **applies it in the running process**: the wiring is rebuilt and
+Saving writes the right file first: a vault-scoped key goes to `<vault>/vault.yaml` (created on the
+first such save, carrying only the keys that save touched), everything else to the machine's config.
+Comments are preserved, a `${VAR}` stays a reference, each file keeps its old bytes as `<file>.bak`,
+and the merged result is revalidated before either file is replaced. Then the configuration is
+**applied in the running process**: the wiring is rebuilt and
 swapped behind the exclusive gate, so a running document or cluster step finishes first and no use
 case is mutated under a run. The answer says the apply is queued; the overlay follows the read until
-the file and the process agree. A change made over SSH is applied with **Apply the file**.
+the file and the process agree. A change made over SSH is applied with **Apply the file**. The
+overlay shows the vault's file under the machine's config once it exists, and its rows carry the
+source chip `VAULT` instead of `CONFIG`.
 
 An advanced value takes effect where it is read: a timeout, a retry or a capture threshold applies
 to **new** work (a run already in flight keeps what it started with), and a `cluster.*` value applies
@@ -403,5 +421,6 @@ A claim body that quotes bracket syntax is written as inline code by the distill
 of a source is the URL's hash by construction — there is nothing left to migrate.
 
 **Backup.** The real backup is the vault: `sources/` + `atoms/` + `wiki/` + `clusters/` +
-`interests/` (or git history). The index is rebuildable, so it does not need a backup. For a live copy, use SQLite's
+`interests/` + `vault.yaml` (or git history). The index is rebuildable, so it does not need a
+backup. For a live copy, use SQLite's
 `VACUUM INTO` rather than copying `index.db` while the app runs.

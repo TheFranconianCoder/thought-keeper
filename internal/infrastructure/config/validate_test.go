@@ -11,8 +11,12 @@ import (
 // a value the writer accepts in its default shape.
 func TestEveryWritableKeyIsDescribedAndWritable(t *testing.T) {
 	clearOpenAIEnv(t)
-	path := t.TempDir() + "/config.yaml"
-	view := Describe(Defaults(), path)
+	path := writeConfig(t, "server:\n    addr: '127.0.0.1:9210'\n")
+	loaded, err := LoadFull(path)
+	if err != nil {
+		t.Fatalf("LoadFull: %v", err)
+	}
+	view := Describe(loaded.Config, path)
 	described := map[string]Field{}
 	for _, section := range view.Sections {
 		for _, field := range section.Fields {

@@ -8,6 +8,11 @@
 # ceiling) can be changed in the overlay and is applied in the running process; the Advanced reveal
 # opens the expert set (timeouts, cluster arithmetic, capture and tool limits) the same way. The vault
 # and index paths, the listener, the secrets and the tray switches stay read-only.
+#
+# The knobs that describe the VAULT (language.claims/summary, the capture cadences and thresholds,
+# ocr.languages, assistant.retention and every cluster.* value) may also live in <vault>/vault.yaml,
+# which wins over this file; the overlay writes them there on the first save. This file stays their
+# fallback, so a vault without vault.yaml behaves exactly as before.
 
 app:
     # The app never launches a browser: it logs the address and the tray can show it.

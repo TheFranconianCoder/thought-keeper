@@ -140,8 +140,11 @@ open, and the Start lens lists the three latest QUESTIONS, which are answers the
   An **Advanced** switch in the toolbar reveals the expert knobs (timeouts, cluster arithmetic,
   capture and tool limits), each carrying an `advanced` chip; the reveal is closed by default and a
   search shows a matching expert row even while it is closed, so the find field never hides a knob
-  that exists. When the file on disk differs (an edit over SSH), **Apply the file** appears.
-  Everything else is read-only. A path or tool knob also shows the absolute path the
+  that exists. When the file on disk differs (an edit over SSH), **Apply the file** appears. A
+  vault-scoped row (language, capture cadence/threshold, OCR languages, the assistant retention and
+  the cluster arithmetic) is stored in the vault's own `vault.yaml` and carries the source chip
+  `VAULT` once it does; the overlay shows that file under the machine's config, with its absolute
+  path and a copy button. Everything else is read-only. A path or tool knob also shows the absolute path the
   process actually uses — the vault directory, or the binary found on PATH — or **not found**, named
   after what was searched for (`lightpanda` when `browser.path` is empty). The first line is the
   short name, the second the absolute path, and the config key is the subline of every row. Secrets

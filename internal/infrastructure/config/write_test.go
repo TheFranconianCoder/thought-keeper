@@ -19,17 +19,17 @@ func TestWritePatchesAndKeepsCommentsAndReferences(t *testing.T) {
 	t.Setenv("TK_WRITE_KEY", "secret")
 	path := writeConfig(t, `# the vault's language
 language:
-    claims: 'en'   # the claims are written in this language
+    ui: 'en'   # the interface language
 openai:
     api_key: '${TK_WRITE_KEY}'
 `)
 
-	loaded, err := Write(path, Patch{"language.claims": "de"})
+	loaded, err := Write(path, Patch{"language.ui": "de"})
 	if err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if loaded.Config.Language.Claims != "de" {
-		t.Errorf("claims = %q, want de", loaded.Config.Language.Claims)
+	if loaded.Config.Language.UI != "de" {
+		t.Errorf("ui = %q, want de", loaded.Config.Language.UI)
 	}
 	body, err := os.ReadFile(path)
 	if err != nil {
@@ -38,9 +38,9 @@ openai:
 	text := string(body)
 	for _, want := range []string{
 		"# the vault's language",
-		"# the claims are written in this language",
+		"# the interface language",
 		"${TK_WRITE_KEY}",
-		"claims: de",
+		"ui: de",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("written file lost %q:\n%s", want, text)
@@ -50,7 +50,7 @@ openai:
 	if err != nil {
 		t.Fatalf("backup: %v", err)
 	}
-	if !strings.Contains(string(backup), "claims: 'en'") {
+	if !strings.Contains(string(backup), "ui: 'en'") {
 		t.Errorf("backup does not hold the old bytes:\n%s", backup)
 	}
 }

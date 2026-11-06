@@ -20,11 +20,18 @@ type Loaded struct {
 	Path string
 	// Exists is false when the app runs on the code's defaults (a missing file is not an error).
 	Exists bool
-	// Set holds the dotted keys the FILE declared, e.g. "language.claims". A key that is absent was
-	// filled from a default (or from the environment).
+	// Set holds the dotted keys the MACHINE file declared, e.g. "language.claims". A key that is
+	// absent was filled from a default (or from the environment).
 	Set map[string]bool
 	// Env maps a dotted key the ENVIRONMENT decided to the variable that decided it.
 	Env map[string]string
+	// VaultPath is the vault's own config file, <vault>/vault.yaml, whether or not it exists.
+	VaultPath string
+	// VaultExists says the vault carries its own config. A vault key the file declares wins over the
+	// machine file; a key it leaves out falls back to the machine.
+	VaultExists bool
+	// VaultSet holds the dotted vault keys the vault file declared, for the overlay's origin.
+	VaultSet map[string]bool
 }
 
 // View is the running configuration as the Config overlay shows it: the values in effect, plus where
@@ -35,10 +42,13 @@ type View struct {
 	// Changed says the file on disk (or its absence) no longer matches what this process runs. It is
 	// the signal behind "the file says something else than the app is doing".
 	Changed bool
-	// Error is the file's read or parse error. The running values are still listed: they are still
-	// what the process uses.
-	Error    string
-	Sections []Section
+	// Error is the machine or vault file's read or parse error. The running values are still listed:
+	// they are still what the process uses.
+	Error string
+	// VaultPath is the vault's own config file; VaultExists says whether the vault carries one.
+	VaultPath   string
+	VaultExists bool
+	Sections    []Section
 }
 
 // Section is one YAML block, in the order of the Config struct (= the order of config.example.yaml).
@@ -64,7 +74,8 @@ type Field struct {
 	// empty browser.path: that means the engine's own name, lightpanda. It names what is missing
 	// when Resolved is empty.
 	Lookup string
-	// Source is "file", "environment" or "default".
+	// Source is "file" (the machine's config), "vault" (the vault's own config), "environment" or
+	// "default".
 	Source string
 	// Env names the variable that decided the value when Source is "environment".
 	Env string
@@ -80,6 +91,9 @@ type Field struct {
 	// Tier is "basic" or "advanced" for a writable knob, empty for a read-only one. The overlay shows
 	// the basic set unasked and the advanced set behind a reveal; the API applies both the same way.
 	Tier string
+	// Scope is "vault" when the knob belongs in the vault's own config file, "machine" otherwise. It
+	// is where the writer sends the value, not where it currently comes from (that is Source).
+	Scope string
 	// Options lists the accepted values when the knob is an enumeration.
 	Options []string
 }
@@ -99,11 +113,15 @@ func Describe(running Config, path string) View {
 	if strings.TrimSpace(path) == "" {
 		path = DefaultPath()
 	}
-	view := View{Path: path, Sections: sectionsOf(running)}
+	view := View{Path: path, Sections: sectionsOf(running), VaultPath: VaultPath(running)}
 	applyResolved(view.Sections, running)
 	loaded, err := LoadFull(path)
 	view.Path = loaded.Path
 	view.Exists = loaded.Exists
+	if loaded.VaultPath != "" {
+		view.VaultPath = loaded.VaultPath
+	}
+	view.VaultExists = loaded.VaultExists
 	if err != nil {
 		// The file cannot be read: the running values stay, but their origin cannot be attributed to
 		// what is on disk now. The overlay shows the error and leaves the origin blank.
@@ -111,7 +129,7 @@ func Describe(running Config, path string) View {
 		return view
 	}
 	view.Changed = !reflect.DeepEqual(running, loaded.Config)
-	applyOrigins(view.Sections, loaded.Set, loaded.Env)
+	applyOrigins(view.Sections, loaded.Set, loaded.VaultSet, loaded.Env)
 	return view
 }
 
@@ -226,13 +244,15 @@ func absPath(path string) string {
 
 // applyOrigins labels each field with the place its value came from. The file is read once per
 // request, so a value edited over SSH is labelled correctly the moment it is saved.
-func applyOrigins(sections []Section, set map[string]bool, env map[string]string) {
+func applyOrigins(sections []Section, set, vaultSet map[string]bool, env map[string]string) {
 	for i := range sections {
 		for j := range sections[i].Fields {
 			field := &sections[i].Fields[j]
 			switch {
 			case env[field.Key] != "":
 				field.Source, field.Env = "environment", env[field.Key]
+			case vaultSet[field.Key]:
+				field.Source = "vault"
 			case set[field.Key]:
 				field.Source = "file"
 			default:
@@ -281,6 +301,7 @@ func collectFields(node *yaml.Node, prefix string, out *[]Field) {
 		Restart:  Tier(prefix) == "",
 		Writable: Writable(prefix),
 		Tier:     Tier(prefix),
+		Scope:    scopeOf(prefix),
 		Options:  optionsKeys[prefix],
 	}
 	if prefix == "openai.api_key" {
@@ -414,4 +435,13 @@ func walkKeys(node *yaml.Node, prefix string, out map[string]bool) {
 			walkKeys(node.Content[i+1], key, out)
 		}
 	}
+}
+
+// scopeOf names where a knob is WRITTEN: the vault's own file or the machine's config. It is a
+// static property of the key, not an observation about the current value.
+func scopeOf(key string) string {
+	if VaultScoped(key) {
+		return "vault"
+	}
+	return "machine"
 }

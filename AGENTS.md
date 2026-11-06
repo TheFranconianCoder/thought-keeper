@@ -91,11 +91,15 @@ in the source's rail. They are managed in an overlay, and their matches are comp
 index table, no model, no second grouping.
 
 The app's own configuration is readable in the **Config overlay** (`?config=1`, the gear in the top
-bar): every knob with its origin (the file, the environment or a default). A curated set is
+bar): every knob with its origin (the machine's file, the vault's file, the environment or a
+default). A curated set is
 **writable** and is applied **in the running process** — the wiring is rebuilt and swapped behind the
 exclusive gate, never mutated under a run. An **Advanced** reveal in the overlay opens the expert set
-(timeouts, cluster arithmetic, capture and tool limits). Secrets, environment-owned values and the
-vault/index paths stay read-only.
+(timeouts, cluster arithmetic, capture and tool limits). The knobs that describe the corpus — the
+content languages, the capture cadences and thresholds, the OCR languages, the assistant retention
+and the cluster arithmetic — are stored in the vault's own **`vault.yaml`** and travel with it; a key
+it declares wins over the machine's config. Secrets, environment-owned values and the vault/index
+paths stay read-only.
 
 ## Positioning
 
@@ -323,6 +327,7 @@ instance, not clients of a server you operate.
 ```
 <vault>/
 ├── index.db          # SQLite: FTS5, derived counts (rebuildable)
+├── vault.yaml        # settings that belong to THIS vault (optional, record)
 ├── inbox/            # drop zone; the watcher intakes files into sources/
 ├── sources/          # immutable, content-addressed (object + sidecars)
 ├── wiki/             # user-authored Markdown pages (source of truth)

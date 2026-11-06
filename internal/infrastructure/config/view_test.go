@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,10 +22,15 @@ func clearOpenAIEnv(t *testing.T) {
 	}
 }
 
+// writeConfig writes a machine config with a vault of its own. Every config in this package needs a
+// private vault root: a vault-scoped key is written to <vault>/vault.yaml, and one test's vault must
+// not leak into the next.
 func writeConfig(t *testing.T, body string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := fmt.Sprintf("vault:\n    root: %q\n", filepath.Join(dir, "vault")) + body
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return path

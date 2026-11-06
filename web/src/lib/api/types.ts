@@ -781,8 +781,12 @@ export interface CommandRef {
  * the file.
  */
 export interface ConfigView {
-  /** The resolved file: the default location when the app was started without --config. */
+  /** The resolved machine file: the default location when the app was started without --config. */
   path: string;
+  /** The vault's own config file, <vault>/vault.yaml. */
+  vault_path?: string;
+  /** True when this vault carries its own config file. */
+  vault_exists?: boolean;
   /** False when the app runs on the code's defaults. */
   exists: boolean;
   /** The file says something else than the process runs. */
@@ -809,7 +813,7 @@ export interface ConfigFieldView {
   resolved?: string;
   /** The name a tool field searches on PATH (lightpanda when browser.path is empty). */
   lookup?: string;
-  source: 'file' | 'environment' | 'default';
+  source: 'file' | 'vault' | 'environment' | 'default';
   /** The variable that decided an environment value. */
   env?: string;
   secret?: boolean;
@@ -820,6 +824,8 @@ export interface ConfigFieldView {
   writable: boolean;
   /** "basic" for the curated set, "advanced" for the expert set behind the reveal; empty when read-only. */
   tier?: 'basic' | 'advanced';
+  /** Where the writer stores the value: the vault's own file or the machine's config. */
+  scope: 'machine' | 'vault';
   options?: string[];
 }
 

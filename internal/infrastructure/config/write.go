@@ -16,13 +16,14 @@ import (
 // the allowlisted knobs (the curated set and Advanced) are accepted.
 type Patch map[string]any
 
-// Write applies a patch to the YAML file WITHOUT resolving anything: the file is decoded as a node
-// tree, only the patched scalars are replaced (comments on the surrounding nodes survive), the result
-// is validated by loading it, and only then does it replace the original. The previous bytes stay
-// next to it as <file>.bak.
+// Write applies a patch across the two config files. A vault-scoped key goes to the vault's own
+// vault.yaml (created on the first such save, carrying only the keys of this patch); every other key
+// goes to the machine's file. Each file is decoded as a node tree, so comments on the surrounding
+// keys survive, and each keeps its old bytes as <file>.bak.
 //
-// A missing file is created. A broken file refuses the patch: editing a file that no longer parses
-// would hide the problem it says it has.
+// The merged result is validated BEFORE either file is replaced: a patch that writes two files must
+// not leave one of them in a state the app cannot run. A broken file refuses the patch: editing a
+// file that no longer parses would hide the problem it says it has.
 func Write(path string, patch Patch) (Loaded, error) {
 	if strings.TrimSpace(path) == "" {
 		path = DefaultPath()
@@ -42,6 +43,7 @@ func Write(path string, patch Patch) (Loaded, error) {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	machinePatch, vaultPatch := Patch{}, Patch{}
 	for _, key := range keys {
 		if !Writable(key) {
 			return current, fmt.Errorf("%w: %s", ErrNotWritable, key)
@@ -55,39 +57,115 @@ func Write(path string, patch Patch) (Loaded, error) {
 		if err := validatePatchValue(key, patch[key]); err != nil {
 			return current, err
 		}
+		if VaultScoped(key) {
+			vaultPatch[key] = patch[key]
+		} else {
+			machinePatch[key] = patch[key]
+		}
 	}
 
-	var doc yaml.Node
-	if data, readErr := os.ReadFile(path); readErr == nil {
-		if err := yaml.Unmarshal(data, &doc); err != nil {
-			return current, fmt.Errorf("parse config: %w", err)
-		}
-	} else if !os.IsNotExist(readErr) {
-		return current, fmt.Errorf("read config: %w", readErr)
-	}
-	root, err := documentRoot(&doc)
+	machineData, machineChanged, err := buildFile(path, machinePatch, kinds, "")
 	if err != nil {
 		return current, err
 	}
-	for _, key := range keys {
-		if err := setValue(root, key, patch[key], kinds[key]); err != nil {
-			return current, err
+	vaultData, vaultChanged, err := buildFile(current.VaultPath, vaultPatch, kinds, vaultHeader)
+	if err != nil {
+		return current, err
+	}
+
+	if machineChanged || vaultChanged {
+		merged, mErr := mergedConfig(machineData, vaultData)
+		if mErr != nil {
+			return current, mErr
+		}
+		applyDefaults(&merged)
+		if vErr := Validate(merged); vErr != nil {
+			return current, vErr
 		}
 	}
 
+	if machineChanged {
+		if err := replaceFile(path, machineData, current.Exists); err != nil {
+			return current, err
+		}
+	}
+	if vaultChanged {
+		if err := replaceFile(current.VaultPath, vaultData, current.VaultExists); err != nil {
+			// The machine file may already hold the new bytes. Put the old ones back, so a failed
+			// two-file patch leaves the pair as it was; the .bak is the record either way.
+			if machineChanged {
+				restoreFile(path, current.Exists)
+			}
+			return current, err
+		}
+	}
+	return LoadFull(path)
+}
+
+// vaultHeader introduces a vault.yaml the app creates. It says what the file is for, because the
+// file travels with the vault and may be read on a machine that did not write it.
+const vaultHeader = `Settings that belong to this vault. They travel with it, and a key set here wins over
+the machine's config. Delete a line to fall back to the machine.`
+
+// buildFile edits one YAML file with the patch that belongs to it. A file that does not exist is
+// created (with the header, for vault.yaml). An unchanged file returns its current bytes so the
+// merged validation sees the real pair; a missing unchanged file returns nil.
+func buildFile(path string, patch Patch, kinds map[string]string, header string) ([]byte, bool, error) {
+	original, readErr := os.ReadFile(path)
+	exists := readErr == nil
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return nil, false, fmt.Errorf("read config: %w", readErr)
+	}
+	if len(patch) == 0 {
+		return original, false, nil
+	}
+	var doc yaml.Node
+	if exists {
+		if err := yaml.Unmarshal(original, &doc); err != nil {
+			return nil, false, fmt.Errorf("parse config: %w", err)
+		}
+	}
+	root, err := documentRoot(&doc)
+	if err != nil {
+		return nil, false, err
+	}
+	keys := make([]string, 0, len(patch))
+	for key := range patch {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if err := setValue(root, key, patch[key], kinds[key]); err != nil {
+			return nil, false, err
+		}
+	}
+	if !exists && header != "" {
+		root.HeadComment = header
+	}
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(4)
 	if err := enc.Encode(&doc); err != nil {
-		return current, fmt.Errorf("encode config: %w", err)
+		return nil, false, fmt.Errorf("encode config: %w", err)
 	}
 	if err := enc.Close(); err != nil {
-		return current, fmt.Errorf("encode config: %w", err)
+		return nil, false, fmt.Errorf("encode config: %w", err)
 	}
-	if err := replaceFile(path, buf.Bytes(), current.Exists); err != nil {
-		return current, err
+	return buf.Bytes(), true, nil
+}
+
+// restoreFile undoes a replaceFile that already happened: the .bak holds the old bytes, and a file
+// that did not exist is removed again.
+func restoreFile(path string, existed bool) {
+	if !existed {
+		_ = os.Remove(path) //nolint:errcheck // rollback: a missing file is the original state
+		return
 	}
-	return LoadFull(path)
+	old, err := os.ReadFile(path + ".bak")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(path, old, 0o600) //nolint:errcheck // best effort; the .bak remains the record
 }
 
 // validatePatchValue checks the value BEFORE applyDefaults can mask it, with the same rule the whole
@@ -313,8 +391,8 @@ func asStrings(value any) ([]string, error) {
 	return nil, fmt.Errorf("want a list of strings")
 }
 
-// replaceFile validates the new bytes in a temp file next to the original, keeps the old bytes as
-// <file>.bak, and only then renames. A validation failure leaves the original untouched.
+// replaceFile writes data to a temp file next to the original, keeps the old bytes as <file>.bak when
+// it existed, and renames. The caller validated the merged configuration before calling it.
 func replaceFile(path string, data []byte, exists bool) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -336,13 +414,6 @@ func replaceFile(path string, data []byte, exists bool) error {
 	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close temp config: %w", err)
-	}
-	loaded, err := LoadFull(tmpName)
-	if err != nil {
-		return err
-	}
-	if err := Validate(loaded.Config); err != nil {
-		return err
 	}
 	if exists {
 		old, err := os.ReadFile(path)

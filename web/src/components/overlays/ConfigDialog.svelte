@@ -125,6 +125,8 @@
         return t('config.sourceEnvironment', { env: field.env ?? '' });
       case 'file':
         return t('config.sourceFile');
+      case 'vault':
+        return t('config.sourceVault');
       default:
         return t('config.sourceDefault');
     }
@@ -286,8 +288,17 @@
 
   async function copyPath(): Promise<void> {
     if (!view) return;
+    await copyText(view.path);
+  }
+
+  async function copyVaultPath(): Promise<void> {
+    if (!view?.vault_path) return;
+    await copyText(view.vault_path);
+  }
+
+  async function copyText(text: string): Promise<void> {
     try {
-      await navigator.clipboard.writeText(view.path);
+      await navigator.clipboard.writeText(text);
       toast(t('config.copied'), 'success');
     } catch {
       toast(t('config.copyFailed'), 'error');
@@ -360,6 +371,17 @@
           <span class="chip">{t('config.noFile')}</span>
         {/if}
       </div>
+
+      {#if view?.vault_exists}
+        <div class="config-path config-path--vault">
+          <Icon name="file" size={13} />
+          <button class="path" title={t('config.copyVaultPath')} onclick={() => void copyVaultPath()}>
+            <span class="mono truncate">{view.vault_path}</span>
+            <Icon name="copy" size={11} />
+          </button>
+          <span class="chip" title={t('config.vaultNote')}>{t('config.vaultFile')}</span>
+        </div>
+      {/if}
 
       {#if applying}
         <p class="config-notice notice notice--warn">
@@ -543,8 +565,8 @@
                           {:else}
                             <button
                               class="icon-btn row-edit"
-                              title={t('config.editValue')}
-                              aria-label={t('config.editValue')}
+                              title={field.scope === 'vault' ? t('config.editVaultValue') : t('config.editValue')}
+                              aria-label={field.scope === 'vault' ? t('config.editVaultValue') : t('config.editValue')}
                               onclick={() => startEdit(field.key)}
                             >
                               <Icon name="edit" size={11} />
@@ -680,6 +702,11 @@
     padding: 0 14px 10px;
     color: var(--muted);
     font-size: 11px;
+  }
+
+  /* The vault's own file sits under the machine's config: two records, one running configuration. */
+  .config-path--vault {
+    padding-top: 0;
   }
 
   .path {
@@ -996,6 +1023,11 @@
 
   .source--file {
     color: var(--muted);
+  }
+
+  .source--vault {
+    background: var(--accent-soft);
+    color: var(--accent);
   }
 
   .source--environment {

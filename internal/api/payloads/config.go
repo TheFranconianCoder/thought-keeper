@@ -4,8 +4,13 @@ package payloads
 // not of the file: the values are the ones in effect, and Changed says whether the file on disk says
 // something else.
 type Config struct {
-	// Path is the resolved file (the default location when the app was started without --config).
+	// Path is the resolved machine file (the default location when the app was started without
+	// --config).
 	Path string `json:"path"`
+	// VaultPath is the vault's own config file, <vault>/vault.yaml. VaultExists says whether this vault
+	// carries one.
+	VaultPath   string `json:"vault_path,omitempty"`
+	VaultExists bool   `json:"vault_exists"`
 	// Exists is false when the app runs on the code's defaults.
 	Exists bool `json:"exists"`
 	// Changed says the file no longer matches what this process runs.
@@ -49,6 +54,8 @@ type ConfigField struct {
 	// Tier is "basic" or "advanced" for a writable knob, empty for a read-only one. The overlay shows
 	// the basic set unasked and the advanced set behind a reveal.
 	Tier string `json:"tier,omitempty"`
+	// Scope is "vault" when the knob is stored in the vault's own config file, "machine" otherwise.
+	Scope string `json:"scope"`
 	// Options lists the accepted values of an enumeration.
 	Options []string `json:"options,omitempty"`
 }

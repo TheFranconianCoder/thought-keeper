@@ -25,10 +25,12 @@ func resolvedConfigPath(path string) string {
 func (a *App) Config() payloads.Config {
 	view := config.Describe(a.conf(), a.cfgPath)
 	out := payloads.Config{
-		Path:    view.Path,
-		Exists:  view.Exists,
-		Changed: view.Changed,
-		Error:   view.Error,
+		Path:        view.Path,
+		VaultPath:   view.VaultPath,
+		VaultExists: view.VaultExists,
+		Exists:      view.Exists,
+		Changed:     view.Changed,
+		Error:       view.Error,
 	}
 	out.Sections = make([]payloads.ConfigSection, 0, len(view.Sections))
 	for _, section := range view.Sections {
@@ -47,6 +49,7 @@ func (a *App) Config() payloads.Config {
 				Restart:  field.Restart,
 				Writable: field.Writable,
 				Tier:     field.Tier,
+				Scope:    field.Scope,
 				Options:  field.Options,
 			})
 		}
