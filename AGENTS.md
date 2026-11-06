@@ -91,10 +91,11 @@ in the source's rail. They are managed in an overlay, and their matches are comp
 index table, no model, no second grouping.
 
 The app's own configuration is readable in the **Config overlay** (`?config=1`, the gear in the top
-bar): every knob with its origin (the file, the environment or a default). A curated Tier 1 set is
+bar): every knob with its origin (the file, the environment or a default). A curated set is
 **writable** and is applied **in the running process** — the wiring is rebuilt and swapped behind the
-exclusive gate, never mutated under a run. Secrets, environment-owned values and the vault/index paths
-stay read-only.
+exclusive gate, never mutated under a run. An **Advanced** reveal in the overlay opens the expert set
+(timeouts, cluster arithmetic, capture and tool limits). Secrets, environment-owned values and the
+vault/index paths stay read-only.
 
 ## Positioning
 

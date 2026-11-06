@@ -87,10 +87,12 @@ type App struct {
 	clusterQueue chan runJob
 	// reconcilePass is the consistency job; reconcileOffset is where its next slice starts.
 	reconcileOffset int
-	// pruneCommands enforces the assistant's retention. The pass walks commands/, so it runs on its
-	// own (daily) cadence — not on every consistency tick.
-	pruneInterval time.Duration
-	nextPrune     time.Time
+	// The assistant's history has an expiry, enforced on its own cadence (daily by default) — not on
+	// every consistency tick. The interval is read from the running config on every tick, so a change
+	// in the Config overlay applies without a restart; pruneWarned remembers the last unusable value
+	// so the log says it once instead of every minute.
+	nextPrune   time.Time
+	pruneWarned string
 	// clusterBacklog/clusterStalled bound the automatic cluster passes: two passes in a row without
 	// progress stop the asking until something changes. requestClusterMu serialises the
 	// CHECK-then-queue of a pass, so two triggers cannot both see "nothing queued".
@@ -398,12 +400,6 @@ func New(opts Options) (*App, error) {
 	reg.ClusterPass.Progress = a.setClusterProgress
 	a.depsPtr.Store(&reg)
 	a.handler.Store(reg.Handler)
-	if d, err := time.ParseDuration(cfg.Assistant.PruneInterval); err == nil && d > 0 {
-		a.pruneInterval = d
-	} else if cfg.Assistant.PruneInterval != "" {
-		log.Warn("assistant: invalid prune_interval; the prune stays off",
-			"value", cfg.Assistant.PruneInterval)
-	}
 	// The first tick after start prunes once: a restart must not postpone yesterday's expiry by a
 	// whole day. (The pass is idempotent and only touches commands/.)
 	a.nextPrune = time.Now()

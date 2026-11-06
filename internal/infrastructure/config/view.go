@@ -74,15 +74,18 @@ type Field struct {
 	// Restart means a change would need a new process. Part 2 applies every WRITABLE knob in-process,
 	// so only a read-only field (a vault path, the listener) is marked this way.
 	Restart bool
-	// Writable says the Config overlay may write this key (the Tier 1 allowlist). An environment-owned
-	// value is still refused by the writer.
+	// Writable says the Config overlay may write this key (either tier). An environment-owned value
+	// is still refused by the writer.
 	Writable bool
+	// Tier is "basic" or "advanced" for a writable knob, empty for a read-only one. The overlay shows
+	// the basic set unasked and the advanced set behind a reveal; the API applies both the same way.
+	Tier string
 	// Options lists the accepted values when the knob is an enumeration.
 	Options []string
 }
 
 var optionsKeys = map[string][]string{
-	"browser.wait_until":              {"load", "networkidle", "done"},
+	"browser.wait_until":              {"load", "domcontentloaded", "networkalmostidle", "networkidle", "done"},
 	"openai.reasoning_effort_compile": {"minimal", "low", "medium", "high"},
 	"openai.reasoning_effort_distill": {"minimal", "low", "medium", "high"},
 	"openai.reasoning_effort_reason":  {"minimal", "low", "medium", "high"},
@@ -275,8 +278,9 @@ func collectFields(node *yaml.Node, prefix string, out *[]Field) {
 	field := Field{
 		Key:      prefix,
 		Kind:     kindOf(prefix, node),
-		Restart:  !Writable(prefix),
+		Restart:  Tier(prefix) == "",
 		Writable: Writable(prefix),
+		Tier:     Tier(prefix),
 		Options:  optionsKeys[prefix],
 	}
 	if prefix == "openai.api_key" {

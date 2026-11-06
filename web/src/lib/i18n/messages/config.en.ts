@@ -3,6 +3,11 @@ export const configEn: Record<string, string> = {
   'config.title': 'Configuration',
   'config.description': 'The configuration this instance runs on — and where each value came from.',
   'config.find': 'Find a setting',
+  'config.advanced': 'Advanced',
+  'config.advancedHint': 'Advanced setting',
+  'config.tierAdvanced': 'advanced',
+  'config.advancedNote':
+    'Expert settings. They apply to new runs and captures — work already running keeps the settings it started with, and cluster values take effect on the next pass.',
   'config.applyNote':
     'Use the pencil to edit a value; Save applies it in the running process. The file on disk is the record. Secrets, environment-owned values and the vault/index paths stay read-only.',
   'config.noFile': 'no file yet — running on defaults',

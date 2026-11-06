@@ -14,6 +14,13 @@ import (
 // pdfSections extracts text with poppler's pdftotext (stdin → stdout). Pages are
 // separated by a form feed. Pages whose text is shorter than the threshold are
 // treated as scanned and OCR'd page by page (pdftocairo + tesseract) when available.
+// ocrAllowed says whether a page is still inside the OCR ceiling. The PDF ceiling and the OCR
+// ceiling are different knobs: the first limits how much of a book is read, the second how much of
+// it is rasterized.
+func (e *Extractor) ocrAllowed(pageNo int) bool {
+	return e.cfg.OCRMaxPages <= 0 || pageNo <= e.cfg.OCRMaxPages
+}
+
 func (e *Extractor) pdfSections(ctx context.Context, data []byte, onEvent func(entities.ExtractEvent)) ([]entities.Part, error) {
 	if !e.runner.Available(e.cfg.PDFTextTool) {
 		return nil, types.New("unsupported_source",
@@ -44,7 +51,7 @@ func (e *Extractor) pdfSections(ctx context.Context, data []byte, onEvent func(e
 		}
 		text := strings.TrimSpace(string(page))
 		ocr := false
-		if len(text) < e.cfg.MinTextCharsPerPage && ocrReady {
+		if len(text) < e.cfg.MinTextCharsPerPage && ocrReady && e.ocrAllowed(pageNo) {
 			ocrStart := time.Now()
 			ocrText, err := e.ocrPage(ctx, data, pageNo)
 			dur := time.Since(ocrStart)

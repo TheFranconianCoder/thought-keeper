@@ -245,15 +245,15 @@ are.
    properties of the VAULT, but they live in the machine's config file. A vault moved to another
    machine takes its claims but not its claim language. A `vault.yaml` read next to `index.db`
    (machine config overrides, or the other way round) is the likely answer.
-2. **Tier 2, the expert knobs.** The apply path supports them, but the first writable release keeps
-   the surface to 21 keys. The next slice — behind an "Advanced" reveal — is the model/pipeline
-   timeouts, the reconcile interval, the capture thresholds, `cluster.*`, `assistant.*`, the
-   browser/OCR/PDF/fetch limits and `app.smart_open`.
+2. **`capture.dedupe_by_url` is inert.** No code reads it: URL identity is the hash (of the URL), so
+   "one source per URL" is how the store works, not a switch. It is read-only in the overlay for that
+   reason. Either give it a real meaning (e.g. merging two URLs that redirect to the same page) or
+   drop it from the config and the example file.
 3. **The apply is not in the Job Queue.** The PUT writes the file and queues a goroutine; the overlay
    polls until the file and the process agree. A long document step can make that poll time out (the
    overlay then shows the drift with Apply). A real job row in Status would name what the apply waits
    for, like the repair does.
-4. **Restart automation, only if it is ever needed.** No Tier 1 knob needs a new process; the
+4. **Restart automation, only if it is ever needed.** No writable knob needs a new process; the
    read-only knobs (vault/index paths, the listener, the tray) are deliberately not editable. If a
    future knob does, prefer `syscall.Exec` in-process on Unix over telling the reader to restart a
    remote instance — and check the tray and the endpoint file first.

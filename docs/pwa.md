@@ -131,13 +131,17 @@ open, and the Start lens lists the three latest QUESTIONS, which are answers the
   overlay does not lose the reader's place.
 - **The Config overlay** (`?config=1`, the gear in the top bar, `&field=<key>` to land on one knob)
   shows the **running** configuration: sections in file order, each knob with its origin (the config
-  file, the environment with the variable's name, or the code's default). A **curated Tier 1 set is
+  file, the environment with the variable's name, or the code's default). A **curated set is
   editable**: a faint **pencil** opens one row in place — the input is laid over the value, or a
   checkbox sits beside it for a switch — so the row keeps its width, height and baseline (Enter
   saves, Escape closes the row). The Save/Revert footer writes the file and applies it in the
   running process — the overlay says *Applying in-process…* and follows the read until the file
-  and the process agree. Nothing is a form by default: a value is text until its pencil is pressed. When the file on disk differs (an edit over SSH), **Apply the file** appears.
-  Everything else is read-only with its reason. A path or tool knob also shows the absolute path the
+  and the process agree. Nothing is a form by default: a value is text until its pencil is pressed.
+  An **Advanced** switch in the toolbar reveals the expert knobs (timeouts, cluster arithmetic,
+  capture and tool limits), each carrying an `advanced` chip; the reveal is closed by default and a
+  search shows a matching expert row even while it is closed, so the find field never hides a knob
+  that exists. When the file on disk differs (an edit over SSH), **Apply the file** appears.
+  Everything else is read-only. A path or tool knob also shows the absolute path the
   process actually uses — the vault directory, or the binary found on PATH — or **not found**, named
   after what was searched for (`lightpanda` when `browser.path` is empty). The first line is the
   short name, the second the absolute path, and the config key is the subline of every row. Secrets

@@ -331,7 +331,10 @@ func Defaults() Config {
 			SplitMinCoreSize: 3, TopicSpanLimit: 12, MaxClusterClaims: 80,
 			AttachMinScore: 0.18, OverlapMinEdges: 4, OverlapMax: 2, CrossTopicMinEdges: 3,
 		},
-		Capture: CaptureConfig{DedupeByURL: true, RefreshInterval: "168h", FeedRefreshInterval: "24h", MinTextChars: 400},
+		Capture: CaptureConfig{
+			DedupeByURL: true, RefreshInterval: "168h", FeedRefreshInterval: "24h",
+			MinTextChars: 400, ListingMaxPages: 100,
+		},
 		Assistant: AssistantConfig{
 			// A week is long enough to find yesterday's request again, and short enough that the
 			// history never becomes a second vault.
@@ -458,6 +461,9 @@ func applyDefaults(c *Config) map[string]string {
 	}
 	if c.Pipeline.ReconcileBatch <= 0 {
 		c.Pipeline.ReconcileBatch = d.Pipeline.ReconcileBatch
+	}
+	if c.Capture.ListingMaxPages <= 0 {
+		c.Capture.ListingMaxPages = d.Capture.ListingMaxPages
 	}
 	if c.Pipeline.ParallelRuns <= 0 {
 		c.Pipeline.ParallelRuns = d.Pipeline.ParallelRuns

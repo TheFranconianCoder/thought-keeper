@@ -240,10 +240,12 @@ func TestDescribeNamesKindsAndApplyBehaviour(t *testing.T) {
 		{"vault.trash", "path", true},
 		{"vault.git.ignore_derived", "bool", true},
 		{"ocr.languages", "list", false},
-		{"pdf.text_tool", "tool", true},
-		{"ocr.rasterizer", "tool", true},
+		{"pdf.text_tool", "tool", false},
+		{"ocr.rasterizer", "tool", false},
 		{"browser.path", "tool", false},
-		{"browser.wait_until", "string", true},
+		{"browser.wait_until", "string", false},
+		{"cluster.neighbor_k", "int", false},
+		{"server.addr", "string", true},
 	}
 	for _, tc := range cases {
 		field := findField(t, view, tc.key)
@@ -256,9 +258,21 @@ func TestDescribeNamesKindsAndApplyBehaviour(t *testing.T) {
 		if field.Writable != Writable(tc.key) {
 			t.Errorf("%s writable = %v, want %v", tc.key, field.Writable, Writable(tc.key))
 		}
+		if field.Tier != Tier(tc.key) {
+			t.Errorf("%s tier = %q, want %q", tc.key, field.Tier, Tier(tc.key))
+		}
 	}
-	if got := findField(t, view, "browser.wait_until").Options; len(got) != 3 {
-		t.Errorf("wait_until options = %v, want three", got)
+	if got := findField(t, view, "browser.wait_until").Options; len(got) != 5 {
+		t.Errorf("wait_until options = %v, want five", got)
+	}
+	if got := findField(t, view, "language.claims").Tier; got != TierBasic {
+		t.Errorf("language.claims tier = %q, want %q", got, TierBasic)
+	}
+	if got := findField(t, view, "cluster.neighbor_k").Tier; got != TierAdvanced {
+		t.Errorf("cluster.neighbor_k tier = %q, want %q", got, TierAdvanced)
+	}
+	if got := findField(t, view, "vault.root").Tier; got != "" {
+		t.Errorf("vault.root tier = %q, want empty (read-only)", got)
 	}
 	if len(view.Sections) == 0 || view.Sections[0].Name != "app" {
 		t.Errorf("first section = %+v, want the struct's order (app)", view.Sections)

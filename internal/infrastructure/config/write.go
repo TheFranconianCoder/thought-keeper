@@ -8,13 +8,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 // Patch is a set of dotted YAML keys and their new values, as the Config overlay sends them. Only
-// the keys in the Tier 1 allowlist are accepted.
+// the allowlisted knobs (the curated set and Advanced) are accepted.
 type Patch map[string]any
 
 // Write applies a patch to the YAML file WITHOUT resolving anything: the file is decoded as a node
@@ -91,46 +90,12 @@ func Write(path string, patch Patch) (Loaded, error) {
 	return LoadFull(path)
 }
 
-// validatePatchValue checks the value BEFORE applyDefaults can mask it. A zero worker count, for
-// example, would otherwise be silently replaced by the default and the file would say one thing while
-// the app does another.
+// validatePatchValue checks the value BEFORE applyDefaults can mask it, with the same rule the whole
+// config is validated by. A zero worker count, for example, would otherwise be silently replaced by
+// the default and the file would say one thing while the app does another.
 func validatePatchValue(key string, value any) error {
-	switch key {
-	case "pipeline.parallel_runs", "pipeline.parallel_queries", "pipeline.parallel_parts", "pipeline.parts_per_run":
-		n, err := asInt(value)
-		if err != nil || n <= 0 {
-			return fmt.Errorf("%w: %s must be greater than zero", ErrInvalidValue, key)
-		}
-	case "app.memory_limit_mb":
-		n, err := asInt(value)
-		if err != nil || n < 0 {
-			return fmt.Errorf("%w: %s must not be negative", ErrInvalidValue, key)
-		}
-	case "language.ui", "language.claims", "language.summary":
-		s, err := asString(value)
-		if err != nil || !isLanguageCode(strings.ToLower(s)) {
-			return fmt.Errorf("%w: %s must be a language code", ErrInvalidValue, key)
-		}
-	case "openai.model_compile", "openai.model_reason":
-		s, err := asString(value)
-		if err != nil || s == "" {
-			return fmt.Errorf("%w: %s must not be empty", ErrInvalidValue, key)
-		}
-	case "pipeline.debounce", "capture.refresh_interval", "capture.feed_refresh_interval":
-		s, err := asString(value)
-		if err != nil {
-			return fmt.Errorf("%w: %s %w", ErrInvalidValue, key, err)
-		}
-		if s != "" {
-			if d, dErr := time.ParseDuration(s); dErr != nil || d < 0 {
-				return fmt.Errorf("%w: %s is not a duration", ErrInvalidValue, key)
-			}
-		}
-	case "ocr.languages":
-		items, err := asStrings(value)
-		if err != nil || len(items) == 0 {
-			return fmt.Errorf("%w: %s must list at least one language", ErrInvalidValue, key)
-		}
+	if problem := keyProblem(key, value); problem != "" {
+		return fmt.Errorf("%w: %s", ErrInvalidValue, problem)
 	}
 	return nil
 }

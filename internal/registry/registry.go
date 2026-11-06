@@ -197,7 +197,8 @@ func Build(
 		Languages:           cfg.OCR.Languages,
 		DPI:                 cfg.OCR.DPI,
 		MinTextCharsPerPage: cfg.OCR.MinTextCharsPerPage,
-		MaxPages:            cfg.OCR.MaxPages,
+		MaxPages:            cfg.PDF.MaxPages,
+		OCRMaxPages:         cfg.OCR.MaxPages,
 		OCR:                 cfg.OCR.Enabled,
 		Log:                 log,
 	})

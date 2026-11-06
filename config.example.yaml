@@ -4,9 +4,10 @@
 #
 # The app reads this file at request time for the Config overlay (the gear in the PWA's top bar) and
 # reports the RUNNING values with their origin: this file, the environment, or the code's default.
-# A curated Tier 1 set (language, models/efforts, pipeline counts and cadences, browser/OCR, the heap
-# ceiling) can be changed in the overlay and is applied in the running process; everything else is
-# read at start-up and stays read-only in the overlay.
+# A curated set (language, models/efforts, pipeline counts and cadences, browser/OCR, the heap
+# ceiling) can be changed in the overlay and is applied in the running process; the Advanced reveal
+# opens the expert set (timeouts, cluster arithmetic, capture and tool limits) the same way. The vault
+# and index paths, the listener, the secrets and the tray switches stay read-only.
 
 app:
     # The app never launches a browser: it logs the address and the tray can show it.
@@ -165,7 +166,7 @@ browser:                                   # the OPTIONAL local browser that ren
 pdf:
     text_tool: 'pdftotext'                 # poppler, ad-hoc stdin→stdout
     max_bytes: 52428800                    # 50 MiB
-    max_pages: 2000
+    max_pages: 2000                        # the PDF page ceiling: the walk stops here
 
 ocr:
     enabled: true
@@ -174,7 +175,7 @@ ocr:
     languages: ['eng', 'deu']
     dpi: 300
     min_text_chars_per_page: 32            # below this, the page is OCR'd
-    max_pages: 500
+    max_pages: 500                         # OCR stops here; later pages keep their text layer
     timeout: '5m'
 
 language:                                  # the language of what the app WRITES. A source's own

@@ -69,18 +69,32 @@ absolute path the process uses (a bare `pdftotext` is resolved on PATH, and *not
 plainly). The overlay re-reads the file on every request: when it no longer matches what the process
 runs (an edit over SSH), it says so.
 
-A **curated Tier 1 set is writable**: language, the models and reasoning efforts, the inbox /
-auto-distill / debounce knobs, parallel runs/queries/parts, the capture cadences, `browser.path`, OCR
-enable/languages and the heap ceiling. Saving writes the YAML first (comments preserved, `${VAR}`
-kept as a reference, the old bytes in `<file>.bak`, revalidated) and then **applies it in the running
-process**: the wiring is rebuilt and swapped behind the exclusive gate, so a running document or
-cluster step finishes first and no use case is mutated under a run. The answer says the apply is
-queued; the overlay follows the read until the file and the process agree. A change made over SSH is
-applied with **Apply the file**. Everything else is read-only with its reason: `vault.*`,
-`index.*`, `server.addr`, the tray switches, `openai.api_key`/`headers`/`base_url`,
-`fetch.allow_private` and the non-implemented git switches. Secrets stay where they are: the API key
-is reported as *set* or *not set*, never as a value, and `openai.headers` reveals only the header
-names.
+Two sets are writable. The **curated set** is shown unasked: language, the models and reasoning
+efforts, the inbox / auto-distill / debounce knobs, parallel runs/queries/parts, the capture
+cadences, `browser.path`, OCR enable/languages and the heap ceiling. The **Advanced** set is behind
+a reveal in the toolbar: the request and fetch timeouts, `openai.retries`/`retry_backoff`/
+`max_iterations`, the run/cluster ceilings, `auto_continue`, the reconcile cadence and batch, the
+capture thresholds, the whole `cluster.*` arithmetic, the assistant retention/prune/limits, the
+browser switches, the PDF/OCR tools and page ceilings, and `app.smart_open`. A search shows a match
+whichever set it belongs to.
+
+Saving writes the YAML first (comments preserved, `${VAR}` kept as a reference, the old bytes in
+`<file>.bak`, revalidated) and then **applies it in the running process**: the wiring is rebuilt and
+swapped behind the exclusive gate, so a running document or cluster step finishes first and no use
+case is mutated under a run. The answer says the apply is queued; the overlay follows the read until
+the file and the process agree. A change made over SSH is applied with **Apply the file**.
+
+An advanced value takes effect where it is read: a timeout, a retry or a capture threshold applies
+to **new** work (a run already in flight keeps what it started with), and a `cluster.*` value applies
+on the **next cluster pass** — the overlay never starts a pass by itself. The assistant prune cadence
+is read on the consistency worker's tick (and checked every minute even when the consistency pass is
+off), so turning it on or off needs no restart.
+
+The rest stays read-only: `vault.*`, `index.*`, `server.addr`, `app.tray`/`autostart`,
+`openai.api_key`/`headers`/`base_url`, `fetch.allow_private`, `capture.dedupe_by_url` (URL identity is
+the hash, so the behaviour is not a switch) and the non-implemented git switches. Secrets stay where
+they are: the API key is reported as *set* or *not set*, never as a value, and `openai.headers`
+reveals only the header names.
 
 Models resolve **env → yaml → default**: `OPENAI_MODEL` sets both, `OPENAI_MODEL_COMPILE` /
 `OPENAI_MODEL_REASON` override one; the same holds for the patience knobs

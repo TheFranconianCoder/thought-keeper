@@ -97,6 +97,44 @@ func TestPDFPagesAndOCRFallback(t *testing.T) {
 	}
 }
 
+// TestPDFAndOCRPageCeilingsAreSeparate: pdf.max_pages limits how much of a book is read, ocr.max_pages
+// how much of it is rasterized. A page beyond the OCR ceiling keeps its own (short) text instead of
+// being OCR'd, and the PDF ceiling still stops the walk on its own.
+func TestPDFAndOCRPageCeilingsAreSeparate(t *testing.T) {
+	runner := fakeRunner{
+		avail: map[string]bool{"pdftotext": true, "pdftocairo": true, "tesseract": true},
+		out: map[string][]byte{
+			"pdftotext":  []byte("alpha page one long enough\ftiny\fgamma page three long enough\f"),
+			"pdftocairo": []byte("PNG"),
+			"tesseract":  []byte("OCR text for a short page"),
+		},
+	}
+	cfg := extract.Config{
+		PDFTextTool: "pdftotext", Rasterizer: "pdftocairo", Tesseract: "tesseract",
+		Languages: []string{"eng"}, DPI: 300, MinTextCharsPerPage: 10,
+		MaxPages: 2, OCRMaxPages: 1, OCR: true,
+	}
+	doc, err := extract.New(runner, cfg).Extract(context.Background(), ".pdf", []byte("%PDF"), nil)
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	if len(doc.Parts) != 2 {
+		t.Fatalf("parts = %d, want 2 (pdf.max_pages stops the walk): %+v", len(doc.Parts), doc.Parts)
+	}
+	if doc.Parts[1].OCR || !strings.Contains(doc.Parts[1].Text, "tiny") {
+		t.Errorf("page2 = %+v, want its own text and no OCR (beyond ocr.max_pages)", doc.Parts[1])
+	}
+
+	cfg.OCRMaxPages = 2
+	doc, err = extract.New(runner, cfg).Extract(context.Background(), ".pdf", []byte("%PDF"), nil)
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	if len(doc.Parts) != 2 || !doc.Parts[1].OCR || !strings.Contains(doc.Parts[1].Text, "OCR text") {
+		t.Errorf("page2 = %+v, want OCR inside the ceiling", doc.Parts[1])
+	}
+}
+
 func TestPDFRequiresPdftotext(t *testing.T) {
 	e := extract.New(fakeRunner{avail: map[string]bool{}}, extract.Config{PDFTextTool: "pdftotext"})
 	_, err := e.Extract(context.Background(), ".pdf", []byte("%PDF"), nil)

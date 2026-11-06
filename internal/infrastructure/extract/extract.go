@@ -24,9 +24,13 @@ type Config struct {
 	Languages           []string
 	DPI                 int
 	MinTextCharsPerPage int
-	MaxPages            int
-	OCR                 bool
-	Log                 *slog.Logger
+	// MaxPages is the PDF's page ceiling: the walk stops there (pdf.max_pages). 0 means no ceiling.
+	MaxPages int
+	// OCRMaxPages is where OCR stops: later pages keep their text layer but are not rasterized
+	// (ocr.max_pages). 0 means no ceiling. OCR is the expensive half, so it needs its own ceiling.
+	OCRMaxPages int
+	OCR         bool
+	Log         *slog.Logger
 }
 
 // Extractor dispatches by extension.

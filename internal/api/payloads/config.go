@@ -42,10 +42,13 @@ type ConfigField struct {
 	// Secret means the value never leaves the process; Set says whether it has one.
 	Secret bool `json:"secret,omitempty"`
 	Set    bool `json:"set,omitempty"`
-	// Restart means a change applies only after a new process.
+	// Restart means a change would need a new process (only a read-only knob).
 	Restart bool `json:"restart"`
-	// Writable is false in part 1: the overlay reads.
+	// Writable says the Config overlay may write this key. Both tiers are applied the same way.
 	Writable bool `json:"writable"`
+	// Tier is "basic" or "advanced" for a writable knob, empty for a read-only one. The overlay shows
+	// the basic set unasked and the advanced set behind a reveal.
+	Tier string `json:"tier,omitempty"`
 	// Options lists the accepted values of an enumeration.
 	Options []string `json:"options,omitempty"`
 }

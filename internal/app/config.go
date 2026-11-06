@@ -46,6 +46,7 @@ func (a *App) Config() payloads.Config {
 				Set:      field.Set,
 				Restart:  field.Restart,
 				Writable: field.Writable,
+				Tier:     field.Tier,
 				Options:  field.Options,
 			})
 		}

@@ -814,10 +814,12 @@ export interface ConfigFieldView {
   env?: string;
   secret?: boolean;
   set?: boolean;
-  /** A change applies only after a new process. */
+  /** A change would need a new process (only a read-only knob). */
   restart: boolean;
-  /** False in part 1: the overlay reads. */
+  /** The overlay may write this field (either tier). */
   writable: boolean;
+  /** "basic" for the curated set, "advanced" for the expert set behind the reveal; empty when read-only. */
+  tier?: 'basic' | 'advanced';
   options?: string[];
 }
 

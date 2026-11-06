@@ -29,18 +29,30 @@
   let saveError = $state('');
   // A writable value is edited only on instruction: the pencil opens that row, Save commits it.
   let editing = $state<string[]>([]);
+  // The expert knobs are behind a reveal: the overlay shows the curated set unasked, and a search
+  // shows whatever matches regardless of the reveal.
+  let advanced = $state(false);
 
   const shown = $derived.by(() => {
     const needles = query.trim().toLowerCase();
     const sections = view?.sections ?? [];
-    if (!needles) return sections;
+    // A search reveals a match even when the advanced set is closed; otherwise the find field
+    // would answer "nothing" for a knob that exists.
+    const visible = (field: ConfigFieldView): boolean =>
+      advanced || !!needles || field.tier !== 'advanced';
     return sections
       .map((section) => ({
         name: section.name,
-        fields: section.fields.filter((field) => matches(field, needles)),
+        fields: section.fields.filter((field) => visible(field) && (!needles || matches(field, needles))),
       }))
       .filter((section) => section.fields.length > 0);
   });
+
+  // The expert warning belongs to every visible advanced row — including a match a search revealed
+  // while the reveal switch is still closed.
+  const showsAdvanced = $derived(
+    shown.some((section) => section.fields.some((field) => field.tier === 'advanced')),
+  );
 
   // A translated name when there is one; empty otherwise. The KEY is always the stable name, so an
   // untranslated field shows its key once instead of repeating it as a name and a subline.
@@ -296,6 +308,13 @@
     );
   });
 
+  // A link to an advanced knob must not land on a row the reveal hides.
+  $effect(() => {
+    if (!open || !target) return;
+    const field = fieldByKey(target);
+    if (field?.tier === 'advanced' && !advanced) advanced = true;
+  });
+
   $effect(() => {
     if (!open) return;
     void tick().then(() => panel?.focus());
@@ -386,8 +405,24 @@
             autocomplete="off"
           />
         </div>
+        <button
+          class="btn btn--ghost btn--sm advanced-toggle"
+          class:advanced-toggle--on={advanced}
+          aria-pressed={advanced}
+          title={t('config.advancedNote')}
+          onclick={() => (advanced = !advanced)}
+        >
+          {t('config.advanced')}
+        </button>
         <p class="config-note">{t('config.applyNote')}</p>
       </div>
+
+      {#if showsAdvanced}
+        <p class="config-notice notice notice--warn">
+          <Icon name="warning" size={14} />
+          <span>{t('config.advancedNote')}</span>
+        </p>
+      {/if}
 
       <div class="config-body">
         {#if loading && !view}
@@ -480,6 +515,11 @@
                             {/if}
                           {/if}
                         </span>
+                        {#if field.tier === 'advanced'}
+                          <span class="tier" title={t('config.advancedHint')}>
+                            {t('config.tierAdvanced')}
+                          </span>
+                        {/if}
                         {#if field.source}
                           <span class="source source--{field.source}" title={sourceText(field)}>
                             {sourceText(field)}
@@ -711,6 +751,17 @@
     outline: none;
   }
 
+  .advanced-toggle {
+    flex: none;
+    color: var(--muted);
+  }
+
+  .advanced-toggle--on {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
   .config-note {
     flex: 1 1 100%;
     margin: 0;
@@ -930,6 +981,17 @@
     text-overflow: ellipsis;
     text-transform: uppercase;
     white-space: nowrap;
+  }
+
+  .tier {
+    flex: none;
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
   .source--file {

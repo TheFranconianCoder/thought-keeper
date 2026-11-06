@@ -383,12 +383,15 @@ func (a *App) reconcileWorker() {
 	for {
 		interval, err := time.ParseDuration(a.conf().Pipeline.ReconcileInterval)
 		if err != nil || interval <= 0 {
+			// The consistency pass is off. Keep the loop alive for the assistant's prune, which has
+			// its own cadence and must not disappear with the reconcile interval.
 			timer := time.NewTimer(time.Minute)
 			select {
 			case <-a.quit:
 				timer.Stop()
 				return
 			case <-timer.C:
+				a.pruneTick(context.Background())
 				continue
 			}
 		}
@@ -398,8 +401,37 @@ func (a *App) reconcileWorker() {
 			timer.Stop()
 			return
 		case <-timer.C:
+			a.pruneTick(context.Background())
 			a.reconcile("periodic")
 		}
+	}
+}
+
+// pruneTick enforces the assistant's retention when its cadence is due. An empty or unusable value
+// means "off"; nextPrune is then moved forward, so enabling the cadence prunes on the next tick.
+func (a *App) pruneTick(ctx context.Context) {
+	raw := a.conf().Assistant.PruneInterval
+	interval, err := time.ParseDuration(raw)
+	if err != nil || interval <= 0 {
+		if raw != "" && raw != a.pruneWarned {
+			a.log.Warn("assistant: invalid prune_interval; the prune stays off", "value", raw, "err", err)
+			a.pruneWarned = raw
+		}
+		a.nextPrune = time.Now()
+		return
+	}
+	a.pruneWarned = ""
+	if time.Now().Before(a.nextPrune) {
+		return
+	}
+	a.nextPrune = time.Now().Add(interval)
+	if n, pErr := a.deps().PruneCommands.Prune(ctx); pErr != nil {
+		a.log.Warn("assistant: pruning the command history failed", "err", pErr)
+	} else if n > 0 {
+		a.log.Info("assistant: pruned expired commands", "removed", n)
+		a.publish("command", map[string]any{"status": "pruned", "removed": n})
+	} else {
+		a.log.Debug("assistant: no expired commands")
 	}
 }
 
@@ -434,20 +466,6 @@ func (a *App) reconcile(reason string) {
 		}
 	}
 	a.reconcileOffset = res.Next
-	// The assistant's history has an expiry, enforced on its own cadence: a 7-day window does not
-	// need a per-minute walk over commands/. Once a day (and once right after start) is enough —
-	// a command that lives an hour longer costs nothing.
-	if a.pruneInterval > 0 && !time.Now().Before(a.nextPrune) {
-		a.nextPrune = time.Now().Add(a.pruneInterval)
-		if n, pErr := a.deps().PruneCommands.Prune(ctx); pErr != nil {
-			a.log.Warn("assistant: pruning the command history failed", "err", pErr)
-		} else if n > 0 {
-			a.log.Info("assistant: pruned expired commands", "removed", n)
-			a.publish("command", map[string]any{"status": "pruned", "removed": n})
-		} else {
-			a.log.Debug("assistant: no expired commands")
-		}
-	}
 	if err == nil && a.deps().Reconcile.Index != nil {
 		// The backlog the Status lens shows. A walk that starts at the first source starts a new
 		// measurement; every slice of the walk adds what it found, so a sliced walk still shows the
