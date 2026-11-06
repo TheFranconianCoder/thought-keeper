@@ -49,3 +49,16 @@ type ConfigField struct {
 	// Options lists the accepted values of an enumeration.
 	Options []string `json:"options,omitempty"`
 }
+
+// ConfigWrite is one patch from the overlay: only the keys the reader changed, with the values in
+// their JSON shapes (string, boolean, number, list).
+type ConfigWrite struct {
+	Values map[string]any `json:"values"`
+}
+
+// ConfigWriteResult answers a patch. The file is written synchronously; the apply runs in-process and
+// is queued behind the gate, so the running view may still be the old one when this is returned.
+type ConfigWriteResult struct {
+	Queued bool   `json:"queued"`
+	Config Config `json:"config"`
+}

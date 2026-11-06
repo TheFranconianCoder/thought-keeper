@@ -233,16 +233,16 @@ func TestDescribeNamesKindsAndApplyBehaviour(t *testing.T) {
 		kind    string
 		restart bool
 	}{
-		{"capture.refresh_interval", "duration", true},
+		{"capture.refresh_interval", "duration", false},
 		{"pipeline.auto_distill", "bool", false},
-		{"pipeline.auto", "bool", true},
+		{"pipeline.auto", "bool", false},
 		{"vault.root", "path", true},
 		{"vault.trash", "path", true},
 		{"vault.git.ignore_derived", "bool", true},
-		{"ocr.languages", "list", true},
+		{"ocr.languages", "list", false},
 		{"pdf.text_tool", "tool", true},
 		{"ocr.rasterizer", "tool", true},
-		{"browser.path", "tool", true},
+		{"browser.path", "tool", false},
 		{"browser.wait_until", "string", true},
 	}
 	for _, tc := range cases {
@@ -253,8 +253,8 @@ func TestDescribeNamesKindsAndApplyBehaviour(t *testing.T) {
 		if field.Restart != tc.restart {
 			t.Errorf("%s restart = %v, want %v", tc.key, field.Restart, tc.restart)
 		}
-		if field.Writable {
-			t.Errorf("%s is writable in part 1", tc.key)
+		if field.Writable != Writable(tc.key) {
+			t.Errorf("%s writable = %v, want %v", tc.key, field.Writable, Writable(tc.key))
 		}
 	}
 	if got := findField(t, view, "browser.wait_until").Options; len(got) != 3 {

@@ -20,6 +20,15 @@
   let error = $state('');
   let query = $state('');
   let panel: HTMLDivElement | undefined = $state();
+  // A writable knob is edited in place: draft holds the input values, original the values the running
+  // configuration has. Only the differing keys travel on Save.
+  let draft = $state<Record<string, string | boolean>>({});
+  let original = $state<Record<string, string | boolean>>({});
+  let saving = $state(false);
+  let applying = $state(false);
+  let saveError = $state('');
+  // A writable value is edited only on instruction: the pencil opens that row, Save commits it.
+  let editing = $state<string[]>([]);
 
   const shown = $derived.by(() => {
     const needles = query.trim().toLowerCase();
@@ -89,6 +98,15 @@
     return String(value);
   }
 
+  // A boolean shows its DRAFT while the row is open, in the same span as the read-only value: the
+  // checkbox appears beside it and never replaces the text, so the line cannot reflow.
+  function boolText(field: ConfigFieldView): string {
+    if (isEditing(field.key) && typeof draft[field.key] === 'boolean') {
+      return draft[field.key] === true ? t('config.on') : t('config.off');
+    }
+    return valueText(field);
+  }
+
   function sourceText(field: ConfigFieldView): string {
     switch (field.source) {
       case 'environment':
@@ -100,11 +118,153 @@
     }
   }
 
+  // The value a text input shows: a boolean as a checkbox state, a list as a comma-separated line,
+  // everything else as the string the writer expects.
+  function inputValue(field: ConfigFieldView): string | boolean {
+    if (field.kind === 'bool') return field.value === true;
+    if (field.kind === 'list') return Array.isArray(field.value) ? field.value.join(', ') : '';
+    if (field.value === null || field.value === undefined) return '';
+    return String(field.value);
+  }
+
+  function initDrafts(v: ConfigView): void {
+    const next: Record<string, string | boolean> = {};
+    for (const section of v.sections) {
+      for (const field of section.fields) {
+        if (field.writable && field.source !== 'environment') next[field.key] = inputValue(field);
+      }
+    }
+    draft = next;
+    original = { ...next };
+    editing = [];
+  }
+
+  function editable(field: ConfigFieldView): boolean {
+    return field.writable && field.source !== 'environment';
+  }
+
+  function fieldByKey(key: string): ConfigFieldView | undefined {
+    for (const section of view?.sections ?? []) {
+      for (const field of section.fields) if (field.key === key) return field;
+    }
+    return undefined;
+  }
+
+  const dirtyKeys = $derived(Object.keys(draft).filter((key) => draft[key] !== original[key]));
+
+  function setDraft(key: string, value: string | boolean): void {
+    draft = { ...draft, [key]: value };
+  }
+
+  function isEditing(key: string): boolean {
+    return editing.includes(key);
+  }
+
+  function startEdit(key: string): void {
+    if (!editing.includes(key)) editing = [...editing, key];
+    void tick().then(() => document.getElementById(`config-input-${key}`)?.focus());
+  }
+
+  function cancelEdit(key: string): void {
+    draft = { ...draft, [key]: original[key] };
+    editing = editing.filter((item) => item !== key);
+  }
+
+  function revert(): void {
+    draft = { ...original };
+    editing = [];
+    saveError = '';
+  }
+
+  function values(): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const key of dirtyKeys) {
+      const field = fieldByKey(key);
+      if (!field) continue;
+      const raw = draft[key];
+      switch (field.kind) {
+        case 'bool':
+          out[key] = raw === true;
+          break;
+        case 'int':
+        case 'float': {
+          const n = Number(raw);
+          // An unparseable number goes to the server as the raw string, so Validate can say why.
+          out[key] = Number.isFinite(n) ? n : String(raw);
+          break;
+        }
+        case 'list':
+          out[key] = String(raw)
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean);
+          break;
+        default:
+          out[key] = String(raw);
+      }
+    }
+    return out;
+  }
+
+  async function save(): Promise<void> {
+    if (!dirtyKeys.length || saving) return;
+    saving = true;
+    saveError = '';
+    try {
+      const result = await api.saveConfig(values());
+      view = result.config; // the running view; changed is still true until the apply lands
+      await waitApplied();
+    } catch (err) {
+      saveError = humanError(err);
+      toast(saveError, 'error');
+    } finally {
+      saving = false;
+    }
+  }
+
+  // The file is written before the answer, the apply runs in-process. Poll the read until the file
+  // and the running configuration agree; the apply waits for the exclusive gate, so this can take
+  // as long as the step that is running.
+  async function waitApplied(): Promise<void> {
+    applying = true;
+    try {
+      for (let attempt = 0; attempt < 60; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const next = await api.config();
+        if (!next.changed) {
+          view = next;
+          initDrafts(next);
+          toast(t('config.applied'), 'success');
+          return;
+        }
+      }
+    } catch (err) {
+      saveError = humanError(err);
+    } finally {
+      applying = false;
+    }
+  }
+
+  // The file may have been edited over SSH; apply it as it is, without a restart.
+  async function applyFile(): Promise<void> {
+    if (applying || saving) return;
+    saveError = '';
+    try {
+      const result = await api.reloadConfig();
+      view = result.config;
+      await waitApplied();
+    } catch (err) {
+      saveError = humanError(err);
+      toast(saveError, 'error');
+    }
+  }
+
   async function load(): Promise<void> {
     loading = true;
     error = '';
     try {
       view = await api.config();
+      initDrafts(view);
     } catch (err) {
       error = humanError(err);
     } finally {
@@ -182,10 +342,24 @@
         {/if}
       </div>
 
-      {#if view?.changed}
+      {#if applying}
+        <p class="config-notice notice notice--warn">
+          <Icon name="refresh" size={14} />
+          <span>{t('config.applying')}</span>
+        </p>
+      {:else if view?.changed}
         <p class="config-notice notice notice--warn">
           <Icon name="clock" size={14} />
           <span>{t('config.changed')}</span>
+          <button class="btn btn--secondary btn--sm notice-action" onclick={() => void applyFile()}>
+            {t('config.apply')}
+          </button>
+        </p>
+      {/if}
+      {#if saveError}
+        <p class="config-notice notice notice--error">
+          <Icon name="warning" size={14} />
+          <span>{saveError}</span>
         </p>
       {/if}
       {#if view?.error}
@@ -237,24 +411,105 @@
                     </span>
                     <span class="row-value">
                       <span class="value-line">
+                        <!-- The value is ALWAYS in the layout: the pencil opens an input that is
+                             laid over it, so the row keeps its width, height and baseline. -->
                         <span
-                          class="value mono"
-                          class:value--secret={field.secret}
-                          title={field.secret
-                            ? t('config.secretHint')
-                            : field.kind === 'path' || field.kind === 'tool'
-                              ? String(field.value ?? field.lookup ?? '')
-                              : ''}
-                        >{valueText(field)}</span>
+                          class="row-control"
+                          class:row-control--editing={editable(field) && isEditing(field.key)}
+                        >
+                          {#if editable(field) && field.kind === 'bool'}
+                            <span class="row-bool">
+                              <span class="value mono">{boolText(field)}</span>
+                              {#if isEditing(field.key)}
+                                <input
+                                  id={`config-input-${field.key}`}
+                                  class="row-checkbox"
+                                  type="checkbox"
+                                  checked={draft[field.key] === true}
+                                  disabled={saving || applying}
+                                  aria-label={name(field)}
+                                  title={t('config.writableHint')}
+                                  onchange={(event) => setDraft(field.key, event.currentTarget.checked)}
+                                  onkeydown={(event) => {
+                                    if (event.key === 'Enter') {
+                                      event.preventDefault();
+                                      void save();
+                                    }
+                                    if (event.key === 'Escape') {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      cancelEdit(field.key);
+                                    }
+                                  }}
+                                />
+                              {/if}
+                            </span>
+                          {:else}
+                            <span
+                              class="value mono"
+                              class:value--secret={field.secret}
+                              class:value--hidden={editable(field) && isEditing(field.key)}
+                              title={field.secret
+                                ? t('config.secretHint')
+                                : field.kind === 'path' || field.kind === 'tool'
+                                  ? String(field.value ?? field.lookup ?? '')
+                                  : ''}
+                            >{valueText(field)}</span>
+                            {#if editable(field) && isEditing(field.key)}
+                              <input
+                                id={`config-input-${field.key}`}
+                                class="input row-input"
+                                class:row-input--dirty={draft[field.key] !== original[field.key]}
+                                type={field.kind === 'int' || field.kind === 'float' ? 'number' : 'text'}
+                                value={String(draft[field.key] ?? '')}
+                                disabled={saving || applying}
+                                placeholder={field.kind === 'list' ? t('config.listPlaceholder') : ''}
+                                oninput={(event) => setDraft(field.key, event.currentTarget.value)}
+                                onkeydown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    void save();
+                                  }
+                                  if (event.key === 'Escape') {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    cancelEdit(field.key);
+                                  }
+                                }}
+                              />
+                            {/if}
+                          {/if}
+                        </span>
                         {#if field.source}
                           <span class="source source--{field.source}" title={sourceText(field)}>
                             {sourceText(field)}
                           </span>
                         {/if}
-                        {#if !field.restart}
+                        {#if !field.restart && field.writable && field.source !== 'environment'}
                           <span class="live" title={t('config.liveHint')}>
                             <Icon name="refresh" size={10} /> {t('config.live')}
                           </span>
+                        {/if}
+                        {#if editable(field)}
+                          {#if isEditing(field.key)}
+                            <button
+                              class="icon-btn row-cancel"
+                              title={t('config.cancelEdit')}
+                              aria-label={t('config.cancelEdit')}
+                              onclick={() => cancelEdit(field.key)}
+                            >
+                              <Icon name="close" size={11} />
+                            </button>
+                          {:else}
+                            <button
+                              class="icon-btn row-edit"
+                              title={t('config.editValue')}
+                              aria-label={t('config.editValue')}
+                              onclick={() => startEdit(field.key)}
+                            >
+                              <Icon name="edit" size={11} />
+                            </button>
+                          {/if}
                         {/if}
                       </span>
                       {#if field.kind === 'tool' || field.kind === 'path'}
@@ -275,6 +530,23 @@
             </section>
           {/each}
         {/if}
+      </div>
+
+      <div class="config-foot">
+        <span class="muted small">
+          {#if dirtyKeys.length}{t('config.dirty', { count: dirtyKeys.length })}{:else}{t('config.unchanged')}{/if}
+        </span>
+        <span class="grow"></span>
+        <button class="btn btn--ghost btn--sm" disabled={!dirtyKeys.length || saving || applying} onclick={revert}>
+          {t('config.revert')}
+        </button>
+        <button
+          class="btn btn--primary btn--sm"
+          disabled={!dirtyKeys.length || saving || applying}
+          onclick={() => void save()}
+        >
+          {saving ? t('config.saving') : t('config.save')}
+        </button>
       </div>
     </div>
   </div>
@@ -550,6 +822,87 @@
     color: var(--warning);
   }
 
+  /* The value's own text decides the box; the input is laid over it and never reflows the row. */
+  .row-control {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: min(150px, 38vw);
+    min-height: 24px;
+  }
+
+  .value--hidden {
+    visibility: hidden;
+  }
+
+  .row-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 2px 7px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+  }
+
+  .row-input--dirty {
+    border-color: var(--accent);
+  }
+
+  /* The text is the value itself; the checkbox hangs to its LEFT, outside the flow. The text keeps
+     its exact position, font and width when the row is opened. */
+  .row-bool {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .row-checkbox {
+    position: absolute;
+    top: 50%;
+    right: calc(100% + 8px);
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+    transform: translateY(-50%);
+  }
+
+  .row-edit {
+    flex: none;
+    color: var(--faint);
+  }
+
+  .row-edit:hover {
+    color: var(--accent);
+  }
+
+  .row-cancel {
+    flex: none;
+    color: var(--muted);
+  }
+
+  .notice-action {
+    flex: none;
+    margin-left: auto;
+  }
+
+  .config-foot {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--line);
+    background: var(--bg-elevated);
+  }
+
+  .config-foot .grow {
+    flex: 1;
+  }
+
   .value {
     overflow: hidden;
     color: var(--ink-2);
@@ -625,6 +978,7 @@
     }
 
     .value-line {
+      flex-wrap: wrap;
       justify-content: flex-start;
     }
 

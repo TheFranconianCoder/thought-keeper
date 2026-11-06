@@ -28,20 +28,21 @@ type Gate interface {
 // Deps are the handlers the router mounts.
 type Deps struct {
 	Status handlers.StatusProvider
-	// Config is the running configuration for the Config overlay. Nil (a hand-built router) means the
-	// route is not registered.
-	Config     handlers.ConfigProvider
-	Sources    handlers.SourcesHandler
-	Add        handlers.AddHandler
-	URL        handlers.URLHandler
-	Reindex    handlers.ReindexHandler
-	Vocabulary handlers.VocabularyHandler
-	Tree       handlers.TreeHandler
-	Atoms      handlers.AtomHandler
-	Wiki       handlers.WikiHandler
-	Interests  handlers.InterestHandler
-	Search     handlers.SearchHandler
-	Asks       handlers.AskHandler
+	// Config is the running configuration for the Config overlay; ConfigWriter is its patch endpoint.
+	// Nil (a hand-built router) means the route is not registered.
+	Config       handlers.ConfigProvider
+	ConfigWriter handlers.ConfigWriter
+	Sources      handlers.SourcesHandler
+	Add          handlers.AddHandler
+	URL          handlers.URLHandler
+	Reindex      handlers.ReindexHandler
+	Vocabulary   handlers.VocabularyHandler
+	Tree         handlers.TreeHandler
+	Atoms        handlers.AtomHandler
+	Wiki         handlers.WikiHandler
+	Interests    handlers.InterestHandler
+	Search       handlers.SearchHandler
+	Asks         handlers.AskHandler
 	// Commands is the assistant: one utterance in, one address out. It publishes its own SSE frame,
 	// so a client that did not send the request still follows it.
 	Commands handlers.CommandHandler
@@ -119,11 +120,16 @@ func New(deps Deps, web http.Handler) http.Handler {
 		// done. The embedded PWA's own assets are outside this group and always load.
 		r.Use(readOnlyWhileRebuilding(deps.Repairing))
 		r.Get("/status", handlers.StatusHandler{Provider: deps.Status}.Get)
-		// The Config overlay's read: the running configuration with each value's origin, the file it
-		// came from, and whether the file on disk still matches. It is a read of the process, so the
-		// repair guard is irrelevant.
+		// The Config overlay's read and write: the running configuration with each value's origin,
+		// the file it came from, and whether the file on disk still matches. A read of the process, so
+		// the repair guard is irrelevant; the PUT rewrites the YAML and queues an in-process apply.
+		configHandler := handlers.ConfigHandler{Provider: deps.Config, Writer: deps.ConfigWriter}
 		if deps.Config != nil {
-			r.Get("/config", handlers.ConfigHandler{Provider: deps.Config}.Get)
+			r.Get("/config", configHandler.Get)
+		}
+		if deps.ConfigWriter != nil {
+			r.Put("/config", configHandler.Put)
+			r.Post("/config/reload", configHandler.Reload)
 		}
 		// The global pipeline status: documents (capture/outline/distill) or the cluster step —
 		// never both, which is the whole point of the strict separation.

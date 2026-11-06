@@ -6,7 +6,16 @@ import (
 	"time"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
+	"github.com/TheFranconianCoder/thought-keeper/internal/registry"
 )
+
+// stepsApp is the smallest App a barrier test needs: the step records are the only use case it reads.
+func stepsApp(recs interfaces.StepTracker) *App {
+	a := &App{}
+	a.depsPtr.Store(&registry.Deps{Steps: recs})
+	return a
+}
 
 type barrierSteps map[string]entities.SourceRecord
 
@@ -53,7 +62,7 @@ func TestFeedAndSitemapAreNeverTheBarrier(t *testing.T) {
 			Steps:    entities.NewStepSet().With(entities.StepCapture, ok).With(entities.StepOutline, ok).With(entities.StepDistill, ok),
 		},
 	}
-	a := &App{steps: recs}
+	a := stepsApp(recs)
 	for _, step := range []entities.Step{entities.StepOutline, entities.StepDistill, entities.StepCluster} {
 		if !a.stepBarrierAllows(step) {
 			t.Errorf("%s must not wait for a feed or a sitemap", step)
@@ -79,7 +88,7 @@ func TestACollectedLinkIsNeverTheBarrier(t *testing.T) {
 			Steps:    entities.NewStepSet().With(entities.StepCapture, ok),
 		},
 	}
-	a := &App{steps: recs}
+	a := stepsApp(recs)
 
 	for _, step := range []entities.Step{entities.StepOutline, entities.StepDistill, entities.StepCluster} {
 		if !a.stepBarrierAllows(step) {
@@ -114,7 +123,7 @@ func TestAFailedStepDoesNotHoldTheBarrier(t *testing.T) {
 			Steps:    entities.NewStepSet().With(entities.StepCapture, ok).With(entities.StepOutline, ok).With(entities.StepDistill, failed),
 		},
 	}
-	a := &App{steps: recs}
+	a := stepsApp(recs)
 
 	if !a.stepBarrierAllows(entities.StepCluster) {
 		t.Error("a failed distill must not hold the cluster step")
@@ -129,7 +138,7 @@ func TestAFailedStepDoesNotHoldTheBarrier(t *testing.T) {
 			Steps:    entities.NewStepSet().With(entities.StepCapture, ok).With(entities.StepOutline, failed),
 		},
 	}
-	a = &App{steps: broken}
+	a = stepsApp(broken)
 	if !a.stepBarrierAllows(entities.StepDistill) {
 		t.Error("a failed outline must not hold another source's distill")
 	}
@@ -154,7 +163,8 @@ func TestAPendingPageFetchIsNotTheBarrier(t *testing.T) {
 			Steps:    entities.NewStepSet().With(entities.StepCapture, pending),
 		},
 	}
-	a := &App{steps: recs, urlPending: map[string]bool{"b.pdf": true}}
+	a := stepsApp(recs)
+	a.urlPending = map[string]bool{"b.pdf": true}
 
 	for _, step := range []entities.Step{entities.StepOutline, entities.StepDistill, entities.StepCluster} {
 		if !a.stepBarrierAllows(step) {
@@ -178,7 +188,7 @@ func TestGlobalStepBarrier(t *testing.T) {
 		"a.pdf": {Identity: entities.SourceIdentity{Kind: entities.SourceKindPDF}, Steps: entities.NewStepSet().With(entities.StepCapture, ok).With(entities.StepOutline, ok).With(entities.StepDistill, ok)},
 		"b.pdf": {Identity: entities.SourceIdentity{Kind: entities.SourceKindPDF}, Steps: entities.NewStepSet().With(entities.StepCapture, pending)},
 	}
-	a := &App{steps: recs}
+	a := stepsApp(recs)
 
 	if a.stepBarrierAllows(entities.StepOutline) {
 		t.Error("outline must wait for every source to finish capture")

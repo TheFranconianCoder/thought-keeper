@@ -11,6 +11,7 @@ import type {
   CommandContext,
   CommandList,
   ConfigView,
+  ConfigWriteResult,
   DeleteResult,
   DistillResponse,
   FindingList,
@@ -59,6 +60,11 @@ export const api = {
   pipeline: () => request<Pipeline>('/pipeline'),
   // The Config overlay reads the RUNNING configuration: values, origins and drift.
   config: () => request<ConfigView>('/config'),
+  /** saveConfig writes a patch; the answer carries the running view, the apply is queued. */
+  saveConfig: (values: Record<string, unknown>) =>
+    request<ConfigWriteResult>('/config', json('PUT', { values })),
+  /** reloadConfig applies the file as it is on disk (the SSH-edit path). */
+  reloadConfig: () => request<ConfigWriteResult>('/config/reload', { method: 'POST' }),
 
   // ── Sources ────────────────────────────────────────────────────────────
   sources: (filter: SourceListFilter = {}, limit = 200, offset = 0, signal?: AbortSignal) =>

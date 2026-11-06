@@ -36,7 +36,8 @@ func publishWrites(hub *stream.Hub) func(http.Handler) http.Handler {
 			// READ that happens to write its own record: it announces itself with its own frame, and
 			// reloading every container for it was a full list read behind every keystroke of the
 			// assistant's field.
-			if strings.Contains(r.URL.Path, "/window/") || strings.HasPrefix(r.URL.Path, "/api/v1/commands") {
+			if strings.Contains(r.URL.Path, "/window/") || strings.HasPrefix(r.URL.Path, "/api/v1/commands") ||
+				strings.HasPrefix(r.URL.Path, "/api/v1/config") {
 				next.ServeHTTP(w, r)
 				return
 			}

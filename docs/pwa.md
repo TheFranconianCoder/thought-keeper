@@ -130,17 +130,20 @@ open, and the Start lens lists the three latest QUESTIONS, which are answers the
 - **Dialogs and overlays are query parameters too** (`withParam` / `withoutParams`), so closing an
   overlay does not lose the reader's place.
 - **The Config overlay** (`?config=1`, the gear in the top bar, `&field=<key>` to land on one knob)
-  is a read of the **running** configuration: sections in file order, each knob with its origin (the
-  config file, the environment with the variable's name, or the code's default), and the two knobs that
-  apply without a restart marked **live**. A path or tool knob also shows the absolute path the
-  process actually uses — the vault directory, or the binary found on PATH — or **not found**,
-  named after what was searched for (`lightpanda` when `browser.path` is empty). The first line is
-  the short name: an absolute configured path is shortened to its base name, so every path row reads
-  short name first, absolute path second. Secrets are
-  *set* / *not set*, never values. When the file
-  on disk no longer matches what the process runs, the overlay says so; a broken file is reported
-  while the running values stay readable. A missing capability chip on Status is a link to the knob
-  that fixes it, and a field in the address is a NAME, never free text.
+  shows the **running** configuration: sections in file order, each knob with its origin (the config
+  file, the environment with the variable's name, or the code's default). A **curated Tier 1 set is
+  editable**: a faint **pencil** opens one row in place — the input is laid over the value, or a
+  checkbox sits beside it for a switch — so the row keeps its width, height and baseline (Enter
+  saves, Escape closes the row). The Save/Revert footer writes the file and applies it in the
+  running process — the overlay says *Applying in-process…* and follows the read until the file
+  and the process agree. Nothing is a form by default: a value is text until its pencil is pressed. When the file on disk differs (an edit over SSH), **Apply the file** appears.
+  Everything else is read-only with its reason. A path or tool knob also shows the absolute path the
+  process actually uses — the vault directory, or the binary found on PATH — or **not found**, named
+  after what was searched for (`lightpanda` when `browser.path` is empty). The first line is the
+  short name, the second the absolute path, and the config key is the subline of every row. Secrets
+  are *set* / *not set*, never values. A broken file is reported while the running values stay
+  readable. A missing capability chip on Status is a link to the knob that fixes it, and a field in
+  the address is a NAME, never free text.
 - **The theme toggle has three states**: light / dark / auto (follows the system), persisted in
   `localStorage`.
 - **A second window focuses the first** (BroadcastChannel election).

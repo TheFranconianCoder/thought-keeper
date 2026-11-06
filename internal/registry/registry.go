@@ -89,6 +89,10 @@ type Deps struct {
 	// the reader's rules and a strong match joins the read-later queue.
 	MatchSourceInterests usecases.ReadLater
 	AgentAvailable       bool
+	// PDFAvailable and OCRAvailable are the probes the Status lens shows; the extractor was built with
+	// these tools, so a config apply that changes them must replace the Deps to change the answer.
+	PDFAvailable bool
+	OCRAvailable bool
 	// BrowserAvailable says whether the local rendering engine was found. The reader sees it in
 	// Status, and it explains why a JavaScript page is a bookmark.
 	BrowserAvailable bool
@@ -108,6 +112,7 @@ func Build(
 	db *sql.DB,
 	status handlers.StatusProvider,
 	configProvider handlers.ConfigProvider,
+	configWriter handlers.ConfigWriter,
 	onAdded func(hash string),
 	onRemoved func(hash string),
 	onTag func(pageID string),
@@ -145,6 +150,8 @@ func Build(
 	commandStore := commands.New(cfg.CommandsDir())
 	clock := gateways.SystemClock{}
 	runner := gateways.ExecRunner{}
+	pdfAvailable := runner.Available(cfg.PDF.TextTool)
+	ocrAvailable := runner.Available(cfg.OCR.Rasterizer) && runner.Available(cfg.OCR.Tesseract)
 	languages := langdetect.Detector{}
 
 	fetchTimeout := durationOr(cfg.Fetch.Timeout, 30*time.Second, log, "fetch.timeout")
@@ -387,11 +394,12 @@ func Build(
 	hasAtoms, withoutAtoms, openParts, withoutTree := sources, sources, sources, sources
 
 	h := router.New(router.Deps{
-		Status:    status,
-		Config:    configProvider,
-		Pipeline:  handlers.PipelineHandler{Pipeline: pipeline},
-		Cluster:   handlers.ClusterHandler{Runs: clusterQueue},
-		Reconcile: handlers.ReconcileHandler{Runs: reconciler},
+		Status:       status,
+		Config:       configProvider,
+		ConfigWriter: configWriter,
+		Pipeline:     handlers.PipelineHandler{Pipeline: pipeline},
+		Cluster:      handlers.ClusterHandler{Runs: clusterQueue},
+		Reconcile:    handlers.ReconcileHandler{Runs: reconciler},
 		Sources: handlers.SourcesHandler{
 			Lister: sources.List, Counter: sources.Count, Facets: sources.Facets, ChildLister: sources.Children,
 			Queue:     sources.ReadLaterCounts,
@@ -490,6 +498,8 @@ func Build(
 		PruneWikiLinks:         wiki,
 		MatchSourceInterests:   readLater,
 		AgentAvailable:         agentOK,
+		PDFAvailable:           pdfAvailable,
+		OCRAvailable:           ocrAvailable,
 		BrowserAvailable:       renderer != nil,
 		BrowserTool:            browserToolName(cfg.Browser.Path),
 	}

@@ -71,19 +71,14 @@ type Field struct {
 	// Secret means the value must never leave the process: only Set says whether it has one.
 	Secret bool
 	Set    bool
-	// Restart means a change applies only after a new process. Live knobs are the exception.
+	// Restart means a change would need a new process. Part 2 applies every WRITABLE knob in-process,
+	// so only a read-only field (a vault path, the listener) is marked this way.
 	Restart bool
-	// Writable is always false in part 1. Part 2 opens the curated allowlist.
+	// Writable says the Config overlay may write this key (the Tier 1 allowlist). An environment-owned
+	// value is still refused by the writer.
 	Writable bool
 	// Options lists the accepted values when the knob is an enumeration.
 	Options []string
-}
-
-// liveKeys apply without a new process today: the scheduler reads them from the running
-// configuration, everything else was captured when the wiring was built.
-var liveKeys = map[string]bool{
-	"pipeline.auto_distill": true,
-	"pipeline.debounce":     true,
 }
 
 var optionsKeys = map[string][]string{
@@ -280,8 +275,8 @@ func collectFields(node *yaml.Node, prefix string, out *[]Field) {
 	field := Field{
 		Key:      prefix,
 		Kind:     kindOf(prefix, node),
-		Restart:  !liveKeys[prefix],
-		Writable: false,
+		Restart:  !Writable(prefix),
+		Writable: Writable(prefix),
 		Options:  optionsKeys[prefix],
 	}
 	if prefix == "openai.api_key" {

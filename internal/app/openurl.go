@@ -28,7 +28,7 @@ func OpenURL(url string) error {
 // the OS URL handler. `smart_open: false` keeps the plain OS handler.
 func (a *App) openURL() {
 	url := a.uiURL()
-	if !a.cfg.App.SmartOpen {
+	if !a.conf().App.SmartOpen {
 		a.openWithOSHandler(url)
 		return
 	}

@@ -4,8 +4,9 @@
 #
 # The app reads this file at request time for the Config overlay (the gear in the PWA's top bar) and
 # reports the RUNNING values with their origin: this file, the environment, or the code's default.
-# Most knobs are read when the app starts, so a change applies after a restart; pipeline.auto_distill
-# and pipeline.debounce are read live.
+# A curated Tier 1 set (language, models/efforts, pipeline counts and cadences, browser/OCR, the heap
+# ceiling) can be changed in the overlay and is applied in the running process; everything else is
+# read at start-up and stays read-only in the overlay.
 
 app:
     # The app never launches a browser: it logs the address and the tray can show it.

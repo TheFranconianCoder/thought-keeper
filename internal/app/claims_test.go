@@ -13,6 +13,8 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
+	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/config"
+	"github.com/TheFranconianCoder/thought-keeper/internal/registry"
 )
 
 // fakeRuns records the run rows the app closes; the rest of the audit is irrelevant here.
@@ -50,8 +52,9 @@ func claimApp(runs *fakeRuns) *App {
 		executing:     map[string]entities.Step{},
 		progress:      map[string]runProgress{},
 		stalled:       map[string]int{},
-		startRun:      usecases.Runs{Store: runs, Clock: systemClock{}},
 	}
+	a.setConfig(config.Defaults())
+	a.depsPtr.Store(&registry.Deps{StartRun: usecases.Runs{Store: runs, Clock: systemClock{}}})
 	return a
 }
 
@@ -138,9 +141,11 @@ func TestOnePumpPassClaimsOnlyAWindow(t *testing.T) {
 		}
 	}
 	a := claimApp(&fakeRuns{})
-	a.steps = records
-	a.cfg.Pipeline.ParallelRuns = 4
-	a.cfg.Pipeline.AutoDistill = true
+	a.deps().Steps = records
+	cfg := a.conf()
+	cfg.Pipeline.ParallelRuns = 4
+	cfg.Pipeline.AutoDistill = true
+	a.setConfig(cfg)
 	a.distillQueue = make(chan runJob, 256)
 
 	a.pumpOnce("test")

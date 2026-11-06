@@ -61,17 +61,26 @@ code (ISO 639-3 when no 639-1 exists). Changing a content language affects **new
 claims and overviews are records written in the old language and are never rewritten behind the
 reader's back; a reset / rewrite is the explicit way to derive them again.
 
-**Reading the configuration in the app.** The gear in the top bar opens the **Config overlay**
-(`?config=1`). It is a read of the **running process**: every section and knob in file order, the
-origin of each value — the config file, the environment (with the variable's name, e.g. `OPENAI_MODEL`) or
-the code's default — and whether a change applies at once or only after a restart. Only
-`pipeline.auto_distill` and `pipeline.debounce` are read live today; everything else was captured when
-the wiring was built. A path or tool knob shows the absolute path the process uses (a bare
-`pdftotext` is resolved on PATH, and *not found* is said plainly). The overlay re-reads the file on
-every request: when it no longer matches what
-the process runs (an edit over SSH), it says so. Secrets stay where they are: `openai.api_key` is
-reported as *set* or *not set*, never as a value, and `openai.headers` reveals only the header names.
-The overlay writes nothing in this version.
+**The configuration in the app.** The gear in the top bar opens the **Config overlay**
+(`?config=1`). It shows the **running process**: every section and knob in file order, the origin of
+each value — the config file, the environment (with the variable's name, e.g. `OPENAI_MODEL`) or the
+code's default — and whether a change applies in the running process. A path or tool knob shows the
+absolute path the process uses (a bare `pdftotext` is resolved on PATH, and *not found* is said
+plainly). The overlay re-reads the file on every request: when it no longer matches what the process
+runs (an edit over SSH), it says so.
+
+A **curated Tier 1 set is writable**: language, the models and reasoning efforts, the inbox /
+auto-distill / debounce knobs, parallel runs/queries/parts, the capture cadences, `browser.path`, OCR
+enable/languages and the heap ceiling. Saving writes the YAML first (comments preserved, `${VAR}`
+kept as a reference, the old bytes in `<file>.bak`, revalidated) and then **applies it in the running
+process**: the wiring is rebuilt and swapped behind the exclusive gate, so a running document or
+cluster step finishes first and no use case is mutated under a run. The answer says the apply is
+queued; the overlay follows the read until the file and the process agree. A change made over SSH is
+applied with **Apply the file**. Everything else is read-only with its reason: `vault.*`,
+`index.*`, `server.addr`, the tray switches, `openai.api_key`/`headers`/`base_url`,
+`fetch.allow_private` and the non-implemented git switches. Secrets stay where they are: the API key
+is reported as *set* or *not set*, never as a value, and `openai.headers` reveals only the header
+names.
 
 Models resolve **env → yaml → default**: `OPENAI_MODEL` sets both, `OPENAI_MODEL_COMPILE` /
 `OPENAI_MODEL_REASON` override one; the same holds for the patience knobs

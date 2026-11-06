@@ -91,8 +91,10 @@ in the source's rail. They are managed in an overlay, and their matches are comp
 index table, no model, no second grouping.
 
 The app's own configuration is readable in the **Config overlay** (`?config=1`, the gear in the top
-bar): every knob with its origin (the file, the environment or a default) and whether a change applies
-at once. Secrets are reported as set, never as values, and the overlay writes nothing yet.
+bar): every knob with its origin (the file, the environment or a default). A curated Tier 1 set is
+**writable** and is applied **in the running process** — the wiring is rebuilt and swapped behind the
+exclusive gate, never mutated under a run. Secrets, environment-owned values and the vault/index paths
+stay read-only.
 
 ## Positioning
 

@@ -241,23 +241,19 @@ are.
 
 ## Config
 
-1. **The Config overlay writes, and the process applies it without a restart.** Today the overlay is
-   read-only. Part 2 is `PUT /api/v1/config` plus an in-process apply: a patch per key, written to the
-   YAML with `yaml.Node` (comments kept, `${VAR}` kept as a reference, `.bak`, atomic replace,
-   revalidated by a second `Load`), then applied by rebuilding the wiring and swapping it atomically
-   (`registry.Build` is already a pure constructor) after taking the exclusive gate — never by
-   mutating a use case a run is reading. `pipeline.auto_distill` and `pipeline.debounce` already
-   apply live. The reason this matters: the app runs headless on a remote Pi, where "restart the
-   app" is not a workflow. Read-only knobs stay `vault.*`, `index.*`, `server.addr` and the tray
-   switches; `openai.api_key` stays an environment decision.
-2. **A `config.Validate`.** Writes need it first: today a malformed duration is silently replaced by
-   its default (`durationOr` logs a warning), so a value that the overlay accepts could still do
-   nothing. Validate positive integers, parseable durations, `browser.wait_until`, loopback `addr`,
-   cluster thresholds in `[0,1]` — and use the same function when loading, as a warning.
-3. **Vault-scoped settings.** `language.claims`, the capture cadences and the cluster gates are
+1. **Vault-scoped settings.** `language.claims`, the capture cadences and the cluster gates are
    properties of the VAULT, but they live in the machine's config file. A vault moved to another
    machine takes its claims but not its claim language. A `vault.yaml` read next to `index.db`
    (machine config overrides, or the other way round) is the likely answer.
-4. **Restart automation, only if it is ever needed.** No editable knob needs a new process once part 2
-   lands. If a future knob does (a listener rebind), prefer `syscall.Exec` in-process on Unix over
-   telling the reader to restart a remote instance — and check the tray and the endpoint file first.
+2. **Tier 2, the expert knobs.** The apply path supports them, but the first writable release keeps
+   the surface to 21 keys. The next slice — behind an "Advanced" reveal — is the model/pipeline
+   timeouts, the reconcile interval, the capture thresholds, `cluster.*`, `assistant.*`, the
+   browser/OCR/PDF/fetch limits and `app.smart_open`.
+3. **The apply is not in the Job Queue.** The PUT writes the file and queues a goroutine; the overlay
+   polls until the file and the process agree. A long document step can make that poll time out (the
+   overlay then shows the drift with Apply). A real job row in Status would name what the apply waits
+   for, like the repair does.
+4. **Restart automation, only if it is ever needed.** No Tier 1 knob needs a new process; the
+   read-only knobs (vault/index paths, the listener, the tray) are deliberately not editable. If a
+   future knob does, prefer `syscall.Exec` in-process on Unix over telling the reader to restart a
+   remote instance — and check the tray and the endpoint file first.

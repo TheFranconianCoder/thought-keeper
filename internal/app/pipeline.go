@@ -379,20 +379,25 @@ const maxClusterNoProgress = 2
 //
 // The walk is sliced (reconcile_batch per tick) and remembers where it stopped.
 func (a *App) reconcileWorker() {
-	interval, err := time.ParseDuration(a.cfg.Pipeline.ReconcileInterval)
-	if err != nil || interval <= 0 {
-		a.log.Info("consistency job disabled", "interval", a.cfg.Pipeline.ReconcileInterval)
-		return
-	}
-	a.log.Info("consistency job enabled", "interval", interval.String(),
-		"batch", a.cfg.Pipeline.ReconcileBatch)
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	// The interval is read on every loop: a config apply changes it without restarting the worker.
 	for {
+		interval, err := time.ParseDuration(a.conf().Pipeline.ReconcileInterval)
+		if err != nil || interval <= 0 {
+			timer := time.NewTimer(time.Minute)
+			select {
+			case <-a.quit:
+				timer.Stop()
+				return
+			case <-timer.C:
+				continue
+			}
+		}
+		timer := time.NewTimer(interval)
 		select {
 		case <-a.quit:
+			timer.Stop()
 			return
-		case <-ticker.C:
+		case <-timer.C:
 			a.reconcile("periodic")
 		}
 	}
@@ -412,8 +417,8 @@ func (a *App) reconcile(reason string) {
 	var res usecases.ReconcileResult
 	var err error
 	startOffset := a.reconcileOffset
-	if a.reconcilePass.Index != nil {
-		check := a.reconcilePass
+	if a.deps().Reconcile.Index != nil {
+		check := a.deps().Reconcile
 		check.Offset = a.reconcileOffset
 		check.DryRun = true
 		res, err = check.Reconcile(ctx)
@@ -421,7 +426,7 @@ func (a *App) reconcile(reason string) {
 			a.log.Info("consistency: repairs needed", "reason", reason,
 				"invalidated", len(res.Invalidated), "broken", len(res.Broken),
 				"languages", res.Languages, "identities", res.Identities, "ownerships", res.Ownerships)
-			pass := a.reconcilePass
+			pass := a.deps().Reconcile
 			pass.Offset = a.reconcileOffset
 			a.gate.Lock()
 			res, err = pass.Reconcile(ctx)
@@ -434,7 +439,7 @@ func (a *App) reconcile(reason string) {
 	// a command that lives an hour longer costs nothing.
 	if a.pruneInterval > 0 && !time.Now().Before(a.nextPrune) {
 		a.nextPrune = time.Now().Add(a.pruneInterval)
-		if n, pErr := a.pruneCommands.Prune(ctx); pErr != nil {
+		if n, pErr := a.deps().PruneCommands.Prune(ctx); pErr != nil {
 			a.log.Warn("assistant: pruning the command history failed", "err", pErr)
 		} else if n > 0 {
 			a.log.Info("assistant: pruned expired commands", "removed", n)
@@ -443,7 +448,7 @@ func (a *App) reconcile(reason string) {
 			a.log.Debug("assistant: no expired commands")
 		}
 	}
-	if err == nil && a.reconcilePass.Index != nil {
+	if err == nil && a.deps().Reconcile.Index != nil {
 		// The backlog the Status lens shows. A walk that starts at the first source starts a new
 		// measurement; every slice of the walk adds what it found, so a sliced walk still shows the
 		// whole picture instead of its last batch.
@@ -499,7 +504,7 @@ func (a *App) requestClusterIfDue(reason string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	srcs, err := a.pendingCluster.WithUnclustered(ctx)
+	srcs, err := a.deps().SourcesWithUnclustered.WithUnclustered(ctx)
 	if err != nil {
 		return
 	}
@@ -545,7 +550,7 @@ func (a *App) requestCluster(reason string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	srcs, err := a.pendingCluster.WithUnclustered(ctx)
+	srcs, err := a.deps().SourcesWithUnclustered.WithUnclustered(ctx)
 	if err != nil {
 		a.log.Warn("cluster: cannot read the backlog", "err", err)
 		return "", err
@@ -554,7 +559,7 @@ func (a *App) requestCluster(reason string) (string, error) {
 		a.log.Debug("cluster pass not needed", "reason", reason)
 		return "", nil
 	}
-	runID, err := a.startRun.Start(ctx, entities.RunPipeline, "", entities.StepCluster, "cluster")
+	runID, err := a.deps().StartRun.Start(ctx, entities.RunPipeline, "", entities.StepCluster, "cluster")
 	if err != nil {
 		a.log.Warn("cluster: cannot start the run", "err", err)
 		return "", err
@@ -570,7 +575,7 @@ func (a *App) requestCluster(reason string) (string, error) {
 		return runID.String(), nil
 	default:
 		// The slot was not there: close the run instead of leaving a `running` row behind.
-		if a.startRun.Abandon(context.Background(), runID, "the cluster queue is full") != nil {
+		if a.deps().StartRun.Abandon(context.Background(), runID, "the cluster queue is full") != nil {
 			a.log.Warn("cluster queue is full — the pass waits for the next trigger", "reason", reason)
 		}
 		return "", nil
@@ -607,14 +612,14 @@ func (a *App) runCluster(job runJob) {
 		ctx, cancel := a.runContextFor(job.op)
 		defer cancel()
 		a.publish("run", map[string]any{"run_id": run, "op": string(job.op), "step": string(job.step), "status": "running"})
-		res, err := a.clusterPass.Pass(ctx, job.runID)
+		res, err := a.deps().ClusterPass.Pass(ctx, job.runID)
 		if err != nil {
 			return err
 		}
 		// The pass settles itself: dead members are pruned and the findings refreshed, so a
 		// finished pass leaves no stale membership.
-		if a.cleanup.ClusterRepo != nil {
-			if _, cErr := a.cleanup.Cleanup(ctx); cErr != nil {
+		if a.deps().Cleanup.ClusterRepo != nil {
+			if _, cErr := a.deps().Cleanup.Cleanup(ctx); cErr != nil {
 				a.log.Warn("cluster settle failed", "run", run, "err", cErr)
 			}
 		}

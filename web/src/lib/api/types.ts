@@ -820,3 +820,10 @@ export interface ConfigFieldView {
   writable: boolean;
   options?: string[];
 }
+
+/** ConfigWriteResult is the answer to a config patch: the file is written, the apply is queued. */
+export interface ConfigWriteResult {
+  queued: boolean;
+  /** The RUNNING view at the moment of the answer; changed stays true until the apply lands. */
+  config: ConfigView;
+}

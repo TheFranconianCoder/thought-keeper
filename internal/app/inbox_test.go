@@ -17,6 +17,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/objects"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/persistence"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/persistence/sqlc"
+	"github.com/TheFranconianCoder/thought-keeper/internal/registry"
 )
 
 // TestPolledInboxStillTakesADroppedFile: when the kernel refuses an inotify watch (ENOSPC means the
@@ -35,16 +36,18 @@ func TestPolledInboxStillTakesADroppedFile(t *testing.T) {
 	index := sqlc.NewSourceRepository(db)
 
 	a := &App{
-		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		cfg: config.Config{Pipeline: config.PipelineConfig{Debounce: "10ms"}},
-		intake: usecases.Sources{
-			Store: objects.New(filepath.Join(root, "sources")), Index: index, Clock: systemClock{},
-		},
+		log:           slog.New(slog.NewTextHandler(io.Discard, nil)),
 		dropsInflight: map[string]bool{},
 		queued:        map[string]bool{},
 		claimedAt:     map[string]time.Time{},
 		distillActive: map[string]bool{},
 	}
+	cfg := config.Defaults()
+	cfg.Pipeline.Debounce = "10ms"
+	a.setConfig(cfg)
+	a.depsPtr.Store(&registry.Deps{Intake: usecases.Sources{
+		Store: objects.New(filepath.Join(root, "sources")), Index: index, Clock: systemClock{},
+	}})
 
 	inbox := filepath.Join(root, "inbox")
 	if err := os.MkdirAll(inbox, 0o755); err != nil {
