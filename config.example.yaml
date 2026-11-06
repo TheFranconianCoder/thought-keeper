@@ -1,6 +1,11 @@
 # Thought Keeper — application configuration.
 # Copy to config.yaml and adjust. Values may reference environment variables
 # using ${VAR} syntax (useful for secrets).
+#
+# The app reads this file at request time for the Config overlay (the gear in the PWA's top bar) and
+# reports the RUNNING values with their origin: this file, the environment, or the code's default.
+# Most knobs are read when the app starts, so a change applies after a restart; pipeline.auto_distill
+# and pipeline.debounce are read live.
 
 app:
     # The app never launches a browser: it logs the address and the tray can show it.

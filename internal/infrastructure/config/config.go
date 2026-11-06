@@ -364,17 +364,26 @@ func Defaults() Config {
 // missing file is not an error — defaults are used. ${ENV} references are expanded
 // and a leading ~ is resolved to the home directory.
 func Load(path string) (Config, error) {
+	loaded, err := LoadFull(path)
+	return loaded.Config, err
+}
+
+// LoadFull is Load with the provenance the Config overlay needs: the resolved path, whether the file
+// exists, which keys the FILE declared, and which keys the ENVIRONMENT decided (with the variable
+// that decided them). The values are exactly what Load returns — Load is a wrapper around this.
+func LoadFull(path string) (Loaded, error) {
 	cfg := Defaults()
 	if path == "" {
 		path = DefaultPath()
 	}
-	data, err := os.ReadFile(expandHome(path))
+	resolved := expandHome(path)
+	data, err := os.ReadFile(resolved)
 	if err != nil {
 		if os.IsNotExist(err) {
-			applyDefaults(&cfg)
-			return cfg, nil
+			env := applyDefaults(&cfg)
+			return Loaded{Config: cfg, Path: resolved, Env: env}, nil
 		}
-		return cfg, fmt.Errorf("read config: %w", err)
+		return Loaded{Config: cfg, Path: resolved}, fmt.Errorf("read config: %w", err)
 	}
 	expanded := os.ExpandEnv(string(data))
 	// STRICT: an unknown key is an error, not a silent default. A renamed knob (or a typo) would
@@ -384,17 +393,26 @@ func Load(path string) (Config, error) {
 	dec.KnownFields(true)
 	if err := dec.Decode(&cfg); err != nil {
 		if errors.Is(err, io.EOF) {
-			applyDefaults(&cfg)
-			return cfg, nil
+			env := applyDefaults(&cfg)
+			return Loaded{Config: cfg, Path: resolved, Exists: true, Set: map[string]bool{}, Env: env}, nil
 		}
-		return cfg, fmt.Errorf("parse config: %w", err)
+		return Loaded{Config: cfg, Path: resolved, Exists: true}, fmt.Errorf("parse config: %w", err)
 	}
-	applyDefaults(&cfg)
-	return cfg, nil
+	env := applyDefaults(&cfg)
+	return Loaded{
+		Config: cfg,
+		Path:   resolved,
+		Exists: true,
+		Set:    declaredKeys(expanded),
+		Env:    env,
+	}, nil
 }
 
-// applyDefaults fills empty fields that the YAML left zeroed.
-func applyDefaults(c *Config) {
+// applyDefaults fills empty fields that the YAML left zeroed. The returned map names the dotted keys
+// the ENVIRONMENT decided, with the variable that decided each one, so a reader can be told that a
+// value in the overlay is not the file's to change.
+func applyDefaults(c *Config) map[string]string {
+	env := map[string]string{}
 	d := Defaults()
 	if c.Server.Addr == "" {
 		c.Server.Addr = d.Server.Addr
@@ -516,48 +534,54 @@ func applyDefaults(c *Config) {
 	// The OpenAI key/base URL are read from the environment even when the config
 	// file has no `openai:` block, so OPENAI_API_KEY just works.
 	if c.OpenAI.APIKey == "" {
-		c.OpenAI.APIKey = os.Getenv("OPENAI_API_KEY")
+		if v := os.Getenv("OPENAI_API_KEY"); v != "" {
+			c.OpenAI.APIKey, env["openai.api_key"] = v, "OPENAI_API_KEY"
+		}
 	}
 	if c.OpenAI.BaseURL == "" {
-		c.OpenAI.BaseURL = os.Getenv("OPENAI_BASE_URL")
+		if v := os.Getenv("OPENAI_BASE_URL"); v != "" {
+			c.OpenAI.BaseURL, env["openai.base_url"] = v, "OPENAI_BASE_URL"
+		}
 	}
 	// Models resolve env → yaml → default, so a shared endpoint (e.g. opencode Zen,
 	// which does not serve gpt-4o-mini) is one env var away.
 	if v := os.Getenv("OPENAI_MODEL"); v != "" {
 		c.OpenAI.ModelCompile = v
 		c.OpenAI.ModelReason = v
+		env["openai.model_compile"], env["openai.model_reason"] = "OPENAI_MODEL", "OPENAI_MODEL"
 	}
 	if v := os.Getenv("OPENAI_MODEL_COMPILE"); v != "" {
-		c.OpenAI.ModelCompile = v
+		c.OpenAI.ModelCompile, env["openai.model_compile"] = v, "OPENAI_MODEL_COMPILE"
 	}
 	if v := os.Getenv("OPENAI_MODEL_REASON"); v != "" {
-		c.OpenAI.ModelReason = v
+		c.OpenAI.ModelReason, env["openai.model_reason"] = v, "OPENAI_MODEL_REASON"
 	}
 	if v := os.Getenv("OPENAI_REASONING_EFFORT_COMPILE"); v != "" {
-		c.OpenAI.ReasoningEffortCompile = v
+		c.OpenAI.ReasoningEffortCompile, env["openai.reasoning_effort_compile"] = v, "OPENAI_REASONING_EFFORT_COMPILE"
 	}
 	if v := os.Getenv("OPENAI_REASONING_EFFORT_REASON"); v != "" {
-		c.OpenAI.ReasoningEffortReason = v
+		c.OpenAI.ReasoningEffortReason, env["openai.reasoning_effort_reason"] = v, "OPENAI_REASONING_EFFORT_REASON"
 	}
 	// The distill step is its own knob: deciding what ONE claim is is the only judgement call in
 	// the mechanical phases, so it is the one worth raising to "low".
 	if v := os.Getenv("OPENAI_REASONING_EFFORT_DISTILL"); v != "" {
-		c.OpenAI.ReasoningEffortDistill = v
+		c.OpenAI.ReasoningEffortDistill, env["openai.reasoning_effort_distill"] = v, "OPENAI_REASONING_EFFORT_DISTILL"
 	}
 	// Deployment knobs: how patient the caller is with a shared endpoint. They are reachable from
 	// the environment for the same reason the models are — a shared endpoint is often one env var
 	// away from working, and a dev's .env is where that lives.
 	if v := os.Getenv("OPENAI_TIMEOUT"); v != "" {
-		c.OpenAI.Timeout = v
+		c.OpenAI.Timeout, env["openai.timeout"] = v, "OPENAI_TIMEOUT"
 	}
 	if v := os.Getenv("OPENAI_RETRIES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			c.OpenAI.Retries = n
+			c.OpenAI.Retries, env["openai.retries"] = n, "OPENAI_RETRIES"
 		}
 	}
 	if v := os.Getenv("OPENAI_RETRY_BACKOFF"); v != "" {
-		c.OpenAI.RetryBackoff = v
+		c.OpenAI.RetryBackoff, env["openai.retry_backoff"] = v, "OPENAI_RETRY_BACKOFF"
 	}
+	return env
 }
 
 // normalizeLanguage trims and lower-cases one language code, falling back to the default when the

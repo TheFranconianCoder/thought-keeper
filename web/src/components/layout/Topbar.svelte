@@ -4,7 +4,7 @@
   import { navigate } from '../../lib/router.svelte';
   import { pipelineLabel } from '../../lib/source-state';
   import { cycleTheme, themeIcon, themeLabel } from '../../lib/theme.svelte';
-  import { openAssistant, openSearch } from '../../lib/overlays';
+  import { openAssistant, openConfig, openSearch } from '../../lib/overlays';
   import { assistant } from '../../lib/stores/assistant.svelte';
   import { reloadNow, update } from '../../lib/update.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -73,6 +73,9 @@
     </button>
     <button class="icon-btn" title={t('language.title', { language: localeLabel() })} onclick={cycleLocale}>
       <Icon name="language" size={17} />
+    </button>
+    <button class="icon-btn" title={t('config.title')} aria-label={t('config.title')} onclick={() => openConfig()}>
+      <Icon name="settings" size={17} />
     </button>
     <button class="icon-btn" title={themeLabel()} onclick={cycleTheme}>
       <Icon name={themeIcon()} size={17} />

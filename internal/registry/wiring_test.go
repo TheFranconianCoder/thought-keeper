@@ -32,7 +32,7 @@ func TestBuildWiresTheModelDependentUseCases(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	deps := registry.Build(cfg, db, nil, nil, nil, nil, nil, nil, nil,
+	deps := registry.Build(cfg, db, nil, nil, nil, nil, nil, nil, nil, nil,
 		func([]usecases.DiscoveredChildren) {}, nil, nil, nil, nil, nil, nil,
 		stream.NewHub(), slog.New(slog.DiscardHandler))
 

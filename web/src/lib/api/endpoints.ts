@@ -10,6 +10,7 @@ import type {
   Command,
   CommandContext,
   CommandList,
+  ConfigView,
   DeleteResult,
   DistillResponse,
   FindingList,
@@ -56,6 +57,8 @@ const withQuery = (path: string, params: Record<string, string | number | undefi
 export const api = {
   status: () => request<Status>('/status'),
   pipeline: () => request<Pipeline>('/pipeline'),
+  // The Config overlay reads the RUNNING configuration: values, origins and drift.
+  config: () => request<ConfigView>('/config'),
 
   // ── Sources ────────────────────────────────────────────────────────────
   sources: (filter: SourceListFilter = {}, limit = 200, offset = 0, signal?: AbortSignal) =>

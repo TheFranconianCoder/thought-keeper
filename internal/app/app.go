@@ -351,7 +351,7 @@ func New(opts Options) (*App, error) {
 
 	a := &App{
 		cfg:                cfg,
-		cfgPath:            opts.Path,
+		cfgPath:            resolvedConfigPath(opts.Path),
 		log:                log,
 		headless:           opts.Headless || !cfg.App.Tray,
 		noOpen:             opts.NoOpen,
@@ -422,7 +422,7 @@ func New(opts Options) (*App, error) {
 	a.pdfOK = a.runner.Available(cfg.PDF.TextTool)
 	a.ocrOK = a.runner.Available(cfg.OCR.Rasterizer) && a.runner.Available(cfg.OCR.Tesseract)
 
-	reg := registry.Build(cfg, db, a, a.onAdded, a.onRemoved, a.ScheduleWikiTag, a.ScheduleWikiReprocess, a.ScheduleWikiCleanup, a.ScheduleSnapshotRebuild, a.ScheduleDiscoveredChildren, a, a, a, a, a, a, a.hub, a.log)
+	reg := registry.Build(cfg, db, a, a, a.onAdded, a.onRemoved, a.ScheduleWikiTag, a.ScheduleWikiReprocess, a.ScheduleWikiCleanup, a.ScheduleSnapshotRebuild, a.ScheduleDiscoveredChildren, a, a, a, a, a, a, a.hub, a.log)
 	a.handler = reg.Handler
 	a.intake = reg.Intake
 	a.capture = reg.Capture

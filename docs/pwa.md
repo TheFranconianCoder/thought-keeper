@@ -30,7 +30,7 @@ feed row keeps its title.
 | **Claims** | newest claims and the busiest claim topics; a local FTS5 finder and the search palette; one claim opens its detail with provenance and cluster peers. The topic cloud stays while a topic is selected: the active chip is highlighted, clicking it again (or the “Filtered by” chip) clears the filter. Opening a claim keeps the filter in the URL (`#/claims/<id>?topic=…`), so the list beside the detail stays filtered |
 | **Ask** | saved queries with their automatic tags and row actions (open, ask again, delete); a question **appears in the list at once with its status** while it is answered — no separate “thinking” box — and questions run in parallel, so the reader can ask the next one without waiting; an answer appears on its own detail with its **Ask ID** (copy button), and its scroll position survives a visit to a cited claim or source; the answer is written in the question's language and may cite claims and source overviews. A question asked from a source keeps **one source reference under the input inside the composer**; that source is the only evidence the answer may use, and removing the reference widens the next question to the vault. A saved answer remembers its source and “ask again” keeps the same scope |
 | **Attention** | failed source steps, **incomplete derivations** (a distill that stopped with work left) and non-info lint findings — one search narrows all three, and each source list is a window over the server filter; a lens over existing state, not a second health model |
-| **Status** | counts, job queue, summary backfill (missing/queued/running), a **progress bar while the index is rebuilt** (the vault is read-only then: reads work, changes wait), the repairs (consistency check, reindex, outline rebuild, URL refresh), duplicate collapse only while a duplicate exists, vocabulary health, and the **capability chips** — PDF, OCR, **Browser**, agent, vault, search, inbox — where a missing **Browser** says that JavaScript pages are collected as links and never distilled |
+| **Status** | counts, job queue, summary backfill (missing/queued/running), a **progress bar while the index is rebuilt** (the vault is read-only then: reads work, changes wait), the repairs (consistency check, reindex, outline rebuild, URL refresh), duplicate collapse only while a duplicate exists, vocabulary health, and the **capability chips** — PDF, OCR, **Browser**, agent, vault, search, inbox — where a missing **Browser** says that JavaScript pages are collected as links and never distilled, and a missing capability is a **button into the Config overlay** at the knob that fixes it |
 
 **The five library lists share one skeleton.** A head carries the title, its count and the lens's
 single action — Sources: add source, Wiki: new page, Bookmarks: add link, Attention: vault status;
@@ -68,7 +68,8 @@ over the loaded window. Home reads only the eight newest sources of its week and
 The top bar is a **tool bar, not a breadcrumb**: pages carry their own title, and the bar holds the
 global search over claims and sources (a compact command button in the browser, a full-height
 title-bar segment in the installed PWA, and an icon beside the utilities in the narrow layout), the
-activity chip, and the **interface language** switch beside the theme switch. In the narrow layout
+activity chip, the **interface language** switch beside the theme switch, and the **Config** gear
+(the running configuration, `?config=1`). In the narrow layout
 the bar's left side is only the logo and “Thought Keeper”, because the sidebar is gone. The language
 is the reader's choice and is remembered per browser; the server's `language.ui` is only the default
 for a reader who has not chosen one (the app ships English and German). The claims and overviews
@@ -128,6 +129,18 @@ open, and the Start lens lists the three latest QUESTIONS, which are answers the
   not have falls back to the default.
 - **Dialogs and overlays are query parameters too** (`withParam` / `withoutParams`), so closing an
   overlay does not lose the reader's place.
+- **The Config overlay** (`?config=1`, the gear in the top bar, `&field=<key>` to land on one knob)
+  is a read of the **running** configuration: sections in file order, each knob with its origin (the
+  config file, the environment with the variable's name, or the code's default), and the two knobs that
+  apply without a restart marked **live**. A path or tool knob also shows the absolute path the
+  process actually uses — the vault directory, or the binary found on PATH — or **not found**,
+  named after what was searched for (`lightpanda` when `browser.path` is empty). The first line is
+  the short name: an absolute configured path is shortened to its base name, so every path row reads
+  short name first, absolute path second. Secrets are
+  *set* / *not set*, never values. When the file
+  on disk no longer matches what the process runs, the overlay says so; a broken file is reported
+  while the running values stay readable. A missing capability chip on Status is a link to the knob
+  that fixes it, and a field in the address is a NAME, never free text.
 - **The theme toggle has three states**: light / dark / auto (follows the system), persisted in
   `localStorage`.
 - **A second window focuses the first** (BroadcastChannel election).

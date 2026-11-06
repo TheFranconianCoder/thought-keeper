@@ -10,6 +10,7 @@ import { statusEn } from './messages/status.en';
 import { attentionEn } from './messages/attention.en';
 import { assistantEn } from './messages/assistant.en';
 import { interestsEn } from './messages/interests.en';
+import { configEn } from './messages/config.en';
 
 /** The English catalog: every key the interface asks for, and the fallback for every other locale. */
 export const en: Record<string, string> = {
@@ -25,4 +26,5 @@ export const en: Record<string, string> = {
   ...attentionEn,
   ...assistantEn,
   ...interestsEn,
+  ...configEn,
 };

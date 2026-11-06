@@ -184,4 +184,6 @@ export const statusEn: Record<string, string> = {
   'status.files.one': '{count} file',
   'status.files.many': '{count} files',
   'status.collapseFailed': 'Collapse failed: {error}',
+  'status.config': 'Configuration',
+  'status.capFix': 'Open the configuration at the knob that fixes this.',
 };

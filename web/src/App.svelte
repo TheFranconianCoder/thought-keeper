@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte';
   import AddSourceDialog from './components/overlays/AddSourceDialog.svelte';
   import AssistantDialog from './components/overlays/AssistantDialog.svelte';
+  import ConfigDialog from './components/overlays/ConfigDialog.svelte';
   import DuplicateWindow from './components/overlays/DuplicateWindow.svelte';
   import InterestsDialog from './components/overlays/InterestsDialog.svelte';
   import SearchPalette from './components/overlays/SearchPalette.svelte';
@@ -167,6 +168,7 @@
 <AssistantDialog />
 <AddSourceDialog />
 <InterestsDialog />
+<ConfigDialog />
 <ConfirmDialog />
 <DuplicateWindow />
 <Toasts />

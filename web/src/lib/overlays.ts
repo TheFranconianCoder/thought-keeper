@@ -57,3 +57,23 @@ export function openAssistant(): void {
 export function closeAssistant(): void {
   navigate(withoutQuery('assistant'));
 }
+
+/** The Config overlay reads the running configuration. It is a query parameter on the current route,
+ *  like the interests manager: opening it never loses the reader's place, and a link to one knob is a
+ *  NAME in the address (never free text). */
+export function configOpen(): boolean {
+  return router.current.params.get('config') === '1';
+}
+
+/** openConfig opens the overlay, optionally at one knob (the Status capability chips do). */
+export function openConfig(field = ''): void {
+  const params = new URLSearchParams(router.current.params);
+  params.set('config', '1');
+  if (field) params.set('field', field);
+  else params.delete('field');
+  navigate(buildHash(router.current.view, router.current.id, params));
+}
+
+export function closeConfig(): void {
+  navigate(withoutQuery('config', 'field'));
+}

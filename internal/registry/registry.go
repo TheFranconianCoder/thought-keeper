@@ -107,6 +107,7 @@ func Build(
 	cfg config.Config,
 	db *sql.DB,
 	status handlers.StatusProvider,
+	configProvider handlers.ConfigProvider,
 	onAdded func(hash string),
 	onRemoved func(hash string),
 	onTag func(pageID string),
@@ -387,6 +388,7 @@ func Build(
 
 	h := router.New(router.Deps{
 		Status:    status,
+		Config:    configProvider,
 		Pipeline:  handlers.PipelineHandler{Pipeline: pipeline},
 		Cluster:   handlers.ClusterHandler{Runs: clusterQueue},
 		Reconcile: handlers.ReconcileHandler{Runs: reconciler},

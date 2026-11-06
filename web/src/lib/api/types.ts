@@ -774,3 +774,49 @@ export interface CommandRef {
   total: number;
   missing?: number;
 }
+
+/**
+ * ConfigView is the running configuration as the Config overlay shows it: the values in effect, where
+ * each one came from, and whether the file on disk still matches. It is a read of the process, not of
+ * the file.
+ */
+export interface ConfigView {
+  /** The resolved file: the default location when the app was started without --config. */
+  path: string;
+  /** False when the app runs on the code's defaults. */
+  exists: boolean;
+  /** The file says something else than the process runs. */
+  changed: boolean;
+  /** The file's read or parse error; the running values are still listed. */
+  error?: string;
+  sections: ConfigSectionView[];
+}
+
+export interface ConfigSectionView {
+  name: string;
+  fields: ConfigFieldView[];
+}
+
+export type ConfigKind = 'string' | 'bool' | 'int' | 'float' | 'duration' | 'list' | 'map' | 'path' | 'tool';
+
+export interface ConfigFieldView {
+  /** The dotted YAML path, e.g. "capture.refresh_interval". */
+  key: string;
+  kind: ConfigKind;
+  /** The effective value; null for a secret. */
+  value: unknown;
+  /** The absolute path a path or tool field uses; empty when the tool is not found. */
+  resolved?: string;
+  /** The name a tool field searches on PATH (lightpanda when browser.path is empty). */
+  lookup?: string;
+  source: 'file' | 'environment' | 'default';
+  /** The variable that decided an environment value. */
+  env?: string;
+  secret?: boolean;
+  set?: boolean;
+  /** A change applies only after a new process. */
+  restart: boolean;
+  /** False in part 1: the overlay reads. */
+  writable: boolean;
+  options?: string[];
+}

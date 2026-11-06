@@ -11,6 +11,7 @@
   } from '../../lib/actions';
   import { elapsed, relTime } from '../../lib/format';
   import { n, t, tn } from '../../lib/i18n/index.svelte';
+  import { openConfig } from '../../lib/overlays';
   import { navigate, router, sourcePath } from '../../lib/router.svelte';
   import { sources } from '../../lib/stores/sources.svelte';
   import { system } from '../../lib/stores/system.svelte';
@@ -69,22 +70,24 @@
 
   const caps = $derived.by(() => {
     const status = system.status;
-    if (!status) return [] as { label: string; ok: boolean; text: string; why?: string }[];
+    if (!status) return [] as { label: string; ok: boolean; text: string; why?: string; target?: string }[];
     return [
-      { label: 'PDF', ok: status.tools.pdf, text: status.tools.pdf ? t('status.ready') : t('status.missing') },
-      { label: 'OCR', ok: status.tools.ocr, text: status.tools.ocr ? t('status.ready') : t('status.missing') },
+      { label: 'PDF', ok: status.tools.pdf, text: status.tools.pdf ? t('status.ready') : t('status.missing'), target: 'pdf.text_tool' },
+      { label: 'OCR', ok: status.tools.ocr, text: status.tools.ocr ? t('status.ready') : t('status.missing'), target: 'ocr.enabled' },
       {
         label: t('status.capBrowser'),
         ok: status.tools.browser,
         text: status.tools.browser ? status.tools.browser_tool || t('status.ready') : t('status.missing'),
         why: status.tools.browser ? undefined : t('status.capBrowserWhy'),
+        target: 'browser.path',
       },
       {
         label: t('status.capAgent'),
         ok: status.agent.configured,
         text: status.agent.configured ? status.agent.model || t('status.ready') : t('status.notConfigured'),
+        target: 'openai.api_key',
       },
-      { label: t('status.capVault'), ok: status.vault.writable, text: status.vault.writable ? t('status.writable') : t('status.readOnly') },
+      { label: t('status.capVault'), ok: status.vault.writable, text: status.vault.writable ? t('status.writable') : t('status.readOnly'), target: 'vault.root' },
       { label: t('status.capSearch'), ok: status.index.search === 'fts5', text: status.index.search },
       {
         label: t('status.capInbox'),
@@ -93,6 +96,7 @@
         why: status.app.inbox?.error
           ? t('status.polledReason', { error: status.app.inbox.error })
           : undefined,
+        target: 'vault.inbox',
       },
     ];
   });
@@ -205,11 +209,23 @@
 
     <div class="caps">
       {#each caps as cap (cap.label)}
-        <span class="cap" class:ok={cap.ok} title={cap.why ?? ''}>
-          <span class="cap-dot"></span>
-          <span class="cap-label">{cap.label}</span>
-          <span class="cap-text">{cap.text}</span>
-        </span>
+        {#if cap.target && !cap.ok}
+          <button
+            class="cap cap--link"
+            title={cap.why ?? t('status.capFix')}
+            onclick={() => openConfig(cap.target)}
+          >
+            <span class="cap-dot"></span>
+            <span class="cap-label">{cap.label}</span>
+            <span class="cap-text">{cap.text}</span>
+          </button>
+        {:else}
+          <span class="cap" class:ok={cap.ok} title={cap.why ?? ''}>
+            <span class="cap-dot"></span>
+            <span class="cap-label">{cap.label}</span>
+            <span class="cap-text">{cap.text}</span>
+          </span>
+        {/if}
       {/each}
     </div>
 
@@ -370,7 +386,14 @@
     </section>
 
     <section class="section details-section">
-      <div class="section-head"><h2>{t('status.vaultDetails')}</h2></div>
+      <div class="section-head">
+        <h2>{t('status.vaultDetails')}</h2>
+        <span class="grow"></span>
+        <button class="btn btn--secondary btn--sm" onclick={() => openConfig()}>
+          <Icon name="settings" size={13} />
+          <span class="btn-text">{t('status.config')}</span>
+        </button>
+      </div>
       <div class="details-grid">
         <div class="kv"><span class="k">{t('status.kvVault')}</span><span class="v mono">{status.vault.root}</span></div>
         <div class="kv"><span class="k">{t('status.kvIndex')}</span><span class="v mono">{status.index.path}</span></div>
@@ -504,6 +527,17 @@
 
   .cap.ok .cap-dot {
     background: var(--success);
+  }
+
+  .cap--link {
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  .cap--link:hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--ink);
   }
 
   .cap-label {

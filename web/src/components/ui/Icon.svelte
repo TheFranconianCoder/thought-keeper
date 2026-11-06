@@ -49,7 +49,10 @@
     // a centre, deliberately not a tag outline: an interest is attention, not a label.
     star: 'M10 3.1l2 4.1 4.5.7-3.3 3.2.8 4.5L10 13.5l-4 2.1.8-4.5L3.5 7.9l4.5-.7z',
     target: 'M10 2.8a7.2 7.2 0 1 0 0 14.4 7.2 7.2 0 0 0 0-14.4z M10 6.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6z',
-    settings: 'M10 7.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6z M10 2.5v2 M10 15.5v2 M2.5 10h2 M15.5 10h2 M4.7 4.7l1.4 1.4 M13.9 13.9l1.4 1.4 M15.3 4.7l-1.4 1.4 M6.1 13.9l-1.4 1.4',
+    // A cog: a toothed outline with a centre hole. Deliberately NO inner ring — a ring with spokes
+    // reads as a ship's wheel. The teeth sit on the perimeter, so the silhouette is a gear at 11 px
+    // (the source rail) and at 17 px (the top bar).
+    settings: 'M15.14 8.72 L17.23 8.98 L17.23 11.02 L15.14 11.28 L14.54 12.73 L15.83 14.39 L14.39 15.83 L12.73 14.54 L11.28 15.14 L11.02 17.23 L8.98 17.23 L8.72 15.14 L7.27 14.54 L5.61 15.83 L4.17 14.39 L5.46 12.73 L4.86 11.28 L2.77 11.02 L2.77 8.98 L4.86 8.72 L5.46 7.27 L4.17 5.61 L5.61 4.17 L7.27 5.46 L8.72 4.86 L8.98 2.77 L11.02 2.77 L11.28 4.86 L12.73 5.46 L14.39 4.17 L15.83 5.61 L14.54 7.27 Z M10 7.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2z',
     panelLeft: 'M3.5 4h13v12h-13z M8 4v12',
     spark: 'M10 2.5 11.8 7.2 16.5 9 11.8 10.8 10 15.5 8.2 10.8 3.5 9 8.2 7.2z',
     // The assistant's mark: three sparkles, so the button reads as "something happens here" rather

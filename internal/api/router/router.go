@@ -27,7 +27,10 @@ type Gate interface {
 
 // Deps are the handlers the router mounts.
 type Deps struct {
-	Status     handlers.StatusProvider
+	Status handlers.StatusProvider
+	// Config is the running configuration for the Config overlay. Nil (a hand-built router) means the
+	// route is not registered.
+	Config     handlers.ConfigProvider
 	Sources    handlers.SourcesHandler
 	Add        handlers.AddHandler
 	URL        handlers.URLHandler
@@ -116,6 +119,12 @@ func New(deps Deps, web http.Handler) http.Handler {
 		// done. The embedded PWA's own assets are outside this group and always load.
 		r.Use(readOnlyWhileRebuilding(deps.Repairing))
 		r.Get("/status", handlers.StatusHandler{Provider: deps.Status}.Get)
+		// The Config overlay's read: the running configuration with each value's origin, the file it
+		// came from, and whether the file on disk still matches. It is a read of the process, so the
+		// repair guard is irrelevant.
+		if deps.Config != nil {
+			r.Get("/config", handlers.ConfigHandler{Provider: deps.Config}.Get)
+		}
 		// The global pipeline status: documents (capture/outline/distill) or the cluster step —
 		// never both, which is the whole point of the strict separation.
 		r.Get("/pipeline", deps.Pipeline.Get)

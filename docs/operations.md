@@ -61,6 +61,18 @@ code (ISO 639-3 when no 639-1 exists). Changing a content language affects **new
 claims and overviews are records written in the old language and are never rewritten behind the
 reader's back; a reset / rewrite is the explicit way to derive them again.
 
+**Reading the configuration in the app.** The gear in the top bar opens the **Config overlay**
+(`?config=1`). It is a read of the **running process**: every section and knob in file order, the
+origin of each value — the config file, the environment (with the variable's name, e.g. `OPENAI_MODEL`) or
+the code's default — and whether a change applies at once or only after a restart. Only
+`pipeline.auto_distill` and `pipeline.debounce` are read live today; everything else was captured when
+the wiring was built. A path or tool knob shows the absolute path the process uses (a bare
+`pdftotext` is resolved on PATH, and *not found* is said plainly). The overlay re-reads the file on
+every request: when it no longer matches what
+the process runs (an edit over SSH), it says so. Secrets stay where they are: `openai.api_key` is
+reported as *set* or *not set*, never as a value, and `openai.headers` reveals only the header names.
+The overlay writes nothing in this version.
+
 Models resolve **env → yaml → default**: `OPENAI_MODEL` sets both, `OPENAI_MODEL_COMPILE` /
 `OPENAI_MODEL_REASON` override one; the same holds for the patience knobs
 (`OPENAI_REASONING_EFFORT_DISTILL`, `OPENAI_TIMEOUT`, `OPENAI_RETRIES`, `OPENAI_RETRY_BACKOFF`).

@@ -90,6 +90,10 @@ oldest entry first), a list on Start and a banner on the list. **Interests** are
 in the source's rail. They are managed in an overlay, and their matches are computed on demand — no
 index table, no model, no second grouping.
 
+The app's own configuration is readable in the **Config overlay** (`?config=1`, the gear in the top
+bar): every knob with its origin (the file, the environment or a default) and whether a change applies
+at once. Secrets are reported as set, never as values, and the overlay writes nothing yet.
+
 ## Positioning
 
 - Studio slogan: "Computer Science as Industrial Craftsmanship".

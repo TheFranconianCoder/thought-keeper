@@ -10,6 +10,7 @@ import { statusDe } from './messages/status.de';
 import { attentionDe } from './messages/attention.de';
 import { assistantDe } from './messages/assistant.de';
 import { interestsDe } from './messages/interests.de';
+import { configDe } from './messages/config.de';
 
 /** The German catalog. A missing key falls back to English, never to the key itself. */
 export const de: Record<string, string> = {
@@ -25,4 +26,5 @@ export const de: Record<string, string> = {
   ...attentionDe,
   ...assistantDe,
   ...interestsDe,
+  ...configDe,
 };

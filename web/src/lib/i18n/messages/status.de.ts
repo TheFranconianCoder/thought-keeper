@@ -183,4 +183,6 @@ export const statusDe: Record<string, string> = {
   'status.files.one': '{count} Datei',
   'status.files.many': '{count} Dateien',
   'status.collapseFailed': 'Zusammenfassen fehlgeschlagen: {error}',
+  'status.config': 'Konfiguration',
+  'status.capFix': 'Öffnet die Konfiguration bei der Einstellung, die das behebt.',
 };
