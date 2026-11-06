@@ -1199,17 +1199,18 @@ type RefreshResult struct {
 	// ChangedURLs are the pages that actually changed, so the caller knows whether the association
 	// layer has something to regroup.
 	ChangedURLs []string
-	// Resets are the sources whose snapshot was replaced by DIFFERENT text. The refresh runs under
-	// the shared gate, so it must not throw a derivation away itself: a document run may be in
-	// flight. The caller schedules the app's exclusive reset for each entry and derives again.
+	// Resets are the sources whose snapshot was replaced by a DIFFERENT body. The refresh runs under
+	// the shared gate, so it must not touch a derivation itself: a document run may be in flight. The
+	// caller schedules the app's exclusive outline rebuild for each entry; the rebuild keeps the
+	// claims of the parts that did not change.
 	Resets []SnapshotReplacement
 	// LastError is why the last source that failed did so. The counts are enough for a pass; the
 	// per-source Refresh button has one row to explain, and "1 failed" alone is not an explanation.
 	LastError string
 }
 
-// SnapshotReplacement names one source whose bytes changed and the reason a reader should see in
-// its log after the old derivation was rebuilt.
+// SnapshotReplacement names one source whose body changed and the reason a reader should see in its
+// log when the outline is rebuilt.
 type SnapshotReplacement struct {
 	Hash   string
 	Reason string
@@ -1612,6 +1613,14 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 			continue
 		}
 
+		// What the STORED SNAPSHOT says, not what the title or the live page says. The body decides
+		// whether the outline has to be rebuilt: a page whose only change is its title keeps its
+		// outline (and its claims), and a reflowed page is compared per node by the rebuild itself.
+		sameBody := sameContent
+		if old, ok := storedSnapshotBody(uc.Store, s.Hash, s.Ext); ok {
+			sameBody = bodyHashOf(body) == bodyHashOf(old)
+		}
+
 		snapshot := renderURLSnapshot(s.URL, title, page.Status, now, body, engine)
 		// The snapshot is refreshed IN PLACE, at the address the source already has. A changed page is
 		// not a new source: filing one made a duplicate row — and a second, from-scratch derivation —
@@ -1725,18 +1734,18 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 				})
 			res.Replaced++
 		}
-		// The source's bytes changed. The old derivation belongs to other text, and a document run
-		// may be in flight: the caller must rebuild it through the app's exclusive reset. A queued
-		// row (Path == "") needs no app reset — it only re-arms its skipped steps below.
-		if !sameContent && s.Path != "" && !attached {
-			reason := "the page changed — the derivation was rebuilt"
+		// The source's body changed. A document run may be in flight: the caller brings the derivation
+		// in line through the app's exclusive outline rebuild, which keeps every unchanged part. A
+		// queued row (Path == "") needs no rebuild — it only re-arms its skipped steps below.
+		if !sameBody && s.Path != "" && !attached {
+			reason := "the page changed — the outline is rebuilt; only the parts that changed are derived again"
 			switch {
 			case becamePage:
-				reason = "the collected link became a page — the derivation was rebuilt"
+				reason = "the collected link became a page — the outline is rebuilt"
 			case fromFeed:
-				reason = "the page replaced the feed copy — the derivation was rebuilt"
+				reason = "the page replaced the feed copy — the outline is rebuilt"
 			case wasWalled:
-				reason = "the wall cleared and the page was read — the derivation was rebuilt"
+				reason = "the wall cleared and the page was read — the outline is rebuilt"
 			}
 			res.Resets = append(res.Resets, SnapshotReplacement{Hash: s.Hash, Reason: reason})
 		}
@@ -1953,6 +1962,33 @@ func metaWithFavicon(raw, url, contentHash string, favicon *faviconMeta) string 
 func contentHashOf(title, body string) string {
 	sum := sha256.Sum256([]byte(title + "\n\n" + body))
 	return hex.EncodeToString(sum[:])
+}
+
+// bodyHashOf is the SNAPSHOT BODY's hash, without the title and without the frontmatter. It decides
+// whether a refresh must rebuild the outline (the references move when the body moves); the title
+// and the fetch time are metadata and must not.
+func bodyHashOf(body string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(body)))
+	return hex.EncodeToString(sum[:])
+}
+
+// storedSnapshotBody reads the body of the snapshot a source holds NOW — before the refresh replaces
+// it. A snapshot is frontmatter + body; a file without frontmatter is returned as it is. Reading the
+// old bytes is what makes the comparison honest: the content_hash in the meta also carries the title.
+func storedSnapshotBody(store interfaces.SourceStore, hash, ext string) (string, bool) {
+	if store == nil || hash == "" || ext == "" {
+		return "", false
+	}
+	rc, err := store.Open(hash, ext)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = rc.Close() }() //nolint:errcheck // a read-only close has nothing to report
+	b, err := io.ReadAll(rc)
+	if err != nil {
+		return "", false
+	}
+	return string(snapshotBody(b)), true
 }
 
 // wrapFetchErr keeps an already-coded error (e.g. the SSRF guard's "forbidden")

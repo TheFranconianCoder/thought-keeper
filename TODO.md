@@ -219,3 +219,22 @@ are.
 10. **A mapped subject waits on the terms model.** The live runs took 9–13 s for the expansion, and
     the assistant is synchronous. Skip the call when the request's own words already produce a
     strong name, and cache the terms per subject for the retention window.
+
+## Refresh and start-up cost
+
+1. **A clean shutdown should skip the full start check.** The check now runs once instead of three
+   times (a stale member is no longer a rebuild reason), but on a 359k-claim vault the remaining scan
+   is still minutes of exclusive time on every start. A marker written at start and removed on a
+   graceful shutdown would let a clean start skip it; only a crash (`kill -9`, power loss) needs the
+   full check.
+2. **A manifest for the cluster records.** `NeedsRepair` still opens all cluster `.meta` files and
+   loads every membership into Go maps. A persisted `(cluster_id, size, mtime, signature)` would let
+   it `stat` instead of parse, and compare signatures instead of whole membership sets.
+3. **Tolerance beyond one percent.** The rebuild keeps a part's claims while at least 99 % of its
+   words survive (after the whitespace normalization). That is a deliberate trade: a claim can survive
+   a text it no longer exactly cites. Raising it needs a better diff (a changed number is one word)
+   and a decision about provenance, not just a bigger threshold.
+4. **Clusters as records, not as a cache.** `clusters/**/*.meta` is gitignored and a reindex may
+   delete a record whose members the index cannot confirm. The association layer is the valuable
+   artifact; the SQLite membership is the cache. Decide whether the record joins the vault's history
+   and stops being removed on an unverified atom set.

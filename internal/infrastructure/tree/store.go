@@ -39,18 +39,19 @@ type treeFile struct {
 }
 
 type nodeJSON struct {
-	NodeID    string `json:"node_id"`
-	ParentID  string `json:"parent_id,omitempty"`
-	Depth     int    `json:"depth"`
-	Ord       int    `json:"ord"`
-	Title     string `json:"title,omitempty"`
-	Summary   string `json:"summary,omitempty"`
-	StartPage int    `json:"start_page,omitempty"`
-	EndPage   int    `json:"end_page,omitempty"`
-	OCR       bool   `json:"ocr,omitempty"`
-	TextStart int    `json:"text_start,omitempty"`
-	TextEnd   int    `json:"text_end,omitempty"`
-	TextHash  string `json:"text_hash,omitempty"`
+	NodeID       string `json:"node_id"`
+	ParentID     string `json:"parent_id,omitempty"`
+	Depth        int    `json:"depth"`
+	Ord          int    `json:"ord"`
+	Title        string `json:"title,omitempty"`
+	Summary      string `json:"summary,omitempty"`
+	StartPage    int    `json:"start_page,omitempty"`
+	EndPage      int    `json:"end_page,omitempty"`
+	OCR          bool   `json:"ocr,omitempty"`
+	TextStart    int    `json:"text_start,omitempty"`
+	TextEnd      int    `json:"text_end,omitempty"`
+	TextHash     string `json:"text_hash,omitempty"`
+	TextNormHash string `json:"text_norm_hash,omitempty"`
 	// Text is an outline written BEFORE the references existed: it still carries the text. It is read
 	// (and its hash derived from it), never written again — the first rebuild replaces the file.
 	Text string `json:"text,omitempty"`
@@ -61,6 +62,7 @@ func nodeToJSON(n entities.SourceNode) nodeJSON {
 		NodeID: n.NodeID, ParentID: n.ParentID, Depth: n.Depth, Ord: n.Ord,
 		Title: n.Title, Summary: n.Summary, StartPage: n.StartPage, EndPage: n.EndPage,
 		OCR: n.OCR, TextStart: n.TextStart, TextEnd: n.TextEnd, TextHash: n.TextHash,
+		TextNormHash: n.TextNormHash,
 	}
 	// The text is written ONLY for a node that has no reference — a text that could not be found in
 	// the readable text (an extractor that normalised it). A node that can be referenced is not
@@ -76,6 +78,7 @@ func (j nodeJSON) toNode() entities.SourceNode {
 		NodeID: j.NodeID, ParentID: j.ParentID, Depth: j.Depth, Ord: j.Ord,
 		Title: j.Title, Summary: j.Summary, StartPage: j.StartPage, EndPage: j.EndPage,
 		OCR: j.OCR, TextStart: j.TextStart, TextEnd: j.TextEnd, TextHash: j.TextHash,
+		TextNormHash: j.TextNormHash,
 	}
 	if j.Text != "" {
 		// An outline from an older build: it has the text, so the hash can be derived from it and the

@@ -422,7 +422,7 @@ func New(opts Options) (*App, error) {
 	a.pdfOK = a.runner.Available(cfg.PDF.TextTool)
 	a.ocrOK = a.runner.Available(cfg.OCR.Rasterizer) && a.runner.Available(cfg.OCR.Tesseract)
 
-	reg := registry.Build(cfg, db, a, a.onAdded, a.onRemoved, a.ScheduleWikiTag, a.ScheduleWikiReprocess, a.ScheduleWikiCleanup, a.ScheduleSourceReset, a.ScheduleDiscoveredChildren, a, a, a, a, a, a, a.hub, a.log)
+	reg := registry.Build(cfg, db, a, a.onAdded, a.onRemoved, a.ScheduleWikiTag, a.ScheduleWikiReprocess, a.ScheduleWikiCleanup, a.ScheduleSnapshotRebuild, a.ScheduleDiscoveredChildren, a, a, a, a, a, a, a.hub, a.log)
 	a.handler = reg.Handler
 	a.intake = reg.Intake
 	a.capture = reg.Capture
@@ -3737,7 +3737,7 @@ func (a *App) handleURLJob(job urlJob) {
 		a.ScheduleListingURLs(src.Hash, src.ListingURLs)
 	}
 	if src.NeedsReset {
-		a.ScheduleSourceReset(src.Hash, "the page replaced the stored snapshot — the derivation was rebuilt")
+		a.ScheduleSnapshotRebuild(src.Hash, "the page replaced the stored snapshot — the outline is rebuilt")
 	} else {
 		a.onAdded(src.Hash)
 	}
@@ -3832,15 +3832,14 @@ func (a *App) refreshWorker() {
 	}
 }
 
-// applyRefreshResult turns one refresh pass into the two app-level actions it owes: a derivation
-// reset for every source whose bytes changed (exclusive, after any running run) and a pump for the
-// rest. A source that is being reset must NOT be pumped first: the old claims would be derived again
-// only to be thrown away a moment later.
+// applyRefreshResult turns one refresh pass into the two app-level actions it owes: an outline
+// rebuild for every source whose snapshot changed (exclusive, after any running run) and a pump for
+// the rest. The rebuild KEEPS the derivation: only the parts whose text changed lose their claims.
 func (a *App) applyRefreshResult(res usecases.RefreshResult, focus string) {
 	resets := make(map[string]bool, len(res.Resets))
 	for _, r := range res.Resets {
 		resets[r.Hash] = true
-		a.ScheduleSourceReset(r.Hash, r.Reason)
+		a.ScheduleSnapshotRebuild(r.Hash, r.Reason)
 	}
 	for _, s := range res.Sources {
 		if !resets[s.Hash] {
@@ -3859,19 +3858,27 @@ func (a *App) applyRefreshResult(res usecases.RefreshResult, focus string) {
 	}
 }
 
-// ScheduleSourceReset rebuilds a source's derivation after its snapshot was replaced. It runs in the
-// background and takes the EXCLUSIVE gate: the refresh that found the change ran under the shared
-// gate, and a document run may still be using the old text. The reset keeps capture and the bytes,
-// throws away tree/claims/steps, and the pump derives the new text. The reason is appended after the
-// reset (a reset clears the old log).
-func (a *App) ScheduleSourceReset(hash, reason string) {
+// ScheduleSnapshotRebuild brings a derivation in line with a snapshot that changed WITHOUT throwing
+// it away. The refresh already wrote the new bytes; the old outline is still on disk, so the tree
+// build compares the rebuilt outline with it and re-arms only the parts whose text changed (or
+// appeared). The claims of the parts that did not change keep their ids AND their cluster
+// memberships — a corrected paragraph no longer costs a whole document.
+//
+// It takes the EXCLUSIVE gate: the refresh ran under the shared one, and a document run may still be
+// reading the old text.
+func (a *App) ScheduleSnapshotRebuild(hash, reason string) {
 	if hash == "" {
 		return
 	}
 	go func() {
-		err := a.ExclusiveWrite(context.Background(), "source reset", func(ctx context.Context) error {
-			if _, rErr := a.Reset(hash); rErr != nil {
-				return rErr
+		err := a.ExclusiveWrite(context.Background(), "outline rebuild", func(ctx context.Context) error {
+			if a.steps != nil {
+				if rErr := a.steps.Record(ctx, hash, entities.StepOutline, entities.StepStatus{
+					State: entities.StepPending, At: time.Now().UTC(),
+					Detail: "the snapshot changed — the outline is rebuilt; only changed parts are derived again",
+				}); rErr != nil {
+					return rErr
+				}
 			}
 			if reason != "" && a.SourceLog != nil {
 				a.SourceLog.Append(ctx, hash, interfaces.SourceLogEvent{
@@ -3884,12 +3891,12 @@ func (a *App) ScheduleSourceReset(hash, reason string) {
 			return nil
 		})
 		if err != nil {
-			a.log.Warn("source reset after a changed snapshot failed", "hash", hash, "err", err)
+			a.log.Warn("outline rebuild after a changed snapshot failed", "hash", hash, "err", err)
 			a.publish("source", map[string]any{"hash": hash})
 			return
 		}
 		a.publish("source", map[string]any{"hash": hash})
-		a.pumpPipeline("source reset after a changed snapshot")
+		a.pumpPipeline("outline after a changed snapshot")
 	}()
 }
 
@@ -4034,9 +4041,16 @@ func (a *App) startupRepair() {
 	a.RepairProgress("", 0, 0) // the consistency check has no count to report
 	a.log.Info("startup: checking vault consistency")
 	started := time.Now()
-	needsRepair, reason, checkErr := a.reindex.NeedsRepair(context.Background())
+	needsRepair, reason, stale, checkErr := a.reindex.NeedsRepair(context.Background())
 	if checkErr != nil {
 		a.log.Warn("startup: consistency check failed", "err", checkErr)
+	}
+	if stale > 0 {
+		// The normal residue of a re-derivation: the record still lists members whose claims are
+		// gone. The index membership went with them, retrieval never sees them, and the cluster pass
+		// prunes the records in its first step. Not a rebuild.
+		a.log.Info("startup: cluster records name claims that are gone — the next cluster pass prunes them",
+			"records", stale)
 	}
 
 	runReindex := func(why string) {
@@ -4082,26 +4096,6 @@ func (a *App) startupRepair() {
 
 	if needsRepair {
 		a.log.Warn("startup: the association layer is inconsistent", "reason", reason)
-		// A cluster record that names a claim the vault no longer holds is a STALE MEMBER, not a
-		// broken index: a source reset removes claims, and the next cluster pass prunes the
-		// membership. Rebuilding 238k claims for that is out of all proportion, so the cheap prune
-		// runs first and the rebuild is kept for a real disagreement (a record without its row, a
-		// row without its record, a membership table that disagrees).
-		if a.cleanup.ClusterRepo != nil {
-			a.gate.Lock()
-			_, cErr := a.cleanup.Cleanup(context.Background())
-			a.gate.Unlock()
-			if cErr != nil {
-				a.log.Warn("startup: pruning the stale members failed", "err", cErr)
-			} else if again, why, rErr := a.reindex.NeedsRepair(context.Background()); rErr == nil && !again {
-				a.log.Info("startup: pruned the stale members — no rebuild needed", "reason", reason)
-				needsRepair = false
-			} else if rErr == nil {
-				reason = why
-			}
-		}
-	}
-	if needsRepair {
 		a.log.Warn("startup: rebuilding the index before accepting writes", "reason", reason)
 		runReindex(reason)
 	} else if checkErr == nil {

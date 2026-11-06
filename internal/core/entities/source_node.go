@@ -20,7 +20,11 @@ type SourceNode struct {
 	TextStart int
 	TextEnd   int
 	TextHash  string
-	OCR       bool
+	// TextNormHash is TextHash with whitespace runs collapsed. A rebuilt outline compares THIS first:
+	// a page that was only reflowed (line wrapping, indentation, trailing spaces) keeps its norm hash,
+	// so the part is not derived again. Wording and punctuation still count.
+	TextNormHash string
+	OCR          bool
 	// HasText says whether this node carries text of its own. It is the index's answer (the DB keeps
 	// a text HASH, never the text): a node without text is a grouping heading — the document's title,
 	// a part — and the outline shows it as one instead of offering it as something to read. A node

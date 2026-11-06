@@ -356,18 +356,63 @@ func (uc Trees) locate(ctx context.Context, hash, text string, parts []entities.
 // claim cites and the text it was derived from are both unchanged, so those claims are still true.
 // A node that is new, whose text changed, or that is gone is absent from the set.
 func unchangedNodes(previous, rebuilt []entities.SourceNode) map[string]bool {
-	before := make(map[string]string, len(previous))
+	before := make(map[string]entities.SourceNode, len(previous))
 	for _, n := range previous {
-		before[n.NodeID] = n.TextHash
+		before[n.NodeID] = n
 	}
 	keep := make(map[string]bool, len(rebuilt))
 	for _, n := range rebuilt {
 		// Only a text-bearing node is a part, and only a part carries claims.
-		if n.TextHash != "" && before[n.NodeID] == n.TextHash {
+		if !n.HasText {
+			continue
+		}
+		if old, ok := before[n.NodeID]; ok && sameNodeText(old, n) {
 			keep[n.NodeID] = true
 		}
 	}
 	return keep
+}
+
+// nodeTextTolerance is how much of a part may change without losing its claims: a Dice coefficient
+// over words. One percent keeps a typo fix or one changed word in a long paragraph, and re-derives a
+// paragraph where a few words changed. The old node's TEXT is in the outline for Markdown and URL
+// sources (their parts carry no byte reference), which is exactly the refresh case.
+const nodeTextTolerance = 0.99
+
+// sameNodeText is the tolerance of a rebuild. Three answers, in order:
+//  1. both nodes carry a normalized hash and it is equal: a reflow is not a change (no text needed);
+//  2. both carry their text: a tiny edit within the tolerance keeps the claims;
+//  3. otherwise the exact hash, so an outline written before the normalized hash existed still
+//     compares with something real (a norm hash must never be compared with an old exact hash).
+func sameNodeText(a, b entities.SourceNode) bool {
+	if a.TextNormHash != "" && b.TextNormHash != "" && a.TextNormHash == b.TextNormHash {
+		return true
+	}
+	if a.Text != "" && b.Text != "" {
+		return tokenSimilarity(a.Text, b.Text) >= nodeTextTolerance
+	}
+	return a.TextHash == b.TextHash
+}
+
+// tokenSimilarity is the Dice coefficient over whitespace-delimited words: 1 for the same words,
+// 0 for nothing in common. It is order-blind on purpose — a moved paragraph is not a changed one.
+func tokenSimilarity(a, b string) float64 {
+	left, right := strings.Fields(a), strings.Fields(b)
+	if len(left)+len(right) == 0 {
+		return 1
+	}
+	counts := make(map[string]int, len(left))
+	for _, word := range left {
+		counts[word]++
+	}
+	common := 0
+	for _, word := range right {
+		if counts[word] > 0 {
+			counts[word]--
+			common++
+		}
+	}
+	return 2 * float64(common) / float64(len(left)+len(right))
 }
 
 // rearmParts marks the parts a rebuild CHANGED as open work. Their record says "done" about text that
@@ -410,7 +455,7 @@ func treeChanged(previous, rebuilt []entities.SourceNode) bool {
 		// same fact in 64 characters instead of a whole document.
 		if previous[i].NodeID != rebuilt[i].NodeID ||
 			previous[i].Title != rebuilt[i].Title ||
-			previous[i].TextHash != rebuilt[i].TextHash {
+			!sameNodeText(previous[i], rebuilt[i]) {
 			return true
 		}
 	}

@@ -169,10 +169,15 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   explicit refetch may try one, and a walled normal source is attempted again on the same cadence,
   because it may become readable. A bookmark is not re-read automatically: it is a collected link
   until the reader says "try the page again".
-- **A changed page is a changed source.** When a refresh writes different text — a normal page, a
-  feed copy replaced by its page, or a wall that cleared — the old derivation is thrown away and
-  built again from the new bytes (capture survives). The refresh reports the source for a reset; the
-  app runs it under the exclusive gate, so a document run cannot mix old claims with new text.
+- **A changed page is not a new source.** When a refresh writes different text — a normal page, a
+  feed copy replaced by its page, or a wall that cleared — the snapshot is replaced and the **outline
+  is rebuilt** under the exclusive gate. The rebuild keeps the derivation: a node whose text is
+  unchanged keeps its claims, a node whose text changed or vanished loses them and is re-armed, and a
+  new node is derived. "Unchanged" has two tolerances: a reflow keeps the normalized text hash, and
+  otherwise a part keeps its claims while at least 99 % of its words survive (a typo fix, or one
+  changed word in a long paragraph). A paragraph where more changed is derived again. A title change
+  alone replaces the snapshot and touches no claim. A **human-attached** snapshot is still a full reset:
+  the human replaced the bytes by hand, and the new bytes are the reader's own answer.
 - PDF: extract the text layer with poppler; OCR a page that has none (`pdftocairo` + `tesseract`).
   Write the readable rendering to `sources/<ab>/<cd>/<hash>.capture.md`, with one
   `<!--part …-->` marker per part.

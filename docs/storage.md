@@ -53,7 +53,7 @@ page is a destination, because a human authored it.
 | --- | --- | --- | --- |
 | `<hash>.capture.md` | a source whose bytes are not readable (a PDF, an EPUB) or a wiki page representation | the content as readable Markdown | **cache** — re-derivable (`capture`) |
 | `<hash>.meta` | a source | what the source **is** (kind, language, URL, identity), its title, **the date it declares for itself and the layer that found it**, **human tags**, **auto tags** and when they were derived, the reader's **favorite** and **read-later** marks, the state of capture/outline/distill and the part records | **record** — the file IS the truth |
-| `<hash>.outline` | a source | the node tree with references into the readable text | **cache** — re-derivable (`rebuild-trees`) |
+| `<hash>.outline` | a source | the node tree with references into the readable text, and two hashes per node: the exact text and a whitespace-normalized one (the rebuild tolerance) | **cache** — re-derivable (`rebuild-trees`) |
 | `<hash>.summary.md` | a source | its **overview**, written from the claims after a complete distill | **cache** — regenerated from the claims (a model writes it, so not byte-identical) |
 | `<hash>.log` | a source | everything done to it | **record** — history |
 | `clusters/<ab>/<cd>/<id>.meta` | a cluster | its membership and signature | **cache** — re-derivable from the claims |

@@ -165,3 +165,17 @@ func TestMatterFilterKeepsContentAboutTheSameWords(t *testing.T) {
 		t.Error("a part whose body mentions matter was dropped")
 	}
 }
+
+// TestTextNormHashToleratesReflow: the rebuild's tolerance is whitespace, not wording. A paragraph
+// that was re-wrapped keeps its normalized hash (and its claims); a changed word does not.
+func TestTextNormHashToleratesReflow(t *testing.T) {
+	if got, want := TextNormHash("one  two\nthree"), TextNormHash("one two three"); got != want {
+		t.Errorf("reflowed text = %s, want %s", got, want)
+	}
+	if TextNormHash("one two three") == TextNormHash("one two four") {
+		t.Error("a changed word kept the normalized hash")
+	}
+	if TextNormHash("") != "" {
+		t.Error("empty text must have no normalized hash")
+	}
+}

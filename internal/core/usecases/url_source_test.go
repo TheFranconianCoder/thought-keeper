@@ -131,6 +131,23 @@ func TestRefreshURLsDetectsChange(t *testing.T) {
 		t.Fatalf("an unchanged page asked for a derivation reset: %+v", res.Resets)
 	}
 
+	// A new TITLE is not a changed body: the snapshot is rewritten, the outline (and its claims)
+	// stay. Comparing the title-inclusive content_hash alone would rebuild the whole derivation.
+	conv.title = "Another title"
+	res, err = refresh.RefreshAll(ctx)
+	if err != nil {
+		t.Fatalf("refresh title-only: %v", err)
+	}
+	if res.Changed != 1 {
+		t.Fatalf("a retitled page = %+v, want changed 1 (the snapshot bytes changed)", res)
+	}
+	if len(res.Resets) != 0 {
+		t.Fatalf("a title-only change asked for an outline rebuild: %+v", res.Resets)
+	}
+	if len(res.Sources) != 1 || res.Sources[0].Title != "Another title" {
+		t.Fatalf("the new title did not reach the row: %+v", res.Sources)
+	}
+
 	conv.markdown = strings.Repeat("same text ", 60) + " but the page changed"
 	res, err = refresh.RefreshAll(ctx)
 	if err != nil {

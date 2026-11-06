@@ -40,7 +40,7 @@ func TestReindexRemovesClusterRowsWithoutRecords(t *testing.T) {
 		Clock: testClock{},
 		Steps: sourcemeta.NewTracker(sourcemeta.New(t.TempDir()), nil, nil),
 	}
-	needs, reason, err := reindex.NeedsRepair(ctx)
+	needs, reason, _, err := reindex.NeedsRepair(ctx)
 	if err != nil {
 		t.Fatalf("needs repair: %v", err)
 	}

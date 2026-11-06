@@ -79,6 +79,10 @@ windowed**: filters and paging are server-side, only the visible range (± overs
 filtered count is the scroll height. A cluster is
 **not** a lens: it has no title and no page, and it is visible only as the **peers** of a claim.
 
+A page that changed is re-read **in place**: the refresh replaces the snapshot and rebuilds the
+outline, and only the parts whose text changed materially lose their claims — a reflow or a single
+changed word keeps them, and a new title touches no claim.
+
 The reader's own marks are **not** lenses either. A **favorite** is a star on a source or a wiki page
 and a filter in that lens; the **read-later queue** is a filter of the Sources list (`?readlater=1`,
 oldest entry first), a list on Start and a banner on the list. **Interests** are standing rules in

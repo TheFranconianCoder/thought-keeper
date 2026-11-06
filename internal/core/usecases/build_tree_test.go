@@ -330,3 +330,49 @@ func TestBuildTreeSkipsAFeedOrSitemap(t *testing.T) {
 		})
 	}
 }
+
+// TestReflowedSourceKeepsItsClaims: the refresh tolerance end to end. A page whose WORDS did not
+// change keeps its derivation across a rebuild — the atom survives, the part stays done — even though
+// the bytes and the line breaks moved. Only a changed word re-arms a part.
+func TestReflowedSourceKeepsItsClaims(t *testing.T) {
+	ctx := context.Background()
+	store := objects.New(t.TempDir())
+	idx := newFakeIndex()
+	trees := &fakeTreeStore{m: map[string][]entities.SourceNode{}}
+	extractor := extract.New(gateways.ExecRunner{}, extract.Config{})
+
+	src, err := usecases.Sources{Store: store, Index: idx, Clock: fixedClock{}}.Intake(ctx,
+		usecases.IntakeInput{Name: "doc.md", Reader: strings.NewReader("# Doc\n\ntext one two three\n")})
+	if err != nil {
+		t.Fatalf("intake: %v", err)
+	}
+	if _, err := (usecases.Trees{Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{}}).
+		Build(ctx, src.Hash); err != nil {
+		t.Fatalf("first build: %v", err)
+	}
+
+	atomStore := &fakeAtomStore{m: map[string]entities.Atom{}}
+	atomRepo := &fakeAtomRepo{saved: []entities.Atom{{
+		ID: ulid.Make(), Topic: "eng", Path: "eng/a.md", Claim: "a claim", Body: "b",
+		Status: entities.AtomActive, Sources: []entities.AtomSource{{Hash: src.Hash, NodeID: "0.1"}},
+	}}}
+	parts := &fakeSections{m: map[string]entities.PartState{"0.1": {NodeID: "0.1", State: entities.PartDone}}}
+	clean := usecases.Derivation{PartRepo: parts, Index: idx, Atoms: atomRepo, AtomStore: atomStore, Clock: fixedClock{}}
+
+	// The same words, re-wrapped. The bytes changed; the part did not.
+	if _, err := store.PutAt(src.Hash, ".md", []byte("# Doc\n\ntext  one\ntwo three\n")); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	if _, err := (usecases.Trees{
+		Store: store, Index: idx, Trees: trees, Extractor: extractor, Clock: fixedClock{},
+		Clean: clean.Correct, Parts: parts,
+	}).Build(ctx, src.Hash); err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+	if len(atomRepo.saved) != 1 {
+		t.Errorf("a reflowed part lost its claims: %+v", atomRepo.saved)
+	}
+	if st := parts.m["0.1"]; st.State != entities.PartDone {
+		t.Errorf("the reflowed part was re-armed: %+v", st)
+	}
+}

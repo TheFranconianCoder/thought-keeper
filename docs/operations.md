@@ -220,11 +220,14 @@ commit and the build time into `internal/version` via `-ldflags`, builds
   moment (350 ms) and folds a burst into one pass. The pass reads the index for "which hashes exist"
   instead of a full detail read per hash and step — 154 links used to cost 154 passes of ~780 ms.
 - **When the document steps run (automatic).** On add and on start. The start-up consistency check
-  runs BEFORE the HTTP server starts and always logs its outcome (`vault consistency ok`, or the
-  reason it rebuilt): a missing index is rebuilt; a cluster record without its row (or the reverse)
-  triggers a reindex; a record naming a claim that is gone, or a membership that contradicts its
-  record, does too; a step recorded `running` is cleared; a distill `ok` with no claims is open
-  again. It reads ids, rows and memberships — never claim bodies.
+  runs after the listener is up and before the workers start (writes wait), and always logs its
+  outcome (`vault consistency ok`, or the reason it rebuilt): a missing index is rebuilt; a cluster
+  record with live members but no row, a row with live members but no record, or a membership that
+  contradicts its record triggers a reindex. A record that names a claim the vault no longer holds is
+  the normal residue of a re-derivation: it is counted (`stale`) and left for the cluster pass, whose
+  first step prunes it — it does not trigger a rebuild, a cleanup or a second scan. A step recorded
+  `running` is cleared; a distill `ok` with no claims is open again. The check reads ids, rows and
+  memberships — never claim bodies — and it runs ONCE.
 - **Missing summaries are filled in the background.** The consistency check reports sources whose
   derivation is complete but whose `<hash>.summary.md` is gone; the app queues two per pass on the
   summary worker (a model call each), so a vault from before the summary existed drains gradually. A

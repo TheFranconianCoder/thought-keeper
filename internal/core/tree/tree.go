@@ -98,20 +98,21 @@ func Build(parts []entities.Part) []entities.SourceNode {
 		// reference describes THAT slice) — trimming again here would move the text away from its range.
 		text := s.Text
 		nodes = append(nodes, entities.SourceNode{
-			NodeID:    id,
-			ParentID:  parentID,
-			Depth:     nodes[parent.index].Depth + 1,
-			Ord:       len(nodes),
-			Title:     strings.TrimSpace(s.Title),
-			Summary:   preview(text),
-			StartPage: s.Page,
-			EndPage:   s.Page,
-			Text:      text,
-			TextStart: s.TextStart,
-			TextEnd:   s.TextEnd,
-			TextHash:  textHash(text),
-			HasText:   text != "",
-			OCR:       s.OCR,
+			NodeID:       id,
+			ParentID:     parentID,
+			Depth:        nodes[parent.index].Depth + 1,
+			Ord:          len(nodes),
+			Title:        strings.TrimSpace(s.Title),
+			Summary:      preview(text),
+			StartPage:    s.Page,
+			EndPage:      s.Page,
+			Text:         text,
+			TextStart:    s.TextStart,
+			TextEnd:      s.TextEnd,
+			TextHash:     textHash(text),
+			TextNormHash: TextNormHash(text),
+			HasText:      text != "",
+			OCR:          s.OCR,
 		})
 		stack = append(stack, frame{level: level, index: len(nodes) - 1})
 	}
@@ -147,6 +148,17 @@ func textHash(text string) string {
 	}
 	sum := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(sum[:])
+}
+
+// TextNormHash is the text's hash with whitespace runs collapsed. It is the tolerance a rebuilt
+// outline uses: a page that was reflowed keeps its norm hash and its claims, while a changed word
+// does not. Indentation inside code blocks is collapsed too — a claim is prose, and a part whose
+// code was re-wrapped is not new knowledge.
+func TextNormHash(text string) string {
+	if text == "" {
+		return ""
+	}
+	return textHash(strings.Join(strings.Fields(text), " "))
 }
 
 // propagatePages rolls each node's page range up into its ancestors so a parent
