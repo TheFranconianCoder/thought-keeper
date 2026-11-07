@@ -35,6 +35,7 @@
   import { wiki } from './lib/stores/wiki.svelte';
   import { asks } from './lib/stores/asks.svelte';
   import { initTheme } from './lib/theme.svelte';
+  import { newSources } from './lib/new-sources.svelte';
   import { startUpdateWatch } from './lib/update.svelte';
   import { ui } from './lib/ui.svelte';
 
@@ -102,10 +103,17 @@
     };
     window.addEventListener('keydown', onKey);
 
-    claimWindow(() => {
-      ui.duplicateWindow = true;
-      window.close();
-    });
+    claimWindow(
+      () => {
+        ui.duplicateWindow = true;
+        window.close();
+      },
+      () => {
+        // Only the window that won the election may acknowledge the batch; a duplicate that is
+        // about to close must not consume the reader's arrivals.
+        newSources.primary = true;
+      },
+    );
 
     return () => {
       window.removeEventListener('keydown', onKey);

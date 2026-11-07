@@ -7,8 +7,11 @@ const CHANNEL = 'thought-keeper-ui';
 let channel: BroadcastChannel | null = null;
 let claimed = false;
 
-export function claimWindow(onDuplicate: () => void): void {
-  if (typeof BroadcastChannel === 'undefined') return;
+export function claimWindow(onDuplicate: () => void, onPrimary?: () => void): void {
+  if (typeof BroadcastChannel === 'undefined') {
+    onPrimary?.();
+    return;
+  }
 
   channel = new BroadcastChannel(CHANNEL);
   let primarySeen = false;
@@ -38,6 +41,7 @@ export function claimWindow(onDuplicate: () => void): void {
       return;
     }
     claimed = true;
+    onPrimary?.();
   }, 250);
 }
 

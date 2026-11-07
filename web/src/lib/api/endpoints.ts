@@ -21,6 +21,8 @@ import type {
   InterestPreview,
   InterestRequest,
   Pipeline,
+  ReaderActivation,
+  ReaderState,
   RebuildTreeResult,
   ReconcileResult,
   RefetchResult,
@@ -65,6 +67,13 @@ export const api = {
     request<ConfigWriteResult>('/config', json('PUT', { values })),
   /** reloadConfig applies the file as it is on disk (the SSH-edit path). */
   reloadConfig: () => request<ConfigWriteResult>('/config/reload', { method: 'POST' }),
+
+  // ── Reader ─────────────────────────────────────────────────────────────
+  /** reader is the shared "new" watermark; a resync reads it without acknowledging anything. */
+  reader: (signal?: AbortSignal) => request<ReaderState>('/reader', { signal }),
+  /** readerActive acknowledges the batch for every client (Start/Sources became visible). */
+  readerActive: (signal?: AbortSignal) =>
+    request<ReaderActivation>('/reader/active', { method: 'POST', signal }),
 
   // ── Sources ────────────────────────────────────────────────────────────
   sources: (filter: SourceListFilter = {}, limit = 200, offset = 0, signal?: AbortSignal) =>

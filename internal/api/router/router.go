@@ -43,6 +43,9 @@ type Deps struct {
 	Interests    handlers.InterestHandler
 	Search       handlers.SearchHandler
 	Asks         handlers.AskHandler
+	// Reader is the shared "new" watermark: a client that becomes active acknowledges the batch for
+	// every client. It publishes its own SSE frame, so the other windows clear their marks at once.
+	Reader handlers.ReaderHandler
 	// Commands is the assistant: one utterance in, one address out. It publishes its own SSE frame,
 	// so a client that did not send the request still follows it.
 	Commands handlers.CommandHandler
@@ -243,6 +246,12 @@ func New(deps Deps, web http.Handler) http.Handler {
 		r.Get("/commands", deps.Commands.List)
 		r.Get("/commands/{id}", deps.Commands.GetOne)
 		r.Delete("/commands/{id}", deps.Commands.DeleteOne)
+
+		// The reader's shared "new" watermark. A client acknowledges the batch when it becomes
+		// active on Start or Sources; the record is app state, not a pipeline write, so it takes no
+		// gate. The repair guard still applies: the watermark reads the index's newest arrival.
+		r.Get("/reader", deps.Reader.Get)
+		r.Post("/reader/active", deps.Reader.Activate)
 
 		r.Get("/search", deps.Search.Get)
 		r.Post("/query", deps.Query.Post)

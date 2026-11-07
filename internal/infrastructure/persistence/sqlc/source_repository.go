@@ -480,6 +480,20 @@ func decodeSourceTags(raw string) []string {
 	return tags
 }
 
+// MaxSourceImportedAt is the newest arrival in the vault, in Unix milliseconds (zero for an empty
+// vault). The reader's seen watermark advances to it, which keeps both sides of "new" on the same
+// clock: the arrival time the index stores.
+func (r *SourceRepository) MaxSourceImportedAt(ctx context.Context) (time.Time, error) {
+	ms, err := r.q.MaxSourceImportedAt(ctx)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("max source imported_at: %w", err)
+	}
+	if ms <= 0 {
+		return time.Time{}, nil
+	}
+	return time.UnixMilli(ms).UTC(), nil
+}
+
 // CountSources is how many sources the FILTERED list has in total, so a page knows whether it is
 // the whole list and a windowed scroller knows its full height.
 func (r *SourceRepository) CountSources(ctx context.Context, filter entities.SourceFilter) (int, error) {

@@ -28,6 +28,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/objects"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/persistence"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/persistence/sqlc"
+	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/reader"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/sourcelog"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/sourcemeta"
 	treeStore "github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/tree"
@@ -149,6 +150,7 @@ func Build(
 	searchRepo := sqlc.NewSearchRepository(db, persistence.HasFTS5(db))
 	commandStore := commands.New(cfg.CommandsDir())
 	clock := gateways.SystemClock{}
+	readerState := &usecases.Reader{Store: reader.New(cfg.ReaderDir()), Index: index, Clock: clock}
 	runner := gateways.ExecRunner{}
 	pdfAvailable := runner.Available(cfg.PDF.TextTool)
 	ocrAvailable := runner.Available(cfg.OCR.Rasterizer) && runner.Available(cfg.OCR.Tesseract)
@@ -447,6 +449,9 @@ func Build(
 		Interests: handlers.InterestHandler{
 			Lister: readLater.Interests, Saver: readLater.SaveInterest, Deleter: readLater.DeleteInterest,
 			Previewer: readLater.PreviewInterest, Rejecter: readLater.RejectInterest,
+		},
+		Reader: handlers.ReaderHandler{
+			State: readerState.State, Activator: readerState.Activate, Notifier: hub,
 		},
 		Search: handlers.SearchHandler{Search: query.Search},
 		Asks:   handlers.AskHandler{Lister: asks.List, Getter: asks.Get, Deleter: asks.Delete},

@@ -16,6 +16,8 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/config` | The RUNNING configuration for the Config overlay: `path` (the resolved machine file), `vault_path` (the vault's own file, `<vault>/vault.yaml`), `vault_exists` (the vault carries one), `exists` (false = no machine file), `changed` (the file on disk differs from what the process runs, compared by effective value), `error` (a broken file; the running values are still listed) and `sections` in struct order. Each field carries `key` (the dotted YAML path), `kind` (`string`, `bool`, `int`, `float`, `duration`, `list`, `map`, `path` or `tool`), `value`, `resolved` (for a path or tool: the absolute directory or binary the process uses; empty when a tool is not found), `lookup` (for a tool: the name searched on PATH — `lightpanda` when `browser.path` is empty), `source` (`file` means the machine's YAML, `vault` the vault's own file, `environment` or `default`), `scope` (`vault` when the knob is stored in the vault's file, `machine` otherwise), `env` (the variable that decided an environment value), `restart` (true when a change would need a new process), `writable` (true for either writable set; an environment-owned value is still refused), `tier` (`basic` for the curated set, `advanced` for the expert set behind the overlay's reveal, absent when read-only), and `options` for an enumeration. Secrets never leave the process: `openai.api_key` has `value: null` and `set`, and `openai.headers` names the header NAMES only |
 | `PUT` | `/api/v1/config` | Write a patch (`{values:{key:value,…}}`) and apply it in the running process. Only the two writable sets are accepted (the curated set and Advanced); a key outside them or an environment-owned value is `400 invalid_body`, a value `Validate` rejects is `422 unparsed`. The right file is written first — a vault-scoped key to `<vault>/vault.yaml`, everything else to the machine's config (comments preserved, `${VAR}` kept as a reference, `<file>.bak`, merged result validated before either file is replaced) — then the apply is queued behind the exclusive gate — the answer is `202 {queued:true, config}` with the RUNNING view, which still shows `changed:true` until the swap lands |
 | `POST` | `/api/v1/config/reload` | Apply the file as it is on disk (an edit over SSH), without a restart. `202 {queued:true, config}` |
+| `GET` | `/api/v1/reader` | The shared **seen watermark**: `{seen_at}` (RFC3339, absent until a client acknowledges). A source is **new** when its `imported_at` is later. The watermark is one record per vault (`<vault>/.thought-keeper/reader/seen.md`), not per client |
+| `POST` | `/api/v1/reader/active` | A client became active while Start or Sources is visible: acknowledge every source that exists now and answer the baseline its marks use. `200 {since, seen_at}` — `since` is absent on the very first acknowledgment (nothing is new then); `seen_at` is the watermark after it. The watermark only moves forward, and only when there is something later than it; a move publishes the `reader` event. No gate: it is app state, not a pipeline write. The repair guard still refuses it while the index is rebuilt |
 | `GET` | `/api/v1/pipeline` | Global step status: documents or clusters, queued counts, `jobs`, and the index rebuild (`repair`) while one runs |
 | `POST` | `/api/v1/cluster` | Queue the cluster step by hand (waits for the gate) |
 | `POST` | `/api/v1/reconcile` | Run the consistency job by hand |
@@ -124,10 +126,14 @@ is read by id.
 One SSE stream (`GET /api/v1/events`) pushes events by type:
 
 `run` · `source` · `wiki` · `clusters` · `findings` · `urls` · `pipeline` · `progress` · `log` ·
-`vocabulary` · `interests` · `command`
+`vocabulary` · `interests` · `command` · `reader`
 
 `interests` is a state event: a rule was saved or deleted, or a match queued a source. The rule list
 and its open counts are re-read; the queue rows are source rows and ride the `source` scope.
+
+`reader` is a state event: `{seen_at}` when another client acknowledged the batch and moved the
+shared watermark. A client applies it only forward, and a late frame can never re-open what was
+already seen. It is what removes the same sources from "new" on every other client.
 
 State events coalesce per type and are never dropped; `progress` coalesces per source; `log` is a
 bounded live tail. The PWA patches only the containers each event names. See `pwa.md`.

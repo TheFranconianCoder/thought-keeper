@@ -35,9 +35,12 @@ func publishWrites(hub *stream.Hub) func(http.Handler) http.Handler {
 			// The window channel is the shell talking to itself; it changes no data. A command is a
 			// READ that happens to write its own record: it announces itself with its own frame, and
 			// reloading every container for it was a full list read behind every keystroke of the
-			// assistant's field.
+			// assistant's field. The reader's watermark likewise announces itself as `reader` and
+			// changes no source: invalidating every list on every activation would make the phone's
+			// "I am here" reload the desktop's pages.
 			if strings.Contains(r.URL.Path, "/window/") || strings.HasPrefix(r.URL.Path, "/api/v1/commands") ||
-				strings.HasPrefix(r.URL.Path, "/api/v1/config") {
+				strings.HasPrefix(r.URL.Path, "/api/v1/config") ||
+				strings.HasPrefix(r.URL.Path, "/api/v1/reader") {
 				next.ServeHTTP(w, r)
 				return
 			}

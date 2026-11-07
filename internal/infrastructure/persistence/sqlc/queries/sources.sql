@@ -491,3 +491,9 @@ SELECT COUNT(*) FROM sources
 WHERE (CASE WHEN json_valid(meta)
            THEN COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '')
            ELSE '' END) IN ('true', '1');
+
+-- name: MaxSourceImportedAt :one
+-- The newest arrival in the vault, in Unix milliseconds; 0 when the vault is empty. The reader's
+-- seen watermark moves to this instant, so no client clock is compared with a server clock: both
+-- sides of "new" are the arrival time the index stores.
+SELECT CAST(COALESCE(MAX(imported_at), 0) AS INTEGER) AS max_imported_at FROM sources;

@@ -85,7 +85,9 @@ func (h *Hub) Subscribers() int {
 // (a log line, each of which says something different).
 func coalesceKey(typ string, data any) string {
 	switch typ {
-	case "run", "source", "clusters", "findings", "urls":
+	case "run", "source", "clusters", "findings", "urls", "reader":
+		// Only the newest watermark matters: a second one overwrites the first, exactly like the
+		// container events above.
 		return typ
 	case "progress":
 		if m, ok := data.(map[string]any); ok {

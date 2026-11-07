@@ -9,6 +9,13 @@
   import { readError, readSignal } from '../../lib/read';
   import { askPath, navigate, router, sourcePath } from '../../lib/router.svelte';
   import { pipelineLabel } from '../../lib/source-state';
+  import {
+    activateNewSources,
+    arrivalWindowExtended,
+    arrivalWindowStart,
+    isNew,
+    newSources,
+  } from '../../lib/new-sources.svelte';
   import { asks } from '../../lib/stores/asks.svelte';
   import { interests } from '../../lib/stores/interests.svelte';
   import { sources } from '../../lib/stores/sources.svelte';
@@ -16,6 +23,7 @@
   import { system } from '../../lib/stores/system.svelte';
   import Icon from '../ui/Icon.svelte';
   import InterestChip from '../ui/InterestChip.svelte';
+  import NewTag from '../sources/NewTag.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
   import SourceLamp from '../sources/SourceLamp.svelte';
 
@@ -24,6 +32,8 @@
   let arrivalCount = $state(0);
   let arrivalsLoaded = $state(false);
   let arrivalsError = $state('');
+  /** Whether the card's window reaches back past its three days to the last visit. */
+  let arrivalsExtended = $state(false);
   // The queue is a LINE, not a card: the oldest entry and its numbers say everything the door owes
   // it, and the arrivals below are the list the reader actually works from.
   let readLaterOldest = $state<Source | null>(null);
@@ -33,6 +43,9 @@
 
   const status = $derived(system.status);
   const recentQuestions = $derived(asks.recent.slice(0, 3));
+  const arrivalsWindow = $derived(
+    arrivalsExtended ? t('home.arrivalsWindowSince') : t('home.arrivalsWindow'),
+  );
   // A card that would only say "nothing came in this window" is one card too many: like the signal
   // lines it is absent when quiet.
   const showArrivals = $derived(!arrivalsLoaded || arrivalsError !== '' || arrivals.length > 0);
@@ -81,10 +94,22 @@
 
   $effect(() => {
     if (router.current.view !== 'home') return;
+    // Opening Start is the acknowledgment of the shared "new" batch; a wake on another lens must not
+    // consume the arrivals.
+    if (newSources.primary && newSources.active && newSources.ack === 'idle') void activateNewSources();
+  });
+
+  $effect(() => {
+    if (router.current.view !== 'home') return;
+    // The card waits for this phase's acknowledgment: painting without marks and then reloading
+    // with them was a visible flicker. An inactive window (idle) keeps the last known baseline and
+    // loads at once; a failed acknowledgment also loads, with whatever baseline is known.
+    if (newSources.active && newSources.ack !== 'done' && newSources.ack !== 'failed') return;
     // The Start page does not need the full list, only the arrivals and the queue — but both change
     // when the vault does. `epoch` moves when the sources are invalidated, never when a page of some
-    // list happens to arrive.
+    // list happens to arrive. `since` moves when another client acknowledged the batch.
     void sourceWindow.epoch;
+    void newSources.since;
     untrack(() => {
       void loadArrivals();
       void loadReadLater();
@@ -118,11 +143,20 @@
   async function loadArrivals(): Promise<void> {
     try {
       // The newest SOURCES of the window, each one a row of its own: a feed's article is an arrival
-      // like a document is, and the window keeps the card from freezing on the newest ever.
-      const since = new Date(Date.now() - 3 * 86_400_000).toISOString();
-      const result = await api.sources({ since }, 8, 0, readSignal(20_000));
+      // like a document is, and the window keeps the card from freezing on the newest ever. The
+      // window is at least three days, and reaches back to the last acknowledgment when that is
+      // earlier, so an arrival the reader has not seen is actually on the card.
+      const now = Date.now();
+      const since = newSources.since;
+      const result = await api.sources(
+        { since: arrivalWindowStart(now, since) },
+        8,
+        0,
+        readSignal(20_000),
+      );
       arrivals = result.sources ?? [];
       arrivalCount = result.count ?? arrivals.length;
+      arrivalsExtended = arrivalWindowExtended(now, since);
       arrivalsLoaded = true;
       arrivalsError = '';
     } catch (error) {
@@ -250,7 +284,7 @@
         {#if arrivalsLoaded && arrivalCount > 0}
           <span class="count">{tn('home.arrivalsCount', arrivalCount)}</span>
         {/if}
-        <span class="card-window">{t('home.arrivalsWindow')}</span>
+        <span class="card-window">{arrivalsWindow}</span>
         <a class="card-link" href="#/sources">
           {t('home.allSources')}
           <Icon name="chevronRight" size={13} />
@@ -267,8 +301,10 @@
         <div class="home-rows">
           {#each arrivals as source (source.hash)}
             {@const live = sources.progress[source.hash]}
-            <button class="home-row source-row" onclick={() => openSource(source)}>
+            {@const fresh = isNew(source.imported_at)}
+            <button class="home-row source-row" class:is-new={fresh} onclick={() => openSource(source)}>
               <SourceIcon kind={source.kind} hash={source.hash} size={16} />
+              {#if fresh}<NewTag />{/if}
               <span class="source-main">
                 <span class="row-title">{source.title || source.hash.slice(0, 12)}</span>
                 <span class="row-sub">
@@ -503,7 +539,7 @@
     font-size: 11.5px;
   }
 
-  /* The window the card reads, said instead of assumed: the digest is a week, not "the newest". */
+  /* The window the card reads, said instead of assumed: three days, or back to the last visit. */
   .card-window {
     color: var(--faint);
     font-size: 11px;
@@ -559,6 +595,12 @@
   .home-row:hover {
     background: var(--bg-hover);
     color: var(--ink);
+  }
+
+  /* The same quiet accent the Sources row carries: the tag already says it, this only makes the
+     row findable while scrolling. */
+  .home-row.is-new {
+    box-shadow: inset 2px 0 0 var(--accent);
   }
 
   .home-row :global(.ico) {

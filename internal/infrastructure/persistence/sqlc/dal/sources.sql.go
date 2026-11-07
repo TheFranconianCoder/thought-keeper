@@ -1470,6 +1470,20 @@ func (q *Queries) ListURLSources(ctx context.Context) ([]Source, error) {
 	return items, nil
 }
 
+const maxSourceImportedAt = `-- name: MaxSourceImportedAt :one
+SELECT CAST(COALESCE(MAX(imported_at), 0) AS INTEGER) AS max_imported_at FROM sources
+`
+
+// The newest arrival in the vault, in Unix milliseconds; 0 when the vault is empty. The reader's
+// seen watermark moves to this instant, so no client clock is compared with a server clock: both
+// sides of "new" are the arrival time the index stores.
+func (q *Queries) MaxSourceImportedAt(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, maxSourceImportedAt)
+	var max_imported_at int64
+	err := row.Scan(&max_imported_at)
+	return max_imported_at, err
+}
+
 const resetSourceDerived = `-- name: ResetSourceDerived :exec
 UPDATE sources SET title = ?, pages = NULL WHERE hash = ?
 `

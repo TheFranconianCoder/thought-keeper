@@ -59,10 +59,11 @@ its title, a wiki page's edit), which is shown beside the arrival but never orde
 **Start** is the front door: a vault-pulse line, an Ask box, and three thin signals for what runs,
 what needs you and what waits in the read-later queue (open entries, the interests that queued them
 by name, the age of the oldest), all absent when quiet; then **Arrived** — the eight newest sources
-that entered the vault in the last three days, one row each (a feed's article is an arrival like a
-document is), each with the date its source declares and its arrival age, and — where a standing rule
-queued it — the rule's chip on the row (the same chip the Sources rows carry, shown while the entry is
-open); the card is absent when the window is quiet. Never a session-restore card and never the
+of the window (three days, or longer when the vault was last visited earlier), one row each (a feed's
+article is an arrival like a document is), each with the date its source declares and its arrival
+age, a **new** mark when it arrived since that last visit, and — where a standing rule queued it —
+the rule's chip on the row (the same chip the Sources rows carry, shown while the entry is open); the
+card is absent when the window is quiet. Never a session-restore card and never the
 newest-claims wall. A **wiki
 page** is user-authored Markdown with tags; saving it writes a source representation and runs the
 document pipeline from capture. The app also tags a page and a source
@@ -88,7 +89,9 @@ and a filter in that lens; the **read-later queue** is a filter of the Sources l
 oldest entry first), a list on Start and a banner on the list. **Interests** are standing rules in
 `interests/`: a strong lexical match puts a NEW source into the queue, a weak one stays a suggestion
 in the source's rail. They are managed in an overlay, and their matches are computed on demand — no
-index table, no model, no second grouping.
+index table, no model, no second grouping. The **seen watermark** is the one shared reader state:
+one record per vault, advanced by the first client that becomes active on Start or Sources, so a
+source the phone has seen is not new on the desktop — no client id, no per-device file.
 
 The app's own configuration is readable in the **Config overlay** (`?config=1`, the gear in the top
 bar): every knob with its origin (the machine's file, the vault's file, the environment or a
@@ -178,6 +181,7 @@ paths stay read-only.
 | **favorite** | The reader's star on a source or a wiki page: "this belongs to me". No lifecycle, no label, never a ranking signal. | the source record / the page frontmatter |
 | **read later** | The reader's queue of sources. Open until marked done; otherwise a filter of the Sources list, ordered oldest entry first. | the source record + `?readlater=1` |
 | **interest** | A standing rule the reader writes: terms that make a NEW source join the read-later queue. A strong match queues; a weak one is only a suggestion. | `interests/<slug>.md` |
+| **seen watermark** | The instant up to which the vault's arrivals have been seen; a source later than it is **new**. One per vault, shared by every client: the first client active on Start or Sources acknowledges the batch. A record, not a cache. | `.thought-keeper/reader/seen.md` |
 | **reconcile / reindex / cleanup** | The repairs: check records against the vault; rebuild the index from the vault; prune dead cluster members. The first two are buttons in Status → Vault; cleanup settles every cluster pass by itself. | Status → Vault |
 
 **The URL is the truth about UI state — with one exception that is deliberate.** A command's address
@@ -337,7 +341,7 @@ instance, not clients of a server you operate.
 ├── interests/        # the reader's standing rules (<slug>.md, records)
 ├── asks/             # saved Ask conversations (<run-id>.md)
 ├── commands/         # the assistant's requests (pruned after a week; git-ignored)
-├── .thought-keeper/  # derived, hidden: favicons/
+├── .thought-keeper/  # app state, hidden: favicons/ (derived), reader/seen.md (the seen watermark)
 ├── .trash/           # deletions (trash, not delete)
 └── (.git/ if you version the vault — the app keeps .gitignore current)
 ```

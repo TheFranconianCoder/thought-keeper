@@ -30,6 +30,9 @@ export const sourcesEn: Record<string, string> = {
   'sources.readTimeout': 'The local service did not answer in time.',
 
   // One row: the labels the list shows next to a source.
+  // The shared "new" mark: the source arrived after the vault's seen watermark.
+  'sources.tagNew': 'new',
+  'sources.tagNewTitle': 'Arrived since the vault was last visited',
   'sources.attachedTag': 'attached',
   'sources.attachedTagTitle': 'Snapshot attached by hand',
   'sources.attachedTagTitleFrom': 'Snapshot attached by hand from {from}',

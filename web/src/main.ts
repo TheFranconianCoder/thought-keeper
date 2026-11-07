@@ -3,6 +3,7 @@ import './styles/app.css';
 import App from './App.svelte';
 import { freezeDocumentScroll, trackViewportHeight } from './lib/viewport';
 import { trackWindowControls } from './lib/window-controls';
+import { initNewSources } from './lib/new-sources.svelte';
 import { initTheme } from './lib/theme.svelte';
 
 const target = document.getElementById('app');
@@ -16,6 +17,9 @@ trackWindowControls();
 trackViewportHeight();
 freezeDocumentScroll();
 initTheme();
+// The presence engine runs before the first render: the Start card waits for this opening's
+// acknowledgment, and a phase that starts late would make it paint twice.
+initNewSources();
 
 // The service worker makes the PWA installable and lets the shell open when the local service is not
 // running. The API is deliberately never cached: a cached answer about the vault would be a lie at

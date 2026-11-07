@@ -26,7 +26,7 @@ const Header = "# thought-keeper: derived files — rebuildable or rewritten on 
 // objects in sources/, the atom files, the vocabulary) IS the artifact and belongs in the history.
 func Patterns() []string {
 	return []string{
-		// The vault's hidden cache (favicons) and the local trash.
+		// The vault's hidden app state (favicons, the reader's seen watermark) and the local trash.
 		".thought-keeper/",
 		".trash/",
 		// The drop zone: files are consumed by intake, so a leftover there is not content.

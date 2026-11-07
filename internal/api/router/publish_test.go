@@ -43,6 +43,7 @@ func TestPublishWritesAnnouncesSuccessfulWrites(t *testing.T) {
 	})
 	r.Get("/api/v1/notes", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	r.Post("/api/v1/window/close", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	r.Post("/api/v1/reader/active", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	post := func(path string) {
 		rec := httptest.NewRecorder()
@@ -81,5 +82,12 @@ func TestPublishWritesAnnouncesSuccessfulWrites(t *testing.T) {
 	post("/api/v1/window/close")
 	if n := sub.Pending(); n != 0 {
 		t.Errorf("a window action announced itself (%d events)", n)
+	}
+
+	// The reader's watermark announces itself with one `reader` frame, never the source containers:
+	// an activation on the phone must not reload the desktop's lists.
+	post("/api/v1/reader/active")
+	if n := sub.Pending(); n != 0 {
+		t.Errorf("a reader activation announced the whole vault (%d events)", n)
 	}
 }

@@ -220,6 +220,21 @@ export interface QueueCounts {
   interests?: InterestShare[];
 }
 
+/** ReaderState is the shared "new" watermark: the instant up to which the vault's arrivals have
+ *  been seen. One value per vault, never per client. Empty means no client has acknowledged yet. */
+export interface ReaderState {
+  seen_at?: string;
+}
+
+/** ReaderActivation is the answer to a client becoming active. `since` is the baseline its marks use
+ *  (absent on the first activation, when nothing is new); `seen_at` is the watermark after the
+ *  acknowledgment. */
+export interface ReaderActivation {
+  since?: string;
+  seen_at: string;
+  first?: boolean;
+}
+
 /** SourceLink is one URL a document links to that already IS a source: the vault's own page for it. */
 export interface SourceLink {
   url: string;
@@ -660,7 +675,8 @@ export type EventType =
   | 'progress'
   | 'log'
   | 'vocabulary'
-  | 'command';
+  | 'command'
+  | 'reader';
 
 export interface StreamFrame {
   type: EventType | string;

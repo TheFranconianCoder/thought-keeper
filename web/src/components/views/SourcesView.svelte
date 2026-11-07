@@ -17,6 +17,8 @@
   import { scrollFade } from '../../lib/scroll-fade';
   import { rememberSourcesTop } from '../../lib/sources-scroll';
   import { interestChipSlugs, statusLabel } from '../../lib/source-state';
+  import { activateNewSources, isNew, newSources } from '../../lib/new-sources.svelte';
+  import NewTag from '../sources/NewTag.svelte';
   import CloudMore from '../ui/CloudMore.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -142,6 +144,13 @@
     if (router.current.view !== 'sources') return;
     if (!sourceWindow.facetsLoaded) untrack(() => void sourceWindow.loadFacets());
     if (!interests.loaded) untrack(() => void interests.load());
+  });
+
+  $effect(() => {
+    if (router.current.view !== 'sources') return;
+    // Sources is one of the two surfaces that shows the new batch, so opening it acknowledges it.
+    // A wake on a claim or a source page deliberately does not.
+    if (newSources.primary && newSources.active && newSources.ack === 'idle') void activateNewSources();
   });
 
   function toggleParam(key: string): void {
@@ -415,7 +424,8 @@
           {#if source}
             {@const live = sources.progress[source.hash]}
             {@const rowTagInfo = rowTags(source)}
-            <div class="source-row">
+            {@const fresh = isNew(source.imported_at)}
+            <div class="source-row" class:is-new={fresh}>
               <button
                 class="source-open"
                 title={statusLabel(source, live)}
@@ -425,6 +435,7 @@
 
                 <div class="source-main">
                   <div class="source-title">
+                    {#if fresh}<NewTag />{/if}
                     {#if source.attached}
                       <span
                         class="tag tag--attached"
@@ -559,6 +570,11 @@
   .source-row:hover,
   .source-row:focus-within {
     background: var(--bg-hover);
+  }
+
+  /* The tag says "new"; the accent line is what makes the row findable while scrolling. */
+  .source-row.is-new {
+    box-shadow: inset 2px 0 0 var(--accent);
   }
 
   .source-row--skeleton {

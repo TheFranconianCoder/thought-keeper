@@ -682,8 +682,9 @@ func (c Config) InterestsDir() string {
 	return filepath.Join(c.VaultRoot(), dir)
 }
 
-// derivedDir is the vault's hidden cache directory. It holds what is derived but is NOT about one
-// single source: today only the favicons (two sources of one host share an icon).
+// derivedDir is the vault's hidden app-state directory. It holds what is not about one single
+// source: the favicons (two sources of one host share an icon) and the reader's seen watermark,
+// which is a record rather than a cache but is likewise no knowledge of the vault.
 //
 // Everything that belongs to ONE source lives next to that source instead
 // (sources/<ab>/<cd>/<hash>.md · .meta · .outline · .log), and the index database sits in the
@@ -704,6 +705,12 @@ func (c Config) IndexDB() string {
 		return expandHome(p)
 	}
 	return filepath.Join(c.VaultRoot(), p)
+}
+
+// ReaderDir returns the absolute reader-state directory: the shared seen watermark lives here,
+// hidden with the app's other state. It is a RECORD, not a cache: reindex never touches it.
+func (c Config) ReaderDir() string {
+	return filepath.Join(c.derivedDir(), "reader")
 }
 
 // FaviconsDir returns the absolute favicon store directory (the vault's hidden cache).

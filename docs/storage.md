@@ -38,7 +38,7 @@ greppable, worth versioning and backing up. The app never treats a directory as 
 │   └── source-tags.md
 ├── interests/                  # the reader's standing rules: <slug>.md (records)
 ├── asks/                       # saved Ask conversations: <run-id>.md
-├── .thought-keeper/            # derived, hidden: favicons/
+├── .thought-keeper/            # app state, hidden: favicons/ (derived), reader/seen.md (a record)
 ├── .trash/                     # deletions (trash, not delete)
 └── (.git/ if you version the vault — the app keeps .gitignore current)
 ```
@@ -79,8 +79,10 @@ file — to fall back. It is a **record**: version it with the vault.
 5. **The primary artifact stays primary.** A sidecar never carries content that cannot be derived
    elsewhere — except for the *records*, where the file is deliberately the authority.
 
-The **one exception** is the favicon store (`.thought-keeper/favicons/`): two sources of one host
-share an icon, so it belongs to no single source.
+The **one sidecar exception** is the favicon store (`.thought-keeper/favicons/`): two sources of one
+host share an icon, so it belongs to no single source. The reader's seen watermark
+(`.thought-keeper/reader/seen.md`) is not a sidecar either: it belongs to the whole vault and is
+described in §11.
 
 The rendering is named after the step that writes it, and that name is doing real work:
 `<hash>.capture.md` can never be mistaken for an object, while a plain `<hash>.md` could be — a
@@ -98,7 +100,7 @@ clusters/**/*.meta
 
 What stays in the history is the object, the wiki pages, the atoms, the vocabulary and the vault's
 own config — the knowledge. `.meta` and `.log` are records but are excluded anyway: they change on every run and are
-rebuilt from the vault. `vault.git.enabled` and `commit_on_write` are **not implemented**; the app
+rebuilt from the vault. The reader's seen watermark is app state and is excluded too. `vault.git.enabled` and `commit_on_write` are **not implemented**; the app
 never runs git.
 
 ## 3. Per-source log
@@ -570,10 +572,10 @@ items:
 - **No index table.** Like `asks/`, the directory is read directly: the history is small by design.
   `reindex` does not touch it.
 
-## 11. Reader marks and interests
+## 11. Reader marks, interests and the seen watermark
 
-The reader's own state is deliberately small: two marks on a source, one mark on a page, and one
-file per standing rule. None of it is a tag, a topic or a claim.
+The reader's own state is deliberately small: two marks on a source, one mark on a page, one file
+per standing rule and one shared watermark. None of it is a tag, a topic or a claim.
 
 ### The marks
 
@@ -590,6 +592,29 @@ the windowed list):
 
 A wiki page's star is the `favorite_at` key in its frontmatter. Reindex reads both back; nothing
 about the marks is derived.
+
+### `.thought-keeper/reader/seen.md`
+
+One file per vault: the **seen watermark**. A source is **new** when its `imported_at` is later.
+
+```markdown
+---
+seen_at: 2026-11-07T08:00:00.123Z
+---
+```
+
+- **One record, not one per client.** Whichever client becomes active while Start or Sources is
+  visible acknowledges the batch for every client; no client id, token or per-device file exists.
+  That is what keeps a source the phone has seen from being new on the desktop.
+- **It only moves forward**, and only when a source arrived later than it. An acknowledgment with
+  nothing new writes nothing and announces nothing. The first acknowledgment initializes it to
+  "now": a fresh vault marks nothing, it does not flag the whole corpus.
+- **It is app state, not knowledge.** The file is hidden with `.thought-keeper/` and git-ignored
+  (it changes only when a new arrival moves it); `reindex`, `rebuild-trees`, `reconcile` and
+  `cleanup` leave it alone. Losing it is harmless: the next first acknowledgment starts a clean
+  baseline, and only the "new" marks are gone.
+- **No index table.** The reader endpoints read the file directly; the watermark's comparison uses
+  the `imported_at` the index already stores.
 
 ### `interests/<slug>.md`
 

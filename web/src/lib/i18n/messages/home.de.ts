@@ -20,6 +20,7 @@ export const homeDe: Record<string, string> = {
 
   'home.arrivals': 'Angekommen',
   'home.arrivalsWindow': 'letzte 3 Tage',
+  'home.arrivalsWindowSince': 'seit dem letzten Besuch',
   'home.arrivalsCount.one': '{count} neu',
   'home.arrivalsCount.many': '{count} neu',
   'home.allSources': 'Alle Quellen',

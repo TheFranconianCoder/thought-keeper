@@ -55,7 +55,11 @@ func SourceFromPartial(p partialentities.PartialSource) Source {
 		AtomsLeft:         p.AtomsLeft,
 		URLStatus:         p.URLStatus,
 		Bookmark:          p.Bookmark,
-		ImportedAt:        p.ImportedAt.UTC().Format(time.RFC3339),
+		// The arrival is compared with the reader's seen watermark, which is a source's exact
+		// imported_at. Keeping the sub-second part is what makes a source that arrived in the same
+		// second as the last acknowledgment still count as new; rounding it to the second made it
+		// look older than the watermark.
+		ImportedAt: p.ImportedAt.UTC().Format(time.RFC3339Nano),
 	}
 	if !p.URLChecked.IsZero() {
 		s.URLCheckedAt = p.URLChecked.UTC().Format(time.RFC3339)

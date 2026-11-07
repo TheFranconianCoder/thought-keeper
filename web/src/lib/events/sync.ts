@@ -10,6 +10,7 @@ import { claims } from '../stores/claims.svelte';
 import { wiki } from '../stores/wiki.svelte';
 import { asks } from '../stores/asks.svelte';
 import { assistant } from '../stores/assistant.svelte';
+import { applySharedSeen, refreshNewSources, retryNewSources } from '../new-sources.svelte';
 import { checkForUpdate } from '../update.svelte';
 
 /**
@@ -353,6 +354,11 @@ function handleFrame(frame: StreamFrame): void {
       // twice.
       assistant.applyFrame(data);
       return;
+    case 'reader':
+      // Another client acknowledged the batch: its sources are no longer new here. Only a forward
+      // move is applied, so a late frame cannot re-open what was already seen.
+      applySharedSeen(String(data.seen_at ?? ''));
+      return;
     default:
       // Forward compatibility: unknown event types are ignored, never guessed at.
       return;
@@ -385,7 +391,11 @@ export async function resyncAll(force = false): Promise<void> {
     topicsVisible() ? claims.loadTopics() : Promise.resolve(),
     asks.load(),
     interests.load(true),
+    // A reconnect may have missed a `reader` frame; a failed acknowledgment gets another chance
+    // (the visible Start/Sources view calls it when `ack` returns to idle).
+    refreshNewSources(),
   ]);
+  retryNewSources();
 
   await Promise.all([
     sourceDetailVisible() && sources.selectedHash ? sources.refresh() : Promise.resolve(),
