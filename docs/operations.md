@@ -169,7 +169,7 @@ task icons             # render app icons from web/icons/pictogram.svg
 task run               # go run ./cmd/thought-keeper app --config config.yaml
 task run:open          # run and hand the address to the OS
 task run:headless      # no tray (CI, WSL)
-task cross             # static binaries (CGO off)
+task cross             # static binaries (CGO off) for the five release targets
 task format:go         # gofumpt -w .
 task lint:go           # golangci-lint run
 task lint-fix:go       # go mod tidy + go get -u + golangci-lint --fix (upgrades dependencies)
@@ -186,25 +186,35 @@ task hooks             # lefthook install
 
 ### Releases
 
-Releases are cut from `main` with the `release` skill in `.opencode/skills/release/`. They are
-**source-only** for now: GitHub's generated source archives are the artifact. `v0.1.0` through
-`v0.5.0` are pre-releases; `v1.0.0` is the current release.
+Releases are cut from `main` with the `release` skill in `.opencode/skills/release/`. Each release
+ships five static binaries and `SHA256SUMS`:
+
+```text
+thought-keeper-linux-amd64
+thought-keeper-linux-arm64
+thought-keeper-darwin-amd64
+thought-keeper-darwin-arm64
+thought-keeper-windows-amd64.exe
+SHA256SUMS
+```
 
 ```bash
 .opencode/skills/release/scripts/preflight.sh                    # branch, tree, auth, last tag
 .opencode/skills/release/scripts/changes.sh                      # commits since the last tag
-.opencode/skills/release/scripts/release-commit.sh X.Y.Z <commit> [--prerelease]
+.opencode/skills/release/scripts/release.sh X.Y.Z
 ```
 
-The skill writes `.release/title-<version>.txt` and `.release/notes-<version>.md` (git-ignored) from
-the commit log. `release-commit.sh` refuses a tag that exists, creates the tag at the given commit
-through `gh release create --target` and mirrors that tag locally. It does **not** commit: the tag
-points at a commit already on `origin/main`. Requires `gh auth login`.
+The skill writes `.release/title.txt` and `.release/notes.md` (git-ignored) from the commit log.
+`release.sh` re-runs the preflight, builds the PWA, cross-builds the five targets with CGO off,
+stamps the version, the commit and the build time into `internal/version` via `-ldflags`, verifies
+the binary reports the tag, writes `dist/SHA256SUMS` and publishes everything through
+`gh release create`. It does **not** commit: the tag points at a commit already on `origin/main`,
+and the script mirrors it locally afterwards. Requires `gh auth login`. The macOS binaries are
+unsigned, so Gatekeeper may need an explicit allow.
 
-`release.sh X.Y.Z` is the binary path, kept for the first binary release: it stamps the version, the
-commit and the build time into `internal/version` via `-ldflags`, builds
-`dist/thought-keeper-linux-amd64`, `dist/thought-keeper-linux-arm64`,
-`dist/thought-keeper-windows-amd64.exe` and `dist/SHA256SUMS`, and uploads them.
+Every release before the first binary release was source-only. `release-commit.sh X.Y.Z <commit>
+[--prerelease]` still reproduces that history: it uploads no assets and only creates the tag at the
+given commit.
 
 ## 5. Debugging
 

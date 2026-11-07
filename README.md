@@ -524,19 +524,43 @@ task build            # CGO-free; the PWA is embedded
 ./dist/thought-keeper app --config config.yaml
 ```
 
-### Releases
+### Install a release
 
-Releases are **source-only**: each release ships GitHub's generated source archives, and the binary is
-built from them. Download an archive or clone the repository, then:
+From the first binary release on, every release ships static binaries for Linux, macOS and Windows.
+Download the one for your platform from the
+[releases page](https://github.com/TheFranconianCoder/thought-keeper/releases):
 
-```bash
-task build
-./dist/thought-keeper app --config config.yaml
+```text
+thought-keeper-linux-amd64
+thought-keeper-linux-arm64
+thought-keeper-darwin-amd64
+thought-keeper-darwin-arm64
+thought-keeper-windows-amd64.exe
+SHA256SUMS
 ```
 
-Versions follow semver and the tag is the version. The released history starts at `v0.1.0`;
-`v1.0.0` is the current release. Notes and archives are on the
-[releases page](https://github.com/TheFranconianCoder/thought-keeper/releases).
+Linux and macOS:
+
+```bash
+curl -LO https://github.com/TheFranconianCoder/thought-keeper/releases/latest/download/thought-keeper-linux-amd64
+chmod +x thought-keeper-linux-amd64
+install -m 755 thought-keeper-linux-amd64 ~/.local/bin/thought-keeper
+thought-keeper app
+```
+
+Windows: download `thought-keeper-windows-amd64.exe` and run it.
+
+Verify the download with `sha256sum -c SHA256SUMS` on Linux or
+`shasum -a 256 -c SHA256SUMS` on macOS. The macOS binaries are unsigned; Gatekeeper may need an
+explicit allow in System Settings.
+
+The binary needs no checkout and no config file: it uses the defaults (`~/thought-keeper` as the
+vault, `127.0.0.1:9210` for the service) and prints its address, which you open and install as a PWA.
+Put a config at `$XDG_CONFIG_HOME/thought-keeper/config.yaml` (or pass `--config PATH`) only when you
+want to change something, and set `OPENAI_API_KEY` for the agent. People who want to build it
+themselves clone the repository and run `task build`.
+
+Versions follow semver and the tag is the version; the released history starts at `v0.1.0`.
 
 ### CLI
 
@@ -646,9 +670,10 @@ guessed, and a page you saved yourself can be attached to a blocked URL.
 
 Current work is about the long tail of a grown vault: memory- and time-conscious reads, cluster-pass
 throughput, the summary backfill, and the small interaction details that make a desktop app feel
-finished. The recorded history is published as source-only releases, starting at `v0.1.0`;
-`v1.0.0` is the current release. Open work and open questions live in [`TODO.md`](TODO.md) — nothing
-there describes the present.
+finished. From the first binary release on, each release ships static Linux, macOS and Windows
+binaries; the newest release is on the
+[releases page](https://github.com/TheFranconianCoder/thought-keeper/releases). Open work and open
+questions live in [`TODO.md`](TODO.md) — nothing there describes the present.
 
 ---
 

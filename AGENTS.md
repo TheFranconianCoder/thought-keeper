@@ -295,7 +295,7 @@ internal/infrastructure   config, objects, atoms, wiki, clusters, markdown, extr
                           vocabulary, interests, sourcemeta, sourcelog, favicons, vaultgit, idpath, ...
 internal/types            sentinel errors
 internal/version, internal/logging
-.opencode/skills/release  the release skill: preflight, notes, source releases, tag + gh
+.opencode/skills/release  the release skill: preflight, notes, binaries, tag + gh
 ```
 
 ## Application model
@@ -353,9 +353,11 @@ records are specified in **`docs/storage.md`**.
 - **All repository artifacts are written in English** — code comments, docs, commit messages.
 - **Do not commit on your own initiative.** Commits are made by the user; a requested commit message
   follows Conventional Commits, present tense, no Markdown.
-- **Releases are cut from `main` with the `release` skill** (`.opencode/skills/release/`). Releases
-  are source-only for now: `release-commit.sh` tags an existing commit and publishes the notes,
-  `release.sh` builds the three binaries once they ship. It never commits and never moves a tag.
+- **Releases are cut from `main` with the `release` skill** (`.opencode/skills/release/`).
+  `release.sh` builds the five binaries (linux/amd64, linux/arm64, darwin/amd64, darwin/arm64,
+  windows/amd64), stamps the version in, uploads them with `SHA256SUMS` and publishes the notes,
+  mirroring the tag locally. It never commits and never moves a tag. `release-commit.sh` remains
+  only for the source-only history before the first binary release.
 - **Errors are sentinel types** from `internal/types/errors.go`, mapped to the wire once.
 - **An ignored error says why.** `errcheck` runs with `check-blank: true`, so `_ = f()` is not a way
   out: either handle the error or mark the line `//nolint:errcheck // <reason>`. The reason names the

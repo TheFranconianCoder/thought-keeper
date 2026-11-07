@@ -13,13 +13,13 @@ fail() {
 root="$(git rev-parse --show-toplevel 2>/dev/null)" || fail "not inside a git repository"
 cd "$root"
 
-# Task, Go and the GitHub CLI come from mise.toml; fall back to PATH when the tool is installed
-# outside mise.
+# Go, Task, pnpm and the GitHub CLI come from mise.toml (the release builds the PWA too); fall back
+# to PATH when the tool is installed outside mise.
 MISE=()
 if command -v mise >/dev/null 2>&1; then
     MISE=(mise x --)
 else
-    for tool in go task gh; do
+    for tool in go task pnpm gh; do
         command -v "$tool" >/dev/null 2>&1 || fail "$tool not found on PATH (install mise or the tool)"
     done
 fi

@@ -56,6 +56,10 @@ mkdir -p dist
 "${MISE[@]}" go build -trimpath -ldflags "$ldflags" -o dist/thought-keeper-linux-amd64 ./cmd/thought-keeper
 GOOS=linux GOARCH=arm64 "${MISE[@]}" go build -trimpath -ldflags "$ldflags" \
     -o dist/thought-keeper-linux-arm64 ./cmd/thought-keeper
+GOOS=darwin GOARCH=amd64 "${MISE[@]}" go build -trimpath -ldflags "$ldflags" \
+    -o dist/thought-keeper-darwin-amd64 ./cmd/thought-keeper
+GOOS=darwin GOARCH=arm64 "${MISE[@]}" go build -trimpath -ldflags "$ldflags" \
+    -o dist/thought-keeper-darwin-arm64 ./cmd/thought-keeper
 GOOS=windows GOARCH=amd64 "${MISE[@]}" go build -trimpath -ldflags "-H=windowsgui $ldflags" \
     -o dist/thought-keeper-windows-amd64.exe ./cmd/thought-keeper
 
@@ -75,7 +79,12 @@ else
 fi
 (
     cd dist
-    "${sha_cmd[@]}" thought-keeper-linux-amd64 thought-keeper-linux-arm64 thought-keeper-windows-amd64.exe >SHA256SUMS
+    "${sha_cmd[@]}" \
+        thought-keeper-linux-amd64 \
+        thought-keeper-linux-arm64 \
+        thought-keeper-darwin-amd64 \
+        thought-keeper-darwin-arm64 \
+        thought-keeper-windows-amd64.exe >SHA256SUMS
 )
 
 printf '==> gh release create %s\n' "$tag"
@@ -85,8 +94,14 @@ printf '==> gh release create %s\n' "$tag"
     --notes-file "$notes_file" \
     dist/thought-keeper-linux-amd64 \
     dist/thought-keeper-linux-arm64 \
+    dist/thought-keeper-darwin-amd64 \
+    dist/thought-keeper-darwin-arm64 \
     dist/thought-keeper-windows-amd64.exe \
     dist/SHA256SUMS
+
+# Keep local tags in step with the GitHub release, so changes.sh and git describe
+# work for the next release.
+git tag "$tag" "$commit" 2>/dev/null || true
 
 rm -rf "$root/.release"
 
