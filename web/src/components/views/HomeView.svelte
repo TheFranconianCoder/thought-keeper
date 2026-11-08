@@ -188,7 +188,13 @@
         <Icon name="plus" size={14} /> <span class="btn-text">{t('nav.addSource')}</span>
       </button>
     </div>
-    {#if pulse}<p class="sub">{pulse}</p>{/if}
+    <p class="sub" aria-busy={!pulse}>
+      {#if pulse}
+        {pulse}
+      {:else}
+        <span class="skeleton pulse-placeholder" aria-hidden="true"></span>
+      {/if}
+    </p>
   </div>
 
   <section class="home-ask" aria-label={t('home.ask')}>
@@ -328,6 +334,22 @@
 <style>
   .home-page {
     padding-top: 24px;
+  }
+
+  /* The pulse arrives asynchronously. Its line is in the head from the first paint, so the counts
+     cannot push the Ask box down when they arrive. The bar and its margins add up to exactly one
+     text line (1.55em), independent of the font's line metrics. */
+  .home-page .page-head .sub {
+    display: flow-root;
+    min-height: 1.55em;
+  }
+
+  .pulse-placeholder {
+    display: block;
+    width: 230px;
+    max-width: 70%;
+    height: 0.85em;
+    margin: 0.35em 0;
   }
 
   /* The same inner rhythm as the Ask lens's composer: one box, one set of paddings. */
