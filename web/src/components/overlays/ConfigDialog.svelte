@@ -1060,6 +1060,8 @@
       border-radius: 0;
     }
 
+    /* The value moves under its key and keeps the right edge: the two columns of the wide layout
+       become two lines, not two halves. */
     .config-row {
       flex-direction: column;
       align-items: stretch;
@@ -1068,16 +1070,16 @@
 
     .row-value {
       max-width: 100%;
-      align-items: flex-start;
+      align-items: flex-end;
     }
 
     .value-line {
       flex-wrap: wrap;
-      justify-content: flex-start;
+      justify-content: flex-end;
     }
 
     .value {
-      text-align: left;
+      text-align: right;
     }
   }
 </style>
