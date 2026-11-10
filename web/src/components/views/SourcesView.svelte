@@ -17,7 +17,7 @@
   import { scrollFade } from '../../lib/scroll-fade';
   import { rememberSourcesTop } from '../../lib/sources-scroll';
   import { interestChipSlugs, statusLabel } from '../../lib/source-state';
-  import { activateNewSources, isNew, newSources } from '../../lib/new-sources.svelte';
+  import { activateNewSources, isSourceNew, newSources } from '../../lib/new-sources.svelte';
   import NewTag from '../sources/NewTag.svelte';
   import CloudMore from '../ui/CloudMore.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
@@ -424,7 +424,7 @@
           {#if source}
             {@const live = sources.progress[source.hash]}
             {@const rowTagInfo = rowTags(source)}
-            {@const fresh = isNew(source.imported_at)}
+            {@const fresh = isSourceNew(source)}
             <div class="source-row" class:is-new={fresh}>
               <button
                 class="source-open"

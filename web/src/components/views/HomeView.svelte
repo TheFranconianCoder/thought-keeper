@@ -13,7 +13,7 @@
     activateNewSources,
     arrivalWindowExtended,
     arrivalWindowStart,
-    isNew,
+    isSourceNew,
     newSources,
   } from '../../lib/new-sources.svelte';
   import { asks } from '../../lib/stores/asks.svelte';
@@ -307,7 +307,7 @@
         <div class="home-rows">
           {#each arrivals as source (source.hash)}
             {@const live = sources.progress[source.hash]}
-            {@const fresh = isNew(source.imported_at)}
+            {@const fresh = isSourceNew(source)}
             <button class="home-row source-row" class:is-new={fresh} onclick={() => openSource(source)}>
               <SourceIcon kind={source.kind} hash={source.hash} size={16} />
               {#if fresh}<NewTag />{/if}

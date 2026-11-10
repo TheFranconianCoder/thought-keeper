@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import AddSourceDialog from './components/overlays/AddSourceDialog.svelte';
   import AssistantDialog from './components/overlays/AssistantDialog.svelte';
   import ConfigDialog from './components/overlays/ConfigDialog.svelte';
@@ -35,7 +35,7 @@
   import { wiki } from './lib/stores/wiki.svelte';
   import { asks } from './lib/stores/asks.svelte';
   import { initTheme } from './lib/theme.svelte';
-  import { newSources } from './lib/new-sources.svelte';
+  import { markSourceOpened, newSources } from './lib/new-sources.svelte';
   import { startUpdateWatch } from './lib/update.svelte';
   import { ui } from './lib/ui.svelte';
 
@@ -74,6 +74,15 @@
     // to the history entry that is now current.
     void router.current.key;
     void tick().then(() => restoreScroll());
+  });
+
+  $effect(() => {
+    // Opening a source is the reader's answer for that one row: its own "new" mark drops at once,
+    // whichever way the page was reached (a row, a citation, a deep link, back). The shared watermark
+    // is not touched: Start and Sources still acknowledge the whole batch.
+    const route = router.current;
+    if (route.view !== 'source' || !route.id) return;
+    untrack(() => markSourceOpened(route.id));
   });
 
   onMount(() => {

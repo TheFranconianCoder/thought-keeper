@@ -12,6 +12,10 @@ import { readSignal } from './read';
  * This module only decides WHEN to acknowledge. It keeps the active phase and its baseline in
  * memory; no client identity and no per-client storage exist.
  *
+ * Opening a source is the reader's own answer for that ONE row: its mark drops for the rest of the
+ * window, in memory. The shared watermark is untouched, so nothing is written and no other client
+ * is affected.
+ *
  * An active phase is a visible window with input in the last 15 minutes. Hiding the window or going
  * idle ends it; the next input starts a new one, which acknowledges again and therefore sees what
  * arrived in between as new.
@@ -34,7 +38,9 @@ export const newSources = $state<{
   ack: Ack;
   /** The window won the single-window election. A duplicate window must never acknowledge. */
   primary: boolean;
-}>({ since: '', seenAt: '', active: false, ack: 'idle', primary: false });
+  /** The sources this window opened: their own mark is dropped, without touching the watermark. */
+  opened: string[];
+}>({ since: '', seenAt: '', active: false, ack: 'idle', primary: false, opened: [] });
 
 let phase = 0;
 let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -45,6 +51,20 @@ export function isNew(importedAt: string | undefined, since: string = newSources
   const at = Date.parse(importedAt);
   const base = Date.parse(since);
   return Number.isFinite(at) && Number.isFinite(base) && at > base;
+}
+
+/** isSourceNew is the mark a row shows: the source arrived after the baseline AND this window has
+ *  not opened it yet. Opening a source is the reader's own answer for that one row. */
+export function isSourceNew(source: { hash: string; imported_at?: string }): boolean {
+  if (newSources.opened.includes(source.hash)) return false;
+  return isNew(source.imported_at);
+}
+
+/** markSourceOpened drops a source's own mark for the rest of the window. The shared watermark stays
+ *  untouched: the batch is still Start's and Sources' to acknowledge, and no other client changes. */
+export function markSourceOpened(hash: string): void {
+  if (!hash || newSources.opened.includes(hash)) return;
+  newSources.opened.push(hash);
 }
 
 /** arrivalWindowStart extends the Start card's three days to the last acknowledgment when that was

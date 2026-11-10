@@ -13,6 +13,8 @@ import {
   arrivalWindowExtended,
   arrivalWindowStart,
   isNew,
+  isSourceNew,
+  markSourceOpened,
   newSources,
 } from './new-sources.svelte';
 
@@ -32,6 +34,37 @@ describe('isNew', () => {
   it('marks nothing without a baseline', () => {
     expect(isNew('2026-11-07T08:00:00Z', '')).toBe(false);
     expect(isNew(undefined, '2026-11-07T08:00:00Z')).toBe(false);
+  });
+});
+
+describe('opening a source', () => {
+  afterEach(() => {
+    newSources.since = '';
+    newSources.opened = [];
+  });
+
+  it('drops the mark of the source the reader opened, and of that source only', () => {
+    newSources.since = '2026-11-07T08:00:00Z';
+    const opened = { hash: 'aa', imported_at: '2026-11-07T09:00:00Z' };
+    const other = { hash: 'bb', imported_at: '2026-11-07T09:00:00Z' };
+    expect(isSourceNew(opened)).toBe(true);
+    markSourceOpened(opened.hash);
+    expect(isSourceNew(opened)).toBe(false);
+    expect(isSourceNew(other)).toBe(true);
+  });
+
+  it('marks nothing without a baseline, opened or not', () => {
+    const source = { hash: 'cc', imported_at: '2026-11-07T09:00:00Z' };
+    expect(isSourceNew(source)).toBe(false);
+    markSourceOpened(source.hash);
+    expect(isSourceNew(source)).toBe(false);
+  });
+
+  it('ignores an empty hash and the same source twice', () => {
+    markSourceOpened('dd');
+    markSourceOpened('dd');
+    markSourceOpened('');
+    expect(newSources.opened).toEqual(['dd']);
   });
 });
 

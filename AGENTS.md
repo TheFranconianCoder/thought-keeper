@@ -91,7 +91,9 @@ oldest entry first), a list on Start and a banner on the list. **Interests** are
 in the source's rail. They are managed in an overlay, and their matches are computed on demand — no
 index table, no model, no second grouping. The **seen watermark** is the one shared reader state:
 one record per vault, advanced by the first client that becomes active on Start or Sources, so a
-source the phone has seen is not new on the desktop — no client id, no per-device file.
+source the phone has seen is not new on the desktop — no client id, no per-device file. Opening a
+source drops its own mark in that window, in memory: the reader answered for one row, and the
+watermark, the batch and every other client stay as they were.
 
 The app's own configuration is readable in the **Config overlay** (`?config=1`, the gear in the top
 bar): every knob with its origin (the machine's file, the vault's file, the environment or a
