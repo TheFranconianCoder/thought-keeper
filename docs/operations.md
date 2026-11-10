@@ -184,6 +184,11 @@ task audit             # syft + grype + grant
 task hooks             # lefthook install
 ```
 
+`task audit` builds a CycloneDX SBOM with `syft`, scans it with `grype` (configured in
+`.grype.yaml`; fails on high and critical findings) and checks dependency licenses against
+`.grant.yaml` with `grant`. The tool versions are pinned in `mise.toml`; `mise install` provisions
+them.
+
 ### Releases
 
 Releases are cut from `main` with the `release` skill in `.opencode/skills/release/`. Each release
