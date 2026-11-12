@@ -14,6 +14,7 @@ import {
   arrivalWindowStart,
   isNew,
   isSourceNew,
+  isSourceUpdated,
   markSourceOpened,
   newSources,
 } from './new-sources.svelte';
@@ -65,6 +66,58 @@ describe('opening a source', () => {
     markSourceOpened('dd');
     markSourceOpened('');
     expect(newSources.opened).toEqual(['dd']);
+  });
+});
+
+describe('the updated mark', () => {
+  afterEach(() => {
+    newSources.since = '';
+    newSources.opened = [];
+  });
+
+  it('marks content that changed after the baseline', () => {
+    newSources.since = '2026-11-07T08:00:00Z';
+    const source = {
+      hash: 'up',
+      imported_at: '2026-10-01T08:00:00Z',
+      url_changed_at: '2026-11-07T09:00:00Z',
+    };
+    expect(isSourceUpdated(source)).toBe(true);
+  });
+
+  it('does not mark a source that merely arrived in this batch', () => {
+    newSources.since = '2026-11-07T08:00:00Z';
+    const source = {
+      hash: 'new',
+      imported_at: '2026-11-07T09:00:00Z',
+      url_changed_at: '2026-11-07T09:00:00Z',
+    };
+    expect(isSourceUpdated(source)).toBe(false);
+  });
+
+  it('marks nothing without a change time or a baseline', () => {
+    newSources.since = '2026-11-07T08:00:00Z';
+    expect(isSourceUpdated({ hash: 'a', imported_at: '2026-10-01T08:00:00Z' })).toBe(false);
+    newSources.since = '';
+    expect(
+      isSourceUpdated({
+        hash: 'b',
+        imported_at: '2026-10-01T08:00:00Z',
+        url_changed_at: '2026-11-07T09:00:00Z',
+      }),
+    ).toBe(false);
+  });
+
+  it('drops the mark for a source the reader opened', () => {
+    newSources.since = '2026-11-07T08:00:00Z';
+    const source = {
+      hash: 'opened',
+      imported_at: '2026-10-01T08:00:00Z',
+      url_changed_at: '2026-11-07T09:00:00Z',
+    };
+    expect(isSourceUpdated(source)).toBe(true);
+    markSourceOpened(source.hash);
+    expect(isSourceUpdated(source)).toBe(false);
   });
 });
 

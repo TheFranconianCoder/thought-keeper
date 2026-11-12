@@ -56,6 +56,7 @@ type publishedDate struct {
 
 type fakeSteps struct {
 	published  map[string]publishedDate
+	changed    map[string]time.Time
 	seen       map[entities.Step][]entities.StepStatus
 	titles     map[string]string
 	languages  map[string]string
@@ -115,6 +116,17 @@ func (f *fakeSteps) SetPublished(hash string, at time.Time, from string) error {
 	f.published[hash] = publishedDate{at: at, from: from}
 	if f.index != nil {
 		_ = f.index.SetSourcePublished(context.Background(), hash, at, from)
+	}
+	return nil
+}
+
+func (f *fakeSteps) SetChanged(_ context.Context, hash string, at time.Time) error {
+	if f.changed == nil {
+		f.changed = map[string]time.Time{}
+	}
+	f.changed[hash] = at
+	if f.index != nil {
+		_ = f.index.SetSourceURLChanged(context.Background(), hash, at)
 	}
 	return nil
 }

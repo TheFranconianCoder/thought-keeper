@@ -131,6 +131,8 @@ export const sourceEn: Record<string, string> = {
   'source.addedLabel': 'added',
   'source.urlLabel': 'url',
   'source.httpLabel': 'http',
+  'source.checkedLabel': 'last checked',
+  'source.changedLabel': 'last changed',
   'source.idLabel': 'Source ID',
   'source.partOfFeed': 'part of a feed',
   'source.partOfSitemap': 'part of a sitemap',

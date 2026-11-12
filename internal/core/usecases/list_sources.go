@@ -79,6 +79,8 @@ func (uc Sources) Count(ctx context.Context, filter entities.SourceFilter) (int,
 type SourceFacetsResult struct {
 	Tags     []partialentities.NameUses
 	Attached int
+	// Changed is how many sources carry a change time: the "updated" filter chip's count.
+	Changed int
 	// The vault-wide counts behind the filter chips and the queue banner.
 	Favorites          int
 	ReadLater          int
@@ -155,7 +157,13 @@ func (uc Sources) Facets(ctx context.Context) (SourceFacetsResult, error) {
 	if err != nil {
 		return SourceFacetsResult{}, err
 	}
-	res := SourceFacetsResult{Tags: out, Attached: attached}
+	// The changed count is the SAME filter the chip toggles, so the number and the list can never
+	// disagree about what "updated" means.
+	changed, err := uc.Index.CountSources(ctx, entities.SourceFilter{ChangedOnly: true})
+	if err != nil {
+		return SourceFacetsResult{}, err
+	}
+	res := SourceFacetsResult{Tags: out, Attached: attached, Changed: changed}
 	if uc.Shelf != nil {
 		if n, cErr := uc.Shelf.CountFavorites(ctx); cErr == nil {
 			res.Favorites = n

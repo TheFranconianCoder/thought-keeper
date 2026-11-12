@@ -417,6 +417,14 @@ func (f *fakeIndex) SetSourceURLState(_ context.Context, hash string, status int
 	return nil
 }
 
+func (f *fakeIndex) SetSourceURLChanged(_ context.Context, hash string, changedAt time.Time) error {
+	if s, ok := f.m[hash]; ok {
+		s.URLChanged = changedAt
+		f.m[hash] = s
+	}
+	return nil
+}
+
 func (f *fakeIndex) ListURLSources(context.Context) ([]entities.Source, error) {
 	var out []entities.Source
 	for _, s := range f.m {
@@ -556,6 +564,43 @@ func TestReindexKeepsAURLRecognizableAsAURL(t *testing.T) {
 	}
 	if md.Kind != entities.SourceKindMD {
 		t.Errorf("kind = %q, want md for a source without a record", md.Kind)
+	}
+}
+
+// TestReindexRestoresTheChangeTime: the change time is a RECORD, not a row fact. A rebuilt index
+// sorts by it, so losing it would bury every changed page at its old arrival date.
+func TestReindexRestoresTheChangeTime(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store := objects.New(dir)
+	steps := sourcemeta.NewTracker(sourcemeta.New(dir), nil, nil)
+
+	obj, err := store.Put(ctx, ".md", strings.NewReader("# a page that changed\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := steps.SetIdentity(obj.Hash, entities.SourceIdentity{
+		Kind: entities.SourceKindURL, URL: "https://example.com/changed",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	changed := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	if err := steps.SetChanged(ctx, obj.Hash, changed); err != nil {
+		t.Fatal(err)
+	}
+
+	idx := newFakeIndex()
+	if _, err := (usecases.Maintenance{
+		Store: store, Index: idx, Steps: steps, Clock: fixedClock{},
+	}).Reindex(ctx); err != nil {
+		t.Fatalf("reindex: %v", err)
+	}
+	got, err := idx.GetSourceByHash(ctx, obj.Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.URLChanged.Equal(changed) {
+		t.Errorf("change time = %v, want %v restored from the record", got.URLChanged, changed)
 	}
 }
 

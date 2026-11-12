@@ -172,7 +172,11 @@ export interface Source {
   provenance_rows: number;
   running_step?: string;
   url_status?: number;
+  /** The last time the page was FETCHED. A page that answered the same has this and no change time. */
   url_checked_at?: string;
+  /** The last time the stored snapshot's readable content actually changed. The list orders by
+   *  activity (the later of arrival and change); the row marks a change since the last visit. */
+  url_changed_at?: string;
   bookmark?: boolean;
   imported_at: string;
   /** The date the source declares for itself: a page's publication, a feed item's date, a wiki
@@ -252,6 +256,8 @@ export interface SourceListFilter {
   query?: string;
   tag?: string;
   attachedOnly?: boolean;
+  /** Only sources whose stored snapshot content actually changed (the "updated" filter). */
+  changedOnly?: boolean;
   bookmarksOnly?: boolean;
   failedOnly?: boolean;
   /** A derivation that STOPPED with work left (the Attention lens's second source list). */
@@ -282,6 +288,8 @@ export interface SourceTagFacet {
 export interface SourceFacets {
   tags: SourceTagFacet[];
   attached: number;
+  /** Sources whose stored snapshot content changed (the "updated" filter chip). */
+  changed: number;
   /** Vault-wide counts behind the filter chips and the queue banner. */
   favorites: number;
   read_later: number;

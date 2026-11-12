@@ -999,7 +999,13 @@
               </div>
             {/if}
             {#if selected.url_status}
-              <div class="kv"><span class="k">{t('source.httpLabel')}</span><span class="v">{selected.url_status} · {relTime(selected.url_checked_at)}</span></div>
+              <div class="kv"><span class="k">{t('source.httpLabel')}</span><span class="v">{selected.url_status}</span></div>
+              {#if selected.url_checked_at}
+                <div class="kv"><span class="k">{t('source.checkedLabel')}</span><span class="v">{relTime(selected.url_checked_at)}</span></div>
+              {/if}
+            {/if}
+            {#if selected.url_changed_at}
+              <div class="kv"><span class="k">{t('source.changedLabel')}</span><span class="v">{relTime(selected.url_changed_at)}</span></div>
             {/if}
             <div class="kv"><span class="k">ID</span><span class="v"><CopyId text={selected.hash} label={t('source.idLabel')} display={selected.hash.slice(0, 12)} /></span></div>
             {#if (selected.origin === 'sitemap' || selected.origin === 'rss' || selected.origin === 'listing') && selected.parent_hash}

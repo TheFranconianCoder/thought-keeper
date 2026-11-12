@@ -35,6 +35,8 @@ func (i *shelfIndex) SetSourcePublished(_ context.Context, _ string, at time.Tim
 	return nil
 }
 
+func (i *shelfIndex) SetSourceURLChanged(context.Context, string, time.Time) error { return nil }
+
 func (i *shelfIndex) SetSourceFavorite(_ context.Context, _ string, at time.Time) error {
 	i.favoriteAt = at
 	return nil

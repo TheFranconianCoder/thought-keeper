@@ -33,6 +33,13 @@ export const sourcesEn: Record<string, string> = {
   // The shared "new" mark: the source arrived after the vault's seen watermark.
   'sources.tagNew': 'new',
   'sources.tagNewTitle': 'Arrived since the vault was last visited',
+  // The shared "updated" mark: the page's stored content changed after the last visit.
+  'sources.tagUpdated': 'updated',
+  'sources.tagUpdatedTitle': 'Content changed since the vault was last visited',
+  'sources.updatedAgo': 'updated {time}',
+  'sources.changedAtTip': 'Content changed {date} · arrived {arrived}',
+  'sources.changed': 'Updated',
+  'sources.changedTitle': 'Show only sources whose page content changed',
   'sources.attachedTag': 'attached',
   'sources.attachedTagTitle': 'Snapshot attached by hand',
   'sources.attachedTagTitleFrom': 'Snapshot attached by hand from {from}',

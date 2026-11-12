@@ -58,7 +58,7 @@ navigation.
 | | |
 | --- | --- |
 | ![The Start lens](docs/screenshots/desktop-start.png) | **Start.** The front door: an Ask box with the last questions, Continue, Needs you and the newest sources with their live step state. |
-| ![The Sources lens](docs/screenshots/desktop-sources.png) | **Sources.** Markdown, PDF, EPUB, text and URL snapshots in one list, with a persistent search, type and attachment filter; a hand-attached snapshot carries a paperclip badge. |
+| ![The Sources lens](docs/screenshots/desktop-sources.png) | **Sources.** Markdown, PDF, EPUB, text and URL snapshots in one list, ordered by activity, with a persistent search, type and attachment filter; a hand-attached snapshot carries a paperclip badge, and a page whose content changed is marked **updated**. |
 | ![The assistant](docs/screenshots/desktop-assistant.png) | **The assistant.** One request resolves to a lens, a filter and a set; the result is an ordinary list with a banner that says how it was read. |
 | ![An Ask answer](docs/screenshots/desktop-ask.png) | **Ask.** Questions answered from claims, with inline citations, saved as notes with automatic tags. |
 | ![The Status lens](docs/screenshots/desktop-status.png) | **Status.** Counts, job queue, maintenance actions and vocabulary health. |
@@ -160,6 +160,10 @@ line. A new vault starts with "add the first source" here.
 - Content-addressed storage: a file source is its SHA-256, deduplicated and write-once. A URL's
   address is a hash of the URL, so refreshing a page replaces the snapshot without creating a second
   source; a wiki page's representation is the other deliberately in-place exception.
+- **A checked page is not a changed page.** The record keeps the time the readable content last
+  actually changed, not just the last fetch: a rewritten page rises in the Sources list like an
+  arrival, carries the **updated** mark since the last visit, and the **Updated** chip filters those
+  sources.
 - Every source is one folder entry with its whole story: the object, the capture rendering, the step
   record, the outline, the summary and its own append-only **log**.
 - **A source page opens on its summary**, the app's own account of what the source says; its other

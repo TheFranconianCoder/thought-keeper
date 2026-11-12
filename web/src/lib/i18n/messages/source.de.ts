@@ -131,6 +131,8 @@ export const sourceDe: Record<string, string> = {
   'source.addedLabel': 'hinzugefügt',
   'source.urlLabel': 'URL',
   'source.httpLabel': 'HTTP',
+  'source.checkedLabel': 'zuletzt geprüft',
+  'source.changedLabel': 'zuletzt geändert',
   'source.idLabel': 'Quellen-ID',
   'source.partOfFeed': 'Teil eines Feeds',
   'source.partOfSitemap': 'Teil einer Sitemap',

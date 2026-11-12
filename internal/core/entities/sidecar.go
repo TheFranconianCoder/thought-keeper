@@ -72,6 +72,12 @@ type SourceRecord struct {
 	// so a reindex restores the column instead of re-guessing from a page that may no longer carry it.
 	PublishedAt   time.Time
 	PublishedFrom string
+	// ChangedAt is the last time the stored snapshot's readable CONTENT actually changed (zero =
+	// never). It is a RECORD because the Sources list orders by activity — the arrival or the
+	// change — and the index is disposable: without it here, a reindex would bury every changed
+	// page at its old arrival date. `URLChecked` is deliberately NOT here: a check is a fact of the
+	// last fetch, not of the source.
+	ChangedAt time.Time
 	// Tags are the HUMAN's labels for the source (the source-tags vocabulary observes them). They are
 	// a record like the title: deleting the source deletes them, and a reindex reads them back.
 	Tags []string

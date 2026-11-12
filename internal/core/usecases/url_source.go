@@ -589,6 +589,17 @@ func (uc URLs) execute(ctx context.Context, rawURL string, force, manual bool, l
 		_ = uc.Index.SetSourceTitle(ctx, existing.Hash, title)               //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		_ = uc.Index.SetSourceMeta(ctx, existing.Hash, existing.Meta)        //nolint:errcheck // the index and the step records are a light; the vault is the truth
 		_ = uc.Index.SetSourceURLState(ctx, existing.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
+		// Re-adding the same address is a refresh of the snapshot, so it owes the same change time
+		// as a scheduled fetch. A bookmark carries metadata, not content: a new excerpt is not an
+		// update of the page, so it is left out.
+		if needsReset && !bookmark {
+			existing.URLChanged = now
+			if uc.Steps != nil {
+				if err := uc.Steps.SetChanged(ctx, existing.Hash, now); err != nil && uc.Log != nil {
+					uc.Log.Warn("url re-add: change time not recorded", "url", rawURL, "err", err)
+				}
+			}
+		}
 		if language != "" {
 			_ = uc.Index.SetSourceLanguage(ctx, existing.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if uc.Steps != nil {
@@ -1620,6 +1631,9 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		if old, ok := storedSnapshotBody(uc.Store, s.Hash, s.Ext); ok {
 			sameBody = bodyHashOf(body) == bodyHashOf(old)
 		}
+		// A source that already HAS a snapshot is being updated; one that had none (a queued link)
+		// is arriving. The change time is about the former: a first read is an arrival, not an edit.
+		changed := !sameContent && s.Path != ""
 
 		snapshot := renderURLSnapshot(s.URL, title, page.Status, now, body, engine)
 		// The snapshot is refreshed IN PLACE, at the address the source already has. A changed page is
@@ -1671,6 +1685,9 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		updated.Attached, updated.AttachedFrom = false, ""
 		// The page is the source now: neither the feed marker nor the wall survives a successful read.
 		updated.FromFeed, updated.FeedHash, updated.Wall = false, "", ""
+		if changed {
+			updated.URLChanged = now
+		}
 		if err := uc.Index.UpsertSource(ctx, updated); err != nil {
 			res.Failed++
 			res.LastError = err.Error()
@@ -1695,6 +1712,13 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		if err := uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now); err != nil {
 			if uc.Log != nil {
 				uc.Log.Warn("url state", "url", s.URL, "err", err)
+			}
+		}
+		// The change is a RECORD, not a row fact: the Sources list orders by activity, and a rebuilt
+		// index reads this time back instead of burying the page at its old arrival date.
+		if changed && uc.Steps != nil {
+			if err := uc.Steps.SetChanged(ctx, s.Hash, now); err != nil && uc.Log != nil {
+				uc.Log.Warn("url refresh: change time not recorded", "url", s.URL, "err", err)
 			}
 		}
 		// The snapshot is a captured source of its own: the bytes are fetched and readable. A row that

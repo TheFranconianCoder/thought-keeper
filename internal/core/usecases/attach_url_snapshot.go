@@ -106,6 +106,10 @@ func (uc Sources) Attach(ctx context.Context, in AttachInput) (partialentities.P
 	}
 
 	now := uc.Clock.Now()
+	// A source that already had a snapshot is being REPLACED; one that had none is getting its first
+	// readable bytes. Only the replacement is an update: the wall notice or the old attachment is
+	// what the reader saw before.
+	hadSnapshot := src.Path != ""
 	snapshot := renderAttachedSnapshot(src.URL, doc.Title, name, sha, now, body)
 	obj, err := uc.Store.PutAt(src.Hash, ".md", []byte(snapshot))
 	if err != nil {
@@ -114,6 +118,9 @@ func (uc Sources) Attach(ctx context.Context, in AttachInput) (partialentities.P
 
 	src.Ext, src.Path, src.Bytes = obj.Ext, obj.Path, obj.Bytes
 	src.Title, src.Bookmark, src.Language = doc.Title, false, language
+	if hadSnapshot {
+		src.URLChanged = now
+	}
 	// The human's snapshot is the source now; a feed's copy is history.
 	src.FromFeed, src.FeedHash = false, ""
 	src.Meta = metaWithIdentity(metaWith(src.Meta, map[string]any{
@@ -136,6 +143,11 @@ func (uc Sources) Attach(ctx context.Context, in AttachInput) (partialentities.P
 	_ = uc.Index.SetSourceURLState(ctx, src.Hash, 0, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 	if language != "" {
 		_ = uc.Index.SetSourceLanguage(ctx, src.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
+	}
+	if hadSnapshot && uc.Steps != nil {
+		if err := uc.Steps.SetChanged(ctx, src.Hash, now); err != nil && uc.Log != nil {
+			uc.Log.Warn("attached snapshot: change time not recorded", "hash", src.Hash, "err", err)
+		}
 	}
 	if uc.Steps != nil {
 		// The old derivation was built on other bytes: reset it (capture survives, outline and

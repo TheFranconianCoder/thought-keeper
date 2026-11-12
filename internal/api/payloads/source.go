@@ -78,6 +78,11 @@ type Source struct {
 	RunningStep  string `json:"running_step,omitempty"`
 	URLStatus    int    `json:"url_status,omitempty"`
 	URLCheckedAt string `json:"url_checked_at,omitempty"`
+	// URLChangedAt is when the stored snapshot's readable content last actually changed. It is NOT
+	// the last check: a page that answered the same has a check time and no change time. The list
+	// orders by activity (the change when there is one, otherwise the arrival) and the "changed"
+	// filter selects these.
+	URLChangedAt string `json:"url_changed_at,omitempty"`
 	Bookmark     bool   `json:"bookmark,omitempty"`
 	ImportedAt   string `json:"imported_at"`
 	// Steps is the state of the four pipeline steps for this source — the four lights. Every step
@@ -156,6 +161,8 @@ type SourceTagFacet struct {
 type SourceFacets struct {
 	Tags     []SourceTagFacet `json:"tags"`
 	Attached int              `json:"attached"`
+	// Changed is how many sources carry a change time: the "updated" filter chip's count.
+	Changed int `json:"changed"`
 	// Favorites is the starred sources; ReadLater is the OPEN queue; ReadLaterInterests is how much
 	// of that queue the interests put there ("4 von deinen Interessen").
 	Favorites          int `json:"favorites"`

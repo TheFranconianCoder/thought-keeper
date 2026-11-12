@@ -37,6 +37,7 @@ type PartialSource struct {
 	TreeState       string
 	URLStatus       int
 	URLChecked      time.Time
+	URLChanged      time.Time
 	Bookmark        bool
 	ImportedAt      time.Time
 	Meta            string
@@ -104,6 +105,7 @@ func (p PartialSource) ToEntity() entities.Source {
 		TreeState:       entities.TreeState(p.TreeState),
 		URLStatus:       p.URLStatus,
 		URLChecked:      p.URLChecked,
+		URLChanged:      p.URLChanged,
 		Bookmark:        p.Bookmark,
 		ImportedAt:      p.ImportedAt,
 		Meta:            p.Meta,
@@ -160,6 +162,7 @@ func PartialFromSource(s entities.Source) PartialSource {
 		TreeState:       string(s.TreeState),
 		URLStatus:       s.URLStatus,
 		URLChecked:      s.URLChecked,
+		URLChanged:      s.URLChanged,
 		Bookmark:        s.Bookmark,
 		ImportedAt:      s.ImportedAt,
 		Meta:            s.Meta,

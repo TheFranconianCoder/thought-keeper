@@ -164,6 +164,47 @@ func TestRefreshURLsDetectsChange(t *testing.T) {
 	}
 }
 
+// A check is not a change. The first capture and every fetch that answers the same page leave the
+// change time empty; only a snapshot whose readable content differs records one. The record and the
+// index mirror must agree, because the Sources list orders and filters by that column.
+func TestRefreshRecordsOnlyAnActualContentChange(t *testing.T) {
+	ctx := context.Background()
+	idx := newFakeIndex()
+	steps := &fakeSteps{index: idx}
+	store := objects.New(t.TempDir())
+	fetcher := &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("x")}}
+	conv := &fakeConverter{title: "T", markdown: strings.Repeat("same text ", 60)}
+
+	add := usecases.URLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Steps: steps, Clock: fixedClock{}}
+	if _, err := add.Add(ctx, "https://example.com/x", false); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	hash := entities.URLHash("https://example.com/x")
+	if !idx.m[hash].URLChanged.IsZero() || len(steps.changed) != 0 {
+		t.Fatalf("first capture recorded an update: index=%v record=%v", idx.m[hash].URLChanged, steps.changed)
+	}
+
+	refresh := usecases.URLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Steps: steps, Clock: fixedClock{}}
+	if _, err := refresh.RefreshAll(ctx); err != nil {
+		t.Fatalf("unchanged refresh: %v", err)
+	}
+	if !idx.m[hash].URLChanged.IsZero() || len(steps.changed) != 0 {
+		t.Fatalf("an unchanged fetch recorded an update: index=%v record=%v", idx.m[hash].URLChanged, steps.changed)
+	}
+
+	conv.markdown = strings.Repeat("same text ", 60) + " but the page changed"
+	if _, err := refresh.RefreshAll(ctx); err != nil {
+		t.Fatalf("changed refresh: %v", err)
+	}
+	want := fixedClock{}.Now()
+	if got := idx.m[hash].URLChanged; !got.Equal(want) {
+		t.Errorf("index change time = %v, want %v", got, want)
+	}
+	if got := steps.changed[hash]; !got.Equal(want) {
+		t.Errorf("record change time = %v, want %v", got, want)
+	}
+}
+
 func TestRefreshClearsAWallAndReportsTheReset(t *testing.T) {
 	ctx := context.Background()
 	idx := newFakeIndex()
@@ -253,24 +294,32 @@ func TestAddingAURLTwiceRefreshesItInPlace(t *testing.T) {
 	store := objects.New(t.TempDir())
 	fetcher := &fakeFetcher{page: interfaces.FetchedPage{Status: 200, Body: []byte("x")}}
 	conv := &fakeConverter{title: "T", markdown: strings.Repeat("same text ", 60)}
-	add := usecases.URLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Clock: fixedClock{}}
+	steps := &fakeSteps{index: idx}
+	add := usecases.URLs{Fetch: fetcher, Convert: conv, Store: store, Index: idx, Steps: steps, Clock: fixedClock{}}
 
 	first, err := add.Add(ctx, "https://example.com/x", false)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	// The same URL again, unchanged: still one source.
+	// The same URL again, unchanged: still one source, and no change time.
 	if _, err := add.Add(ctx, "https://example.com/x", false); err != nil {
 		t.Fatalf("re-add: %v", err)
 	}
 	if all := sourcesByURL(t, idx, "https://example.com/x"); len(all) != 1 {
 		t.Fatalf("re-adding an unchanged URL filed %d sources, want 1", len(all))
 	}
-	// And again after the page changed: the same source, the same address, the new bytes.
+	if !idx.m[first.Hash].URLChanged.IsZero() {
+		t.Fatalf("an unchanged re-add recorded an update: %v", idx.m[first.Hash].URLChanged)
+	}
+	// And again after the page changed: the same source, the same address, the new bytes — and the
+	// change time, because re-adding is a refresh like any other.
 	conv.markdown = strings.Repeat("same text ", 60) + " and now it changed"
 	again, err := add.Add(ctx, "https://example.com/x", false)
 	if err != nil {
 		t.Fatalf("re-add changed: %v", err)
+	}
+	if got := idx.m[first.Hash].URLChanged; !got.Equal(fixedClock{}.Now()) {
+		t.Errorf("re-adding a changed page recorded %v, want %v", got, fixedClock{}.Now())
 	}
 	all := sourcesByURL(t, idx, "https://example.com/x")
 	if len(all) != 1 {

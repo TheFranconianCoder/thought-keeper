@@ -17,8 +17,9 @@
   import { scrollFade } from '../../lib/scroll-fade';
   import { rememberSourcesTop } from '../../lib/sources-scroll';
   import { interestChipSlugs, statusLabel } from '../../lib/source-state';
-  import { activateNewSources, isSourceNew, newSources } from '../../lib/new-sources.svelte';
+  import { activateNewSources, isSourceNew, isSourceUpdated, newSources } from '../../lib/new-sources.svelte';
   import NewTag from '../sources/NewTag.svelte';
+  import UpdatedTag from '../sources/UpdatedTag.svelte';
   import CloudMore from '../ui/CloudMore.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -47,6 +48,7 @@
     }),
   );
   const attachedCount = $derived(sourceWindow.facets.attached);
+  const changedCount = $derived(sourceWindow.facets.changed);
 
   // The filter is server-side: a page must be the page of the FILTERED list, or its count would lie
   // about the scroll height.
@@ -62,6 +64,11 @@
   const favoritesOnly = $derived(
     router.current.view === 'sources' && router.current.params.get('favorite') === '1',
   );
+  /** The "updated" filter is a named fact about a source (its content changed), so it lives in the
+   *  address like the reader's marks: a reload and another window show the same list. */
+  const changedOnly = $derived(
+    router.current.view === 'sources' && router.current.params.get('changed') === '1',
+  );
   const interestSlug = $derived(
     router.current.view === 'sources' ? (router.current.params.get('interest') ?? '') : '',
   );
@@ -70,6 +77,7 @@
     query: sources.query,
     tag: sources.filter,
     attachedOnly: sources.attachedOnly,
+    changedOnly,
     // An assistant result is ONE filter dimension beside the named ones — the server reads the set
     // from the record, and the window keeps its count, pages and scroll height.
     command: commandId,
@@ -82,6 +90,7 @@
       sources.kind !== 'all' ||
       !!sources.filter ||
       sources.attachedOnly ||
+      changedOnly ||
       favoritesOnly ||
       readLaterOnly,
   );
@@ -110,6 +119,7 @@
       query: sources.query,
       tag: sources.filter,
       attachedOnly: sources.attachedOnly,
+      changedOnly: router.current.params.get('changed') === '1',
       command: router.current.params.get('command') ?? '',
       favoriteOnly: router.current.params.get('favorite') === '1',
       readLaterOnly: router.current.params.get('readlater') === '1',
@@ -341,6 +351,17 @@
           <Icon name="paperclip" size={12} /> {t('sources.attached')}<span class="chip-count">{n(attachedCount)}</span>
         </button>
       {/if}
+      {#if changedCount > 0 || changedOnly}
+        <button
+          class="chip attached-filter"
+          class:chip--accent={changedOnly}
+          aria-pressed={changedOnly}
+          title={t('sources.changedTitle')}
+          onclick={() => toggleParam('changed')}
+        >
+          <Icon name="refresh" size={12} /> {t('sources.changed')}<span class="chip-count">{n(changedCount)}</span>
+        </button>
+      {/if}
     </div>
 
     {#if tagCloud.length > 0}
@@ -425,7 +446,8 @@
             {@const live = sources.progress[source.hash]}
             {@const rowTagInfo = rowTags(source)}
             {@const fresh = isSourceNew(source)}
-            <div class="source-row" class:is-new={fresh}>
+            {@const updated = isSourceUpdated(source)}
+            <div class="source-row" class:is-new={fresh} class:is-updated={!fresh && updated}>
               <button
                 class="source-open"
                 title={statusLabel(source, live)}
@@ -436,6 +458,7 @@
                 <div class="source-main">
                   <div class="source-title">
                     {#if fresh}<NewTag />{/if}
+                    {#if !fresh && updated}<UpdatedTag />{/if}
                     {#if source.attached}
                       <span
                         class="tag tag--attached"
@@ -475,10 +498,19 @@
                     {#if source.origin === 'wiki'}<span class="tag">{t('sources.tagWikiUrl')}</span>{/if}
                   </div>
                   <div class="source-sub">
-                    <span>
+                    <span
+                      title={source.url_changed_at
+                        ? t('sources.changedAtTip', {
+                            date: pubDate(source.url_changed_at),
+                            arrived: pubDate(source.imported_at),
+                          })
+                        : undefined}
+                    >
                       {source.kind} · {fmtBytes(source.bytes)}
                       {#if source.published_at} · {pubDate(source.published_at)}{/if}
-                      · {relTime(source.imported_at)}
+                      · {source.url_changed_at
+                        ? t('sources.updatedAgo', { time: relTime(source.url_changed_at) })
+                        : relTime(source.imported_at)}
                     </span>
                     <span class="source-origin">{subLine(source)}</span>
                   </div>
@@ -575,6 +607,12 @@
   /* The tag says "new"; the accent line is what makes the row findable while scrolling. */
   .source-row.is-new {
     box-shadow: inset 2px 0 0 var(--accent);
+  }
+
+  /* A changed page uses its own color: the row rose because its content changed, not because it
+     arrived. A new arrival wins the accent when both are true. */
+  .source-row.is-updated {
+    box-shadow: inset 2px 0 0 var(--info);
   }
 
   .source-row--skeleton {

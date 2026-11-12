@@ -8,7 +8,7 @@ true.
 
 | Entity | Meaning |
 | --- | --- |
-| `Source` | An immutable input: `id`, `hash`, `kind`, `ext`, `path`, `url`, `title`, `original_name`, `tags` (human labels), `auto_tags` (derived labels) and `auto_tags_at`, the reader's marks (`favorite_at`, `read_later_at`, `read_later_done_at`, `read_later_manual`, `read_later_via`), `bytes`, `pages`, `tree_state`, `steps`, `url_status`, `url_checked_at`, `bookmark`, `meta`. |
+| `Source` | An immutable input: `id`, `hash`, `kind`, `ext`, `path`, `url`, `title`, `original_name`, `tags` (human labels), `auto_tags` (derived labels) and `auto_tags_at`, the reader's marks (`favorite_at`, `read_later_at`, `read_later_done_at`, `read_later_manual`, `read_later_via`), `bytes`, `pages`, `tree_state`, `steps`, `url_status`, `url_checked_at`, `url_changed_at` (the last real content change; `url_checked_at` is only the last fetch), `bookmark`, `meta`. |
 | `SourceNode` | A tree node: `node_id`, `parent_id`, `depth`, `ord`, `title`, `summary`, `start_page`, `end_page`, `text_hash`. |
 | `Atom` | One claim: `id`, `topic`, `claim`, `type`, `status`, `body`, `sources`. |
 | `WikiPage` | User-authored Markdown: `id`, `title`, `tags` (human), `auto_tags` (derived), `urls`, `source` (stable `WikiHash`), `favorite_at`, timestamps, body. |
@@ -53,6 +53,7 @@ index is disposable — deleting it loses nothing but time.
 | `00009_sources_kind_epub.sql` | rebuilds `sources` so `kind` also accepts `epub` (a book's chapters are captured like a PDF's pages) |
 | `00010_sources_shelf.sql` | adds the reader's marks to `sources` (`favorite_at`, `read_later_at`, `read_later_done_at`, `read_later_manual`, `read_later_via`) plus the two indexes the queue and the star filter read |
 | `00011_sources_published_at.sql` | adds `published_at` and `published_from`: the date a source declares for itself and the layer that found it (a record, restored by a reindex) |
+| `00012_sources_url_changed.sql` | adds `url_changed_at`: the last time a URL snapshot's readable content actually changed (a record, restored by a reindex) plus the activity index the Sources list orders by and the partial index the "updated" filter reads |
 
 A schema change is a **new** migration; a change of vocabulary is done in the initial file with the
 database thrown away. The initial file writes the shape marker (`PRAGMA user_version`), and
@@ -66,7 +67,7 @@ sentence — which file it is and what to do ("delete it and reindex; the vault 
 
 ```sql
 sources(id, hash, kind, ext, path, url, title, original_name, bytes, pages,
-        tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta,
+        tree_state, steps, url_status, url_checked_at, url_changed_at, bookmark, imported_at, meta,
         published_at, published_from,
         tags, auto_tags, auto_tags_at,
         favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via)
@@ -97,6 +98,12 @@ Notes that matter:
   it, and the source-tags vocabulary reads them instead of opening one file per source.
   `auto_tags_at` (NULL = never tagged) is the backfill marker: a completely distilled source without
   it is owed one derivation pass, and an empty answer still stamps it so the pass does not repeat.
+- **`sources.url_checked_at` and `sources.url_changed_at` are different facts.** The first is when
+  the page was last FETCHED; the second is when its readable content last actually differed, and it
+  is a record (`changed_at` in `<hash>.meta`) restored by a reindex. The Sources list orders by
+  **activity** — `COALESCE(url_changed_at, imported_at)` — so a rewritten page takes its change time
+  and rises like an arrival does, while a check that answered the same page moves nothing. The
+  `changed=1` filter selects exactly the non-NULL rows.
 - **`sources.favorite_at` / `read_later_*`** mirror the reader's marks from the source record. The
   record is the truth; `reindex` restores the columns from it. The queue is "open" exactly when
   `read_later_at IS NOT NULL AND read_later_done_at IS NULL`, and it is ordered by `read_later_at`

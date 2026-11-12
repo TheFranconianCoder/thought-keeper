@@ -174,6 +174,8 @@ export interface SourceFilter {
   kind?: string;
   tag?: string;
   attachedOnly?: boolean;
+  /** Only sources whose stored snapshot content actually changed. */
+  changedOnly?: boolean;
 }
 
 /** matchesSourceFilter applies the lens filters. An attachment is a source fact (a human supplied
@@ -182,6 +184,7 @@ export interface SourceFilter {
 export function matchesSourceFilter(source: Source, filter: SourceFilter): boolean {
   if (filter.kind && filter.kind !== 'all' && source.kind !== filter.kind) return false;
   if (filter.attachedOnly && source.attached !== true) return false;
+  if (filter.changedOnly && !source.url_changed_at) return false;
   if (filter.tag) {
     const tags = new Set([...(source.tags ?? []), ...(source.auto_tags ?? [])]);
     if (!tags.has(filter.tag)) return false;

@@ -28,15 +28,16 @@ func (b barrierSteps) SetParts(string, map[string]entities.PartRecord) error { r
 func (b barrierSteps) Records() (map[string]entities.SourceRecord, error) {
 	return b, nil
 }
-func (b barrierSteps) Reset(string) error                                { return nil }
-func (b barrierSteps) Remove(string) error                               { return nil }
-func (b barrierSteps) SetTitle(string, string) error                     { return nil }
-func (b barrierSteps) SetLanguage(string, string) error                  { return nil }
-func (b barrierSteps) SetPublished(string, time.Time, string) error      { return nil }
-func (b barrierSteps) SetOrigin(string, string, string) error            { return nil }
-func (b barrierSteps) Release(string) error                              { return nil }
-func (b barrierSteps) SetIdentity(string, entities.SourceIdentity) error { return nil }
-func (b barrierSteps) SetOwnership(string, string, string, string) error { return nil }
+func (b barrierSteps) Reset(string) error                                  { return nil }
+func (b barrierSteps) Remove(string) error                                 { return nil }
+func (b barrierSteps) SetTitle(string, string) error                       { return nil }
+func (b barrierSteps) SetLanguage(string, string) error                    { return nil }
+func (b barrierSteps) SetPublished(string, time.Time, string) error        { return nil }
+func (b barrierSteps) SetChanged(context.Context, string, time.Time) error { return nil }
+func (b barrierSteps) SetOrigin(string, string, string) error              { return nil }
+func (b barrierSteps) Release(string) error                                { return nil }
+func (b barrierSteps) SetIdentity(string, entities.SourceIdentity) error   { return nil }
+func (b barrierSteps) SetOwnership(string, string, string, string) error   { return nil }
 func (b barrierSteps) Identity(string) (entities.SourceIdentity, error) {
 	return entities.SourceIdentity{}, nil
 }

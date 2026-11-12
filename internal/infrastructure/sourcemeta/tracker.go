@@ -16,6 +16,9 @@ type StepIndex interface {
 	SetSourceSteps(ctx context.Context, hash string, steps entities.StepSet) error
 	SetSourceTitle(ctx context.Context, hash, title string) error
 	SetSourcePublished(ctx context.Context, hash string, at time.Time, from string) error
+	// SetSourceURLChanged mirrors the time a URL snapshot's readable content changed. It is a fact
+	// of the source (the list orders by it), not of the last fetch: the check time is separate.
+	SetSourceURLChanged(ctx context.Context, hash string, at time.Time) error
 	SetSourceLanguage(ctx context.Context, hash, language string) error
 	SetSourceOrigin(ctx context.Context, hash, origin, wikiPage, parentHash string) error
 	ClearSourceOrigin(ctx context.Context, hash string) error
@@ -107,7 +110,8 @@ func (t *Tracker) Records() (map[string]entities.SourceRecord, error) {
 			},
 			Steps: rec.Steps, Title: strings.TrimSpace(rec.Title), Tags: rec.Tags,
 			PublishedAt: unixOrZero(rec.PublishedAt), PublishedFrom: rec.PublishedFrom,
-			AutoTags: rec.AutoTags, AutoTagsAt: unixOrZero(rec.AutoTagsAt), Parts: rec.Parts,
+			ChangedAt: unixOrZero(rec.ChangedAt),
+			AutoTags:  rec.AutoTags, AutoTagsAt: unixOrZero(rec.AutoTagsAt), Parts: rec.Parts,
 			FavoriteAt:      unixOrZero(rec.FavoriteAt),
 			ReadLaterAt:     unixOrZero(rec.ReadLaterAt),
 			ReadLaterDoneAt: unixOrZero(rec.ReadLaterDoneAt),
@@ -479,6 +483,30 @@ func (t *Tracker) SetIdentity(hash string, id entities.SourceIdentity) error {
 		return nil
 	})
 	return err
+}
+
+// SetChanged records the time a URL snapshot's readable content actually changed. It is written
+// only when the bytes differ from the stored snapshot's, never on a fetch that answered the same
+// page: the check time belongs to the index (SetSourceURLState), the change time to the record.
+func (t *Tracker) SetChanged(ctx context.Context, hash string, at time.Time) error {
+	if t == nil || t.Meta == nil {
+		return nil
+	}
+	if _, err := t.Meta.Update(hash, func(rec *Record) error {
+		rec.ChangedAt = unixMillis(at)
+		return nil
+	}); err != nil {
+		return err
+	}
+	if t.Index != nil {
+		if err := t.Index.SetSourceURLChanged(ctx, hash, at); err != nil {
+			if t.Log != nil {
+				t.Log.Warn("source change time not mirrored into the index", "hash", hash, "err", err)
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 // SetOwnership records who controls the source's removal. An empty value clears the recorded one:

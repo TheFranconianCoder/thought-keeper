@@ -88,6 +88,9 @@ type SourceFilter struct {
 	Tag string
 	// AttachedOnly keeps sources whose snapshot a human supplied (meta.attached).
 	AttachedOnly bool
+	// ChangedOnly keeps URL sources whose stored snapshot content actually changed. It is a fact of
+	// the source, not of the last fetch: a page that answered the same is not in this list.
+	ChangedOnly bool
 	// BookmarksOnly keeps collected links (bookmark = 1).
 	BookmarksOnly bool
 	// FailedOnly keeps sources whose recorded steps include a failure. It is the Attention
@@ -182,7 +185,11 @@ type Source struct {
 	TreeState  TreeState
 	URLStatus  int       // last HTTP status for kind=url (0 = unknown / fetch failed)
 	URLChecked time.Time // last time a URL source was checked
-	Bookmark   bool      // true = collected link, not indexed (no tree, no atoms)
+	// URLChanged is the last time the stored snapshot's readable content actually changed. It is not
+	// the last check: a page that answered with the same text has a check time and no change time.
+	// It is a RECORD (the .meta sidecar), so a reindex restores it; the index column serves the order.
+	URLChanged time.Time
+	Bookmark   bool // true = collected link, not indexed (no tree, no atoms)
 	// Tags are the HUMAN's labels for this source — the same coarse words a wiki page carries, so a
 	// reader can file and filter sources. They live in the source's <hash>.meta record (the truth) and
 	// are mirrored into the index.

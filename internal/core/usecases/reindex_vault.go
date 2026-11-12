@@ -665,10 +665,16 @@ func (uc Maintenance) sources(ctx context.Context, records map[string]entities.S
 			Bytes:        o.Bytes,
 			TreeState:    entities.TreeNone,
 			ImportedAt:   uc.Clock.Now(),
+			URLChanged:   record.ChangedAt,
 			Meta:         "{}",
 		}
 		if err := uc.Index.UpsertSource(ctx, src); err != nil {
 			return res, err
+		}
+		// The change time is a record, not a fact of the last fetch: without this mirror a rebuilt
+		// index would sort every changed page back to its old arrival date.
+		if err := uc.Index.SetSourceURLChanged(ctx, o.Hash, record.ChangedAt); err != nil && uc.Log != nil {
+			uc.Log.Warn("reindex: url change time not restored", "hash", o.Hash, "err", err)
 		}
 		if identity.Language != "" {
 			if err := uc.Index.SetSourceLanguage(ctx, o.Hash, identity.Language); err != nil && uc.Log != nil {

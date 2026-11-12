@@ -81,6 +81,11 @@ type Record struct {
 	// in the vault because the index is disposable: with it only in the index, a reindex made every
 	// URL look changed and the next refresh filed a second snapshot for each of them.
 	ContentHash string `json:"content_hash,omitempty"`
+	// ChangedAt is when the stored snapshot's readable content last ACTUALLY changed (Unix millis,
+	// 0 = never). It is not the last check: a page that answered the same page keeps its value. A
+	// RECORD, because the Sources list orders by activity (arrival or change) and a reindex must not
+	// bury a changed page at its old arrival date.
+	ChangedAt int64 `json:"changed_at,omitempty"`
 	// Attached marks a snapshot the human supplied (see SourceIdentity.Attached). It is stored here,
 	// not only in the index, so a reindex cannot turn an attached article back into a page the next
 	// refresh is allowed to overwrite.

@@ -219,6 +219,18 @@ describe('source state', () => {
     expect(matchesSourceFilter(attached, { attachedOnly: true, query: 'member' })).toBe(true);
     expect(matchesSourceFilter(attached, { attachedOnly: true, query: 'open' })).toBe(false);
   });
+
+  it('filters sources whose content actually changed', () => {
+    const changed = source({ kind: 'url', url_changed_at: '2026-05-01T00:00:00Z' });
+    const checkedOnly = source({ kind: 'url', url_checked_at: '2026-05-01T00:00:00Z' });
+
+    expect(matchesSourceFilter(changed, { changedOnly: true })).toBe(true);
+    expect(matchesSourceFilter(checkedOnly, { changedOnly: true })).toBe(false);
+    expect(matchesSourceFilter(changed, { changedOnly: false })).toBe(true);
+    // It composes with the other lens filters, like the attachment switch.
+    expect(matchesSourceFilter(changed, { changedOnly: true, kind: 'url' })).toBe(true);
+    expect(matchesSourceFilter(changed, { changedOnly: true, kind: 'md' })).toBe(false);
+  });
 });
 
 describe('pipelineLabel', () => {

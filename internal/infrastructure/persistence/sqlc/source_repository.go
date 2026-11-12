@@ -505,6 +505,7 @@ func (r *SourceRepository) CountSources(ctx context.Context, filter entities.Sou
 		Bookmarks: boolParam(filter.BookmarksOnly),
 		Failed:    boolParam(filter.FailedOnly),
 		Stale:     boolParam(filter.StaleOnly),
+		Changed:   boolParam(filter.ChangedOnly),
 		Favorite:  boolParam(filter.FavoriteOnly),
 		ReadLater: boolParam(filter.ReadLaterOnly),
 		Interest:  filter.Interest,
@@ -646,7 +647,8 @@ func boolParam(only bool) int64 {
 	return 0
 }
 
-// ListSources returns sources ordered by import time (newest first), narrowed by filter.
+// ListSources returns sources ordered by activity (the last real content change, otherwise the
+// arrival), narrowed by filter. The read-later queue keeps its own oldest-entry-first order.
 func (r *SourceRepository) ListSources(ctx context.Context, filter entities.SourceFilter, limit, offset int) ([]entities.Source, error) {
 	var (
 		rows []dal.Source
@@ -662,6 +664,7 @@ func (r *SourceRepository) ListSources(ctx context.Context, filter entities.Sour
 			Bookmarks: boolParam(filter.BookmarksOnly),
 			Failed:    boolParam(filter.FailedOnly),
 			Stale:     boolParam(filter.StaleOnly),
+			Changed:   boolParam(filter.ChangedOnly),
 			Favorite:  boolParam(filter.FavoriteOnly),
 			Interest:  filter.Interest,
 			Roots:     boolParam(filter.RootsOnly),
@@ -679,6 +682,7 @@ func (r *SourceRepository) ListSources(ctx context.Context, filter entities.Sour
 			Bookmarks: boolParam(filter.BookmarksOnly),
 			Failed:    boolParam(filter.FailedOnly),
 			Stale:     boolParam(filter.StaleOnly),
+			Changed:   boolParam(filter.ChangedOnly),
 			Favorite:  boolParam(filter.FavoriteOnly),
 			ReadLater: boolParam(filter.ReadLaterOnly),
 			Interest:  filter.Interest,
@@ -927,6 +931,19 @@ func (r *SourceRepository) SourcesWithNoTree(ctx context.Context) ([]entities.So
 	return out, nil
 }
 
+// SetSourceURLChanged records when a URL snapshot's readable content actually changed. A zero time
+// clears the column: the record is the truth, and a rebuilt index must mirror "never changed" too.
+func (r *SourceRepository) SetSourceURLChanged(ctx context.Context, hash string, changedAt time.Time) error {
+	err := r.q.SetSourceURLChanged(ctx, dal.SetSourceURLChangedParams{
+		UrlChangedAt: nullTime(changedAt),
+		Hash:         hash,
+	})
+	if err != nil {
+		return fmt.Errorf("set source url change time: %w", err)
+	}
+	return nil
+}
+
 // SetSourceURLState records the last HTTP status and check time of a URL source.
 func (r *SourceRepository) SetSourceURLState(ctx context.Context, hash string, status int, checkedAt time.Time) error {
 	err := r.q.SetSourceURLState(ctx, dal.SetSourceURLStateParams{
@@ -1049,6 +1066,9 @@ func toEntity(row dal.Source) entities.Source {
 	}
 	if row.UrlCheckedAt.Valid {
 		s.URLChecked = time.UnixMilli(row.UrlCheckedAt.Int64).UTC()
+	}
+	if row.UrlChangedAt.Valid {
+		s.URLChanged = time.UnixMilli(row.UrlChangedAt.Int64).UTC()
 	}
 	s.Bookmark = row.Bookmark != 0
 	// The attachment is identity, and it lives in the meta JSON as a BOOL (metaField reads strings

@@ -183,6 +183,11 @@ UPDATE sources SET kind = 'url', ext = ?, path = ?, bytes = ?, title = ?, origin
 -- name: SetSourceURLState :exec
 UPDATE sources SET url_status = ?, url_checked_at = ? WHERE hash = ?;
 
+-- name: SetSourceURLChanged :exec
+-- The last time the stored snapshot's readable content actually changed. NULL means "never changed";
+-- a later fetch that answers the same page leaves the value alone.
+UPDATE sources SET url_changed_at = ? WHERE hash = ?;
+
 -- name: SetSourceBookmark :exec
 -- A bookmark that a rendered read finally made readable stops being one; a page that was readable and
 -- is not any more becomes one. The column is the list's filter, so the fetch that read the page owns it.
@@ -351,6 +356,9 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
        OR (CASE WHEN json_valid(meta)
                 THEN COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '')
                 ELSE '' END) IN ('true', '1'))
+  -- A page whose readable content actually changed. This is a fact of the source, not of the last
+  -- fetch: a page that answered the same has no change time and is not in this list.
+  AND (sqlc.arg(changed) = 0 OR url_changed_at IS NOT NULL)
   AND (sqlc.arg(bookmarks) = 0 OR bookmark = 1)
   AND (sqlc.arg(failed) = 0 OR instr(steps, '"state":"failed"') > 0)
   -- Stale: the distill step STOPPED with work left (a recorded pending). Not failed (that is the
@@ -372,7 +380,10 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
   -- a window over an older part of the vault is not lost to the scan limit.
   AND (sqlc.arg(since) = 0 OR imported_at >= sqlc.arg(since))
   AND (sqlc.arg(until) = 0 OR imported_at < sqlc.arg(until))
-ORDER BY imported_at DESC
+-- ACTIVITY, not arrival: the last actual change when there is one, otherwise the arrival. A page
+-- rewritten last night belongs above a source that arrived last week, and a check that answered the
+-- same page does not move anything. The index expression matches this one.
+ORDER BY COALESCE(url_changed_at, imported_at) DESC, imported_at DESC, hash DESC
 LIMIT sqlc.arg(limit) OFFSET sqlc.arg(offset);
 
 -- name: ListSourcesQueue :many
@@ -395,6 +406,9 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
        OR (CASE WHEN json_valid(meta)
                 THEN COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '')
                 ELSE '' END) IN ('true', '1'))
+  -- A page whose readable content actually changed. This is a fact of the source, not of the last
+  -- fetch: a page that answered the same has no change time and is not in this list.
+  AND (sqlc.arg(changed) = 0 OR url_changed_at IS NOT NULL)
   AND (sqlc.arg(bookmarks) = 0 OR bookmark = 1)
   AND (sqlc.arg(failed) = 0 OR instr(steps, '"state":"failed"') > 0)
   -- Stale: the distill step STOPPED with work left (a recorded pending). Not failed (that is the
@@ -431,6 +445,9 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
        OR (CASE WHEN json_valid(meta)
                 THEN COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '')
                 ELSE '' END) IN ('true', '1'))
+  -- A page whose readable content actually changed. This is a fact of the source, not of the last
+  -- fetch: a page that answered the same has no change time and is not in this list.
+  AND (sqlc.arg(changed) = 0 OR url_changed_at IS NOT NULL)
   AND (sqlc.arg(bookmarks) = 0 OR bookmark = 1)
   AND (sqlc.arg(failed) = 0 OR instr(steps, '"state":"failed"') > 0)
   -- Stale: the distill step STOPPED with work left (a recorded pending). Not failed (that is the

@@ -34,6 +34,13 @@ export const sourcesDe: Record<string, string> = {
   // Die gemeinsame „Neu“-Marke: die Quelle kam nach dem Gesehen-Zeitpunkt des Tresors an.
   'sources.tagNew': 'neu',
   'sources.tagNewTitle': 'Seit dem letzten Besuch angekommen',
+  // Die gemeinsame „Aktualisiert“-Marke: der gespeicherte Inhalt hat sich nach dem letzten Besuch geändert.
+  'sources.tagUpdated': 'aktualisiert',
+  'sources.tagUpdatedTitle': 'Inhalt seit dem letzten Besuch geändert',
+  'sources.updatedAgo': 'aktualisiert {time}',
+  'sources.changedAtTip': 'Inhalt geändert am {date} · angekommen {arrived}',
+  'sources.changed': 'Aktualisiert',
+  'sources.changedTitle': 'Nur Quellen zeigen, deren Seiteninhalt sich geändert hat',
   'sources.attachedTag': 'angehängt',
   'sources.attachedTagTitle': 'Schnappschuss von Hand angehängt',
   'sources.attachedTagTitleFrom': 'Schnappschuss von Hand angehängt, aus {from}',

@@ -84,6 +84,7 @@ export const api = {
         tag: filter.tag,
         command: filter.command,
         attached: filter.attachedOnly ? 1 : undefined,
+        changed: filter.changedOnly ? 1 : undefined,
         bookmarks: filter.bookmarksOnly ? 1 : undefined,
         failed: filter.failedOnly ? 1 : undefined,
         stale: filter.staleOnly ? 1 : undefined,

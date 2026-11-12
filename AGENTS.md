@@ -55,7 +55,9 @@ not a chat: a command resolves to a lens, a filter and a materialized set, and e
 follows the address it hands out. A question that asks which items exist is still a list; only a
 prose question goes to Ask. Time means arrival (source), creation (claim) or last edit (wiki page); a
 source also carries the date it declares for itself (a feed item, the page's metadata, a date under
-its title, a wiki page's edit), which is shown beside the arrival but never orders the vault.
+its title, a wiki page's edit), which is shown beside the arrival but never orders the vault. The
+**Sources list orders by activity**: the arrival, or the last time the page's readable content
+actually changed. A check that answered the same page is not an event.
 **Start** is the front door: a vault-pulse line, an Ask box, and three thin signals for what runs,
 what needs you and what waits in the read-later queue (open entries, the interests that queued them
 by name, the age of the oldest), all absent when quiet; then **Arrived** — the eight newest sources
@@ -82,7 +84,9 @@ filtered count is the scroll height. A cluster is
 
 A page that changed is re-read **in place**: the refresh replaces the snapshot and rebuilds the
 outline, and only the parts whose text changed materially lose their claims — a reflow or a single
-changed word keeps them, and a new title touches no claim.
+changed word keeps them, and a new title touches no claim. The source's record keeps the time of that
+change (`changed_at`, not the check time), and the Sources list marks the row **updated** when the
+change is newer than the reader's last visit.
 
 The reader's own marks are **not** lenses either. A **favorite** is a star on a source or a wiki page
 and a filter in that lens; the **read-later queue** is a filter of the Sources list (`?readlater=1`,
@@ -91,9 +95,11 @@ oldest entry first), a list on Start and a banner on the list. **Interests** are
 in the source's rail. They are managed in an overlay, and their matches are computed on demand — no
 index table, no model, no second grouping. The **seen watermark** is the one shared reader state:
 one record per vault, advanced by the first client that becomes active on Start or Sources, so a
-source the phone has seen is not new on the desktop — no client id, no per-device file. Opening a
-source drops its own mark in that window, in memory: the reader answered for one row, and the
-watermark, the batch and every other client stay as they were.
+source the phone has seen is not new on the desktop — no client id, no per-device file. The same
+watermark answers **updated**: a source whose recorded content change is newer than the last visit,
+unless it also just arrived (the stronger **new** mark wins). Opening a source drops its own mark in
+that window, in memory: the reader answered for one row, and the watermark, the batch and every other
+client stay as they were.
 
 The app's own configuration is readable in the **Config overlay** (`?config=1`, the gear in the top
 bar): every knob with its origin (the machine's file, the vault's file, the environment or a
@@ -184,6 +190,7 @@ paths stay read-only.
 | **read later** | The reader's queue of sources. Open until marked done; otherwise a filter of the Sources list, ordered oldest entry first. | the source record + `?readlater=1` |
 | **interest** | A standing rule the reader writes: terms that make a NEW source join the read-later queue. A strong match queues; a weak one is only a suggestion. | `interests/<slug>.md` |
 | **seen watermark** | The instant up to which the vault's arrivals have been seen; a source later than it is **new**. One per vault, shared by every client: the first client active on Start or Sources acknowledges the batch. A record, not a cache. | `.thought-keeper/reader/seen.md` |
+| **updated** | A source whose recorded page content changed after the seen watermark (and that did not also just arrive). The change time is a RECORD; the mark is a display rule in memory, like **new**. | the source's `<hash>.meta` + the Sources row |
 | **reconcile / reindex / cleanup** | The repairs: check records against the vault; rebuild the index from the vault; prune dead cluster members. The first two are buttons in Status → Vault; cleanup settles every cluster pass by itself. | Status → Vault |
 
 **The URL is the truth about UI state — with one exception that is deliberate.** A command's address

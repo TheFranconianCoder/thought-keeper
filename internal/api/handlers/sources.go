@@ -225,6 +225,7 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 		Query:         strings.TrimSpace(q.Get("q")),
 		Tag:           strings.TrimSpace(q.Get("tag")),
 		AttachedOnly:  truthy(q.Get("attached")),
+		ChangedOnly:   truthy(q.Get("changed")),
 		BookmarksOnly: truthy(q.Get("bookmarks")),
 		FailedOnly:    truthy(q.Get("failed")),
 		StaleOnly:     truthy(q.Get("stale")),
@@ -339,7 +340,7 @@ func (h SourcesHandler) ListFacets(w http.ResponseWriter, r *http.Request) {
 	}
 	out := payloads.SourceFacets{
 		Tags:     make([]payloads.SourceTagFacet, 0, len(res.Tags)),
-		Attached: res.Attached, Favorites: res.Favorites,
+		Attached: res.Attached, Changed: res.Changed, Favorites: res.Favorites,
 		ReadLater: res.ReadLater, ReadLaterInterests: res.ReadLaterInterests,
 	}
 	for _, tag := range res.Tags {

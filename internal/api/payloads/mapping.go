@@ -64,6 +64,9 @@ func SourceFromPartial(p partialentities.PartialSource) Source {
 	if !p.URLChecked.IsZero() {
 		s.URLCheckedAt = p.URLChecked.UTC().Format(time.RFC3339)
 	}
+	if !p.URLChanged.IsZero() {
+		s.URLChangedAt = p.URLChanged.UTC().Format(time.RFC3339)
+	}
 	if !p.AutoTagsAt.IsZero() {
 		s.AutoTagsAt = p.AutoTagsAt.UTC().Format(time.RFC3339)
 	}

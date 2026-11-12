@@ -121,6 +121,9 @@ type IndexRepository interface {
 
 	// SetSourceURLState records the last HTTP status and check time of a URL source.
 	SetSourceURLState(ctx context.Context, hash string, status int, checkedAt time.Time) error
+	// SetSourceURLChanged records when the stored snapshot's readable content actually changed.
+	// A zero time clears the mark; a fetch that answered the same page must not touch it.
+	SetSourceURLChanged(ctx context.Context, hash string, changedAt time.Time) error
 	// SetSourceBookmark flips the bookmark decision: a rendered read can turn a collected link into
 	// a page, and a page that stopped being readable becomes a bookmark.
 	SetSourceBookmark(ctx context.Context, hash string, bookmark bool) error

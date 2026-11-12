@@ -36,6 +36,10 @@ type StepTracker interface {
 	// item's pubDate, a wiki page's last edit — and the layer that found it (feed, meta, time, text,
 	// wiki). A zero date is ignored: a later reading that finds none never wipes a known one.
 	SetPublished(hash string, at time.Time, from string) error
+	// SetChanged records the time a URL snapshot's readable CONTENT actually changed. It is not the
+	// check time: a fetch that answered the same page leaves it alone. The record is the truth and
+	// the index column is what the Sources list orders and filters by.
+	SetChanged(ctx context.Context, hash string, at time.Time) error
 	// SetIdentity records what a source IS — its original kind, the URL it was fetched from, whether
 	// it is a collected link, its detected language and the name it came in under. The object's file
 	// name cannot carry the kind any more (a URL snapshot and a Markdown source are both <hash>.md),

@@ -62,7 +62,7 @@ file — to fall back. It is a **record**: version it with the vault.
 | Sidecar | belongs to | holds | kind |
 | --- | --- | --- | --- |
 | `<hash>.capture.md` | a source whose bytes are not readable (a PDF, an EPUB) or a wiki page representation | the content as readable Markdown | **cache** — re-derivable (`capture`) |
-| `<hash>.meta` | a source | what the source **is** (kind, language, URL, identity), its title, **the date it declares for itself and the layer that found it**, **human tags**, **auto tags** and when they were derived, the reader's **favorite** and **read-later** marks, the state of capture/outline/distill and the part records | **record** — the file IS the truth |
+| `<hash>.meta` | a source | what the source **is** (kind, language, URL, identity), its title, **the date it declares for itself and the layer that found it**, **the last time its readable content actually changed**, **human tags**, **auto tags** and when they were derived, the reader's **favorite** and **read-later** marks, the state of capture/outline/distill and the part records | **record** — the file IS the truth |
 | `<hash>.outline` | a source | the node tree with references into the readable text, and two hashes per node: the exact text and a whitespace-normalized one (the rebuild tolerance) | **cache** — re-derivable (`rebuild-trees`) |
 | `<hash>.summary.md` | a source | its **overview**, written from the claims after a complete distill | **cache** — regenerated from the claims (a model writes it, so not byte-identical) |
 | `<hash>.log` | a source | everything done to it | **record** — history |
@@ -202,7 +202,10 @@ the cluster pass writes carries `scope=wiki` when it reports a vault-wide number
 - **A changed page is a changed source.** A refresh that writes DIFFERENT text reports the source for
   a derivation rebuild; the app resets tree/claims/steps under the exclusive gate (capture survives)
   and derives the new bytes again. The source log records why the derivation was rebuilt. The same
-  applies when a feed copy is replaced by its page or a wall clears.
+  applies when a feed copy is replaced by its page or a wall clears. The source's record keeps the
+  **change time** (`changed_at`) — the last moment the readable content actually differed, not the
+  last check. It survives a reindex, and it is what the Sources list orders by and the "updated"
+  filter selects. A fetch that answers the same page does not touch it.
 - **Favicons.** A URL source stores the site's icon content-addressed under
   `.thought-keeper/favicons/`, served at `GET /api/v1/sources/{hash}/favicon`.
 - **Name = SHA-256 of the bytes**, sharded `sources/<ab>/<cd>/<full-hash>.<ext>`. Identical bytes
@@ -355,9 +358,9 @@ Channels connect goroutines.
   one. A URL collected independently is left alone. The wiki page source itself is re-derived;
   existing URL sources are not re-interpreted. The snapshot-stable keys (`language`, `origin`,
   `wiki_page`, `parent_hash`, `sitemap`, `rss`, `listing`, favicon references, `content_hash`,
-  `attached`) survive
-  every meta write — a snapshot rebuild must never un-own a link or turn a human's attached article
-  back into a page the next refresh may overwrite. They are carried forward by the writer (the
+  `attached`) survive every meta write — a snapshot rebuild must never un-own a link or turn a
+  human's attached article back into a page the next refresh may overwrite. They are carried forward
+  by the writer (the
   snapshot JSON is merged into the row's meta, never rebuilt from scratch), and the consistency job
   restores them from the record when a row written before that rule lost them.
 - **A sitemap is a source that owns the pages it declares.** When a fetched URL parses as a

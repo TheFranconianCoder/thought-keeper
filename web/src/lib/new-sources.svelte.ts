@@ -60,6 +60,21 @@ export function isSourceNew(source: { hash: string; imported_at?: string }): boo
   return isNew(source.imported_at);
 }
 
+/** isSourceUpdated is the mark a row shows for a page whose stored snapshot content was rewritten
+ *  since the reader's last visit. It is NOT "new": the source already existed. A source that also
+ *  just arrived keeps the "new" mark alone — that is the stronger fact — and opening either kind
+ *  drops the mark for that row in this window. */
+export function isSourceUpdated(source: {
+  hash: string;
+  imported_at?: string;
+  url_changed_at?: string;
+}): boolean {
+  if (newSources.opened.includes(source.hash)) return false;
+  if (!source.url_changed_at) return false;
+  if (isNew(source.imported_at)) return false;
+  return isNew(source.url_changed_at);
+}
+
 /** markSourceOpened drops a source's own mark for the rest of the window. The shared watermark stays
  *  untouched: the batch is still Start's and Sources' to acknowledge, and no other client changes. */
 export function markSourceOpened(hash: string): void {

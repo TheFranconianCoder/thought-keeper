@@ -37,6 +37,7 @@ class SourceWindowStore {
   facets = $state<SourceFacets>({
     tags: [],
     attached: 0,
+    changed: 0,
     favorites: 0,
     read_later: 0,
     read_later_interests: 0,
@@ -78,6 +79,7 @@ class SourceWindowStore {
       // the window keeps its count, its pages and its scroll height exactly as with a tag filter.
       command: next.command || undefined,
       attachedOnly: next.attachedOnly ? true : undefined,
+      changedOnly: next.changedOnly ? true : undefined,
       bookmarksOnly: next.bookmarksOnly ? true : undefined,
       failedOnly: next.failedOnly ? true : undefined,
       staleOnly: next.staleOnly ? true : undefined,

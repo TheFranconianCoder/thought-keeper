@@ -29,7 +29,8 @@ func (i *tagIndex) SetSourceTitle(context.Context, string, string) error { retur
 func (i *tagIndex) SetSourcePublished(context.Context, string, time.Time, string) error {
 	return nil
 }
-func (i *tagIndex) SetSourceLanguage(context.Context, string, string) error { return nil }
+func (i *tagIndex) SetSourceURLChanged(context.Context, string, time.Time) error { return nil }
+func (i *tagIndex) SetSourceLanguage(context.Context, string, string) error      { return nil }
 func (i *tagIndex) SetSourceOrigin(context.Context, string, string, string, string) error {
 	return nil
 }
