@@ -1502,18 +1502,21 @@ func (q *Queries) ListURLSources(ctx context.Context) ([]Source, error) {
 	return items, nil
 }
 
-const maxSourceImportedAt = `-- name: MaxSourceImportedAt :one
-SELECT CAST(COALESCE(MAX(imported_at), 0) AS INTEGER) AS max_imported_at FROM sources
+const maxSourceActivityAt = `-- name: MaxSourceActivityAt :one
+SELECT CAST(COALESCE(MAX(COALESCE(url_changed_at, imported_at)), 0) AS INTEGER) AS max_activity_at
+FROM sources
 `
 
-// The newest arrival in the vault, in Unix milliseconds; 0 when the vault is empty. The reader's
-// seen watermark moves to this instant, so no client clock is compared with a server clock: both
-// sides of "new" are the arrival time the index stores.
-func (q *Queries) MaxSourceImportedAt(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, maxSourceImportedAt)
-	var max_imported_at int64
-	err := row.Scan(&max_imported_at)
-	return max_imported_at, err
+// The newest ACTIVITY in the vault, in Unix milliseconds; 0 when the vault is empty. Activity is the
+// same instant the list orders by: the last real content change of a page, otherwise the arrival.
+// The reader's seen watermark moves to it, so one acknowledgment settles both the "new" and the
+// "updated" mark, and no client clock is compared with a server clock: both sides of either mark
+// are the instants the index stores.
+func (q *Queries) MaxSourceActivityAt(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, maxSourceActivityAt)
+	var max_activity_at int64
+	err := row.Scan(&max_activity_at)
+	return max_activity_at, err
 }
 
 const resetSourceDerived = `-- name: ResetSourceDerived :exec

@@ -480,13 +480,14 @@ func decodeSourceTags(raw string) []string {
 	return tags
 }
 
-// MaxSourceImportedAt is the newest arrival in the vault, in Unix milliseconds (zero for an empty
-// vault). The reader's seen watermark advances to it, which keeps both sides of "new" on the same
-// clock: the arrival time the index stores.
-func (r *SourceRepository) MaxSourceImportedAt(ctx context.Context) (time.Time, error) {
-	ms, err := r.q.MaxSourceImportedAt(ctx)
+// MaxSourceActivityAt is the newest activity in the vault, in Unix milliseconds (zero for an empty
+// vault): the last real content change of a page, otherwise the arrival — the same instant the
+// Sources list orders by. The reader's seen watermark advances to it, which keeps both sides of
+// "new" and of "updated" on the same clock: the instants the index stores.
+func (r *SourceRepository) MaxSourceActivityAt(ctx context.Context) (time.Time, error) {
+	ms, err := r.q.MaxSourceActivityAt(ctx)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("max source imported_at: %w", err)
+		return time.Time{}, fmt.Errorf("max source activity: %w", err)
 	}
 	if ms <= 0 {
 		return time.Time{}, nil

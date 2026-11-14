@@ -11,10 +11,11 @@ import (
 
 // Reader is the use case of the shared "new" watermark.
 //
-// A source is NEW when it arrived after SeenAt. The watermark is ONE per vault, never per client:
-// the first client that becomes active while Start or Sources is visible acknowledges the batch, so
-// a source the phone has seen is not new on the desktop. A client's active phase only decides WHEN
-// to acknowledge; no identity and no per-client state are stored.
+// A source is NEW when it arrived after SeenAt, and UPDATED when its page content changed after it.
+// The watermark is ONE per vault, never per client: the first client that becomes active while
+// Start or Sources is visible acknowledges the batch, so a source the phone has seen is not new on
+// the desktop. A client's active phase only decides WHEN to acknowledge; no identity and no
+// per-client state are stored.
 type Reader struct {
 	Store interfaces.ReaderStore
 	Index interfaces.ReaderIndex
@@ -34,13 +35,14 @@ func (uc *Reader) State(ctx context.Context) (entities.ReaderState, error) {
 	return entities.ReaderState{SeenAt: seen}, nil
 }
 
-// Activate acknowledges every source that exists now and returns the baseline the caller should
-// mark from.
+// Activate acknowledges everything that happened in the vault up to now and returns the baseline
+// the caller should mark from.
 //
-// The watermark only moves FORWARD, and only when there is something new: an activation that finds
-// no later arrival writes nothing and reports Changed=false, so no other client is reloaded for
-// nothing. The first activation initializes the record to "now": the whole vault is the baseline,
-// never "all of it is new" — a reader who opens a fresh vault does not want every source flagged.
+// The watermark only moves FORWARD, and only when there is something later: an activation that
+// finds no later arrival and no later content change writes nothing and reports Changed=false, so
+// no other client is reloaded for nothing. The first activation initializes the record to "now":
+// the whole vault is the baseline, never "all of it is new" — a reader who opens a fresh vault does
+// not want every source flagged.
 func (uc *Reader) Activate(ctx context.Context) (entities.ReaderActivation, error) {
 	uc.mu.Lock()
 	defer uc.mu.Unlock()
@@ -49,12 +51,12 @@ func (uc *Reader) Activate(ctx context.Context) (entities.ReaderActivation, erro
 	if err != nil {
 		return entities.ReaderActivation{}, err
 	}
-	newest, err := uc.Index.MaxSourceImportedAt(ctx)
+	newest, err := uc.Index.MaxSourceActivityAt(ctx)
 	if err != nil {
 		return entities.ReaderActivation{}, err
 	}
-	// The index stores arrival times in milliseconds; keep the baseline on the same clock so a
-	// later comparison is never off by a fraction the store cannot represent.
+	// The index stores the activity instants in milliseconds; keep the baseline on the same clock
+	// so a later comparison is never off by a fraction the store cannot represent.
 	now := uc.Clock.Now().UTC().Truncate(time.Millisecond)
 
 	if !exists || previous.IsZero() {

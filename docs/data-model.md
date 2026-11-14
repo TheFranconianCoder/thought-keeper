@@ -20,7 +20,7 @@ true.
 | `StepStatus` | One step's state for one source, persisted in the source's `.meta`. |
 | `Vocabulary` | A namespace's canonical names and what they absorbed. Three namespaces: `topics`, `wiki-tags` and `source-tags`. |
 | `Interest` | One standing rule: `slug` (identity), `name`, `terms`, `exclude`, `kinds`, `enabled`, `rejected` (source hashes), `created`, `updated`. A FILE record (`interests/<slug>.md`), not an index entity; its matches are computed on demand. |
-| `ReaderState` | The shared seen watermark: `seen_at`, the instant up to which the vault's arrivals have been seen. A source is **new** when its `imported_at` is later. A FILE record (`.thought-keeper/reader/seen.md`), one per vault, never per client, with **no index table** — `reindex` leaves it alone. |
+| `ReaderState` | The shared seen watermark: `seen_at`, the instant up to which the vault's activity has been seen. A source is **new** when its `imported_at` is later, and **updated** when its `url_changed_at` is. A FILE record (`.thought-keeper/reader/seen.md`), one per vault, never per client, with **no index table** — `reindex` leaves it alone. |
 | `Run` | One run: `op` (`pipeline` \| `query` \| `lint` \| `vocabulary` \| `tag` \| `summary`), `step` (capture/outline/distill/cluster), model, tokens, status, and the question for a query. |
 | `StepRecord` | One tool call of a run: `tool`, argument/result digests, error flag, duration. |
 | `Command` | One assistant request: `id`, `text`, `lens`, `criteria`, `items` (the materialized set, in order), `total`/`vault`/`scanned`, `url`, `generated`, `created`. A FILE record (`commands/<id>.md`), short-lived, with **no index table** — the directory is read directly, like `asks/`, and `reindex` leaves it alone. |
@@ -142,8 +142,10 @@ index keeps **one** connection — every connection to `:memory:` is a separate 
   `read_later_via` matching a slug
 - `interest_match(source, rule)` = the lexical evaluation of `interests.ForSource` + `Evaluate`;
   never stored, never a tag
-- **new** = a source whose `imported_at` is later than the reader's `seen_at`. The watermark is one
-  file record; the comparison is client-side on the arrival time the payload already carries
+- **new** = a source whose `imported_at` is later than the reader's `seen_at`; **updated** = a source
+  whose `url_changed_at` is later (and that did not also just arrive). The watermark is one file
+  record, and it advances to the newest activity — the change time when there is one, otherwise the
+  arrival. The comparison is client-side on the instants the payload already carries
 - `graph` = cluster membership + provenance edges (source node → atom)
 - `atom_count` of a source counts **resolvable** claims, never provenance rows alone
 - the fourth light of a source is derived from its claims and their memberships, never stored

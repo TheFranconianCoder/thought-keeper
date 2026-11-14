@@ -26,7 +26,7 @@ func (f *fakeReaderStore) Write(_ context.Context, at time.Time) error {
 
 type fakeReaderIndex struct{ newest time.Time }
 
-func (f fakeReaderIndex) MaxSourceImportedAt(context.Context) (time.Time, error) {
+func (f fakeReaderIndex) MaxSourceActivityAt(context.Context) (time.Time, error) {
 	return f.newest, nil
 }
 
@@ -62,9 +62,10 @@ func TestFirstActivationInitializesWithoutMarkingTheWholeVault(t *testing.T) {
 	}
 }
 
-// TestActivationMovesToTheNewestArrival: the baseline is the previous watermark and the new one is
-// the newest source, so the client marks exactly the batch it just acknowledged.
-func TestActivationMovesToTheNewestArrival(t *testing.T) {
+// TestActivationMovesToTheNewestActivity: the baseline is the previous watermark and the new one is
+// the newest activity — an arrival or the last content change of a page — so the client marks
+// exactly the batch it just acknowledged.
+func TestActivationMovesToTheNewestActivity(t *testing.T) {
 	store := &fakeReaderStore{seen: at(6), exists: true}
 	uc := usecases.Reader{Store: store, Index: fakeReaderIndex{newest: at(9)}, Clock: fakeReaderClock{now: at(10)}}
 
@@ -83,9 +84,9 @@ func TestActivationMovesToTheNewestArrival(t *testing.T) {
 	}
 }
 
-// TestActivationWithoutANewArrivalChangesNothing: the watermark never moves backwards and an
-// activation with nothing new writes and announces nothing.
-func TestActivationWithoutANewArrivalChangesNothing(t *testing.T) {
+// TestActivationWithoutANewActivityChangesNothing: the watermark never moves backwards and an
+// activation with nothing later writes and announces nothing.
+func TestActivationWithoutANewActivityChangesNothing(t *testing.T) {
 	store := &fakeReaderStore{seen: at(9), exists: true}
 	uc := usecases.Reader{Store: store, Index: fakeReaderIndex{newest: at(7)}, Clock: fakeReaderClock{now: at(10)}}
 

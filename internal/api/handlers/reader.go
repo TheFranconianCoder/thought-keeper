@@ -12,8 +12,8 @@ import (
 // ReaderStateProvider returns the shared seen watermark without acknowledging anything.
 type ReaderStateProvider func(ctx context.Context) (entities.ReaderState, error)
 
-// ReaderActivator acknowledges every source that exists now and returns the baseline the client
-// should mark from.
+// ReaderActivator acknowledges everything that happened up to now — arrivals and content changes —
+// and returns the baseline the client should mark from.
 type ReaderActivator func(ctx context.Context) (entities.ReaderActivation, error)
 
 // ReaderNotifier broadcasts a watermark change to every connected client, so the sources another
@@ -44,8 +44,9 @@ func (h ReaderHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // Activate serves POST /api/v1/reader/active. It is the client saying "I am active and showing the
-// new sources"; the answer carries the baseline its marks use. The watermark only moves when there
-// is something later than it, so an activation with nothing new publishes nothing.
+// new sources and the changed pages"; the answer carries the baseline its marks use. The watermark
+// only moves when there is something later than it, so an activation with nothing new publishes
+// nothing.
 func (h ReaderHandler) Activate(w http.ResponseWriter, r *http.Request) {
 	if h.Activator == nil {
 		payloads.WriteError(w, types.ErrNotFound)

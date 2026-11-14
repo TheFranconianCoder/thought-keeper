@@ -598,7 +598,8 @@ about the marks is derived.
 
 ### `.thought-keeper/reader/seen.md`
 
-One file per vault: the **seen watermark**. A source is **new** when its `imported_at` is later.
+One file per vault: the **seen watermark**. A source is **new** when its `imported_at` is later, and
+**updated** when its recorded content change (`url_changed_at`) is later.
 
 ```markdown
 ---
@@ -609,15 +610,17 @@ seen_at: 2026-11-07T08:00:00.123Z
 - **One record, not one per client.** Whichever client becomes active while Start or Sources is
   visible acknowledges the batch for every client; no client id, token or per-device file exists.
   That is what keeps a source the phone has seen from being new on the desktop.
-- **It only moves forward**, and only when a source arrived later than it. An acknowledgment with
-  nothing new writes nothing and announces nothing. The first acknowledgment initializes it to
+- **It only moves forward**, and only when something happened later: an arrival, or a page whose
+  readable content actually changed. It lands on the newest ACTIVITY — the same instant the Sources
+  list orders by (the change time when there is one, otherwise the arrival). An acknowledgment with
+  nothing later writes nothing and announces nothing. The first acknowledgment initializes it to
   "now": a fresh vault marks nothing, it does not flag the whole corpus.
 - **It is app state, not knowledge.** The file is hidden with `.thought-keeper/` and git-ignored
-  (it changes only when a new arrival moves it); `reindex`, `rebuild-trees`, `reconcile` and
-  `cleanup` leave it alone. Losing it is harmless: the next first acknowledgment starts a clean
-  baseline, and only the "new" marks are gone.
+  (it changes only when a new arrival or a content change moves it); `reindex`, `rebuild-trees`,
+  `reconcile` and `cleanup` leave it alone. Losing it is harmless: the next first acknowledgment
+  starts a clean baseline, and only the "new" and "updated" marks are gone.
 - **No index table.** The reader endpoints read the file directly; the watermark's comparison uses
-  the `imported_at` the index already stores.
+  the instants the index already stores (`imported_at`, `url_changed_at`).
 
 ### `interests/<slug>.md`
 

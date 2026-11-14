@@ -7,7 +7,7 @@ import (
 )
 
 // ReaderState is GET /api/v1/reader: the shared seen watermark. An empty value means no client has
-// opened this vault yet, not that nothing has arrived.
+// opened this vault yet, not that nothing has happened.
 type ReaderState struct {
 	SeenAt string `json:"seen_at,omitempty"`
 }
@@ -35,8 +35,9 @@ func ReaderActivationFromUseCase(act entities.ReaderActivation) ReaderActivation
 	return out
 }
 
-// readerInstant keeps the sub-second part: the watermark is a source's imported_at, and rounding it
-// to the second would make a source imported in the same second look older than it is.
+// readerInstant keeps the sub-second part: the watermark is a source's activity instant (its arrival
+// or the time its content last changed), and rounding it to the second would make something that
+// happened in the same second look older than it is.
 func readerInstant(t time.Time) string {
 	if t.IsZero() {
 		return ""

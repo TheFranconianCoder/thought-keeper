@@ -15,7 +15,8 @@ type ReaderStore interface {
 	Write(ctx context.Context, seenAt time.Time) error
 }
 
-// ReaderIndex answers the newest arrival in the index. The zero time means an empty vault.
+// ReaderIndex answers the newest activity in the index: the last real content change of a page,
+// otherwise the arrival. The zero time means an empty vault.
 type ReaderIndex interface {
-	MaxSourceImportedAt(ctx context.Context) (time.Time, error)
+	MaxSourceActivityAt(ctx context.Context) (time.Time, error)
 }

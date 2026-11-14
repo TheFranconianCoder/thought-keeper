@@ -86,7 +86,7 @@ A page that changed is re-read **in place**: the refresh replaces the snapshot a
 outline, and only the parts whose text changed materially lose their claims — a reflow or a single
 changed word keeps them, and a new title touches no claim. The source's record keeps the time of that
 change (`changed_at`, not the check time), and the Sources list marks the row **updated** when the
-change is newer than the reader's last visit.
+change is newer than the seen watermark.
 
 The reader's own marks are **not** lenses either. A **favorite** is a star on a source or a wiki page
 and a filter in that lens; the **read-later queue** is a filter of the Sources list (`?readlater=1`,
@@ -96,7 +96,7 @@ in the source's rail. They are managed in an overlay, and their matches are comp
 index table, no model, no second grouping. The **seen watermark** is the one shared reader state:
 one record per vault, advanced by the first client that becomes active on Start or Sources, so a
 source the phone has seen is not new on the desktop — no client id, no per-device file. The same
-watermark answers **updated**: a source whose recorded content change is newer than the last visit,
+watermark answers **updated**: a source whose recorded content change is newer than the watermark,
 unless it also just arrived (the stronger **new** mark wins). Opening a source drops its own mark in
 that window, in memory: the reader answered for one row, and the watermark, the batch and every other
 client stay as they were.
@@ -189,7 +189,7 @@ paths stay read-only.
 | **favorite** | The reader's star on a source or a wiki page: "this belongs to me". No lifecycle, no label, never a ranking signal. | the source record / the page frontmatter |
 | **read later** | The reader's queue of sources. Open until marked done; otherwise a filter of the Sources list, ordered oldest entry first. | the source record + `?readlater=1` |
 | **interest** | A standing rule the reader writes: terms that make a NEW source join the read-later queue. A strong match queues; a weak one is only a suggestion. | `interests/<slug>.md` |
-| **seen watermark** | The instant up to which the vault's arrivals have been seen; a source later than it is **new**. One per vault, shared by every client: the first client active on Start or Sources acknowledges the batch. A record, not a cache. | `.thought-keeper/reader/seen.md` |
+| **seen watermark** | The instant up to which the vault's activity has been seen — an arrival or the last real content change of a page; a source later than it is **new**, a changed page **updated**. One per vault, shared by every client: the first client active on Start or Sources acknowledges the batch. A record, not a cache. | `.thought-keeper/reader/seen.md` |
 | **updated** | A source whose recorded page content changed after the seen watermark (and that did not also just arrive). The change time is a RECORD; the mark is a display rule in memory, like **new**. | the source's `<hash>.meta` + the Sources row |
 | **reconcile / reindex / cleanup** | The repairs: check records against the vault; rebuild the index from the vault; prune dead cluster members. The first two are buttons in Status → Vault; cleanup settles every cluster pass by itself. | Status → Vault |
 
