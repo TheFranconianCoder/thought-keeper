@@ -1,5 +1,6 @@
-// Package reader persists the reader's shared "new" watermark in the vault: one record, not one per
-// client. A source is NEW when its arrival is later than SeenAt.
+// Package reader persists the reader's two shared seen watermarks in the vault: one record, not one
+// per client. Start's watermark drives the statistic the front door shows; Sources' watermark
+// drives the new and updated marks of its rows.
 //
 // The file is app state, hidden with the rest of .thought-keeper/ and git-ignored: an acknowledgment
 // rewrites it whenever something new arrived, and versioning that churn would bury the knowledge. It
@@ -18,13 +19,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"gopkg.in/yaml.v3"
 )
 
 // File is the record's name inside the reader-state directory.
 const File = "seen.md"
 
-// Store reads and writes the seen watermark of one vault.
+// Store reads and writes the seen watermarks of one vault.
 type Store struct {
 	root string
 	mu   sync.Mutex
@@ -37,40 +39,54 @@ func New(root string) *Store { return &Store{root: root} }
 func (s *Store) Path() string { return filepath.Join(s.root, File) }
 
 type frontmatter struct {
-	SeenAt string `yaml:"seen_at"`
+	// SeenAt is the single watermark of older records. It seeds both scopes on first read and is
+	// never written again.
+	SeenAt        string `yaml:"seen_at"`
+	StartSeenAt   string `yaml:"start_seen_at"`
+	SourcesSeenAt string `yaml:"sources_seen_at"`
 }
 
-// Read returns the watermark and whether the record exists. A malformed record is treated as
-// absent: one damaged line of app state must not hide the vault, and the next activation rewrites
-// it.
-func (s *Store) Read(_ context.Context) (time.Time, bool, error) {
+// Read returns both watermarks. A malformed field is treated as absent: one damaged line of app
+// state must not hide the vault, and the next activation rewrites it.
+func (s *Store) Read(_ context.Context) (entities.ReaderState, error) {
 	b, err := os.ReadFile(s.Path())
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return time.Time{}, false, nil
+			return entities.ReaderState{}, nil
 		}
-		return time.Time{}, false, fmt.Errorf("reader: read seen watermark: %w", err)
+		return entities.ReaderState{}, fmt.Errorf("reader: read seen watermark: %w", err)
 	}
 	text := strings.TrimPrefix(string(b), "---\n")
 	before, _, ok := strings.Cut(text, "\n---")
 	if !ok {
-		return time.Time{}, false, nil
+		return entities.ReaderState{}, nil
 	}
 	var fm frontmatter
-	decodeErr := yaml.Unmarshal([]byte(before), &fm)
-	at, parseErr := time.Parse(time.RFC3339Nano, fm.SeenAt)
-	valid := decodeErr == nil && parseErr == nil && !at.IsZero()
-	if !valid {
-		// A damaged record is a vault no client has acknowledged yet, not an error: the next
-		// activation rewrites it.
-		return time.Time{}, false, nil
+	if err := yaml.Unmarshal([]byte(before), &fm); err != nil {
+		//nolint:nilerr // a damaged record is a vault no client has acknowledged yet, not a failure
+		return entities.ReaderState{}, nil
 	}
-	return at.UTC(), true, nil
+	state := entities.ReaderState{
+		StartSeenAt:   parseInstant(fm.StartSeenAt),
+		SourcesSeenAt: parseInstant(fm.SourcesSeenAt),
+	}
+	// A record written before the two watermarks existed carries one instant: it was acknowledged
+	// by Start or Sources alike, so it seeds both. A scope that already has its own value keeps it.
+	if legacy := parseInstant(fm.SeenAt); !legacy.IsZero() {
+		if state.StartSeenAt.IsZero() {
+			state.StartSeenAt = legacy
+		}
+		if state.SourcesSeenAt.IsZero() {
+			state.SourcesSeenAt = legacy
+		}
+	}
+	return state, nil
 }
 
-// Write stores the watermark atomically (temp file → rename).
-func (s *Store) Write(_ context.Context, seenAt time.Time) error {
-	if seenAt.IsZero() {
+// Write stores both watermarks atomically (temp file → rename). A zero scope is omitted: the first
+// visit to the other lens initializes it, and a Start visit must never speak for Sources.
+func (s *Store) Write(_ context.Context, state entities.ReaderState) error {
+	if state.StartSeenAt.IsZero() && state.SourcesSeenAt.IsZero() {
 		return fmt.Errorf("reader: a seen watermark needs an instant")
 	}
 	s.mu.Lock()
@@ -78,7 +94,7 @@ func (s *Store) Write(_ context.Context, seenAt time.Time) error {
 	if err := os.MkdirAll(s.root, 0o755); err != nil {
 		return fmt.Errorf("reader: mkdir: %w", err)
 	}
-	b := encode(seenAt)
+	b := encode(state)
 	tmp, err := os.CreateTemp(s.root, ".seen-*.tmp")
 	if err != nil {
 		return fmt.Errorf("reader: temp: %w", err)
@@ -98,10 +114,23 @@ func (s *Store) Write(_ context.Context, seenAt time.Time) error {
 	return nil
 }
 
-func encode(seenAt time.Time) []byte {
+func parseInstant(raw string) time.Time {
+	at, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil || at.IsZero() {
+		return time.Time{}
+	}
+	return at.UTC()
+}
+
+func encode(state entities.ReaderState) []byte {
 	var b strings.Builder
 	b.WriteString("---\n")
-	b.WriteString("seen_at: " + seenAt.UTC().Format(time.RFC3339Nano) + "\n")
+	if !state.StartSeenAt.IsZero() {
+		b.WriteString("start_seen_at: " + state.StartSeenAt.UTC().Format(time.RFC3339Nano) + "\n")
+	}
+	if !state.SourcesSeenAt.IsZero() {
+		b.WriteString("sources_seen_at: " + state.SourcesSeenAt.UTC().Format(time.RFC3339Nano) + "\n")
+	}
 	b.WriteString("---\n")
 	return []byte(b.String())
 }

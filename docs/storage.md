@@ -80,8 +80,8 @@ file — to fall back. It is a **record**: version it with the vault.
    elsewhere — except for the *records*, where the file is deliberately the authority.
 
 The **one sidecar exception** is the favicon store (`.thought-keeper/favicons/`): two sources of one
-host share an icon, so it belongs to no single source. The reader's seen watermark
-(`.thought-keeper/reader/seen.md`) is not a sidecar either: it belongs to the whole vault and is
+host share an icon, so it belongs to no single source. The reader's two seen watermarks
+(`.thought-keeper/reader/seen.md`) are not a sidecar either: they belong to the whole vault and are
 described in §11.
 
 The rendering is named after the step that writes it, and that name is doing real work:
@@ -100,7 +100,7 @@ clusters/**/*.meta
 
 What stays in the history is the object, the wiki pages, the atoms, the vocabulary and the vault's
 own config — the knowledge. `.meta` and `.log` are records but are excluded anyway: they change on every run and are
-rebuilt from the vault. The reader's seen watermark is app state and is excluded too. `vault.git.enabled` and `commit_on_write` are **not implemented**; the app
+rebuilt from the vault. The reader's seen watermarks are app state and are excluded too. `vault.git.enabled` and `commit_on_write` are **not implemented**; the app
 never runs git.
 
 ## 3. Per-source log
@@ -575,10 +575,10 @@ items:
 - **No index table.** Like `asks/`, the directory is read directly: the history is small by design.
   `reindex` does not touch it.
 
-## 11. Reader marks, interests and the seen watermark
+## 11. Reader marks, interests and the seen watermarks
 
 The reader's own state is deliberately small: two marks on a source, one mark on a page, one file
-per standing rule and one shared watermark. None of it is a tag, a topic or a claim.
+per standing rule and two independent watermarks. None of it is a tag, a topic or a claim.
 
 ### The marks
 
@@ -598,28 +598,37 @@ about the marks is derived.
 
 ### `.thought-keeper/reader/seen.md`
 
-One file per vault: the **seen watermark**. A source is **new** when its `imported_at` is later, and
-**updated** when its recorded content change (`url_changed_at`) is later.
+One file per vault holds the **two seen watermarks**: `start_seen_at` belongs to the Start lens and
+drives its statistic; `sources_seen_at` belongs to the Sources lens and drives the **new** and
+**updated** marks of its rows. A source is **new** on Sources when its `imported_at` is later than
+the Sources watermark, and **updated** when its recorded content change (`url_changed_at`) is later
+(unless it also just arrived: the stronger **new** mark wins).
 
 ```markdown
 ---
-seen_at: 2026-11-07T08:00:00.123Z
+start_seen_at: 2026-11-07T08:00:00.123Z
+sources_seen_at: 2026-11-07T09:30:00.456Z
 ---
 ```
 
-- **One record, not one per client.** Whichever client becomes active while Start or Sources is
-  visible acknowledges the batch for every client; no client id, token or per-device file exists.
-  That is what keeps a source the phone has seen from being new on the desktop.
-- **It only moves forward**, and only when something happened later: an arrival, or a page whose
-  readable content actually changed. It lands on the newest ACTIVITY — the same instant the Sources
-  list orders by (the change time when there is one, otherwise the arrival). An acknowledgment with
-  nothing later writes nothing and announces nothing. The first acknowledgment initializes it to
-  "now": a fresh vault marks nothing, it does not flag the whole corpus.
+- **Two scopes, one record.** A client acknowledges only the lens it is looking at: Start's
+  watermark moves on a Start visit, Sources' on a Sources visit. Opening Start never clears the
+  Sources marks. A scope that has never been acknowledged is omitted from the file; its first visit
+  initializes it to "now" (a fresh vault marks nothing, it does not flag the whole corpus).
+- **One record, not one per client.** Whichever client becomes active on a lens acknowledges that
+  scope for every client; no client id, token or per-device file exists. That is what keeps a source
+  the phone has seen from being new on the desktop.
+- **Each watermark only moves forward**, and only when something happened later: an arrival, or a
+  page whose readable content actually changed. It lands on the newest ACTIVITY — the same instant
+  the Sources list orders by (the change time when there is one, otherwise the arrival). An
+  acknowledgment with nothing later writes nothing and announces nothing.
+- **A legacy record seeds both scopes.** An older file with a single `seen_at` is read as the value
+  of both watermarks; the next acknowledgment writes the two named keys and drops the legacy one.
 - **It is app state, not knowledge.** The file is hidden with `.thought-keeper/` and git-ignored
-  (it changes only when a new arrival or a content change moves it); `reindex`, `rebuild-trees`,
-  `reconcile` and `cleanup` leave it alone. Losing it is harmless: the next first acknowledgment
-  starts a clean baseline, and only the "new" and "updated" marks are gone.
-- **No index table.** The reader endpoints read the file directly; the watermark's comparison uses
+  (it changes only when a visit moves a scope); `reindex`, `rebuild-trees`, `reconcile` and
+  `cleanup` leave it alone. Losing it is harmless: the next first acknowledgment starts a clean
+  baseline, and only the statistic and the marks are gone.
+- **No index table.** The reader endpoints read the file directly; each watermark's comparison uses
   the instants the index already stores (`imported_at`, `url_changed_at`).
 
 ### `interests/<slug>.md`

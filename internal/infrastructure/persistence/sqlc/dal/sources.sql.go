@@ -244,23 +244,30 @@ WHERE (?1 = '' OR kind = ?1)
        OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
   AND (?13 = 0 OR imported_at >= ?13)
   AND (?14 = 0 OR imported_at < ?14)
+  -- The Start statistic has two windows against its own watermark: an arrival strictly after it,
+  -- and a page whose content changed after it but that did not also just arrive.
+  AND (?15 = 0 OR imported_at > ?15)
+  AND (?16 = 0
+       OR (url_changed_at > ?16 AND imported_at <= ?16))
 `
 
 type CountSourcesFilteredParams struct {
-	Kind      interface{} `json:"kind"`
-	Query     interface{} `json:"query"`
-	Tag       interface{} `json:"tag"`
-	Attached  interface{} `json:"attached"`
-	Changed   interface{} `json:"changed"`
-	Bookmarks interface{} `json:"bookmarks"`
-	Failed    interface{} `json:"failed"`
-	Stale     interface{} `json:"stale"`
-	Favorite  interface{} `json:"favorite"`
-	ReadLater interface{} `json:"read_later"`
-	Interest  interface{} `json:"interest"`
-	Roots     interface{} `json:"roots"`
-	Since     interface{} `json:"since"`
-	Until     interface{} `json:"until"`
+	Kind         interface{} `json:"kind"`
+	Query        interface{} `json:"query"`
+	Tag          interface{} `json:"tag"`
+	Attached     interface{} `json:"attached"`
+	Changed      interface{} `json:"changed"`
+	Bookmarks    interface{} `json:"bookmarks"`
+	Failed       interface{} `json:"failed"`
+	Stale        interface{} `json:"stale"`
+	Favorite     interface{} `json:"favorite"`
+	ReadLater    interface{} `json:"read_later"`
+	Interest     interface{} `json:"interest"`
+	Roots        interface{} `json:"roots"`
+	Since        interface{} `json:"since"`
+	Until        interface{} `json:"until"`
+	ArrivedSince interface{} `json:"arrived_since"`
+	ChangedSince interface{} `json:"changed_since"`
 }
 
 func (q *Queries) CountSourcesFiltered(ctx context.Context, arg CountSourcesFilteredParams) (int64, error) {
@@ -279,6 +286,8 @@ func (q *Queries) CountSourcesFiltered(ctx context.Context, arg CountSourcesFilt
 		arg.Roots,
 		arg.Since,
 		arg.Until,
+		arg.ArrivedSince,
+		arg.ChangedSince,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -948,27 +957,34 @@ WHERE (?1 = '' OR kind = ?1)
   -- a window over an older part of the vault is not lost to the scan limit.
   AND (?13 = 0 OR imported_at >= ?13)
   AND (?14 = 0 OR imported_at < ?14)
+  -- The Start statistic has two windows against its own watermark: an arrival strictly after it,
+  -- and a page whose content changed after it but that did not also just arrive.
+  AND (?15 = 0 OR imported_at > ?15)
+  AND (?16 = 0
+       OR (url_changed_at > ?16 AND imported_at <= ?16))
 ORDER BY COALESCE(url_changed_at, imported_at) DESC, imported_at DESC, hash DESC
-LIMIT ?16 OFFSET ?15
+LIMIT ?18 OFFSET ?17
 `
 
 type ListSourcesFilteredParams struct {
-	Kind      interface{} `json:"kind"`
-	Query     interface{} `json:"query"`
-	Tag       interface{} `json:"tag"`
-	Attached  interface{} `json:"attached"`
-	Changed   interface{} `json:"changed"`
-	Bookmarks interface{} `json:"bookmarks"`
-	Failed    interface{} `json:"failed"`
-	Stale     interface{} `json:"stale"`
-	Favorite  interface{} `json:"favorite"`
-	ReadLater interface{} `json:"read_later"`
-	Interest  interface{} `json:"interest"`
-	Roots     interface{} `json:"roots"`
-	Since     interface{} `json:"since"`
-	Until     interface{} `json:"until"`
-	Offset    int64       `json:"offset"`
-	Limit     int64       `json:"limit"`
+	Kind         interface{} `json:"kind"`
+	Query        interface{} `json:"query"`
+	Tag          interface{} `json:"tag"`
+	Attached     interface{} `json:"attached"`
+	Changed      interface{} `json:"changed"`
+	Bookmarks    interface{} `json:"bookmarks"`
+	Failed       interface{} `json:"failed"`
+	Stale        interface{} `json:"stale"`
+	Favorite     interface{} `json:"favorite"`
+	ReadLater    interface{} `json:"read_later"`
+	Interest     interface{} `json:"interest"`
+	Roots        interface{} `json:"roots"`
+	Since        interface{} `json:"since"`
+	Until        interface{} `json:"until"`
+	ArrivedSince interface{} `json:"arrived_since"`
+	ChangedSince interface{} `json:"changed_since"`
+	Offset       int64       `json:"offset"`
+	Limit        int64       `json:"limit"`
 }
 
 // ACTIVITY, not arrival: the last actual change when there is one, otherwise the arrival. A page
@@ -990,6 +1006,8 @@ func (q *Queries) ListSourcesFiltered(ctx context.Context, arg ListSourcesFilter
 		arg.Roots,
 		arg.Since,
 		arg.Until,
+		arg.ArrivedSince,
+		arg.ChangedSince,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -1079,26 +1097,33 @@ WHERE (?1 = '' OR kind = ?1)
        OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
   AND (?12 = 0 OR imported_at >= ?12)
   AND (?13 = 0 OR imported_at < ?13)
+  -- The Start statistic has two windows against its own watermark: an arrival strictly after it,
+  -- and a page whose content changed after it but that did not also just arrive.
+  AND (?14 = 0 OR imported_at > ?14)
+  AND (?15 = 0
+       OR (url_changed_at > ?15 AND imported_at <= ?15))
 ORDER BY read_later_at ASC, imported_at DESC
-LIMIT ?15 OFFSET ?14
+LIMIT ?17 OFFSET ?16
 `
 
 type ListSourcesQueueParams struct {
-	Kind      interface{} `json:"kind"`
-	Query     interface{} `json:"query"`
-	Tag       interface{} `json:"tag"`
-	Attached  interface{} `json:"attached"`
-	Changed   interface{} `json:"changed"`
-	Bookmarks interface{} `json:"bookmarks"`
-	Failed    interface{} `json:"failed"`
-	Stale     interface{} `json:"stale"`
-	Favorite  interface{} `json:"favorite"`
-	Interest  interface{} `json:"interest"`
-	Roots     interface{} `json:"roots"`
-	Since     interface{} `json:"since"`
-	Until     interface{} `json:"until"`
-	Offset    int64       `json:"offset"`
-	Limit     int64       `json:"limit"`
+	Kind         interface{} `json:"kind"`
+	Query        interface{} `json:"query"`
+	Tag          interface{} `json:"tag"`
+	Attached     interface{} `json:"attached"`
+	Changed      interface{} `json:"changed"`
+	Bookmarks    interface{} `json:"bookmarks"`
+	Failed       interface{} `json:"failed"`
+	Stale        interface{} `json:"stale"`
+	Favorite     interface{} `json:"favorite"`
+	Interest     interface{} `json:"interest"`
+	Roots        interface{} `json:"roots"`
+	Since        interface{} `json:"since"`
+	Until        interface{} `json:"until"`
+	ArrivedSince interface{} `json:"arrived_since"`
+	ChangedSince interface{} `json:"changed_since"`
+	Offset       int64       `json:"offset"`
+	Limit        int64       `json:"limit"`
 }
 
 // The read-later queue, worked front to back. It is the SAME list with the same filters, ordered by
@@ -1119,6 +1144,8 @@ func (q *Queries) ListSourcesQueue(ctx context.Context, arg ListSourcesQueuePara
 		arg.Roots,
 		arg.Since,
 		arg.Until,
+		arg.ArrivedSince,
+		arg.ChangedSince,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -1509,9 +1536,9 @@ FROM sources
 
 // The newest ACTIVITY in the vault, in Unix milliseconds; 0 when the vault is empty. Activity is the
 // same instant the list orders by: the last real content change of a page, otherwise the arrival.
-// The reader's seen watermark moves to it, so one acknowledgment settles both the "new" and the
-// "updated" mark, and no client clock is compared with a server clock: both sides of either mark
-// are the instants the index stores.
+// A reader watermark moves to it, so one acknowledgment settles both the "new" and the "updated"
+// mark, and no client clock is compared with a server clock: both sides of either mark are the
+// instants the index stores.
 func (q *Queries) MaxSourceActivityAt(ctx context.Context) (int64, error) {
 	row := q.db.QueryRowContext(ctx, maxSourceActivityAt)
 	var max_activity_at int64

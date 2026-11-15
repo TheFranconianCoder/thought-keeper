@@ -3,39 +3,32 @@
   import { untrack } from 'svelte';
   import { api } from '../../lib/api';
   import type { QueueCounts, Source } from '../../lib/api/types';
-  import { pubDate, relTime } from '../../lib/format';
+  import { relTime } from '../../lib/format';
   import { t, tn } from '../../lib/i18n/index.svelte';
   import { openAdd } from '../../lib/overlays';
   import { readError, readSignal } from '../../lib/read';
   import { askPath, navigate, router, sourcePath } from '../../lib/router.svelte';
   import { pipelineLabel } from '../../lib/source-state';
-  import {
-    activateNewSources,
-    arrivalWindowExtended,
-    arrivalWindowStart,
-    isSourceNew,
-    newSources,
-  } from '../../lib/new-sources.svelte';
+  import { activateStart, newSources } from '../../lib/new-sources.svelte';
   import { asks } from '../../lib/stores/asks.svelte';
   import { interests } from '../../lib/stores/interests.svelte';
-  import { sources } from '../../lib/stores/sources.svelte';
   import { sourceWindow } from '../../lib/stores/source-window.svelte';
   import { system } from '../../lib/stores/system.svelte';
   import Icon from '../ui/Icon.svelte';
-  import InterestChip from '../ui/InterestChip.svelte';
-  import NewTag from '../sources/NewTag.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
-  import SourceLamp from '../sources/SourceLamp.svelte';
 
   let question = $state('');
-  let arrivals = $state<Source[]>([]);
-  let arrivalCount = $state(0);
-  let arrivalsLoaded = $state(false);
-  let arrivalsError = $state('');
-  /** Whether the card's window reaches back past its three days to the last visit. */
-  let arrivalsExtended = $state(false);
+  // The front door's activity card: what arrived and what actually changed since THIS lens's last
+  // visit. Two bounded lists carry the names; the counts come with them, so a long batch stays a
+  // number and a few chips instead of a list that cannot fit.
+  let freshSources = $state<Source[]>([]);
+  let changedSources = $state<Source[]>([]);
+  let freshCount = $state(0);
+  let changedCount = $state(0);
+  let activityLoaded = $state(false);
+  let activityError = $state('');
   // The queue is a LINE, not a card: the oldest entry and its numbers say everything the door owes
-  // it, and the arrivals below are the list the reader actually works from.
+  // it, above the activity statistic.
   let readLaterOldest = $state<Source | null>(null);
   let readLaterCount = $state(0);
   let readLaterQueue = $state<QueueCounts | null>(null);
@@ -43,12 +36,11 @@
 
   const status = $derived(system.status);
   const recentQuestions = $derived(asks.recent.slice(0, 3));
-  const arrivalsWindow = $derived(
-    arrivalsExtended ? t('home.arrivalsWindowSince') : t('home.arrivalsWindow'),
+  // A card that would only say "nothing happened" is one card too many: like the signal lines it is
+  // absent when quiet. The skeleton is shown while the first answer is on its way.
+  const showActivity = $derived(
+    !activityLoaded || activityError !== '' || freshCount > 0 || changedCount > 0,
   );
-  // A card that would only say "nothing came in this window" is one card too many: like the signal
-  // lines it is absent when quiet.
-  const showArrivals = $derived(!arrivalsLoaded || arrivalsError !== '' || arrivals.length > 0);
 
   // The rules BEHIND the queue, by name and with their share: that is what makes the line say WHY
   // it is long. A slug whose rule was deleted is dropped, exactly as a queue row drops its label.
@@ -94,24 +86,25 @@
 
   $effect(() => {
     if (router.current.view !== 'home') return;
-    // Opening Start is the acknowledgment of the shared "new" batch; a wake on another lens must not
-    // consume the arrivals.
-    if (newSources.primary && newSources.active && newSources.ack === 'idle') void activateNewSources();
+    // Opening Start acknowledges only the front door's watermark. Sources keeps its own marks until
+    // the reader actually visits the list.
+    if (newSources.primary && newSources.active && newSources.start.ack === 'idle') void activateStart();
   });
 
   $effect(() => {
     if (router.current.view !== 'home') return;
-    // The card waits for this phase's acknowledgment: painting without marks and then reloading
-    // with them was a visible flicker. An inactive window (idle) keeps the last known baseline and
-    // loads at once; a failed acknowledgment also loads, with whatever baseline is known.
-    if (newSources.active && newSources.ack !== 'done' && newSources.ack !== 'failed') return;
-    // The Start page does not need the full list, only the arrivals and the queue — but both change
-    // when the vault does. `epoch` moves when the sources are invalidated, never when a page of some
-    // list happens to arrive. `since` moves when another client acknowledged the batch.
+    // The statistic waits for this phase's acknowledgment: painting without a baseline and then
+    // reloading with one was a visible flicker. An inactive window (idle) keeps the last known
+    // baseline and loads at once; a failed acknowledgment also loads, with whatever baseline is
+    // known.
+    if (newSources.active && newSources.start.ack !== 'done' && newSources.start.ack !== 'failed') return;
+    // The Start page does not need the full list, only its two counts and the queue — but both
+    // change when the vault does. `epoch` moves when the sources are invalidated, never when a page
+    // of some list happens to arrive. `since` moves when another client acknowledged Start.
     void sourceWindow.epoch;
-    void newSources.since;
+    void newSources.start.since;
     untrack(() => {
-      void loadArrivals();
+      void loadActivity();
       void loadReadLater();
     });
   });
@@ -140,28 +133,35 @@
     }
   }
 
-  async function loadArrivals(): Promise<void> {
+  async function loadActivity(): Promise<void> {
+    const since = newSources.start.since;
+    if (!since) {
+      // The scope's first visit has no baseline: nothing is new, and the card stays absent.
+      freshSources = [];
+      changedSources = [];
+      freshCount = 0;
+      changedCount = 0;
+      activityLoaded = true;
+      activityError = '';
+      return;
+    }
     try {
-      // The newest SOURCES of the window, each one a row of its own: a feed's article is an arrival
-      // like a document is, and the window keeps the card from freezing on the newest ever. The
-      // window is at least three days, and reaches back to the last acknowledgment when that is
-      // earlier, so an arrival the reader has not seen is actually on the card.
-      const now = Date.now();
-      const since = newSources.since;
-      const result = await api.sources(
-        { since: arrivalWindowStart(now, since) },
-        8,
-        0,
-        readSignal(20_000),
-      );
-      arrivals = result.sources ?? [];
-      arrivalCount = result.count ?? arrivals.length;
-      arrivalsExtended = arrivalWindowExtended(now, since);
-      arrivalsLoaded = true;
-      arrivalsError = '';
+      // Two bounded reads against the SAME baseline: arrivals that are strictly later, and pages
+      // that already existed whose content changed after it. A feed's article is an arrival like a
+      // document is. The count is the filtered total; the lists only name a few.
+      const [arrivals, changes] = await Promise.all([
+        api.sources({ arrivedSince: since }, 8, 0, readSignal(20_000)),
+        api.sources({ changedSince: since }, 8, 0, readSignal(20_000)),
+      ]);
+      freshSources = arrivals.sources ?? [];
+      freshCount = arrivals.count ?? freshSources.length;
+      changedSources = changes.sources ?? [];
+      changedCount = changes.count ?? changedSources.length;
+      activityLoaded = true;
+      activityError = '';
     } catch (error) {
-      arrivalsLoaded = true;
-      arrivalsError = readError(error);
+      activityLoaded = true;
+      activityError = readError(error);
     }
   }
 
@@ -283,49 +283,72 @@
         <Icon name="plus" size={13} /> {t('home.emptySourcesAction')}
       </button>
     </section>
-  {:else if showArrivals}
-    <section class="home-card" aria-label={t('home.arrivals')}>
+  {:else if showActivity}
+    <section class="home-card home-activity" aria-label={t('home.sinceLastVisit')}>
       <div class="card-head">
-        <h2>{t('home.arrivals')}</h2>
-        {#if arrivalsLoaded && arrivalCount > 0}
-          <span class="count">{tn('home.arrivalsCount', arrivalCount)}</span>
+        <h2>{t('home.sinceLastVisit')}</h2>
+        {#if newSources.start.since}
+          <span class="card-window">
+            {t('home.lastVisit', { age: relTime(newSources.start.since) })}
+          </span>
         {/if}
-        <span class="card-window">{arrivalsWindow}</span>
-        <a class="card-link" href="#/sources">
-          {t('home.allSources')}
-          <Icon name="chevronRight" size={13} />
-        </a>
       </div>
-      {#if arrivalsError}
-        <p class="notice notice--error">{arrivalsError}</p>
+      {#if activityError}
+        <p class="notice notice--error">{activityError}</p>
       {/if}
-      {#if !arrivalsLoaded}
+      {#if !activityLoaded}
         <div class="stack">
-          {#each Array(4) as _, index (index)}<span class="skeleton" style="height:40px"></span>{/each}
+          {#each Array(3) as _, index (index)}<span class="skeleton" style="height:24px"></span>{/each}
         </div>
       {:else}
-        <div class="home-rows">
-          {#each arrivals as source (source.hash)}
-            {@const live = sources.progress[source.hash]}
-            {@const fresh = isSourceNew(source)}
-            <button class="home-row source-row" class:is-new={fresh} onclick={() => openSource(source)}>
-              <SourceIcon kind={source.kind} hash={source.hash} size={16} />
-              {#if fresh}<NewTag />{/if}
-              <span class="source-main">
-                <span class="row-title">{source.title || source.hash.slice(0, 12)}</span>
-                <span class="row-sub">
-                  <span class="row-sub-text">
-                    {#if source.published_at}{pubDate(source.published_at)} · {/if}
-                    {t('home.arrivalAge', { age: relTime(source.imported_at) })}
-                    {#if source.atom_count > 0} · {tn('home.claimsCount', source.atom_count)}{/if}
-                  </span>
-                  <InterestChip {source} />
+        {#if freshCount > 0}
+          <div class="activity-group">
+            <div class="activity-head">
+              <span class="activity-count activity-count--new">{tn('home.newSources', freshCount)}</span>
+            </div>
+            <div class="activity-chips">
+              {#each freshSources as source (source.hash)}
+                <button
+                  class="source-chip"
+                  title={source.title || source.hash}
+                  onclick={() => openSource(source)}
+                >
+                  <SourceIcon kind={source.kind} hash={source.hash} size={12} />
+                  <span class="source-chip-name">{source.title || source.hash.slice(0, 12)}</span>
+                </button>
+              {/each}
+              {#if freshCount > freshSources.length}
+                <span class="activity-more">
+                  {t('home.moreSources', { count: freshCount - freshSources.length })}
                 </span>
-              </span>
-              {#if !source.bookmark}<SourceLamp {source} {live} />{/if}
-            </button>
-          {/each}
-        </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+        {#if changedCount > 0}
+          <div class="activity-group">
+            <div class="activity-head">
+              <span class="activity-count activity-count--updated">{tn('home.changedSources', changedCount)}</span>
+            </div>
+            <div class="activity-chips">
+              {#each changedSources as source (source.hash)}
+                <button
+                  class="source-chip"
+                  title={source.title || source.hash}
+                  onclick={() => openSource(source)}
+                >
+                  <SourceIcon kind={source.kind} hash={source.hash} size={12} />
+                  <span class="source-chip-name">{source.title || source.hash.slice(0, 12)}</span>
+                </button>
+              {/each}
+              {#if changedCount > changedSources.length}
+                <span class="activity-more">
+                  {t('home.moreSources', { count: changedCount - changedSources.length })}
+                </span>
+              {/if}
+            </div>
+          </div>
+        {/if}
       {/if}
     </section>
   {/if}
@@ -556,114 +579,90 @@
     letter-spacing: 0.01em;
   }
 
-  .card-head .count {
-    color: var(--faint);
-    font-size: 11.5px;
-  }
-
-  /* The window the card reads, said instead of assumed: three days, or back to the last visit. */
+  /* The last visit, said instead of assumed: the statistic always covers what happened after it. */
   .card-window {
     color: var(--faint);
     font-size: 11px;
     letter-spacing: 0.01em;
   }
 
-  .card-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    margin-left: auto;
-    color: var(--muted);
-    font-size: 11.5px;
-    line-height: 1;
-    transition: color 0.14s var(--ease);
-  }
-
-  .card-link :global(.ico) {
-    color: var(--faint);
-    transition: color 0.14s var(--ease);
-  }
-
-  .card-link:hover,
-  .card-link:hover :global(.ico) {
-    color: var(--accent);
-  }
-
-  .home-rows {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .home-row {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    width: 100%;
-    min-height: 36px;
-    padding: 7px 6px;
-    border: 0;
+  /* The statistic is two quiet groups, not two cards: a count and the names that make it concrete.
+     A group with nothing to say is absent, so the card never shows an empty half. */
+  .activity-group {
+    padding: 9px 0 2px;
     border-top: 1px solid var(--line);
-    border-radius: 0;
-    background: transparent;
-    color: var(--ink-2);
-    font-size: 12.5px;
-    text-align: left;
   }
 
-  .home-row:first-child {
+  .activity-group:first-of-type {
+    padding-top: 2px;
     border-top: 0;
   }
 
-  .home-row:hover {
+  .activity-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .activity-count {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  /* The same pair of colours the Sources rows use: an arrival is the accent, a change is info. */
+  .activity-count--new {
+    color: var(--accent);
+  }
+
+  .activity-count--updated {
+    color: var(--info);
+  }
+
+  .activity-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .source-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    padding: 3px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg-muted);
+    color: var(--ink-2);
+    font: inherit;
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+
+  .source-chip:hover {
+    border-color: var(--line-strong);
     background: var(--bg-hover);
     color: var(--ink);
   }
 
-  /* The same quiet accent the Sources row carries: the tag already says it, this only makes the
-     row findable while scrolling. */
-  .home-row.is-new {
-    box-shadow: inset 2px 0 0 var(--accent);
-  }
-
-  .home-row :global(.ico) {
-    color: var(--faint);
-  }
-
-  .row-title {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .source-main {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    flex-direction: column;
-    gap: 1px;
-  }
-
-  .source-row .row-title {
+  .source-chip :global(.ico) {
     flex: none;
-  }
-
-  /* The sub line is a ROW: the text gives way first, the rule chip keeps its shape. */
-  .row-sub {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
     color: var(--faint);
-    font-size: 11px;
   }
 
-  .row-sub-text {
-    overflow: hidden;
+  .source-chip-name {
     min-width: 0;
+    max-width: 24ch;
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .activity-more {
+    color: var(--faint);
+    font-size: 11.5px;
   }
 
   .onboarding {

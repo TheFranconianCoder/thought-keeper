@@ -30,12 +30,12 @@ export const sourcesEn: Record<string, string> = {
   'sources.readTimeout': 'The local service did not answer in time.',
 
   // One row: the labels the list shows next to a source.
-  // The shared "new" mark: the source arrived after the vault's seen watermark.
+  // The shared "new" mark: the source arrived after Sources was last visited.
   'sources.tagNew': 'new',
-  'sources.tagNewTitle': 'Arrived since the vault was last visited',
-  // The shared "updated" mark: the page's stored content changed after the last visit.
+  'sources.tagNewTitle': 'Arrived since you last opened Sources',
+  // The shared "updated" mark: the page's stored content changed after that Sources visit.
   'sources.tagUpdated': 'updated',
-  'sources.tagUpdatedTitle': 'Content changed since the vault was last visited',
+  'sources.tagUpdatedTitle': 'Content changed since you last opened Sources',
   'sources.updatedAgo': 'updated {time}',
   'sources.changedAtTip': 'Content changed {date} · arrived {arrived}',
   'sources.changed': 'Updated',

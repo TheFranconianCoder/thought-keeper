@@ -31,12 +31,12 @@ export const sourcesDe: Record<string, string> = {
   'sources.readTimeout': 'Der lokale Dienst hat nicht rechtzeitig geantwortet.',
 
   // Eine Zeile: die Etiketten neben einer Quelle.
-  // Die gemeinsame „Neu“-Marke: die Quelle kam nach dem Gesehen-Zeitpunkt des Tresors an.
+  // Die gemeinsame „Neu“-Marke: die Quelle kam nach dem letzten Öffnen der Quellenliste an.
   'sources.tagNew': 'neu',
-  'sources.tagNewTitle': 'Seit dem letzten Besuch angekommen',
-  // Die gemeinsame „Aktualisiert“-Marke: der gespeicherte Inhalt hat sich nach dem letzten Besuch geändert.
+  'sources.tagNewTitle': 'Seit du die Quellenliste zuletzt geöffnet hast angekommen',
+  // Die gemeinsame „Aktualisiert“-Marke: der gespeicherte Inhalt hat sich seit jenem Besuch geändert.
   'sources.tagUpdated': 'aktualisiert',
-  'sources.tagUpdatedTitle': 'Inhalt seit dem letzten Besuch geändert',
+  'sources.tagUpdatedTitle': 'Inhalt seit deinem letzten Öffnen der Quellenliste geändert',
   'sources.updatedAgo': 'aktualisiert {time}',
   'sources.changedAtTip': 'Inhalt geändert am {date} · angekommen {arrived}',
   'sources.changed': 'Aktualisiert',

@@ -60,13 +60,11 @@ its title, a wiki page's edit), which is shown beside the arrival but never orde
 actually changed. A check that answered the same page is not an event.
 **Start** is the front door: a vault-pulse line, an Ask box, and three thin signals for what runs,
 what needs you and what waits in the read-later queue (open entries, the interests that queued them
-by name, the age of the oldest), all absent when quiet; then **Arrived** — the eight newest sources
-of the window (three days, or longer when the vault was last visited earlier), one row each (a feed's
-article is an arrival like a document is), each with the date its source declares and its arrival
-age, a **new** mark when it arrived since that last visit, and — where a standing rule queued it —
-the rule's chip on the row (the same chip the Sources rows carry, shown while the entry is open); the
-card is absent when the window is quiet. Never a session-restore card and never the
-newest-claims wall. A **wiki
+by name, the age of the oldest), all absent when quiet; then a **since your last visit** statistic —
+how many sources are **new** and how many **updated** since Start itself was last opened, each count
+paired with the names that make it concrete (a few chips, then `+n more`; a feed's article is named
+like any other source), and the card is absent when both counts are zero. The counts are information;
+a chip opens its source. Never a session-restore card and never the newest-claims wall. A **wiki
 page** is user-authored Markdown with tags; saving it writes a source representation and runs the
 document pipeline from capture. The app also tags a page and a source
 (auto tags, kept apart from the human's tags) and curates the three name vocabularies (`topics`,
@@ -86,20 +84,21 @@ A page that changed is re-read **in place**: the refresh replaces the snapshot a
 outline, and only the parts whose text changed materially lose their claims — a reflow or a single
 changed word keeps them, and a new title touches no claim. The source's record keeps the time of that
 change (`changed_at`, not the check time), and the Sources list marks the row **updated** when the
-change is newer than the seen watermark.
+change is newer than the Sources watermark.
 
 The reader's own marks are **not** lenses either. A **favorite** is a star on a source or a wiki page
 and a filter in that lens; the **read-later queue** is a filter of the Sources list (`?readlater=1`,
 oldest entry first), a list on Start and a banner on the list. **Interests** are standing rules in
 `interests/`: a strong lexical match puts a NEW source into the queue, a weak one stays a suggestion
 in the source's rail. They are managed in an overlay, and their matches are computed on demand — no
-index table, no model, no second grouping. The **seen watermark** is the one shared reader state:
-one record per vault, advanced by the first client that becomes active on Start or Sources, so a
-source the phone has seen is not new on the desktop — no client id, no per-device file. The same
-watermark answers **updated**: a source whose recorded content change is newer than the watermark,
-unless it also just arrived (the stronger **new** mark wins). Opening a source drops its own mark in
-that window, in memory: the reader answered for one row, and the watermark, the batch and every other
-client stay as they were.
+index table, no model, no second grouping. The **two seen watermarks** are the shared reader state:
+one record per vault, with one instant for Start and one for Sources, each advanced only by a client
+that actually visits that lens, so a source the phone has seen is not new on the desktop — no client
+id, no per-device file. Start's watermark answers its statistic; Sources' watermark answers its
+**new** and **updated** marks: a source whose content change is newer than it, unless it also just
+arrived (the stronger **new** mark wins). Opening a source drops that row's mark in that window, in
+memory: the reader answered for one row, and the watermark, the batch and every other client stay as
+they were.
 
 The app's own configuration is readable in the **Config overlay** (`?config=1`, the gear in the top
 bar): every knob with its origin (the machine's file, the vault's file, the environment or a
@@ -189,8 +188,8 @@ paths stay read-only.
 | **favorite** | The reader's star on a source or a wiki page: "this belongs to me". No lifecycle, no label, never a ranking signal. | the source record / the page frontmatter |
 | **read later** | The reader's queue of sources. Open until marked done; otherwise a filter of the Sources list, ordered oldest entry first. | the source record + `?readlater=1` |
 | **interest** | A standing rule the reader writes: terms that make a NEW source join the read-later queue. A strong match queues; a weak one is only a suggestion. | `interests/<slug>.md` |
-| **seen watermark** | The instant up to which the vault's activity has been seen — an arrival or the last real content change of a page; a source later than it is **new**, a changed page **updated**. One per vault, shared by every client: the first client active on Start or Sources acknowledges the batch. A record, not a cache. | `.thought-keeper/reader/seen.md` |
-| **updated** | A source whose recorded page content changed after the seen watermark (and that did not also just arrive). The change time is a RECORD; the mark is a display rule in memory, like **new**. | the source's `<hash>.meta` + the Sources row |
+| **seen watermark** | The instant up to which one lens's activity has been seen — an arrival or the last real content change of a page. Two per vault and independent: Start's answers its statistic, Sources' answers its **new** and **updated** marks. Each is shared by every client and advanced only by a visit to that lens. A record, not a cache. | `.thought-keeper/reader/seen.md` |
+| **updated** | A source whose recorded page content changed after the Sources watermark (and that did not also just arrive). The change time is a RECORD; the mark is a display rule in memory, like **new**. | the source's `<hash>.meta` + the Sources row |
 | **reconcile / reindex / cleanup** | The repairs: check records against the vault; rebuild the index from the vault; prune dead cluster members. The first two are buttons in Status → Vault; cleanup settles every cluster pass by itself. | Status → Vault |
 
 **The URL is the truth about UI state — with one exception that is deliberate.** A command's address
@@ -350,7 +349,7 @@ instance, not clients of a server you operate.
 ├── interests/        # the reader's standing rules (<slug>.md, records)
 ├── asks/             # saved Ask conversations (<run-id>.md)
 ├── commands/         # the assistant's requests (pruned after a week; git-ignored)
-├── .thought-keeper/  # app state, hidden: favicons/ (derived), reader/seen.md (the seen watermark)
+├── .thought-keeper/  # app state, hidden: favicons/ (derived), reader/seen.md (the two seen watermarks)
 ├── .trash/           # deletions (trash, not delete)
 └── (.git/ if you version the vault — the app keeps .gitignore current)
 ```

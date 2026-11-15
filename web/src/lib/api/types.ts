@@ -224,20 +224,26 @@ export interface QueueCounts {
   interests?: InterestShare[];
 }
 
-/** ReaderState is the shared "new" watermark: the instant up to which the vault's arrivals have
- *  been seen. One value per vault, never per client. Empty means no client has acknowledged yet. */
+/** ReaderState is the reader's two independent seen watermarks: Start's drives the front door's
+ *  statistic, Sources' drives its row marks. One value per vault and scope, never per client.
+ *  Empty means that scope has not been acknowledged yet. */
 export interface ReaderState {
-  seen_at?: string;
+  start_seen_at?: string;
+  sources_seen_at?: string;
 }
 
-/** ReaderActivation is the answer to a client becoming active. `since` is the baseline its marks use
- *  (absent on the first activation, when nothing is new); `seen_at` is the watermark after the
- *  acknowledgment. */
+/** ReaderActivation is the answer to a client acknowledging one scope. `scope` names the watermark
+ *  that moved; `since` is the baseline that scope uses (absent on its first activation, when nothing
+ *  is new); `seen_at` is the watermark after the acknowledgment. */
 export interface ReaderActivation {
+  scope: ReaderScope;
   since?: string;
   seen_at: string;
   first?: boolean;
 }
+
+/** ReaderScope names one of the two independent watermarks. */
+export type ReaderScope = 'start' | 'sources';
 
 /** SourceLink is one URL a document links to that already IS a source: the vault's own page for it. */
 export interface SourceLink {
@@ -271,6 +277,11 @@ export interface SourceListFilter {
   /** The arrival window, as an absolute instant (RFC3339): what entered the vault at or after it.
    *  The Start page asks for its own week; the server holds no opinion about the length. */
   since?: string;
+  /** Sources that arrived strictly after the instant. Start's statistic's "new" half. */
+  arrivedSince?: string;
+  /** Sources that already existed whose snapshot content changed after the instant. Start's
+   *  statistic's "updated" half; a source that also just arrived is new, never updated. */
+  changedSince?: string;
   /**
    * command is an assistant result: the server reads the materialized set from the record instead
    * of filtering. It is one filter dimension, so the window (count, pages, scroll height) works

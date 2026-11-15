@@ -245,6 +245,27 @@ func (h SourcesHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		filter.Since = since
 	}
+	// The Start statistic's two windows, resolved against its own watermark on the client. They are
+	// strict and independent: `arrived_since` counts arrivals, `changed_since` counts content
+	// changes of sources that did not also just arrive.
+	for _, param := range []struct {
+		name   string
+		target *time.Time
+	}{
+		{"arrived_since", &filter.ArrivedSince},
+		{"changed_since", &filter.ChangedSince},
+	} {
+		raw := strings.TrimSpace(q.Get(param.name))
+		if raw == "" {
+			continue
+		}
+		at, tErr := time.Parse(time.RFC3339Nano, raw)
+		if tErr != nil {
+			payloads.WriteError(w, types.New("invalid_body", param.name+" must be an RFC3339 instant", tErr))
+			return
+		}
+		*param.target = at
+	}
 	srcs, err := h.Lister(r.Context(), filter, limit, offset)
 	if err != nil {
 		payloads.WriteError(w, err)

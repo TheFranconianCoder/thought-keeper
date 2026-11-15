@@ -195,3 +195,77 @@ func TestSourceListRoots(t *testing.T) {
 	check("roots in the queue", entities.SourceFilter{RootsOnly: true, ReadLaterOnly: true}, 0)
 	check("child in the queue", entities.SourceFilter{ReadLaterOnly: true}, 1)
 }
+
+// TestSourceActivityWindows: the Start statistic's two halves are separate filters, in both the
+// list and the count. "Arrived" is strictly later than the watermark, and "changed" is a source
+// that already existed whose content changed after it — a source that also just arrived is new,
+// never updated, and the instant of the last visit itself belongs to neither half.
+func TestSourceActivityWindows(t *testing.T) {
+	ctx := context.Background()
+	db, err := persistence.Open(filepath.Join(t.TempDir(), "index.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := persistence.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewSourceRepository(db)
+	base := time.UnixMilli(1_700_000_000_000).UTC()
+	insert := func(hash, title string, arrived time.Time) {
+		t.Helper()
+		if err := repo.UpsertSource(ctx, entities.Source{
+			ID: ulid.Make(), Hash: hash, Kind: entities.SourceKindURL, Ext: ".url",
+			Path: hash + ".url", Title: title, Bytes: 1, TreeState: entities.TreeNone,
+			ImportedAt: arrived, Meta: `{"url":"https://example.com"}`,
+		}); err != nil {
+			t.Fatalf("source %s: %v", title, err)
+		}
+	}
+
+	hashOld := strings.Repeat("a1", 32)
+	hashBoundary := strings.Repeat("a2", 32)
+	hashNew := strings.Repeat("a3", 32)
+	hashChanged := strings.Repeat("a4", 32)
+	hashChangedNew := strings.Repeat("a5", 32)
+	hashChangedBoundary := strings.Repeat("a6", 32)
+	insert(hashOld, "old", base.Add(-72*time.Hour))
+	insert(hashBoundary, "at the baseline", base)
+	insert(hashNew, "new", base.Add(time.Hour))
+	insert(hashChanged, "changed later", base.Add(-72*time.Hour))
+	insert(hashChangedNew, "arrived and changed", base.Add(time.Hour))
+	insert(hashChangedBoundary, "changed at the baseline", base.Add(-72*time.Hour))
+	for hash, changed := range map[string]time.Time{
+		hashChanged:         base.Add(time.Hour),
+		hashChangedNew:      base.Add(time.Hour),
+		hashChangedBoundary: base,
+	} {
+		if err := repo.SetSourceURLChanged(ctx, hash, changed); err != nil {
+			t.Fatalf("changed %s: %v", hash, err)
+		}
+	}
+
+	check := func(name string, filter entities.SourceFilter, want int) {
+		t.Helper()
+		rows, err := repo.ListSources(ctx, filter, 100, 0)
+		if err != nil {
+			t.Fatalf("%s: list: %v", name, err)
+		}
+		if len(rows) != want {
+			t.Errorf("%s: rows = %d, want %d", name, len(rows), want)
+		}
+		n, err := repo.CountSources(ctx, filter)
+		if err != nil {
+			t.Fatalf("%s: count: %v", name, err)
+		}
+		if n != want {
+			t.Errorf("%s: count = %d, want %d", name, n, want)
+		}
+	}
+
+	check("arrived since", entities.SourceFilter{ArrivedSince: base}, 2)
+	check("changed since", entities.SourceFilter{ChangedSince: base}, 1)
+	check("arrived since later", entities.SourceFilter{ArrivedSince: base.Add(2 * time.Hour)}, 0)
+	check("changed since later", entities.SourceFilter{ChangedSince: base.Add(2 * time.Hour)}, 0)
+	check("no window", entities.SourceFilter{}, 6)
+}

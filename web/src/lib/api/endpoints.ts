@@ -22,6 +22,7 @@ import type {
   InterestRequest,
   Pipeline,
   ReaderActivation,
+  ReaderScope,
   ReaderState,
   RebuildTreeResult,
   ReconcileResult,
@@ -69,11 +70,12 @@ export const api = {
   reloadConfig: () => request<ConfigWriteResult>('/config/reload', { method: 'POST' }),
 
   // ── Reader ─────────────────────────────────────────────────────────────
-  /** reader is the shared "new" watermark; a resync reads it without acknowledging anything. */
+  /** reader reads both seen watermarks without acknowledging anything (a resync). */
   reader: (signal?: AbortSignal) => request<ReaderState>('/reader', { signal }),
-  /** readerActive acknowledges the batch for every client (Start/Sources became visible). */
-  readerActive: (signal?: AbortSignal) =>
-    request<ReaderActivation>('/reader/active', { method: 'POST', signal }),
+  /** readerActive acknowledges ONE lens's watermark for every client: Start's statistic or the
+   *  Sources marks. Opening Start never clears the Sources marks, and vice versa. */
+  readerActive: (scope: ReaderScope, signal?: AbortSignal) =>
+    request<ReaderActivation>(withQuery('/reader/active', { scope }), { method: 'POST', signal }),
 
   // ── Sources ────────────────────────────────────────────────────────────
   sources: (filter: SourceListFilter = {}, limit = 200, offset = 0, signal?: AbortSignal) =>
@@ -92,6 +94,8 @@ export const api = {
         readlater: filter.readLaterOnly ? 1 : undefined,
         interest: filter.interest,
         since: filter.since,
+        arrived_since: filter.arrivedSince,
+        changed_since: filter.changedSince,
         limit,
         offset,
       }),

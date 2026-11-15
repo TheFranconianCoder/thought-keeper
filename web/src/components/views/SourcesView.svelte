@@ -17,7 +17,7 @@
   import { scrollFade } from '../../lib/scroll-fade';
   import { rememberSourcesTop } from '../../lib/sources-scroll';
   import { interestChipSlugs, statusLabel } from '../../lib/source-state';
-  import { activateNewSources, isSourceNew, isSourceUpdated, newSources } from '../../lib/new-sources.svelte';
+  import { activateSources, isSourceNew, isSourceUpdated, newSources } from '../../lib/new-sources.svelte';
   import NewTag from '../sources/NewTag.svelte';
   import UpdatedTag from '../sources/UpdatedTag.svelte';
   import CloudMore from '../ui/CloudMore.svelte';
@@ -158,9 +158,10 @@
 
   $effect(() => {
     if (router.current.view !== 'sources') return;
-    // Sources is one of the two surfaces that shows the new batch, so opening it acknowledges it.
-    // A wake on a claim or a source page deliberately does not.
-    if (newSources.primary && newSources.active && newSources.ack === 'idle') void activateNewSources();
+    // Only Sources acknowledges the Sources marks: opening Start shows its own statistic and must
+    // leave this batch alone until the reader actually visits the list. A wake on a claim or a
+    // source page acknowledges nothing either.
+    if (newSources.primary && newSources.active && newSources.sources.ack === 'idle') void activateSources();
   });
 
   function toggleParam(key: string): void {

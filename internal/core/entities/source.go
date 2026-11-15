@@ -118,6 +118,13 @@ type SourceFilter struct {
 	// the list's scan limit.
 	Since time.Time
 	Until time.Time
+	// ArrivedSince keeps sources that arrived STRICTLY after the instant. It is the Start
+	// statistic's "new" half: the watermark itself is the last visit, not an arrival.
+	ArrivedSince time.Time
+	// ChangedSince keeps ongoing sources whose snapshot content changed after the instant — the
+	// Start statistic's "updated" half. A source that also just arrived is excluded: the stronger
+	// "new" fact wins. The zero time means "no bound".
+	ChangedSince time.Time
 }
 
 // SourceLink is a link that already IS a source: the URL a document wrote and the hash of the

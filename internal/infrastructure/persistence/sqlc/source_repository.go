@@ -482,8 +482,8 @@ func decodeSourceTags(raw string) []string {
 
 // MaxSourceActivityAt is the newest activity in the vault, in Unix milliseconds (zero for an empty
 // vault): the last real content change of a page, otherwise the arrival — the same instant the
-// Sources list orders by. The reader's seen watermark advances to it, which keeps both sides of
-// "new" and of "updated" on the same clock: the instants the index stores.
+// Sources list orders by. A reader watermark advances to it, which keeps both sides of "new" and of
+// "updated" on the same clock: the instants the index stores.
 func (r *SourceRepository) MaxSourceActivityAt(ctx context.Context) (time.Time, error) {
 	ms, err := r.q.MaxSourceActivityAt(ctx)
 	if err != nil {
@@ -499,20 +499,22 @@ func (r *SourceRepository) MaxSourceActivityAt(ctx context.Context) (time.Time, 
 // the whole list and a windowed scroller knows its full height.
 func (r *SourceRepository) CountSources(ctx context.Context, filter entities.SourceFilter) (int, error) {
 	n, err := r.q.CountSourcesFiltered(ctx, dal.CountSourcesFilteredParams{
-		Kind:      filter.Kind,
-		Query:     filter.Query,
-		Tag:       filter.Tag,
-		Attached:  boolParam(filter.AttachedOnly),
-		Bookmarks: boolParam(filter.BookmarksOnly),
-		Failed:    boolParam(filter.FailedOnly),
-		Stale:     boolParam(filter.StaleOnly),
-		Changed:   boolParam(filter.ChangedOnly),
-		Favorite:  boolParam(filter.FavoriteOnly),
-		ReadLater: boolParam(filter.ReadLaterOnly),
-		Interest:  filter.Interest,
-		Roots:     boolParam(filter.RootsOnly),
-		Since:     millisOrZero(filter.Since),
-		Until:     millisOrZero(filter.Until),
+		Kind:         filter.Kind,
+		Query:        filter.Query,
+		Tag:          filter.Tag,
+		Attached:     boolParam(filter.AttachedOnly),
+		Bookmarks:    boolParam(filter.BookmarksOnly),
+		Failed:       boolParam(filter.FailedOnly),
+		Stale:        boolParam(filter.StaleOnly),
+		Changed:      boolParam(filter.ChangedOnly),
+		Favorite:     boolParam(filter.FavoriteOnly),
+		ReadLater:    boolParam(filter.ReadLaterOnly),
+		Interest:     filter.Interest,
+		Roots:        boolParam(filter.RootsOnly),
+		Since:        millisOrZero(filter.Since),
+		Until:        millisOrZero(filter.Until),
+		ArrivedSince: millisOrZero(filter.ArrivedSince),
+		ChangedSince: millisOrZero(filter.ChangedSince),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("count sources: %w", err)
@@ -658,40 +660,44 @@ func (r *SourceRepository) ListSources(ctx context.Context, filter entities.Sour
 	if filter.ReadLaterOnly {
 		// The queue is the same filter with a different order: oldest entry first.
 		rows, err = r.q.ListSourcesQueue(ctx, dal.ListSourcesQueueParams{
-			Kind:      filter.Kind,
-			Query:     filter.Query,
-			Tag:       filter.Tag,
-			Attached:  boolParam(filter.AttachedOnly),
-			Bookmarks: boolParam(filter.BookmarksOnly),
-			Failed:    boolParam(filter.FailedOnly),
-			Stale:     boolParam(filter.StaleOnly),
-			Changed:   boolParam(filter.ChangedOnly),
-			Favorite:  boolParam(filter.FavoriteOnly),
-			Interest:  filter.Interest,
-			Roots:     boolParam(filter.RootsOnly),
-			Since:     millisOrZero(filter.Since),
-			Until:     millisOrZero(filter.Until),
-			Limit:     int64(limit),
-			Offset:    int64(offset),
+			Kind:         filter.Kind,
+			Query:        filter.Query,
+			Tag:          filter.Tag,
+			Attached:     boolParam(filter.AttachedOnly),
+			Bookmarks:    boolParam(filter.BookmarksOnly),
+			Failed:       boolParam(filter.FailedOnly),
+			Stale:        boolParam(filter.StaleOnly),
+			Changed:      boolParam(filter.ChangedOnly),
+			Favorite:     boolParam(filter.FavoriteOnly),
+			Interest:     filter.Interest,
+			Roots:        boolParam(filter.RootsOnly),
+			Since:        millisOrZero(filter.Since),
+			Until:        millisOrZero(filter.Until),
+			ArrivedSince: millisOrZero(filter.ArrivedSince),
+			ChangedSince: millisOrZero(filter.ChangedSince),
+			Limit:        int64(limit),
+			Offset:       int64(offset),
 		})
 	} else {
 		rows, err = r.q.ListSourcesFiltered(ctx, dal.ListSourcesFilteredParams{
-			Kind:      filter.Kind,
-			Query:     filter.Query,
-			Tag:       filter.Tag,
-			Attached:  boolParam(filter.AttachedOnly),
-			Bookmarks: boolParam(filter.BookmarksOnly),
-			Failed:    boolParam(filter.FailedOnly),
-			Stale:     boolParam(filter.StaleOnly),
-			Changed:   boolParam(filter.ChangedOnly),
-			Favorite:  boolParam(filter.FavoriteOnly),
-			ReadLater: boolParam(filter.ReadLaterOnly),
-			Interest:  filter.Interest,
-			Roots:     boolParam(filter.RootsOnly),
-			Since:     millisOrZero(filter.Since),
-			Until:     millisOrZero(filter.Until),
-			Limit:     int64(limit),
-			Offset:    int64(offset),
+			Kind:         filter.Kind,
+			Query:        filter.Query,
+			Tag:          filter.Tag,
+			Attached:     boolParam(filter.AttachedOnly),
+			Bookmarks:    boolParam(filter.BookmarksOnly),
+			Failed:       boolParam(filter.FailedOnly),
+			Stale:        boolParam(filter.StaleOnly),
+			Changed:      boolParam(filter.ChangedOnly),
+			Favorite:     boolParam(filter.FavoriteOnly),
+			ReadLater:    boolParam(filter.ReadLaterOnly),
+			Interest:     filter.Interest,
+			Roots:        boolParam(filter.RootsOnly),
+			Since:        millisOrZero(filter.Since),
+			Until:        millisOrZero(filter.Until),
+			ArrivedSince: millisOrZero(filter.ArrivedSince),
+			ChangedSince: millisOrZero(filter.ChangedSince),
+			Limit:        int64(limit),
+			Offset:       int64(offset),
 		})
 	}
 	if err != nil {

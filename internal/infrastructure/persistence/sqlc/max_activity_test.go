@@ -13,7 +13,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/persistence"
 )
 
-// TestMaxSourceActivityAt: the reader's watermark moves to the newest activity the index knows — the
+// TestMaxSourceActivityAt: a reader watermark moves to the newest activity the index knows — the
 // last real content change of a page, otherwise the arrival — in the same millisecond clock it
 // stores. An empty vault answers the zero time, never 1970.
 func TestMaxSourceActivityAt(t *testing.T) {

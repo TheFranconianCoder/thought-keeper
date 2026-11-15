@@ -1,4 +1,4 @@
-/** The Start lens: the front door, not a database dump. Ask, see what runs, see what arrived. */
+/** The Start lens: the front door, not a database dump. Ask, see what runs, see what happened. */
 export const homeEn: Record<string, string> = {
   'home.title': 'Start',
 
@@ -18,15 +18,15 @@ export const homeEn: Record<string, string> = {
   'home.needsUnclustered.one': '{count} claim without a cluster',
   'home.needsUnclustered.many': '{count} claims without a cluster',
 
-  'home.arrivals': 'Arrived',
-  'home.arrivalsWindow': 'last 3 days',
-  'home.arrivalsWindowSince': 'since the last visit',
-  'home.arrivalsCount.one': '{count} new',
-  'home.arrivalsCount.many': '{count} new',
-  'home.allSources': 'All sources',
-  'home.arrivalAge': 'arrived {age}',
-  'home.claimsCount.one': '{count} claim',
-  'home.claimsCount.many': '{count} claims',
+  // The activity statistic: what happened since the LAST START VISIT. It is independent of the
+  // Sources marks, which keep their own watermark until the list is actually opened.
+  'home.sinceLastVisit': 'Since your last visit',
+  'home.lastVisit': 'last visit {age}',
+  'home.newSources.one': '{count} new source',
+  'home.newSources.many': '{count} new sources',
+  'home.changedSources.one': '{count} updated source',
+  'home.changedSources.many': '{count} updated sources',
+  'home.moreSources': '+{count} more',
   'home.emptySourcesTitle': 'No sources yet',
   'home.emptySourcesText':
     'Add a Markdown file, a PDF, an EPUB, plain text or a link — or ask a question; the vault can answer that it is still empty.',

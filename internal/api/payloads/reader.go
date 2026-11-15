@@ -6,29 +6,39 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 )
 
-// ReaderState is GET /api/v1/reader: the shared seen watermark. An empty value means no client has
-// opened this vault yet, not that nothing has happened.
+// ReaderState is GET /api/v1/reader: the reader's two seen watermarks. An empty value means that
+// scope has not been acknowledged yet, not that nothing has happened.
 type ReaderState struct {
-	SeenAt string `json:"seen_at,omitempty"`
+	StartSeenAt   string `json:"start_seen_at,omitempty"`
+	SourcesSeenAt string `json:"sources_seen_at,omitempty"`
 }
 
-// ReaderActivation is POST /api/v1/reader/active. Since is the baseline the client marks from; it is
-// empty on the first activation, when nothing is new. SeenAt is the watermark after the
-// acknowledgment. First says the record was initialized by this call.
+// ReaderActivation is POST /api/v1/reader/active. Scope names the watermark that was acknowledged.
+// Since is the baseline that scope marks from; it is empty on the first activation, when nothing is
+// new there. SeenAt is the watermark after the acknowledgment. First says the scope was initialized
+// by this call.
 type ReaderActivation struct {
+	Scope  string `json:"scope"`
 	Since  string `json:"since,omitempty"`
 	SeenAt string `json:"seen_at"`
 	First  bool   `json:"first,omitempty"`
 }
 
-// ReaderStateFromUseCase maps the watermark to its wire shape.
+// ReaderStateFromUseCase maps both watermarks to their wire shape.
 func ReaderStateFromUseCase(st entities.ReaderState) ReaderState {
-	return ReaderState{SeenAt: readerInstant(st.SeenAt)}
+	return ReaderState{
+		StartSeenAt:   readerInstant(st.StartSeenAt),
+		SourcesSeenAt: readerInstant(st.SourcesSeenAt),
+	}
 }
 
 // ReaderActivationFromUseCase maps one acknowledgment to its wire shape.
 func ReaderActivationFromUseCase(act entities.ReaderActivation) ReaderActivation {
-	out := ReaderActivation{SeenAt: readerInstant(act.SeenAt), First: act.First}
+	out := ReaderActivation{
+		Scope:  string(act.Scope),
+		SeenAt: readerInstant(act.SeenAt),
+		First:  act.First,
+	}
 	if !act.First {
 		out.Since = readerInstant(act.Since)
 	}

@@ -355,9 +355,12 @@ function handleFrame(frame: StreamFrame): void {
       assistant.applyFrame(data);
       return;
     case 'reader':
-      // Another client acknowledged the batch: its sources are no longer new here. Only a forward
-      // move is applied, so a late frame cannot re-open what was already seen.
-      applySharedSeen(String(data.seen_at ?? ''));
+      // Another client acknowledged ONE lens: that scope's batch is no longer new here. Only a
+      // forward move is applied, so a late frame cannot re-open what was already seen.
+      applySharedSeen(
+        data.scope === 'sources' ? 'sources' : 'start',
+        String(data.seen_at ?? ''),
+      );
       return;
     default:
       // Forward compatibility: unknown event types are ignored, never guessed at.

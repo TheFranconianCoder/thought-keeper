@@ -380,6 +380,11 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
   -- a window over an older part of the vault is not lost to the scan limit.
   AND (sqlc.arg(since) = 0 OR imported_at >= sqlc.arg(since))
   AND (sqlc.arg(until) = 0 OR imported_at < sqlc.arg(until))
+  -- The Start statistic has two windows against its own watermark: an arrival strictly after it,
+  -- and a page whose content changed after it but that did not also just arrive.
+  AND (sqlc.arg(arrived_since) = 0 OR imported_at > sqlc.arg(arrived_since))
+  AND (sqlc.arg(changed_since) = 0
+       OR (url_changed_at > sqlc.arg(changed_since) AND imported_at <= sqlc.arg(changed_since)))
 -- ACTIVITY, not arrival: the last actual change when there is one, otherwise the arrival. A page
 -- rewritten last night belongs above a source that arrived last week, and a check that answered the
 -- same page does not move anything. The index expression matches this one.
@@ -425,6 +430,11 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
        OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
   AND (sqlc.arg(since) = 0 OR imported_at >= sqlc.arg(since))
   AND (sqlc.arg(until) = 0 OR imported_at < sqlc.arg(until))
+  -- The Start statistic has two windows against its own watermark: an arrival strictly after it,
+  -- and a page whose content changed after it but that did not also just arrive.
+  AND (sqlc.arg(arrived_since) = 0 OR imported_at > sqlc.arg(arrived_since))
+  AND (sqlc.arg(changed_since) = 0
+       OR (url_changed_at > sqlc.arg(changed_since) AND imported_at <= sqlc.arg(changed_since)))
 ORDER BY read_later_at ASC, imported_at DESC
 LIMIT sqlc.arg(limit) OFFSET sqlc.arg(offset);
 
@@ -464,7 +474,12 @@ WHERE (sqlc.arg(kind) = '' OR kind = sqlc.arg(kind))
   AND (sqlc.arg(roots) = 0
        OR NOT (json_valid(meta) AND json_extract(meta, '$.parent_hash') IS NOT NULL))
   AND (sqlc.arg(since) = 0 OR imported_at >= sqlc.arg(since))
-  AND (sqlc.arg(until) = 0 OR imported_at < sqlc.arg(until));
+  AND (sqlc.arg(until) = 0 OR imported_at < sqlc.arg(until))
+  -- The Start statistic has two windows against its own watermark: an arrival strictly after it,
+  -- and a page whose content changed after it but that did not also just arrive.
+  AND (sqlc.arg(arrived_since) = 0 OR imported_at > sqlc.arg(arrived_since))
+  AND (sqlc.arg(changed_since) = 0
+       OR (url_changed_at > sqlc.arg(changed_since) AND imported_at <= sqlc.arg(changed_since)));
 
 -- name: SetSourceFavorite :exec
 UPDATE sources SET favorite_at = sqlc.arg(favorite_at) WHERE hash = sqlc.arg(hash);
@@ -512,8 +527,8 @@ WHERE (CASE WHEN json_valid(meta)
 -- name: MaxSourceActivityAt :one
 -- The newest ACTIVITY in the vault, in Unix milliseconds; 0 when the vault is empty. Activity is the
 -- same instant the list orders by: the last real content change of a page, otherwise the arrival.
--- The reader's seen watermark moves to it, so one acknowledgment settles both the "new" and the
--- "updated" mark, and no client clock is compared with a server clock: both sides of either mark
--- are the instants the index stores.
+-- A reader watermark moves to it, so one acknowledgment settles both the "new" and the "updated"
+-- mark, and no client clock is compared with a server clock: both sides of either mark are the
+-- instants the index stores.
 SELECT CAST(COALESCE(MAX(COALESCE(url_changed_at, imported_at)), 0) AS INTEGER) AS max_activity_at
 FROM sources;

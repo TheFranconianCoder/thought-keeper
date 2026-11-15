@@ -1,4 +1,4 @@
-/** Die Linse „Start“: die Haustür, keine Datenbankausgabe. Fragen, laufende Arbeit, Ankunft. */
+/** Die Linse „Start“: die Haustür, keine Datenbankausgabe. Fragen, laufende Arbeit, was geschah. */
 export const homeDe: Record<string, string> = {
   'home.title': 'Start',
 
@@ -18,15 +18,15 @@ export const homeDe: Record<string, string> = {
   'home.needsUnclustered.one': '{count} Aussage ohne Cluster',
   'home.needsUnclustered.many': '{count} Aussagen ohne Cluster',
 
-  'home.arrivals': 'Angekommen',
-  'home.arrivalsWindow': 'letzte 3 Tage',
-  'home.arrivalsWindowSince': 'seit dem letzten Besuch',
-  'home.arrivalsCount.one': '{count} neu',
-  'home.arrivalsCount.many': '{count} neu',
-  'home.allSources': 'Alle Quellen',
-  'home.arrivalAge': 'kam {age}',
-  'home.claimsCount.one': '{count} Aussage',
-  'home.claimsCount.many': '{count} Aussagen',
+  // Die Aktivitätsstatistik: was seit dem LETZTEN START-BESUCH passiert ist. Sie ist unabhängig
+  // von den Sources-Markierungen, die ihr eigenes Wasserzeichen behalten, bis die Liste geöffnet wird.
+  'home.sinceLastVisit': 'Seit deinem letzten Besuch',
+  'home.lastVisit': 'letzter Besuch {age}',
+  'home.newSources.one': '{count} neue Quelle',
+  'home.newSources.many': '{count} neue Quellen',
+  'home.changedSources.one': '{count} aktualisierte Quelle',
+  'home.changedSources.many': '{count} aktualisierte Quellen',
+  'home.moreSources': '+{count} weitere',
   'home.emptySourcesTitle': 'Noch keine Quelle',
   'home.emptySourcesText':
     'Füge eine Markdown-Datei, ein PDF, ein EPUB, reinen Text oder einen Link hinzu — oder stelle eine Frage; der Tresor darf antworten, dass er noch leer ist.',
