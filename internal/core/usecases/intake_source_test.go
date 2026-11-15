@@ -125,6 +125,17 @@ func (f *fakeIndex) CountSources(_ context.Context, filter entities.SourceFilter
 	return n, nil
 }
 
+// CountSourceActivityRoots counts the owners a Start batch touches. It is exercised by the
+// statistic's own test, which an in-memory map cannot model faithfully.
+func (f *fakeIndex) CountSourceActivityRoots(_ context.Context, _ entities.SourceFilter) (int, error) {
+	return 0, nil
+}
+
+// ListSourceActivityRoots is not exercised by these use cases.
+func (f *fakeIndex) ListSourceActivityRoots(_ context.Context, _ entities.SourceFilter, _ int) ([]entities.Source, error) {
+	return nil, nil
+}
+
 // CountAttachedSources is not exercised by these use cases.
 func (f *fakeIndex) CountAttachedSources(_ context.Context) (int, error) { return 0, nil }
 

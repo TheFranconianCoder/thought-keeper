@@ -14,8 +14,9 @@ type ReaderStore interface {
 	// Read returns both watermarks. A zero field means that scope has not been acknowledged yet;
 	// a missing record is a vault no client has opened, not an error.
 	Read(ctx context.Context) (entities.ReaderState, error)
-	// Write stores both watermarks atomically.
-	Write(ctx context.Context, state entities.ReaderState) error
+	// WriteScopes stores the watermarks one visit acknowledged, atomically, and leaves every scope
+	// it is not given exactly as stored: a Start visit never speaks for Sources.
+	WriteScopes(ctx context.Context, marks []entities.ReaderWatermark) error
 }
 
 // ReaderIndex answers the newest activity in the index: the last real content change of a page,

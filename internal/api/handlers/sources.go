@@ -161,6 +161,8 @@ type SourcesHandler struct {
 	Queue usecases.ReadLaterCounter
 	// Facets is the tag cloud and the attached count (nil = no facets).
 	Facets usecases.SourceFacetLister
+	// Activity answers the Start statistic (nil = the feature is not wired).
+	Activity usecases.SourceActivityReader
 	// ChildLister is the Sub-sources tab: the sources this one owns.
 	ChildLister usecases.SourceChildLister
 	// TagSetter edits the human tags of a source.
@@ -344,6 +346,44 @@ func (h SourcesHandler) decorate(out []payloads.Source) {
 	}
 	for i := range out {
 		out[i].RunningStep = h.Status.RunningStep(out[i].Hash)
+	}
+}
+
+// ListActivity serves GET /api/v1/sources/activity?since=…: the Start statistic. `count` is the
+// batch (a feed's five articles count five), `roots` is how many MAIN sources it touches, and `main`
+// names a few of them — the feed, sitemap or listing that owns the articles. The instant is the
+// front door's own watermark, resolved by the client.
+func (h SourcesHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
+	if h.Activity == nil {
+		payloads.WriteError(w, types.ErrNotFound)
+		return
+	}
+	raw := strings.TrimSpace(r.URL.Query().Get("since"))
+	if raw == "" {
+		payloads.WriteError(w, types.New("invalid_body", "since is required", nil))
+		return
+	}
+	since, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		payloads.WriteError(w, types.New("invalid_body", "since must be an RFC3339 instant", err))
+		return
+	}
+	res, err := h.Activity(r.Context(), since)
+	if err != nil {
+		payloads.WriteError(w, err)
+		return
+	}
+	payloads.WriteJSON(w, http.StatusOK, payloads.SourceActivity{
+		New:     activityGroup(res.Arrived),
+		Changed: activityGroup(res.Changed),
+	})
+}
+
+func activityGroup(group usecases.SourceActivityGroup) payloads.SourceActivityGroup {
+	return payloads.SourceActivityGroup{
+		Count: group.Count,
+		Roots: group.Roots,
+		Main:  payloads.SourcesFromPartials(group.Main),
 	}
 }
 

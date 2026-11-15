@@ -611,10 +611,13 @@ sources_seen_at: 2026-11-07T09:30:00.456Z
 ---
 ```
 
-- **Two scopes, one record.** A client acknowledges only the lens it is looking at: Start's
-  watermark moves on a Start visit, Sources' on a Sources visit. Opening Start never clears the
-  Sources marks. A scope that has never been acknowledged is omitted from the file; its first visit
-  initializes it to "now" (a fresh vault marks nothing, it does not flag the whole corpus).
+- **Two scopes, one record — and one direction.** A **Start** visit writes `start_seen_at` and
+  nothing else: the front door is a summary, so the Sources marks survive it. A **Sources** visit
+  writes both: the list answers the same batch the front door summarizes, so the statistic is
+  settled with it. Opening Sources therefore never leaves the front door with a batch the reader
+  has already read, and opening Start never clears the marks. A scope that has never been
+  acknowledged is omitted from the file; its first visit initializes it to "now" (a fresh vault
+  marks nothing, it does not flag the whole corpus).
 - **One record, not one per client.** Whichever client becomes active on a lens acknowledges that
   scope for every client; no client id, token or per-device file exists. That is what keeps a source
   the phone has seen from being new on the desktop.
@@ -623,7 +626,8 @@ sources_seen_at: 2026-11-07T09:30:00.456Z
   the Sources list orders by (the change time when there is one, otherwise the arrival). An
   acknowledgment with nothing later writes nothing and announces nothing.
 - **A legacy record seeds both scopes.** An older file with a single `seen_at` is read as the value
-  of both watermarks; the next acknowledgment writes the two named keys and drops the legacy one.
+  of both watermarks. A write touches only the keys the visit settled, so the legacy line survives
+  until both scopes have an instant of their own — and is dropped with the second one.
 - **It is app state, not knowledge.** The file is hidden with `.thought-keeper/` and git-ignored
   (it changes only when a visit moves a scope); `reindex`, `rebuild-trees`, `reconcile` and
   `cleanup` leave it alone. Losing it is harmless: the next first acknowledgment starts a clean

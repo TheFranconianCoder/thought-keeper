@@ -94,6 +94,22 @@ type Source struct {
 	Sidecars []Sidecar `json:"sidecars,omitempty"`
 }
 
+// SourceActivity is the Start statistic: how many sources arrived or changed since the front door's
+// watermark, and which MAIN sources they belong to.
+type SourceActivity struct {
+	New     SourceActivityGroup `json:"new"`
+	Changed SourceActivityGroup `json:"changed"`
+}
+
+// SourceActivityGroup is one half of the statistic. Count is the batch (a feed's five items count
+// five); Roots is how many main sources it touches; Main names a few of them, so a chip says WHICH
+// feed or page it was without listing every article.
+type SourceActivityGroup struct {
+	Count int      `json:"count"`
+	Roots int      `json:"roots"`
+	Main  []Source `json:"main"`
+}
+
 // Sidecar is one file of a source (the object or one of its derived files).
 type Sidecar struct {
 	// Name is the suffix (".pdf", ".md", ".meta", ".outline", ".log").

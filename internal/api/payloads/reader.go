@@ -16,12 +16,20 @@ type ReaderState struct {
 // ReaderActivation is POST /api/v1/reader/active. Scope names the watermark that was acknowledged.
 // Since is the baseline that scope marks from; it is empty on the first activation, when nothing is
 // new there. SeenAt is the watermark after the acknowledgment. First says the scope was initialized
-// by this call.
+// by this call. Settled lists EVERY watermark the visit moved: opening Sources settles Start's
+// statistic too, so every window clears its front door as well.
 type ReaderActivation struct {
+	Scope   string          `json:"scope"`
+	Since   string          `json:"since,omitempty"`
+	SeenAt  string          `json:"seen_at"`
+	First   bool            `json:"first,omitempty"`
+	Settled []ReaderSettled `json:"settled,omitempty"`
+}
+
+// ReaderSettled is one watermark a visit moved.
+type ReaderSettled struct {
 	Scope  string `json:"scope"`
-	Since  string `json:"since,omitempty"`
 	SeenAt string `json:"seen_at"`
-	First  bool   `json:"first,omitempty"`
 }
 
 // ReaderStateFromUseCase maps both watermarks to their wire shape.
@@ -41,6 +49,11 @@ func ReaderActivationFromUseCase(act entities.ReaderActivation) ReaderActivation
 	}
 	if !act.First {
 		out.Since = readerInstant(act.Since)
+	}
+	for _, mark := range act.Settled {
+		out.Settled = append(out.Settled, ReaderSettled{
+			Scope: string(mark.Scope), SeenAt: readerInstant(mark.SeenAt),
+		})
 	}
 	return out
 }

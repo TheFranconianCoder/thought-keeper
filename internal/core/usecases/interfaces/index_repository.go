@@ -31,6 +31,11 @@ type IndexRepository interface {
 	// CountSources is the total behind the SAME filter, so the list's scroll height is the whole
 	// filtered list and never only the rows that are loaded.
 	CountSources(ctx context.Context, filter entities.SourceFilter) (int, error)
+	// CountSourceActivityRoots counts the MAIN sources a Start batch touches: the feed, sitemap or
+	// listing that owns each matching source, once. The batch is the filter's two activity windows.
+	CountSourceActivityRoots(ctx context.Context, filter entities.SourceFilter) (int, error)
+	// ListSourceActivityRoots returns those main sources, most recently active first.
+	ListSourceActivityRoots(ctx context.Context, filter entities.SourceFilter, limit int) ([]entities.Source, error)
 	// CountAttachedSources is how many sources carry a human-attached snapshot: the "Attached"
 	// chip exists when this is non-zero.
 	CountAttachedSources(ctx context.Context) (int, error)

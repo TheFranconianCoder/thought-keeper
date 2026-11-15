@@ -12,11 +12,12 @@ import (
 // Reader is the use case of the vault's two seen watermarks.
 //
 // Start's watermark drives the statistic the front door shows; Sources' watermark drives the new
-// and updated marks of its rows. Visiting one lens acknowledges only its own scope, so the marks
-// stay until Sources is actually opened. Each watermark is ONE per vault, never per client: the
-// first client that becomes active on a lens acknowledges that scope for every client, so a source
-// the phone has seen is not new on the desktop. A client's active phase only decides WHEN to
-// acknowledge; no identity and no per-client state are stored.
+// and updated marks of its rows. A Start visit settles the front door alone, so the marks stay
+// until Sources is actually opened; a Sources visit settles both, because the list answers the same
+// batch. Each watermark is ONE per vault, never per client: the first client that becomes active on
+// a lens acknowledges that scope for every client, so a source the phone has seen is not new on the
+// desktop. A client's active phase only decides WHEN to acknowledge; no identity and no per-client
+// state are stored.
 type Reader struct {
 	Store interfaces.ReaderStore
 	Index interfaces.ReaderIndex
@@ -32,14 +33,19 @@ func (uc *Reader) State(ctx context.Context) (entities.ReaderState, error) {
 	return uc.Store.Read(ctx)
 }
 
-// Activate acknowledges everything that happened in the vault up to now for ONE scope and returns
-// the baseline that scope should mark from.
+// Activate acknowledges everything that happened in the vault up to now, from the lens the reader
+// opened, and returns the baseline that lens should mark from.
 //
-// The watermark only moves FORWARD, and only when there is something later: an activation that
-// finds no later arrival and no later content change writes nothing and reports Changed=false, so
-// no other client is reloaded for nothing. The first activation of a scope initializes it to "now":
+// The watermarks only move FORWARD, and only when there is something later: an activation that
+// finds no later arrival and no later content change writes nothing and settles nothing, so no
+// other client is reloaded for nothing. The first activation of a scope initializes it to "now":
 // the whole vault is the baseline, never "all of it is new" — a reader who opens a fresh vault does
-// not want every source flagged, and a first Sources visit must not clear a batch Start never saw.
+// not want every source flagged.
+//
+// A Start visit settles Start's watermark alone: the front door is a summary, and the Sources marks
+// must survive until the reader actually opens the list. A Sources visit settles BOTH: the list
+// answers the same batch the front door summarizes, so the statistic is seen as well. A scope the
+// visit did not settle keeps its stored instant — a pre-split record's shared value included.
 func (uc *Reader) Activate(ctx context.Context, scope entities.ReaderScope) (entities.ReaderActivation, error) {
 	uc.mu.Lock()
 	defer uc.mu.Unlock()
@@ -60,35 +66,43 @@ func (uc *Reader) Activate(ctx context.Context, scope entities.ReaderScope) (ent
 	// so a later comparison is never off by a fraction the store cannot represent.
 	now := uc.Clock.Now().UTC().Truncate(time.Millisecond)
 
+	// A scope's first visit starts at "now"; a later one moves to the newest activity, and only when
+	// that is actually later.
+	target := newest
 	if previous.IsZero() {
-		seen := now
-		if newest.After(seen) {
-			seen = newest
+		target = now
+		if newest.After(target) {
+			target = newest
 		}
-		uc.setSeen(&state, scope, seen)
-		if err := uc.Store.Write(ctx, state); err != nil {
-			return entities.ReaderActivation{}, err
-		}
-		return entities.ReaderActivation{Scope: scope, SeenAt: seen, First: true, Changed: true}, nil
 	}
 
-	act := entities.ReaderActivation{Scope: scope, Since: previous, SeenAt: previous}
-	if newest.After(previous) {
-		uc.setSeen(&state, scope, newest)
-		if err := uc.Store.Write(ctx, state); err != nil {
+	var settled []entities.ReaderWatermark
+	if previous.IsZero() || target.After(previous) {
+		settled = append(settled, entities.ReaderWatermark{Scope: scope, SeenAt: target})
+	}
+	// Opening Sources settles the front door's statistic too: the reader has seen the list that
+	// answers the same batch. It never moves backwards.
+	if scope == entities.ReaderScopeSources && state.StartSeenAt.Before(target) {
+		settled = append(settled, entities.ReaderWatermark{
+			Scope: entities.ReaderScopeStart, SeenAt: target,
+		})
+	}
+	if len(settled) > 0 {
+		if err := uc.Store.WriteScopes(ctx, settled); err != nil {
 			return entities.ReaderActivation{}, err
 		}
-		act.SeenAt = newest
-		act.Changed = true
+	}
+
+	act := entities.ReaderActivation{Scope: scope, Settled: settled}
+	if previous.IsZero() {
+		act.First = true
+		act.SeenAt = target
+		return act, nil
+	}
+	act.Since = previous
+	act.SeenAt = previous
+	if target.After(previous) {
+		act.SeenAt = target
 	}
 	return act, nil
-}
-
-// setSeen writes one scope's watermark and leaves the other untouched.
-func (uc *Reader) setSeen(state *entities.ReaderState, scope entities.ReaderScope, at time.Time) {
-	if scope == entities.ReaderScopeSources {
-		state.SourcesSeenAt = at
-		return
-	}
-	state.StartSeenAt = at
 }

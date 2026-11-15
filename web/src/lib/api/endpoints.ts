@@ -33,6 +33,7 @@ import type {
   SavedAsk,
   SearchResult,
   Source,
+  SourceActivity,
   SourceFacets,
   SourceLinkList,
   SourceList,
@@ -101,6 +102,10 @@ export const api = {
       }),
       { signal },
     ),
+  /** sourceActivity is the Start statistic: the batch behind one instant, counted by source and
+   *  named by the MAIN source that owns it — a feed stands for its articles. */
+  sourceActivity: (since: string, signal?: AbortSignal) =>
+    request<SourceActivity>(withQuery('/sources/activity', { since }), { signal }),
   sourceFacets: (signal?: AbortSignal) => request<SourceFacets>('/sources/facets', { signal }),
   source: (hash: string, signal?: AbortSignal) => request<Source>(`/sources/${enc(hash)}`, { signal }),
   sourceTree: (hash: string, signal?: AbortSignal) =>

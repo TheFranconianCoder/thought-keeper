@@ -19,14 +19,23 @@
 
   let question = $state('');
   // The front door's activity card: what arrived and what actually changed since THIS lens's last
-  // visit. Two bounded lists carry the names; the counts come with them, so a long batch stays a
-  // number and a few chips instead of a list that cannot fit.
-  let freshSources = $state<Source[]>([]);
-  let changedSources = $state<Source[]>([]);
+  // visit. The COUNT is the batch; the chips name its MAIN sources — a feed stands for its articles,
+  // a sitemap for its pages — and `+n more` counts the main sources that did not fit.
+  let freshMain = $state<Source[]>([]);
+  let changedMain = $state<Source[]>([]);
   let freshCount = $state(0);
   let changedCount = $state(0);
+  let freshRoots = $state(0);
+  let changedRoots = $state(0);
   let activityLoaded = $state(false);
   let activityError = $state('');
+
+  // A handful of chips says what happened; the number beside them says how much.
+  const CHIPS = 8;
+  const freshShown = $derived(freshMain.slice(0, CHIPS));
+  const changedShown = $derived(changedMain.slice(0, CHIPS));
+  const freshMore = $derived(Math.max(0, freshRoots - freshShown.length));
+  const changedMore = $derived(Math.max(0, changedRoots - changedShown.length));
   // The queue is a LINE, not a card: the oldest entry and its numbers say everything the door owes
   // it, above the activity statistic.
   let readLaterOldest = $state<Source | null>(null);
@@ -137,26 +146,27 @@
     const since = newSources.start.since;
     if (!since) {
       // The scope's first visit has no baseline: nothing is new, and the card stays absent.
-      freshSources = [];
-      changedSources = [];
+      freshMain = [];
+      changedMain = [];
       freshCount = 0;
       changedCount = 0;
+      freshRoots = 0;
+      changedRoots = 0;
       activityLoaded = true;
       activityError = '';
       return;
     }
     try {
-      // Two bounded reads against the SAME baseline: arrivals that are strictly later, and pages
-      // that already existed whose content changed after it. A feed's article is an arrival like a
-      // document is. The count is the filtered total; the lists only name a few.
-      const [arrivals, changes] = await Promise.all([
-        api.sources({ arrivedSince: since }, 8, 0, readSignal(20_000)),
-        api.sources({ changedSince: since }, 8, 0, readSignal(20_000)),
-      ]);
-      freshSources = arrivals.sources ?? [];
-      freshCount = arrivals.count ?? freshSources.length;
-      changedSources = changes.sources ?? [];
-      changedCount = changes.count ?? changedSources.length;
+      // One read against the SAME baseline: arrivals strictly after it, and pages that already
+      // existed whose content changed. The count is the batch; `main` names the source that owns
+      // it, so a feed's five articles are one chip rather than five.
+      const activity = await api.sourceActivity(since, readSignal(20_000));
+      freshMain = activity.new?.main ?? [];
+      freshCount = activity.new?.count ?? 0;
+      freshRoots = activity.new?.roots ?? freshMain.length;
+      changedMain = activity.changed?.main ?? [];
+      changedCount = activity.changed?.count ?? 0;
+      changedRoots = activity.changed?.roots ?? changedMain.length;
       activityLoaded = true;
       activityError = '';
     } catch (error) {
@@ -176,6 +186,12 @@
 
   function openSource(source: Source): void {
     navigate(sourcePath(source.hash));
+  }
+
+  /** openSources hands the reader the list itself. Its rows carry the new/updated marks for this
+   *  phase, so the card's batch is exactly what the list opens on. */
+  function openSources(): void {
+    navigate('#/sources');
   }
 </script>
 
@@ -292,6 +308,9 @@
             {t('home.lastVisit', { age: relTime(newSources.start.since) })}
           </span>
         {/if}
+        <button class="card-cta" onclick={openSources}>
+          {t('home.openSources')} <Icon name="chevronRight" size={12} />
+        </button>
       </div>
       {#if activityError}
         <p class="notice notice--error">{activityError}</p>
@@ -307,7 +326,7 @@
               <span class="activity-count activity-count--new">{tn('home.newSources', freshCount)}</span>
             </div>
             <div class="activity-chips">
-              {#each freshSources as source (source.hash)}
+              {#each freshShown as source (source.hash)}
                 <button
                   class="source-chip"
                   title={source.title || source.hash}
@@ -317,10 +336,8 @@
                   <span class="source-chip-name">{source.title || source.hash.slice(0, 12)}</span>
                 </button>
               {/each}
-              {#if freshCount > freshSources.length}
-                <span class="activity-more">
-                  {t('home.moreSources', { count: freshCount - freshSources.length })}
-                </span>
+              {#if freshMore > 0}
+                <span class="activity-more">{t('home.moreSources', { count: freshMore })}</span>
               {/if}
             </div>
           </div>
@@ -331,7 +348,7 @@
               <span class="activity-count activity-count--updated">{tn('home.changedSources', changedCount)}</span>
             </div>
             <div class="activity-chips">
-              {#each changedSources as source (source.hash)}
+              {#each changedShown as source (source.hash)}
                 <button
                   class="source-chip"
                   title={source.title || source.hash}
@@ -341,10 +358,8 @@
                   <span class="source-chip-name">{source.title || source.hash.slice(0, 12)}</span>
                 </button>
               {/each}
-              {#if changedCount > changedSources.length}
-                <span class="activity-more">
-                  {t('home.moreSources', { count: changedCount - changedSources.length })}
-                </span>
+              {#if changedMore > 0}
+                <span class="activity-more">{t('home.moreSources', { count: changedMore })}</span>
               {/if}
             </div>
           </div>
@@ -584,6 +599,26 @@
     color: var(--faint);
     font-size: 11px;
     letter-spacing: 0.01em;
+  }
+
+  /* The way into the list the card summarizes. The rows there carry the marks for this phase. */
+  .card-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+
+  .card-cta:hover {
+    color: var(--accent);
+    text-decoration: underline;
   }
 
   /* The statistic is two quiet groups, not two cards: a count and the names that make it concrete.

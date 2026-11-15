@@ -532,3 +532,40 @@ WHERE (CASE WHEN json_valid(meta)
 -- instants the index stores.
 SELECT CAST(COALESCE(MAX(COALESCE(url_changed_at, imported_at)), 0) AS INTEGER) AS max_activity_at
 FROM sources;
+
+-- name: CountSourceActivityRoots :one
+-- How many MAIN sources a Start batch touches: every matching source counts under the source that
+-- OWNS it (its feed, sitemap or listing), once. A child whose owner is not in the index (a wiki
+-- page's representation, a parent already gone) stands for itself, so nothing disappears from the
+-- statistic.
+--
+-- The batch itself is the same two windows the list uses: an arrival strictly after the instant, and
+-- a page whose content changed after it that did not also just arrive.
+SELECT COUNT(*) FROM (
+    SELECT COALESCE(owner.id, s.id) AS root_id
+    FROM sources s
+    LEFT JOIN sources owner
+           ON json_valid(s.meta) AND owner.hash = json_extract(s.meta, '$.parent_hash')
+    WHERE (sqlc.arg(arrived_since) > 0 AND s.imported_at > sqlc.arg(arrived_since))
+       OR (sqlc.arg(changed_since) > 0
+           AND s.url_changed_at > sqlc.arg(changed_since)
+           AND s.imported_at <= sqlc.arg(changed_since))
+    GROUP BY root_id
+);
+
+-- name: ListSourceActivityRoots :many
+-- The MAIN sources themselves, most recently active first, at most a handful: the statistic shows a
+-- few chips, and the number beside them counts the batch, not the owners.
+SELECT * FROM sources root
+WHERE root.id IN (
+    SELECT COALESCE(owner.id, s.id)
+    FROM sources s
+    LEFT JOIN sources owner
+           ON json_valid(s.meta) AND owner.hash = json_extract(s.meta, '$.parent_hash')
+    WHERE (sqlc.arg(arrived_since) > 0 AND s.imported_at > sqlc.arg(arrived_since))
+       OR (sqlc.arg(changed_since) > 0
+           AND s.url_changed_at > sqlc.arg(changed_since)
+           AND s.imported_at <= sqlc.arg(changed_since))
+)
+ORDER BY COALESCE(root.url_changed_at, root.imported_at) DESC, root.imported_at DESC, root.hash DESC
+LIMIT sqlc.arg(lim);

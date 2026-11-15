@@ -39,8 +39,8 @@ func New(root string) *Store { return &Store{root: root} }
 func (s *Store) Path() string { return filepath.Join(s.root, File) }
 
 type frontmatter struct {
-	// SeenAt is the single watermark of older records. It seeds both scopes on first read and is
-	// never written again.
+	// SeenAt is the single watermark of older records. It seeds both scopes on read and survives a
+	// write until both scopes carry an instant of their own.
 	SeenAt        string `yaml:"seen_at"`
 	StartSeenAt   string `yaml:"start_seen_at"`
 	SourcesSeenAt string `yaml:"sources_seen_at"`
@@ -49,22 +49,9 @@ type frontmatter struct {
 // Read returns both watermarks. A malformed field is treated as absent: one damaged line of app
 // state must not hide the vault, and the next activation rewrites it.
 func (s *Store) Read(_ context.Context) (entities.ReaderState, error) {
-	b, err := os.ReadFile(s.Path())
+	fm, err := s.readRecord()
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return entities.ReaderState{}, nil
-		}
-		return entities.ReaderState{}, fmt.Errorf("reader: read seen watermark: %w", err)
-	}
-	text := strings.TrimPrefix(string(b), "---\n")
-	before, _, ok := strings.Cut(text, "\n---")
-	if !ok {
-		return entities.ReaderState{}, nil
-	}
-	var fm frontmatter
-	if err := yaml.Unmarshal([]byte(before), &fm); err != nil {
-		//nolint:nilerr // a damaged record is a vault no client has acknowledged yet, not a failure
-		return entities.ReaderState{}, nil
+		return entities.ReaderState{}, err
 	}
 	state := entities.ReaderState{
 		StartSeenAt:   parseInstant(fm.StartSeenAt),
@@ -83,18 +70,71 @@ func (s *Store) Read(_ context.Context) (entities.ReaderState, error) {
 	return state, nil
 }
 
-// Write stores both watermarks atomically (temp file → rename). A zero scope is omitted: the first
-// visit to the other lens initializes it, and a Start visit must never speak for Sources.
-func (s *Store) Write(_ context.Context, state entities.ReaderState) error {
-	if state.StartSeenAt.IsZero() && state.SourcesSeenAt.IsZero() {
-		return fmt.Errorf("reader: a seen watermark needs an instant")
+// readRecord returns the record as STORED, without the legacy seeding: a write must never turn one
+// lens's inherited baseline into an acknowledgment of that lens.
+func (s *Store) readRecord() (frontmatter, error) {
+	var fm frontmatter
+	b, err := os.ReadFile(s.Path())
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return fm, nil
+		}
+		return fm, fmt.Errorf("reader: read seen watermark: %w", err)
+	}
+	text := strings.TrimPrefix(string(b), "---\n")
+	before, _, ok := strings.Cut(text, "\n---")
+	if !ok {
+		return fm, nil
+	}
+	if err := yaml.Unmarshal([]byte(before), &fm); err != nil {
+		//nolint:nilerr // a damaged record is a vault no client has acknowledged yet, not a failure
+		return frontmatter{}, nil
+	}
+	return fm, nil
+}
+
+// WriteScopes stores the watermarks ONE visit acknowledged, atomically (temp file → rename), and
+// leaves every scope it is not given exactly as stored: opening Start must never write
+// sources_seen_at, and the record never materializes a scope the reader did not visit.
+//
+// The legacy instant survives while a scope is still unacknowledged, because it is that scope's
+// baseline on the next read; once both scopes have an instant of their own the line is dropped.
+func (s *Store) WriteScopes(_ context.Context, marks []entities.ReaderWatermark) error {
+	if len(marks) == 0 {
+		return fmt.Errorf("reader: an acknowledgment needs a watermark")
+	}
+	for _, mark := range marks {
+		if !mark.Scope.Valid() {
+			return fmt.Errorf("reader: unknown scope %q", mark.Scope)
+		}
+		if mark.SeenAt.IsZero() {
+			return fmt.Errorf("reader: a seen watermark needs an instant")
+		}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	fm, err := s.readRecord()
+	if err != nil {
+		return err
+	}
+	for _, mark := range marks {
+		if mark.Scope == entities.ReaderScopeSources {
+			fm.SourcesSeenAt = instant(mark.SeenAt)
+		} else {
+			fm.StartSeenAt = instant(mark.SeenAt)
+		}
+	}
+	if fm.StartSeenAt != "" && fm.SourcesSeenAt != "" {
+		fm.SeenAt = ""
+	}
+	return s.write(fm)
+}
+
+func (s *Store) write(fm frontmatter) error {
 	if err := os.MkdirAll(s.root, 0o755); err != nil {
 		return fmt.Errorf("reader: mkdir: %w", err)
 	}
-	b := encode(state)
+	b := encode(fm)
 	tmp, err := os.CreateTemp(s.root, ".seen-*.tmp")
 	if err != nil {
 		return fmt.Errorf("reader: temp: %w", err)
@@ -122,14 +162,19 @@ func parseInstant(raw string) time.Time {
 	return at.UTC()
 }
 
-func encode(state entities.ReaderState) []byte {
+func instant(at time.Time) string { return at.UTC().Format(time.RFC3339Nano) }
+
+func encode(fm frontmatter) []byte {
 	var b strings.Builder
 	b.WriteString("---\n")
-	if !state.StartSeenAt.IsZero() {
-		b.WriteString("start_seen_at: " + state.StartSeenAt.UTC().Format(time.RFC3339Nano) + "\n")
+	if fm.SeenAt != "" {
+		b.WriteString("seen_at: " + fm.SeenAt + "\n")
 	}
-	if !state.SourcesSeenAt.IsZero() {
-		b.WriteString("sources_seen_at: " + state.SourcesSeenAt.UTC().Format(time.RFC3339Nano) + "\n")
+	if fm.StartSeenAt != "" {
+		b.WriteString("start_seen_at: " + fm.StartSeenAt + "\n")
+	}
+	if fm.SourcesSeenAt != "" {
+		b.WriteString("sources_seen_at: " + fm.SourcesSeenAt + "\n")
 	}
 	b.WriteString("---\n")
 	return []byte(b.String())

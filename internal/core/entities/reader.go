@@ -28,15 +28,26 @@ type ReaderState struct {
 	SourcesSeenAt time.Time
 }
 
+// ReaderWatermark is one scope's instant, as a visit writes it.
+type ReaderWatermark struct {
+	Scope  ReaderScope
+	SeenAt time.Time
+}
+
 // ReaderActivation is the answer to a client that acknowledged one scope. Since is that scope's
 // watermark before the acknowledgment — the baseline its marks or its statistic use — and SeenAt is
 // the watermark after it. First is true when the scope had no watermark yet: the client marks
-// nothing and the record is initialized. Changed reports whether the acknowledgment moved the
-// watermark, so the caller knows whether there is something to announce.
+// nothing and the record is initialized.
+//
+// Settled lists every watermark the visit moved, the acknowledged scope included. Opening Sources
+// settles Start as well — the list answers the same batch the front door summarizes — so the Start
+// statistic clears in every window; opening Start settles Start alone and leaves the Sources marks
+// for the reader who actually visits the list. An empty list means the visit changed nothing, and
+// no other window is reloaded.
 type ReaderActivation struct {
 	Scope   ReaderScope
 	Since   time.Time
 	SeenAt  time.Time
 	First   bool
-	Changed bool
+	Settled []ReaderWatermark
 }

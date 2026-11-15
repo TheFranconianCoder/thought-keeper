@@ -62,9 +62,11 @@ actually changed. A check that answered the same page is not an event.
 what needs you and what waits in the read-later queue (open entries, the interests that queued them
 by name, the age of the oldest), all absent when quiet; then a **since your last visit** statistic —
 how many sources are **new** and how many **updated** since Start itself was last opened, each count
-paired with the names that make it concrete (a few chips, then `+n more`; a feed's article is named
-like any other source), and the card is absent when both counts are zero. The counts are information;
-a chip opens its source. Never a session-restore card and never the newest-claims wall. A **wiki
+paired with the **main sources** that make it concrete (a few chips, then `+n more`; the number
+counts the batch, the chip names the feed, sitemap or listing that owns it), and the card is absent
+when both counts are zero, with a way into the Sources list beside it. The counts are information; a
+chip opens its source and the call to action opens the list, whose rows wear the marks for that
+batch. Never a session-restore card and never the newest-claims wall. A **wiki
 page** is user-authored Markdown with tags; saving it writes a source representation and runs the
 document pipeline from capture. The app also tags a page and a source
 (auto tags, kept apart from the human's tags) and curates the three name vocabularies (`topics`,
@@ -92,13 +94,14 @@ oldest entry first), a list on Start and a banner on the list. **Interests** are
 `interests/`: a strong lexical match puts a NEW source into the queue, a weak one stays a suggestion
 in the source's rail. They are managed in an overlay, and their matches are computed on demand — no
 index table, no model, no second grouping. The **two seen watermarks** are the shared reader state:
-one record per vault, with one instant for Start and one for Sources, each advanced only by a client
-that actually visits that lens, so a source the phone has seen is not new on the desktop — no client
-id, no per-device file. Start's watermark answers its statistic; Sources' watermark answers its
-**new** and **updated** marks: a source whose content change is newer than it, unless it also just
-arrived (the stronger **new** mark wins). Opening a source drops that row's mark in that window, in
-memory: the reader answered for one row, and the watermark, the batch and every other client stay as
-they were.
+one record per vault, with one instant for Start and one for Sources, so a source the phone has seen
+is not new on the desktop — no client id, no per-device file. A Start visit advances Start's
+watermark alone, which is why the Sources marks survive the front door; a Sources visit advances
+both, because the list answers the same batch the statistic summarizes. Start's watermark answers its
+statistic; Sources' watermark answers its **new** and **updated** marks: a source whose content
+change is newer than it, unless it also just arrived (the stronger **new** mark wins). Opening a
+source drops that row's mark in that window, in memory: the reader answered for one row, and the
+watermark, the batch and every other client stay as they were.
 
 The app's own configuration is readable in the **Config overlay** (`?config=1`, the gear in the top
 bar): every knob with its origin (the machine's file, the vault's file, the environment or a
@@ -188,7 +191,7 @@ paths stay read-only.
 | **favorite** | The reader's star on a source or a wiki page: "this belongs to me". No lifecycle, no label, never a ranking signal. | the source record / the page frontmatter |
 | **read later** | The reader's queue of sources. Open until marked done; otherwise a filter of the Sources list, ordered oldest entry first. | the source record + `?readlater=1` |
 | **interest** | A standing rule the reader writes: terms that make a NEW source join the read-later queue. A strong match queues; a weak one is only a suggestion. | `interests/<slug>.md` |
-| **seen watermark** | The instant up to which one lens's activity has been seen — an arrival or the last real content change of a page. Two per vault and independent: Start's answers its statistic, Sources' answers its **new** and **updated** marks. Each is shared by every client and advanced only by a visit to that lens. A record, not a cache. | `.thought-keeper/reader/seen.md` |
+| **seen watermark** | The instant up to which one lens's activity has been seen — an arrival or the last real content change of a page. Two per vault: Start's answers its statistic, Sources' answers its **new** and **updated** marks. A Start visit advances Start's alone; a Sources visit advances both, because the list answers the batch the statistic summarizes. Shared by every client. A record, not a cache. | `.thought-keeper/reader/seen.md` |
 | **updated** | A source whose recorded page content changed after the Sources watermark (and that did not also just arrive). The change time is a RECORD; the mark is a display rule in memory, like **new**. | the source's `<hash>.meta` + the Sources row |
 | **reconcile / reindex / cleanup** | The repairs: check records against the vault; rebuild the index from the vault; prune dead cluster members. The first two are buttons in Status → Vault; cleanup settles every cluster pass by itself. | Status → Vault |
 

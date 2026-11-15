@@ -56,9 +56,10 @@ func TestReaderGetReturnsBothWatermarks(t *testing.T) {
 	}
 }
 
-// TestReaderActivateReturnsTheBaselineAndAnnouncesTheScope: the client gets the previous watermark to
-// mark from, and every other window gets one `reader` frame naming the scope that moved.
-func TestReaderActivateReturnsTheBaselineAndAnnouncesTheScope(t *testing.T) {
+// TestReaderActivateReturnsTheBaselineAndAnnouncesTheSettledScopes: the client gets its scope's
+// previous watermark to mark from, the answer names every watermark the visit moved, and every other
+// window gets one `reader` frame per moved scope — a Sources visit settles Start too.
+func TestReaderActivateReturnsTheBaselineAndAnnouncesTheSettledScopes(t *testing.T) {
 	notifier := &recordingReaderNotifier{}
 	h := handlers.ReaderHandler{
 		Activator: func(_ context.Context, scope entities.ReaderScope) (entities.ReaderActivation, error) {
@@ -66,7 +67,11 @@ func TestReaderActivateReturnsTheBaselineAndAnnouncesTheScope(t *testing.T) {
 				t.Fatalf("scope = %q, want sources", scope)
 			}
 			return entities.ReaderActivation{
-				Scope: scope, Since: readerAt(6), SeenAt: readerAt(9), Changed: true,
+				Scope: scope, Since: readerAt(6), SeenAt: readerAt(9),
+				Settled: []entities.ReaderWatermark{
+					{Scope: entities.ReaderScopeSources, SeenAt: readerAt(9)},
+					{Scope: entities.ReaderScopeStart, SeenAt: readerAt(9)},
+				},
 			}, nil
 		},
 		Notifier: notifier,
@@ -78,10 +83,14 @@ func TestReaderActivateReturnsTheBaselineAndAnnouncesTheScope(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	var body struct {
-		Scope  string `json:"scope"`
-		Since  string `json:"since"`
-		SeenAt string `json:"seen_at"`
-		First  bool   `json:"first"`
+		Scope   string `json:"scope"`
+		Since   string `json:"since"`
+		SeenAt  string `json:"seen_at"`
+		First   bool   `json:"first"`
+		Settled []struct {
+			Scope  string `json:"scope"`
+			SeenAt string `json:"seen_at"`
+		} `json:"settled"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -95,11 +104,23 @@ func TestReaderActivateReturnsTheBaselineAndAnnouncesTheScope(t *testing.T) {
 	if body.First {
 		t.Fatal("first = true, want false")
 	}
-	if len(notifier.types) != 1 || notifier.types[0] != "reader" {
-		t.Fatalf("events = %v, want one reader", notifier.types)
+	if len(body.Settled) != 2 || body.Settled[0].Scope != "sources" || body.Settled[1].Scope != "start" {
+		t.Fatalf("settled = %v, want sources then start", body.Settled)
+	}
+	if body.Settled[1].SeenAt != readerAt(9).Format(time.RFC3339Nano) {
+		t.Fatalf("start seen_at = %q", body.Settled[1].SeenAt)
+	}
+	if len(notifier.types) != 2 || notifier.types[0] != "reader" || notifier.types[1] != "reader" {
+		t.Fatalf("events = %v, want two reader frames", notifier.types)
 	}
 	if notifier.data[0]["scope"] != "sources" || notifier.data[0]["seen_at"] != readerAt(9).Format(time.RFC3339Nano) {
-		t.Fatalf("event = %v", notifier.data[0])
+		t.Fatalf("first event = %v", notifier.data[0])
+	}
+	if notifier.data[1]["scope"] != "start" {
+		t.Fatalf("second event = %v", notifier.data[1])
+	}
+	if _, ok := notifier.data[1]["first"]; ok {
+		t.Fatalf("the other scope's frame claims a first visit: %v", notifier.data[1])
 	}
 }
 
@@ -141,7 +162,10 @@ func TestReaderActivateRejectsAnUnknownScope(t *testing.T) {
 func TestReaderActivateFirstOmitsTheBaseline(t *testing.T) {
 	h := handlers.ReaderHandler{
 		Activator: func(_ context.Context, scope entities.ReaderScope) (entities.ReaderActivation, error) {
-			return entities.ReaderActivation{Scope: scope, SeenAt: readerAt(8), First: true, Changed: true}, nil
+			return entities.ReaderActivation{
+				Scope: scope, SeenAt: readerAt(8), First: true,
+				Settled: []entities.ReaderWatermark{{Scope: scope, SeenAt: readerAt(8)}},
+			}, nil
 		},
 	}
 	rec := httptest.NewRecorder()

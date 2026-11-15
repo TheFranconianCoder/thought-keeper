@@ -192,7 +192,7 @@ describe('acknowledging a phase', () => {
     expect(newSources.start.ack).toBe('done');
   });
 
-  it('acknowledges Sources on its own baseline, without touching Start', async () => {
+  it('acknowledges Sources on its own baseline and settles Start with it', async () => {
     phase();
     newSources.start.since = '2026-11-07T05:00:00Z';
     newSources.start.seenAt = '2026-11-07T06:00:00Z';
@@ -200,11 +200,52 @@ describe('acknowledging a phase', () => {
       scope: 'sources',
       since: '2026-11-07T07:00:00Z',
       seen_at: '2026-11-07T09:00:00Z',
+      settled: [
+        { scope: 'sources', seen_at: '2026-11-07T09:00:00Z' },
+        { scope: 'start', seen_at: '2026-11-07T09:00:00Z' },
+      ],
     });
     await activateSources();
+    // The Sources marks still show this phase: they mark from the previous watermark.
     expect(newSources.sources.since).toBe('2026-11-07T07:00:00Z');
-    expect(newSources.start.since).toBe('2026-11-07T05:00:00Z');
+    // The front door has seen the same batch: its statistic is settled.
+    expect(newSources.start.seenAt).toBe('2026-11-07T09:00:00Z');
+    expect(newSources.start.since).toBe('2026-11-07T09:00:00Z');
     expect(newSources.start.ack).toBe('idle');
+  });
+
+  it('leaves the Sources marks alone when Start settles only itself', async () => {
+    phase();
+    newSources.sources.since = '2026-11-07T05:00:00Z';
+    newSources.sources.seenAt = '2026-11-07T06:00:00Z';
+    vi.mocked(api.readerActive).mockResolvedValue({
+      scope: 'start',
+      since: '2026-11-07T06:00:00Z',
+      seen_at: '2026-11-07T09:00:00Z',
+      settled: [{ scope: 'start', seen_at: '2026-11-07T09:00:00Z' }],
+    });
+    await activateStart();
+    expect(newSources.start.since).toBe('2026-11-07T06:00:00Z');
+    expect(newSources.sources.since).toBe('2026-11-07T05:00:00Z');
+    expect(newSources.sources.seenAt).toBe('2026-11-07T06:00:00Z');
+  });
+
+  it('never clears the front door with a stale settle from another client', async () => {
+    phase();
+    newSources.start.since = '2026-11-07T10:00:00Z';
+    newSources.start.seenAt = '2026-11-07T10:00:00Z';
+    vi.mocked(api.readerActive).mockResolvedValue({
+      scope: 'sources',
+      since: '2026-11-07T07:00:00Z',
+      seen_at: '2026-11-07T09:00:00Z',
+      settled: [
+        { scope: 'sources', seen_at: '2026-11-07T09:00:00Z' },
+        { scope: 'start', seen_at: '2026-11-07T09:00:00Z' },
+      ],
+    });
+    await activateSources();
+    expect(newSources.start.seenAt).toBe('2026-11-07T10:00:00Z');
+    expect(newSources.start.since).toBe('2026-11-07T10:00:00Z');
   });
 
   it('marks nothing on a scope\'s very first acknowledgment', async () => {

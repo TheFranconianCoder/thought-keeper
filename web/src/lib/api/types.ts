@@ -210,6 +210,23 @@ export interface SourceList {
   queue?: QueueCounts;
 }
 
+/** SourceActivity is the Start statistic: what the front door's own watermark has not seen yet.
+ *  `count` is the batch — a feed's five articles count five — `roots` is how many MAIN sources it
+ *  touches, and `main` names a few of them: the feed, not its articles. */
+export interface SourceActivity {
+  new: SourceActivityGroup;
+  changed: SourceActivityGroup;
+}
+
+/** SourceActivityGroup is one half of the statistic. */
+export interface SourceActivityGroup {
+  /** The sources in the batch. */
+  count: number;
+  /** The MAIN sources (owners) the batch touches. `main` names at most a few of them. */
+  roots: number;
+  main?: Source[];
+}
+
 /** InterestShare is one rule's share of the read-later queue. The client knows the rule's name;
  *  a slug whose rule was deleted stays out of the line, like a queue row's label. */
 export interface InterestShare {
@@ -234,12 +251,15 @@ export interface ReaderState {
 
 /** ReaderActivation is the answer to a client acknowledging one scope. `scope` names the watermark
  *  that moved; `since` is the baseline that scope uses (absent on its first activation, when nothing
- *  is new); `seen_at` is the watermark after the acknowledgment. */
+ *  is new); `seen_at` is the watermark after the acknowledgment. `settled` lists EVERY watermark the
+ *  visit moved: opening Sources settles Start's statistic too, because the list answers the same
+ *  batch. */
 export interface ReaderActivation {
   scope: ReaderScope;
   since?: string;
   seen_at: string;
   first?: boolean;
+  settled?: { scope: ReaderScope; seen_at: string }[];
 }
 
 /** ReaderScope names one of the two independent watermarks. */

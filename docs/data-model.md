@@ -20,7 +20,7 @@ true.
 | `StepStatus` | One step's state for one source, persisted in the source's `.meta`. |
 | `Vocabulary` | A namespace's canonical names and what they absorbed. Three namespaces: `topics`, `wiki-tags` and `source-tags`. |
 | `Interest` | One standing rule: `slug` (identity), `name`, `terms`, `exclude`, `kinds`, `enabled`, `rejected` (source hashes), `created`, `updated`. A FILE record (`interests/<slug>.md`), not an index entity; its matches are computed on demand. |
-| `ReaderState` | The two independent seen watermarks: `start_seen_at` drives the Start statistic, `sources_seen_at` drives the Sources **new**/**updated** marks. A source is **new** on Sources when its `imported_at` is later than the Sources watermark, and **updated** when its `url_changed_at` is. A FILE record (`.thought-keeper/reader/seen.md`), one per vault and scope, never per client, with **no index table** — `reindex` leaves it alone. |
+| `ReaderState` | The two seen watermarks: `start_seen_at` drives the Start statistic, `sources_seen_at` drives the Sources **new**/**updated** marks. A source is **new** on Sources when its `imported_at` is later than the Sources watermark, and **updated** when its `url_changed_at` is. A visit writes only what it settles — Start settles Start, Sources settles both — so one lens never speaks for the other's marks. A FILE record (`.thought-keeper/reader/seen.md`), one per vault, never per client, with **no index table** — `reindex` leaves it alone. |
 | `Run` | One run: `op` (`pipeline` \| `query` \| `lint` \| `vocabulary` \| `tag` \| `summary`), `step` (capture/outline/distill/cluster), model, tokens, status, and the question for a query. |
 | `StepRecord` | One tool call of a run: `tool`, argument/result digests, error flag, duration. |
 | `Command` | One assistant request: `id`, `text`, `lens`, `criteria`, `items` (the materialized set, in order), `total`/`vault`/`scanned`, `url`, `generated`, `created`. A FILE record (`commands/<id>.md`), short-lived, with **no index table** — the directory is read directly, like `asks/`, and `reindex` leaves it alone. |
@@ -146,7 +146,11 @@ index keeps **one** connection — every connection to `:memory:` is a separate 
   whose `url_changed_at` is later (and that did not also just arrive). The two watermarks are one
   file record with two scopes, each advancing to the newest activity — the change time when there is
   one, otherwise the arrival. The comparison is client-side on the instants the payload already
-  carries; the Start statistic filters both halves in SQL (`arrived_since`, `changed_since`)
+  carries
+- **activity roots** = the MAIN sources a Start batch touches: each source in the two windows
+  (`arrived_since`, `changed_since`) counted once under the source that owns it
+  (`json_extract(meta,'$.parent_hash')`), an owner-less child as itself. The statistic's number is
+  the batch; the chips are these roots
 - `graph` = cluster membership + provenance edges (source node → atom)
 - `atom_count` of a source counts **resolvable** claims, never provenance rows alone
 - the fourth light of a source is derived from its claims and their memberships, never stored

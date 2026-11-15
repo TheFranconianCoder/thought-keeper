@@ -522,6 +522,40 @@ func (r *SourceRepository) CountSources(ctx context.Context, filter entities.Sou
 	return int(n), nil
 }
 
+// CountSourceActivityRoots is how many MAIN sources a Start batch touches: the feed, sitemap or
+// listing that owns each matching source, counted once. A child whose owner is not in the index is
+// its own root. The batch is the two activity windows of the filter.
+func (r *SourceRepository) CountSourceActivityRoots(ctx context.Context, filter entities.SourceFilter) (int, error) {
+	n, err := r.q.CountSourceActivityRoots(ctx, dal.CountSourceActivityRootsParams{
+		ArrivedSince: millisOrZero(filter.ArrivedSince),
+		ChangedSince: millisOrZero(filter.ChangedSince),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count activity roots: %w", err)
+	}
+	return int(n), nil
+}
+
+// ListSourceActivityRoots returns those main sources, most recently active first.
+func (r *SourceRepository) ListSourceActivityRoots(ctx context.Context, filter entities.SourceFilter, limit int) ([]entities.Source, error) {
+	if limit <= 0 {
+		limit = 24
+	}
+	rows, err := r.q.ListSourceActivityRoots(ctx, dal.ListSourceActivityRootsParams{
+		ArrivedSince: millisOrZero(filter.ArrivedSince),
+		ChangedSince: millisOrZero(filter.ChangedSince),
+		Lim:          int64(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list activity roots: %w", err)
+	}
+	out := make([]entities.Source, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, toEntity(row))
+	}
+	return out, nil
+}
+
 // millisOrZero turns an optional instant into the sentinel the generated query expects: 0 means
 // "no bound". The index stores imported_at in Unix milliseconds.
 func millisOrZero(t time.Time) int64 {

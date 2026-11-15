@@ -27,6 +27,7 @@ export const homeEn: Record<string, string> = {
   'home.changedSources.one': '{count} updated source',
   'home.changedSources.many': '{count} updated sources',
   'home.moreSources': '+{count} more',
+  'home.openSources': 'Open Sources',
   'home.emptySourcesTitle': 'No sources yet',
   'home.emptySourcesText':
     'Add a Markdown file, a PDF, an EPUB, plain text or a link — or ask a question; the vault can answer that it is still empty.',

@@ -147,6 +147,9 @@ func New(deps Deps, web http.Handler) http.Handler {
 		// The Sources lens's facets: the tag cloud and the attached count. Static, before the
 		// {hash} route, so a hash can never shadow it.
 		r.Get("/sources/facets", deps.Sources.ListFacets)
+		// The Start statistic: the batch behind one instant, counted by source and named by the MAIN
+		// source that owns it. Static, like the facets.
+		r.Get("/sources/activity", deps.Sources.ListActivity)
 		// Whether the URLs a page links to already ARE sources: the read behind rewriting a wiki
 		// page's or a sitemap's links to the vault's own pages. Static, like the facets.
 		r.Get("/sources/resolve", deps.Sources.ResolveLinks)

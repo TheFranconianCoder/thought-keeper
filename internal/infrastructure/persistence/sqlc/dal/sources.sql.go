@@ -131,6 +131,39 @@ func (q *Queries) CountRecentExcludedSources(ctx context.Context, importedAt int
 	return i, err
 }
 
+const countSourceActivityRoots = `-- name: CountSourceActivityRoots :one
+SELECT COUNT(*) FROM (
+    SELECT COALESCE(owner.id, s.id) AS root_id
+    FROM sources s
+    LEFT JOIN sources owner
+           ON json_valid(s.meta) AND owner.hash = json_extract(s.meta, '$.parent_hash')
+    WHERE (?1 > 0 AND s.imported_at > ?1)
+       OR (?2 > 0
+           AND s.url_changed_at > ?2
+           AND s.imported_at <= ?2)
+    GROUP BY root_id
+)
+`
+
+type CountSourceActivityRootsParams struct {
+	ArrivedSince interface{} `json:"arrived_since"`
+	ChangedSince interface{} `json:"changed_since"`
+}
+
+// How many MAIN sources a Start batch touches: every matching source counts under the source that
+// OWNS it (its feed, sitemap or listing), once. A child whose owner is not in the index (a wiki
+// page's representation, a parent already gone) stands for itself, so nothing disappears from the
+// statistic.
+//
+// The batch itself is the same two windows the list uses: an arrival strictly after the instant, and
+// a page whose content changed after it that did not also just arrive.
+func (q *Queries) CountSourceActivityRoots(ctx context.Context, arg CountSourceActivityRootsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSourceActivityRoots, arg.ArrivedSince, arg.ChangedSince)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSourceOpenParts = `-- name: CountSourceOpenParts :one
 SELECT count(*) FROM source_nodes n
 WHERE n.source_id = (SELECT id FROM sources WHERE hash = ?1)
@@ -478,6 +511,82 @@ type ListRecentContentSourcesParams struct {
 // a JSON boolean on an older row, and CASE keeps json_extract away from damaged JSON.
 func (q *Queries) ListRecentContentSources(ctx context.Context, arg ListRecentContentSourcesParams) ([]Source, error) {
 	rows, err := q.db.QueryContext(ctx, listRecentContentSources, arg.Since, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Source
+	for rows.Next() {
+		var i Source
+		if err := rows.Scan(
+			&i.ID,
+			&i.Hash,
+			&i.Kind,
+			&i.Ext,
+			&i.Path,
+			&i.Url,
+			&i.Title,
+			&i.OriginalName,
+			&i.Bytes,
+			&i.Pages,
+			&i.TreeState,
+			&i.Steps,
+			&i.UrlStatus,
+			&i.UrlCheckedAt,
+			&i.Bookmark,
+			&i.ImportedAt,
+			&i.Meta,
+			&i.Tags,
+			&i.AutoTags,
+			&i.AutoTagsAt,
+			&i.FavoriteAt,
+			&i.ReadLaterAt,
+			&i.ReadLaterDoneAt,
+			&i.ReadLaterManual,
+			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
+			&i.UrlChangedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSourceActivityRoots = `-- name: ListSourceActivityRoots :many
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from, url_changed_at FROM sources root
+WHERE root.id IN (
+    SELECT COALESCE(owner.id, s.id)
+    FROM sources s
+    LEFT JOIN sources owner
+           ON json_valid(s.meta) AND owner.hash = json_extract(s.meta, '$.parent_hash')
+    WHERE (?1 > 0 AND s.imported_at > ?1)
+       OR (?2 > 0
+           AND s.url_changed_at > ?2
+           AND s.imported_at <= ?2)
+)
+ORDER BY COALESCE(root.url_changed_at, root.imported_at) DESC, root.imported_at DESC, root.hash DESC
+LIMIT ?3
+`
+
+type ListSourceActivityRootsParams struct {
+	ArrivedSince interface{} `json:"arrived_since"`
+	ChangedSince interface{} `json:"changed_since"`
+	Lim          int64       `json:"lim"`
+}
+
+// The MAIN sources themselves, most recently active first, at most a handful: the statistic shows a
+// few chips, and the number beside them counts the batch, not the owners.
+func (q *Queries) ListSourceActivityRoots(ctx context.Context, arg ListSourceActivityRootsParams) ([]Source, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceActivityRoots, arg.ArrivedSince, arg.ChangedSince, arg.Lim)
 	if err != nil {
 		return nil, err
 	}

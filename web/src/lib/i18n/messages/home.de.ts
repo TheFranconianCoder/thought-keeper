@@ -27,6 +27,7 @@ export const homeDe: Record<string, string> = {
   'home.changedSources.one': '{count} aktualisierte Quelle',
   'home.changedSources.many': '{count} aktualisierte Quellen',
   'home.moreSources': '+{count} weitere',
+  'home.openSources': 'Zu den Quellen',
   'home.emptySourcesTitle': 'Noch keine Quelle',
   'home.emptySourcesText':
     'Füge eine Markdown-Datei, ein PDF, ein EPUB, reinen Text oder einen Link hinzu — oder stelle eine Frage; der Tresor darf antworten, dass er noch leer ist.',

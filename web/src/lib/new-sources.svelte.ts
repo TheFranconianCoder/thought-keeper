@@ -6,9 +6,9 @@ import { readSignal } from './read';
  * The reader's two seen watermarks.
  *
  * Start's watermark drives the statistic the front door shows; Sources' watermark drives the new
- * and updated marks of its rows. They are independent: opening Start acknowledges only Start, so
- * the Sources marks stay until Sources is actually visited, and opening Sources never clears the
- * front door's batch. Each watermark is ONE per vault, never per client (the server keeps both in
+ * and updated marks of its rows. Opening Start settles the front door alone, so the Sources marks
+ * stay until the list is actually visited; opening Sources settles BOTH, because the list answers
+ * the same batch the front door summarizes. Each watermark is ONE per vault, never per client (the server keeps both in
  * `.thought-keeper/reader/seen.md`): the first client active on a lens acknowledges that scope for
  * every client, so a source the phone has seen is not new on the desktop.
  *
@@ -160,6 +160,7 @@ export function initNewSources(): void {
 /**
  * activateStart acknowledges the Start lens, once per active phase. The front door calls it when
  * it is visible; no other lens, and no wake on a claim or a source page, consumes the statistic.
+ * It never settles the Sources marks: the reader has only seen the summary.
  */
 export async function activateStart(): Promise<void> {
   await activate('start');
@@ -167,7 +168,8 @@ export async function activateStart(): Promise<void> {
 
 /**
  * activateSources acknowledges the Sources lens, once per active phase. Only Sources calls it: until
- * the reader actually visits the list, its new/updated marks stay.
+ * the reader actually visits the list, its new/updated marks stay. The visit settles Start's
+ * statistic as well — the list answers the batch the front door only summarized.
  */
 export async function activateSources(): Promise<void> {
   await activate('sources');
@@ -193,6 +195,13 @@ async function activate(scope: ReaderScope): Promise<void> {
     } else {
       slot.since = result.first || !result.since ? '' : result.since;
       if (seen) slot.seenAt = seen;
+    }
+    // A visit can settle the OTHER lens too: opening Sources acknowledges the batch the front door
+    // summarizes, so the Start statistic clears here exactly as in every other window. The scope
+    // just acknowledged keeps its own baseline above, so its marks still show for this phase.
+    for (const settled of result.settled ?? []) {
+      if (settled.scope === scope) continue;
+      applySharedSeen(settled.scope, settled.seen_at ?? '');
     }
     slot.ack = 'done';
   } catch {
