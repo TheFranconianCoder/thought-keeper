@@ -3784,6 +3784,24 @@ func (a *App) refreshWorker() {
 		}
 		interval := cadence("capture.refresh_interval", a.conf().Capture.RefreshInterval)
 		feedInterval := cadence("capture.feed_refresh_interval", a.conf().Capture.FeedRefreshInterval)
+		if gap := cadence("capture.refresh_min_gap", a.conf().Capture.RefreshMinGap); gap > 0 {
+			// PACED: one page per gap, chosen by the cadence. The wait after a check is the gap; a
+			// check that found nothing waits a minute at most, so a newly due source (or a cadence
+			// changed in the overlay) is noticed without a restart.
+			found := a.refreshNext("scheduled")
+			wait := gap
+			if !found && wait > time.Minute {
+				wait = time.Minute
+			}
+			timer := time.NewTimer(wait)
+			select {
+			case <-a.quit:
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+			continue
+		}
 		// The ticker only decides how often the app LOOKS for due sources; the cadence itself belongs
 		// to each source's url_checked_at.
 		tick := time.Hour
@@ -3829,7 +3847,7 @@ func (a *App) applyRefreshResult(res usecases.RefreshResult, focus string) {
 	if len(res.Discovered) > 0 {
 		a.ScheduleDiscoveredChildren(res.Discovered)
 	}
-	if res.Changed > 0 {
+	if res.Material > 0 {
 		_, _ = a.requestCluster("url changed") //nolint:errcheck // the run row is an audit trail; the work already ended
 	}
 }
@@ -3884,18 +3902,46 @@ func (a *App) refreshNow(reason string) {
 	res, err := a.deps().RefreshURLs.Refresh(ctx)
 	a.gate.RUnlock()
 	if err != nil {
-		a.log.Warn("url refresh failed", "reason", reason, "err", err)
-		return
+		// A pass that ran out of time (or was cancelled) still did work: apply it, then say why the
+		// rest was left alone. Its sources stay due for the next pass.
+		a.log.Warn("url refresh did not finish", "reason", reason, "err", err)
 	}
-	a.log.Info("url refresh done", "reason", reason,
-		"checked", res.Checked, "changed", res.Changed, "failed", res.Failed,
-		"blocked", res.Blocked, "attached", res.Attached,
-		"discovered", len(res.Discovered), "removed", res.Removed)
-	a.applyRefreshResult(res, "")
-	a.publish("urls", map[string]any{
-		"checked": res.Checked, "changed": res.Changed, "failed": res.Failed,
-		"discovered": len(res.Discovered), "removed": res.Removed,
-	})
+	if res.Checked > 0 || res.Changed > 0 || len(res.Discovered) > 0 {
+		a.log.Info("url refresh done", "reason", reason,
+			"checked", res.Checked, "changed", res.Changed, "material", res.Material,
+			"failed", res.Failed, "blocked", res.Blocked, "attached", res.Attached,
+			"discovered", len(res.Discovered), "removed", res.Removed)
+		a.applyRefreshResult(res, "")
+		a.publish("urls", map[string]any{
+			"checked": res.Checked, "changed": res.Changed, "failed": res.Failed,
+			"discovered": len(res.Discovered), "removed": res.Removed,
+		})
+	}
+}
+
+// refreshNext runs ONE paced check — the due source that has waited longest — and schedules what it
+// changed. It reports whether a source was found; the worker waits longer after a check than after
+// an idle look, so the pace is a throughput and not a poll.
+func (a *App) refreshNext(reason string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	a.gate.RLock()
+	res, found, err := a.deps().RefreshURLs.RefreshNext(ctx)
+	a.gate.RUnlock()
+	if found {
+		a.log.Info("url refresh: one page", "reason", reason,
+			"checked", res.Checked, "changed", res.Changed, "material", res.Material,
+			"failed", res.Failed, "blocked", res.Blocked, "discovered", len(res.Discovered))
+		a.applyRefreshResult(res, "")
+		a.publish("urls", map[string]any{
+			"checked": res.Checked, "changed": res.Changed, "failed": res.Failed,
+			"discovered": len(res.Discovered), "removed": res.Removed,
+		})
+	}
+	if err != nil {
+		a.log.Warn("url refresh: the paced check failed", "reason", reason, "err", err)
+	}
+	return found
 }
 
 // ScheduleDiscoveredChildren fetches the NEW pages a feed or a sitemap declared. The refresh already

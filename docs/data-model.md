@@ -8,7 +8,7 @@ true.
 
 | Entity | Meaning |
 | --- | --- |
-| `Source` | An immutable input: `id`, `hash`, `kind`, `ext`, `path`, `url`, `title`, `original_name`, `tags` (human labels), `auto_tags` (derived labels) and `auto_tags_at`, the reader's marks (`favorite_at`, `read_later_at`, `read_later_done_at`, `read_later_manual`, `read_later_via`), `bytes`, `pages`, `tree_state`, `steps`, `url_status`, `url_checked_at`, `url_changed_at` (the last real content change; `url_checked_at` is only the last fetch), `bookmark`, `meta`. |
+| `Source` | An immutable input: `id`, `hash`, `kind`, `ext`, `path`, `url`, `title`, `original_name`, `tags` (human labels), `auto_tags` (derived labels) and `auto_tags_at`, the reader's marks (`favorite_at`, `read_later_at`, `read_later_done_at`, `read_later_manual`, `read_later_via`), `bytes`, `pages`, `tree_state`, `steps`, `url_status`, `url_checked_at`, `url_changed_at` (the last MATERIAL content change — `capture.change_min_words` / `change_min_word_length`; `url_checked_at` is only the last fetch), `bookmark`, `meta`. |
 | `SourceNode` | A tree node: `node_id`, `parent_id`, `depth`, `ord`, `title`, `summary`, `start_page`, `end_page`, `text_hash`. |
 | `Atom` | One claim: `id`, `topic`, `claim`, `type`, `status`, `body`, `sources`. |
 | `WikiPage` | User-authored Markdown: `id`, `title`, `tags` (human), `auto_tags` (derived), `urls`, `source` (stable `WikiHash`), `favorite_at`, timestamps, body. |
@@ -54,6 +54,7 @@ index is disposable — deleting it loses nothing but time.
 | `00010_sources_shelf.sql` | adds the reader's marks to `sources` (`favorite_at`, `read_later_at`, `read_later_done_at`, `read_later_manual`, `read_later_via`) plus the two indexes the queue and the star filter read |
 | `00011_sources_published_at.sql` | adds `published_at` and `published_from`: the date a source declares for itself and the layer that found it (a record, restored by a reindex) |
 | `00012_sources_url_changed.sql` | adds `url_changed_at`: the last time a URL snapshot's readable content actually changed (a record, restored by a reindex) plus the activity index the Sources list orders by and the partial index the "updated" filter reads |
+| `00013_sources_url_checked_index.sql` | a partial index on `sources(url_checked_at)` for URL sources: the paced refresh asks "which page has waited longest?" once per gap, and without it every ask would sort the whole URL set |
 
 A schema change is a **new** migration; a change of vocabulary is done in the initial file with the
 database thrown away. The initial file writes the shape marker (`PRAGMA user_version`), and
@@ -101,7 +102,7 @@ Notes that matter:
 - **`sources.url_checked_at` and `sources.url_changed_at` are different facts.** The first is when
   the page was last FETCHED; the second is when its readable content last actually differed, and it
   is a record (`changed_at` in `<hash>.meta`) restored by a reindex. The Sources list orders by
-  **activity** — `COALESCE(url_changed_at, imported_at)` — so a rewritten page takes its change time
+  **activity** — `COALESCE(url_changed_at, imported_at)` — so a materially rewritten page takes its change time
   and rises like an arrival does, while a check that answered the same page moves nothing. The
   `changed=1` filter selects exactly the non-NULL rows.
 - **`sources.favorite_at` / `read_later_*`** mirror the reader's marks from the source record. The

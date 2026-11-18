@@ -51,6 +51,9 @@
   const partID = $derived(route.params.get('part') ?? '');
   const fileParam = $derived(route.params.get('file') ?? '');
   const sidecars = $derived(selected?.sidecars ?? []);
+  // The change record lists itself among the sidecars even when the file is missing (the Files tab
+  // shows what a source OWES). The tab and the strip exist only when the file is really there.
+  const hasChanges = $derived(sidecars.some((sidecar) => sidecar.name === '.changes.md' && sidecar.bytes >= 0));
 
   const isPDF = $derived(selected?.ext === '.pdf');
   const isEPUB = $derived(selected?.kind === 'epub');
@@ -168,6 +171,11 @@
   let fileError = $state('');
   let fileSeq = 0;
   let loadedFileKey = '';
+
+  let changesText = $state<string | null>(null);
+  let changesError = $state('');
+  let changesSeq = 0;
+  let loadedChangesKey = '';
 
   let pdfReady = $state(false);
 
@@ -311,6 +319,37 @@
       });
   });
 
+  // The Changes tab reads the record when it opens and again when a source event bumps the version
+  // (a refresh rewrites the file in place, so a cached read would show the previous change).
+  $effect(() => {
+    const currentHash = hash;
+    const currentTab = tab;
+    void sources.version;
+    const seq = ++changesSeq;
+    if (!currentHash || currentTab !== 'changes') {
+      changesText = null;
+      changesError = '';
+      loadedChangesKey = '';
+      return;
+    }
+    const key = `${currentHash}|${sources.version}`;
+    if (key !== loadedChangesKey) {
+      changesText = null;
+      changesError = '';
+    }
+    loadedChangesKey = key;
+    void api
+      .rawText(currentHash, '.changes.md')
+      .then((text) => {
+        if (seq === changesSeq && hash === currentHash) changesText = text;
+      })
+      .catch((error) => {
+        if (seq === changesSeq && hash === currentHash) {
+          changesError = error instanceof Error ? error.message : String(error);
+        }
+      });
+  });
+
   // The Summary and Sub-sources tabs read their data when they open (and again when a source event
   // says something changed) — never on every source detail load.
   $effect(() => {
@@ -414,6 +453,8 @@
       case 'log':
       case 'files':
         return true;
+      case 'changes':
+        return hasChanges;
       case 'pdf':
         return isPDF;
       case 'children':
@@ -602,6 +643,21 @@
         </div>
       </header>
 
+      <!-- The last change of the page is ONE click away from every tab: a reader who opens a source
+           because the list marked it "updated" should not have to know that a file sidecar exists. -->
+      {#if hasChanges}
+        <button
+          class="change-strip"
+          onclick={() => setTab('changes')}
+          title={t('source.changeStripTitle')}
+        >
+          <Icon name="clock" size={14} />
+          <span>{t('source.changeStrip', { time: relTime(selected.url_changed_at) })}</span>
+          <span class="grow"></span>
+          <span class="change-strip-action">{t('source.changeStripAction')}</span>
+        </button>
+      {/if}
+
       <div class="source-layout">
         <section class="source-content">
           <div class="tabs" role="tablist" aria-label={t('source.viewAria')}>
@@ -617,6 +673,9 @@
               {#if isPDF}
                 <button class="tab" class:on={tab === 'pdf'} onclick={() => setTab('pdf')}>PDF</button>
               {/if}
+            {/if}
+            {#if hasChanges}
+              <button class="tab" class:on={tab === 'changes'} onclick={() => setTab('changes')}>{t('source.tabChanges')}</button>
             {/if}
             <button class="tab" class:on={tab === 'log'} onclick={() => setTab('log')}>{t('source.tabLog')}</button>
             <button class="tab" class:on={tab === 'files'} onclick={() => setTab('files')}>{t('source.tabFiles')}</button>
@@ -768,6 +827,15 @@
                     </div>
                   {/each}
                 </div>
+              {/if}
+            {:else if tab === 'changes'}
+              {#if changesError}
+                <p class="notice notice--error file-notice">{changesError}</p>
+              {:else if changesText === null}
+                <p class="file-notice muted">{t('common.loading')}</p>
+              {:else}
+                <p class="file-intro muted">{t('source.changesIntro')}</p>
+                <pre class="raw-file">{changesText}</pre>
               {/if}
             {:else if tab === 'log'}
               {#if sources.log.length > LOG_CAP}
@@ -1005,7 +1073,16 @@
               {/if}
             {/if}
             {#if selected.url_changed_at}
-              <div class="kv"><span class="k">{t('source.changedLabel')}</span><span class="v">{relTime(selected.url_changed_at)}</span></div>
+              <div class="kv">
+                <span class="k">{t('source.changedLabel')}</span>
+                <span class="v">
+                  {#if hasChanges}
+                    <button class="rail-action" onclick={() => setTab('changes')}>{relTime(selected.url_changed_at)}</button>
+                  {:else}
+                    {relTime(selected.url_changed_at)}
+                  {/if}
+                </span>
+              </div>
             {/if}
             <div class="kv"><span class="k">ID</span><span class="v"><CopyId text={selected.hash} label={t('source.idLabel')} display={selected.hash.slice(0, 12)} /></span></div>
             {#if (selected.origin === 'sitemap' || selected.origin === 'rss' || selected.origin === 'listing') && selected.parent_hash}
@@ -1300,6 +1377,34 @@
     flex-wrap: wrap;
     gap: 5px;
     flex: none;
+  }
+
+  /* The change strip: the page changed, and the record is one click away. It sits under the head on
+     every tab, so the answer to "what changed?" does not depend on finding a file in the Files tab. */
+  .change-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin: -6px 0 18px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    color: var(--ink-2);
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .change-strip:hover {
+    border-color: var(--accent);
+  }
+
+  .change-strip-action {
+    color: var(--accent);
+    white-space: nowrap;
   }
 
   /* The rail's own way in. It sits beside the content on a wide page and under it once the page

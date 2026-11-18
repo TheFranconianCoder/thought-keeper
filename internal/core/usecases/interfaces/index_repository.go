@@ -135,4 +135,8 @@ type IndexRepository interface {
 	// ListURLSources lists every URL snapshot (newest first), so the refresher can
 	// re-fetch and the UI can show per-URL status.
 	ListURLSources(ctx context.Context) ([]entities.Source, error)
+	// ListRefreshCandidates lists the URL sources the scheduled refresh may look at, least recently
+	// checked first (never checked before). The due rule is not here: the use case decides which of
+	// the window is due, so the cadence lives in one place. Attached snapshots are left out.
+	ListRefreshCandidates(ctx context.Context, limit int) ([]entities.Source, error)
 }

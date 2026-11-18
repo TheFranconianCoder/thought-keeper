@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/textdiff"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
@@ -110,10 +111,17 @@ func (uc Sources) Attach(ctx context.Context, in AttachInput) (partialentities.P
 	// readable bytes. Only the replacement is an update: the wall notice or the old attachment is
 	// what the reader saw before.
 	hadSnapshot := src.Path != ""
+	oldBody, hadOldBody := storedSnapshotBody(uc.Store, src.Hash, src.Ext)
 	snapshot := renderAttachedSnapshot(src.URL, doc.Title, name, sha, now, body)
 	obj, err := uc.Store.PutAt(src.Hash, ".md", []byte(snapshot))
 	if err != nil {
 		return partialentities.PartialSource{}, err
+	}
+	// The human replaced the bytes; the record says what the old snapshot had and the new one says.
+	// An attachment is always an event: the reader did it.
+	if hadSnapshot && hadOldBody {
+		writeChangeRecord(uc.Store, uc.Log, src.Hash, src.Title, doc.Title, oldBody, body,
+			bodyHashOf(body) == bodyHashOf(oldBody), textdiff.Words(oldBody, body), now)
 	}
 
 	src.Ext, src.Path, src.Bytes = obj.Ext, obj.Path, obj.Bytes

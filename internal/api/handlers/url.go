@@ -96,6 +96,7 @@ func (h URLHandler) Post(w http.ResponseWriter, r *http.Request) {
 	payloads.WriteJSON(w, http.StatusOK, payloads.RefreshResult{
 		Checked:    res.Checked,
 		Changed:    res.Changed,
+		Material:   res.Material,
 		Failed:     res.Failed,
 		Blocked:    res.Blocked,
 		Attached:   res.Attached,
@@ -144,6 +145,7 @@ func (h URLHandler) PostOne(w http.ResponseWriter, r *http.Request) {
 	payloads.WriteJSON(w, http.StatusOK, payloads.RefreshResult{
 		Checked:    res.Checked,
 		Changed:    res.Changed,
+		Material:   res.Material,
 		Failed:     res.Failed,
 		Blocked:    res.Blocked,
 		Attached:   res.Attached,

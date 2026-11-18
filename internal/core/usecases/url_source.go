@@ -20,6 +20,7 @@ import (
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/listing"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/textdiff"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
@@ -341,6 +342,11 @@ type URLs struct {
 	MinAge       time.Duration
 	FeedMinAge   time.Duration
 	MinTextChars int
+	// ChangeMinWords / ChangeMinWordLength are the materiality threshold of a page change: how many
+	// word positions must differ, and how long those words must be on average, before the change
+	// counts as an event. ChangeMinWords <= 0 turns the rule off.
+	ChangeMinWords      int
+	ChangeMinWordLength int
 }
 
 // URLAdder adds one URL source. A handler holds this value; nil means the feature is not wired.
@@ -1194,8 +1200,14 @@ type DiscoveredChildren struct {
 
 // RefreshResult summarizes one pass.
 type RefreshResult struct {
-	Checked  int
-	Changed  int
+	Checked int
+	// Changed counts the pages whose readable content differs from the stored snapshot — the vault is
+	// updated in every one of them.
+	Changed int
+	// Material counts the changes worth telling the reader about: the title moved, or enough words
+	// changed (capture.change_min_words) and they are prose (capture.change_min_word_length). Only a
+	// material change moves the change time, writes the change record and asks for a cluster pass.
+	Material int
 	Failed   int
 	Blocked  int
 	Attached int
@@ -1207,8 +1219,9 @@ type RefreshResult struct {
 	// Removed are the pages a SITEMAP no longer lists. A feed never removes an item.
 	Removed int
 	Sources []partialentities.PartialSource
-	// ChangedURLs are the pages that actually changed, so the caller knows whether the association
-	// layer has something to regroup.
+	// ChangedURLs are the pages whose readable content differs, so the caller knows whether the
+	// association layer has something to regroup. One of them may be an immaterial change (a date,
+	// a counter) — see Material.
 	ChangedURLs []string
 	// Resets are the sources whose snapshot was replaced by a DIFFERENT body. The refresh runs under
 	// the shared gate, so it must not touch a derivation itself: a document run may be in flight. The
@@ -1280,10 +1293,69 @@ func (uc URLs) refreshPass(ctx context.Context, scheduled bool) (RefreshResult, 
 	return uc.executeRows(ctx, rows, scheduled, false)
 }
 
+// RefreshNext refreshes the ONE URL source that has waited longest among those the cadence finds
+// due. The second result says whether one was found: a paced worker that finds nothing waits, it
+// does not report a failure.
+//
+// The candidate window grows when it is full and nothing in it was due, so a due feed behind a crowd
+// of pages that are not due yet is still reached. The DUE rule itself stays in dueOnCadence — the
+// query only answers "what has waited longest", never "what is due", so the cadence cannot drift
+// into a second place.
+func (uc URLs) RefreshNext(ctx context.Context) (RefreshResult, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return RefreshResult{}, false, err
+	}
+	now := uc.Clock.Now()
+	// The window doubles while it is full and nothing in it was due; the cap only bounds a vault
+	// that is not this large. A window that came back short means every candidate was looked at.
+	for window := 64; window <= 1<<16; window *= 2 {
+		rows, err := uc.Index.ListRefreshCandidates(ctx, window)
+		if err != nil {
+			return RefreshResult{}, false, err
+		}
+		for _, s := range rows {
+			if s.URL == "" || !uc.dueOnCadence(s, now) {
+				continue
+			}
+			res, err := uc.executeRows(ctx, []entities.Source{s}, true, false)
+			return res, true, err
+		}
+		if len(rows) < window {
+			break // the window was not full: every candidate has been looked at
+		}
+	}
+	return RefreshResult{}, false, nil
+}
+
+// dueOnCadence reports whether the SCHEDULED pass may check this source now. It is the one place the
+// cadence lives: an attached snapshot is never fetched by the cadence (it exists because the page
+// cannot be read), a kind whose interval is zero is not refreshed automatically, and a feed or a
+// listing — a list that moves daily — is checked on the shorter interval while a page and a sitemap
+// wait the longer one. A source never checked is always due.
+func (uc URLs) dueOnCadence(s entities.Source, now time.Time) bool {
+	if isAttached(s.Meta) {
+		return false
+	}
+	age := uc.MinAge
+	if s.RSS || s.Listing {
+		age = uc.FeedMinAge
+	}
+	if age <= 0 {
+		return false
+	}
+	return s.URLChecked.IsZero() || now.Sub(s.URLChecked) >= age
+}
+
 func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, scheduled, ignoreAttached bool) (RefreshResult, error) {
 	var res RefreshResult
 	seen := make(map[string]bool)
 	for _, s := range rows {
+		// A pass that ran out of time must stop, not spend the rest of its budget writing "failed"
+		// onto sources it never asked: a failed check moves the source's url_checked_at, which
+		// silences it for a whole cadence.
+		if err := ctx.Err(); err != nil {
+			return res, err
+		}
 		if s.URL == "" || seen[entities.URLKey(s.URL)] {
 			continue
 		}
@@ -1302,22 +1374,8 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 			continue
 		}
 		now := uc.Clock.Now()
-		if scheduled {
-			// A feed (its item list) is checked daily; a page and a sitemap weekly. A kind whose
-			// interval is zero is not refreshed automatically at all.
-			age := uc.MinAge
-			if s.RSS || s.Listing {
-				// A feed announces new posts and a listing shows them: both change far more often
-				// than a page's text does.
-				age = uc.FeedMinAge
-			}
-			if age <= 0 {
-				continue
-			}
-			// Due means "not checked within the cadence". A source never checked is always due.
-			if !s.URLChecked.IsZero() && now.Sub(s.URLChecked) < age {
-				continue
-			}
+		if scheduled && !uc.dueOnCadence(s, now) {
+			continue
 		}
 		res.Checked++
 		page, fetchErr := uc.Fetch.Fetch(ctx, s.URL)
@@ -1627,13 +1685,22 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		// What the STORED SNAPSHOT says, not what the title or the live page says. The body decides
 		// whether the outline has to be rebuilt: a page whose only change is its title keeps its
 		// outline (and its claims), and a reflowed page is compared per node by the rebuild itself.
+		oldBody, hadSnapshot := storedSnapshotBody(uc.Store, s.Hash, s.Ext)
 		sameBody := sameContent
-		if old, ok := storedSnapshotBody(uc.Store, s.Hash, s.Ext); ok {
-			sameBody = bodyHashOf(body) == bodyHashOf(old)
+		if hadSnapshot {
+			sameBody = bodyHashOf(body) == bodyHashOf(oldBody)
 		}
 		// A source that already HAS a snapshot is being updated; one that had none (a queued link)
 		// is arriving. The change time is about the former: a first read is an arrival, not an edit.
 		changed := !sameContent && s.Path != ""
+		// ...and only SOME changes are worth an event. The snapshot is always replaced (the vault
+		// stays current); the change time, the updated mark and the record are reserved for a change
+		// a reader would notice. A missing snapshot has nothing to compare: it counts as material.
+		material := changed
+		var shift textdiff.WordShift
+		if changed && hadSnapshot {
+			material, shift = uc.materialChange(s.Title, title, oldBody, body, !sameBody)
+		}
 
 		snapshot := renderURLSnapshot(s.URL, title, page.Status, now, body, engine)
 		// The snapshot is refreshed IN PLACE, at the address the source already has. A changed page is
@@ -1646,6 +1713,22 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 			res.Failed++
 			res.LastError = err.Error()
 			continue
+		}
+		// The record a reader can open, written only once the new snapshot IS the snapshot: both
+		// bodies are in hand here, and the old title is the one the source carried until this fetch
+		// (the title the reader saw). An immaterial change gets a log line instead — the snapshot is
+		// current, but a date or a counter is not news.
+		if changed && hadSnapshot {
+			if material {
+				writeChangeRecord(uc.Store, uc.Log, s.Hash, s.Title, title, oldBody, body, sameBody, shift, now)
+			} else {
+				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "info",
+					"the page changed immaterially — the snapshot is updated, the change is not an event",
+					map[string]any{
+						"words": shift.Words, "avg_chars": fmt.Sprintf("%.1f", shift.AvgRunes),
+						"min_words": uc.ChangeMinWords, "min_avg_chars": uc.ChangeMinWordLength,
+					})
+			}
 		}
 		// The icon belongs to the SITE, not to one snapshot: the fetch above already repaired a
 		// missing icon; if it was still unavailable, keep the reference we had rather than writing a
@@ -1685,7 +1768,7 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		updated.Attached, updated.AttachedFrom = false, ""
 		// The page is the source now: neither the feed marker nor the wall survives a successful read.
 		updated.FromFeed, updated.FeedHash, updated.Wall = false, "", ""
-		if changed {
+		if material {
 			updated.URLChanged = now
 		}
 		if err := uc.Index.UpsertSource(ctx, updated); err != nil {
@@ -1715,8 +1798,9 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 			}
 		}
 		// The change is a RECORD, not a row fact: the Sources list orders by activity, and a rebuilt
-		// index reads this time back instead of burying the page at its old arrival date.
-		if changed && uc.Steps != nil {
+		// index reads this time back instead of burying the page at its old arrival date. Only a
+		// MATERIAL change moves it: a page whose date counter ticked did not say anything new.
+		if material && uc.Steps != nil {
 			if err := uc.Steps.SetChanged(ctx, s.Hash, now); err != nil && uc.Log != nil {
 				uc.Log.Warn("url refresh: change time not recorded", "url", s.URL, "err", err)
 			}
@@ -1793,6 +1877,9 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		if !sameContent {
 			res.Changed++
 			res.ChangedURLs = append(res.ChangedURLs, s.URL)
+		}
+		if material {
+			res.Material++
 		}
 		res.Sources = append(res.Sources, partialentities.PartialFromSource(updated))
 		if uc.Log != nil {
@@ -1999,6 +2086,10 @@ func bodyHashOf(body string) string {
 // storedSnapshotBody reads the body of the snapshot a source holds NOW — before the refresh replaces
 // it. A snapshot is frontmatter + body; a file without frontmatter is returned as it is. Reading the
 // old bytes is what makes the comparison honest: the content_hash in the meta also carries the title.
+//
+// The body is TRIMMED, exactly like the new one (`strings.TrimSpace(conv.Markdown)`): the blank line
+// that separates a snapshot's frontmatter from its prose is layout, not content, and a diff that
+// reported it would add a phantom changed line to every change record.
 func storedSnapshotBody(store interfaces.SourceStore, hash, ext string) (string, bool) {
 	if store == nil || hash == "" || ext == "" {
 		return "", false
@@ -2012,7 +2103,7 @@ func storedSnapshotBody(store interfaces.SourceStore, hash, ext string) (string,
 	if err != nil {
 		return "", false
 	}
-	return string(snapshotBody(b)), true
+	return strings.TrimSpace(string(snapshotBody(b))), true
 }
 
 // wrapFetchErr keeps an already-coded error (e.g. the SSRF guard's "forbidden")

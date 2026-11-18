@@ -46,6 +46,10 @@ func Patterns() []string {
 		"sources/**/*.outline",
 		"sources/**/*.log",
 		"sources/**/*.log.1",
+		// The last change of a page (<hash>.changes.md) is the in-app story of a snapshot that was
+		// rewritten: the snapshot itself is committed, so its git diff is the canonical record. A
+		// committed copy would only churn on every change.
+		"sources/**/*.changes.md",
 		// The association layer is a cache: the claims are the truth.
 		"clusters/**/*.meta",
 		// The assistant's commands are UI states with an expiry: they are deleted after

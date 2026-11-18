@@ -205,6 +205,22 @@ type CaptureConfig struct {
 	// new posts far more often than a page changes; empty disables the automatic feed refresh while
 	// leaving pages and sitemaps on RefreshInterval.
 	FeedRefreshInterval string `yaml:"feed_refresh_interval"`
+	// RefreshMinGap paces the SCHEDULED refresh: at most one page is fetched per gap. The cadences
+	// above stay the minimum age of a source; the gap is the throughput. A vault with more pages
+	// than minutes per cadence needs more than one cadence to sweep, which is the price of being
+	// polite (and of a small machine's CPU). Empty or "0s" is the old burst: every due source in one
+	// pass. The manual passes (POST /api/v1/refresh-urls, one source) ignore it.
+	RefreshMinGap string `yaml:"refresh_min_gap"`
+	// ChangeMinWords is the materiality threshold of a page change. The snapshot is rewritten
+	// whenever the text differs — the vault stays current — but only a change of at least this many
+	// WORD POSITIONS marks the source updated, writes the change record and moves its change time.
+	// A ticking timestamp, a view counter or a typo is therefore not an event. 0 turns the rule off:
+	// every difference is a material change (the pre-threshold behavior).
+	ChangeMinWords int `yaml:"change_min_words"`
+	// ChangeMinWordLength is the average length, in characters, the changed words must exceed: it is
+	// what keeps "Updated 4 minutes ago" or "12 comments" from passing as prose. It only applies
+	// while ChangeMinWords is above 0.
+	ChangeMinWordLength int `yaml:"change_min_word_length"`
 	// MinTextChars: a fetched page with less extracted text than this is kept as a
 	// bookmark (metadata only, never distilled) instead of an indexed document.
 	MinTextChars int `yaml:"min_text_chars"`
@@ -329,7 +345,8 @@ func Defaults() Config {
 		},
 		Capture: CaptureConfig{
 			DedupeByURL: true, RefreshInterval: "168h", FeedRefreshInterval: "24h",
-			MinTextChars: 400, ListingMaxPages: 100,
+			RefreshMinGap: "1m", MinTextChars: 400, ListingMaxPages: 100,
+			ChangeMinWords: 10, ChangeMinWordLength: 5,
 		},
 		Assistant: AssistantConfig{
 			// A week is long enough to find yesterday's request again, and short enough that the

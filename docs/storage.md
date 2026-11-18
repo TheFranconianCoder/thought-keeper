@@ -22,6 +22,7 @@ greppable, worth versioning and backing up. The app never treats a directory as 
 │       ├── 7f3a…<sha256>.meta        # identity + title + tags + auto tags + step record + part records
 │       ├── 7f3a…<sha256>.outline     # the node tree (step 2, JSON)
 │       ├── 7f3a…<sha256>.summary.md  # the source's overview (derived from its claims)
+│       ├── 7f3a…<sha256>.changes.md  # the last change of a URL page (title, stats, unified diff)
 │       └── 7f3a…<sha256>.log         # everything done to this source
 ├── wiki/                       # user-authored Markdown pages (source of truth)
 │   └── <ab>/<cd>/
@@ -62,9 +63,10 @@ file — to fall back. It is a **record**: version it with the vault.
 | Sidecar | belongs to | holds | kind |
 | --- | --- | --- | --- |
 | `<hash>.capture.md` | a source whose bytes are not readable (a PDF, an EPUB) or a wiki page representation | the content as readable Markdown | **cache** — re-derivable (`capture`) |
-| `<hash>.meta` | a source | what the source **is** (kind, language, URL, identity), its title, **the date it declares for itself and the layer that found it**, **the last time its readable content actually changed**, **human tags**, **auto tags** and when they were derived, the reader's **favorite** and **read-later** marks, the state of capture/outline/distill and the part records | **record** — the file IS the truth |
+| `<hash>.meta` | a source | what the source **is** (kind, language, URL, identity), its title, **the date it declares for itself and the layer that found it**, **the last time its readable content materially changed**, **human tags**, **auto tags** and when they were derived, the reader's **favorite** and **read-later** marks, the state of capture/outline/distill and the part records | **record** — the file IS the truth |
 | `<hash>.outline` | a source | the node tree with references into the readable text, and two hashes per node: the exact text and a whitespace-normalized one (the rebuild tolerance) | **cache** — re-derivable (`rebuild-trees`) |
 | `<hash>.summary.md` | a source | its **overview**, written from the claims after a complete distill | **cache** — regenerated from the claims (a model writes it, so not byte-identical) |
+| `<hash>.changes.md` | a source | the LAST change of a URL page: the time, the title before and after, and a unified diff of the readable body | **record** — the old bytes are gone, so it cannot be rebuilt |
 | `<hash>.log` | a source | everything done to it | **record** — history |
 | `clusters/<ab>/<cd>/<id>.meta` | a cluster | its membership and signature | **cache** — re-derivable from the claims |
 
@@ -95,13 +97,16 @@ missing and never touches the user's own lines:
 .thought-keeper/ · .trash/ · inbox/ · index.db · index.db-wal · index.db-shm
 sources/**/*.capture.md · sources/**/*.text.md
 sources/**/*.meta · sources/**/*.outline · sources/**/*.summary.md · sources/**/*.log · sources/**/*.log.1
+sources/**/*.changes.md
 clusters/**/*.meta
 ```
 
 What stays in the history is the object, the wiki pages, the atoms, the vocabulary and the vault's
 own config — the knowledge. `.meta` and `.log` are records but are excluded anyway: they change on every run and are
-rebuilt from the vault. The reader's seen watermarks are app state and are excluded too. `vault.git.enabled` and `commit_on_write` are **not implemented**; the app
-never runs git.
+rebuilt from the vault. `.changes.md` is excluded for the same reason: the snapshot itself is
+committed, so its own git diff is the canonical record, and a committed copy would churn on every
+change. The reader's seen watermarks are app state and are excluded too. `vault.git.enabled` and
+`commit_on_write` are **not implemented**; the app never runs git.
 
 ## 3. Per-source log
 
@@ -121,6 +126,38 @@ OCR'd page gets its own line; dropped page furniture is logged; a deleted source
 the cluster pass writes carries `scope=wiki` when it reports a vault-wide number.
 
 `GET /api/v1/sources/{hash}/log` returns it; the PWA shows it in a **Log** tab of the source page.
+
+## 3a. The change record
+
+`<hash>.changes.md` is what the **last** refresh of a URL page left behind, in the reader's words:
+
+```
+# Changed 2026-11-18T09:12:04Z
+
+Title: "Cache invalidation, revisited" → "Cache invalidation, in practice"
+
+Body: +12 -3 lines.
+
+````diff
+@@ -40,7 +40,7 @@
+ ...
+````
+```
+
+It is written while BOTH bodies are in hand — the refresher already reads the old snapshot to decide
+whether the outline has to be rebuilt — so it costs no extra I/O and keeps no second copy of the
+page, and it is written only for a **material** change: the title moved, or at least
+`capture.change_min_words` word positions differ (a replaced word counts once) with an average length
+above `capture.change_min_word_length` (defaults 10 and 5). A first read is an arrival, not a change;
+an unchanged check never touches the file; a ticked counter or a typo updates the snapshot and the
+outline but leaves the record — and the change time — alone, and the source log says so. A
+**title-only** change replaces an older body diff with `Body: unchanged.`: the record is always about
+the last material change, and the `Words:` line names the measurement that made it one. The diff is
+line based (a reflow of a material change therefore shows), capped at 2000 lines / 256 KiB with a
+closing note, and the record is a **record**: the bytes it compares are gone once the new snapshot is
+written, so it cannot be rebuilt. It is served by
+`GET /api/v1/sources/{hash}/raw?which=.changes.md` and shown in the **Changes** tab; it goes away with
+the source.
 
 ## 4. Sources
 
@@ -622,7 +659,7 @@ sources_seen_at: 2026-11-07T09:30:00.456Z
   scope for every client; no client id, token or per-device file exists. That is what keeps a source
   the phone has seen from being new on the desktop.
 - **Each watermark only moves forward**, and only when something happened later: an arrival, or a
-  page whose readable content actually changed. It lands on the newest ACTIVITY — the same instant
+  page whose readable content materially changed. It lands on the newest ACTIVITY — the same instant
   the Sources list orders by (the change time when there is one, otherwise the arrival). An
   acknowledgment with nothing later writes nothing and announces nothing.
 - **A legacy record seeds both scopes.** An older file with a single `seen_at` is read as the value

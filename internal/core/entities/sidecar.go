@@ -37,6 +37,12 @@ const (
 	SidecarSummary = ".summary.md"
 	// SidecarLog is the source's own log (everything that was done to it).
 	SidecarLog = ".log"
+	// SidecarChanges is the record of the LAST change of a URL page: when it changed, its title
+	// before and after, and a unified diff of the readable body. It is a RECORD, not a derived file:
+	// the bytes it compares are gone once the refresh wrote the new snapshot, so it cannot be
+	// rebuilt. It is what the Changes tab shows; a vault under git ignores it, because the snapshot
+	// itself already carries that diff in the history.
+	SidecarChanges = ".changes.md"
 )
 
 // SidecarRenderLegacy is the rendering's first name ("<hash>.text.md"). It is not written any more,
@@ -50,9 +56,9 @@ const SidecarRenderLegacy = ".text.md"
 // beside it (objects.parseObject), so it must never be skipped on its name alone.
 var SidecarRenderRenames = []string{SidecarRenderLegacy, ".md"}
 
-// SidecarSuffixes lists every derived file of a source, in the order they appear in its life.
+// SidecarSuffixes lists every file of a source, in the order they appear in its life.
 func SidecarSuffixes() []string {
-	return []string{SidecarRender, SidecarMeta, SidecarOutline, SidecarSummary, SidecarLog}
+	return []string{SidecarRender, SidecarMeta, SidecarOutline, SidecarSummary, SidecarChanges, SidecarLog}
 }
 
 // SourceRecord is what a source's <hash>.meta file holds about its DOCUMENT steps: the state of

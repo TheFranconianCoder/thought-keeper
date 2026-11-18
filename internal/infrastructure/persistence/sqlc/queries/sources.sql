@@ -196,6 +196,19 @@ UPDATE sources SET bookmark = ? WHERE hash = ?;
 -- name: ListURLSources :many
 SELECT * FROM sources WHERE kind = 'url' ORDER BY imported_at DESC;
 
+-- name: ListRefreshCandidates :many
+-- The scheduled refresh's candidate window: URL sources ordered by the last CHECK, oldest first
+-- (never checked sorts first). Which of them is DUE is decided in Go (the cadence rule lives there,
+-- once), so this query only brings the least recently checked rows to the front. An attached
+-- snapshot is excluded here: the cadence never fetches one, and its check time never advances, so
+-- left in it would sit at the top of the window forever.
+SELECT * FROM sources
+WHERE kind = 'url'
+  AND url <> ''
+  AND NOT (json_valid(meta) AND COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '') IN ('true', '1'))
+ORDER BY url_checked_at ASC, imported_at ASC
+LIMIT sqlc.arg(limit);
+
 -- name: LatestSourceByURL :one
 SELECT * FROM sources WHERE url = ? ORDER BY imported_at DESC LIMIT 1;
 

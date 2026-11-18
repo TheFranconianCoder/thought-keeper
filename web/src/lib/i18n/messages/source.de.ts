@@ -26,9 +26,17 @@ export const sourceDe: Record<string, string> = {
   'source.tabText': 'Text',
   'source.tabContent': 'Inhalt',
   'source.tabSummary': 'Zusammenfassung',
+  'source.tabChanges': 'Änderungen',
   'source.tabLog': 'Protokoll',
   'source.tabFiles': 'Dateien',
   'source.tabChildren': 'Unterquellen',
+
+  // Der Änderungsrecord: wann die Seite zuletzt anders lautete, und der Diff dieser Änderung.
+  'source.changeStrip': 'Geändert {time} — sieh, was sich geändert hat',
+  'source.changeStripTitle': 'Den Änderungsrecord öffnen',
+  'source.changeStripAction': 'Diff anzeigen',
+  'source.changesIntro':
+    'Die letzte wesentliche Änderung dieser Seite: wann sie geschah, ihr Titel vorher und nachher, wie viele Wörter sich bewegten, und ein Zeilen-Diff des lesbaren Textes. Ein tickender Zähler oder ein Tippfehler ist hier keine Änderung. Die Momentaufnahme ist der aktuelle Text — eine ältere Fassung wird nicht aufbewahrt.',
 
   // Tab „Zusammenfassung“.
   'source.summaryIntro':

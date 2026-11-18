@@ -48,6 +48,7 @@ var writableKeys = map[string]string{
 	"pipeline.parts_per_run":          TierBasic,
 	"capture.refresh_interval":        TierBasic,
 	"capture.feed_refresh_interval":   TierBasic,
+	"capture.refresh_min_gap":         TierBasic,
 	"browser.path":                    TierBasic,
 	"ocr.enabled":                     TierBasic,
 	"ocr.languages":                   TierBasic,
@@ -66,9 +67,12 @@ var writableKeys = map[string]string{
 	"pipeline.reconcile_interval": TierAdvanced,
 	"pipeline.reconcile_batch":    TierAdvanced,
 
-	// Capture: what counts as a readable page and how far a listing is walked.
-	"capture.min_text_chars":    TierAdvanced,
-	"capture.listing_max_pages": TierAdvanced,
+	// Capture: what counts as a readable page, how far a listing is walked, and what counts as a
+	// change worth telling the reader about.
+	"capture.min_text_chars":         TierAdvanced,
+	"capture.listing_max_pages":      TierAdvanced,
+	"capture.change_min_words":       TierAdvanced,
+	"capture.change_min_word_length": TierAdvanced,
 
 	// Cluster: step 4's arithmetic. A change applies to the next pass, never to a running one.
 	"cluster.neighbor_k":            TierAdvanced,
@@ -197,6 +201,7 @@ var durationRules = map[string]struct {
 	"pipeline.debounce":             {allowEmpty: true},
 	"capture.refresh_interval":      {allowEmpty: true},
 	"capture.feed_refresh_interval": {allowEmpty: true},
+	"capture.refresh_min_gap":       {allowEmpty: true},
 	"pipeline.reconcile_interval":   {allowEmpty: true},
 	"assistant.prune_interval":      {allowEmpty: true},
 	"ocr.timeout":                   {allowEmpty: true},
@@ -231,9 +236,12 @@ var intRules = map[string]int64{
 	"assistant.scan_limit":          1,
 	"capture.min_text_chars":        1,
 	"capture.listing_max_pages":     1,
-	"pdf.max_bytes":                 1,
-	"fetch.max_bytes":               1,
-	"ocr.dpi":                       1,
+	// Zero is meaningful: the rule is off (any difference is a material change).
+	"capture.change_min_words":       0,
+	"capture.change_min_word_length": 0,
+	"pdf.max_bytes":                  1,
+	"fetch.max_bytes":                1,
+	"ocr.dpi":                        1,
 
 	// Zero is meaningful here: no heap ceiling, no page ceiling, no minimum text per page.
 	"app.memory_limit_mb":         0,

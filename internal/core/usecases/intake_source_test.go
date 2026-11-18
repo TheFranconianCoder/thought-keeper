@@ -446,6 +446,28 @@ func (f *fakeIndex) ListURLSources(context.Context) ([]entities.Source, error) {
 	return out, nil
 }
 
+// ListRefreshCandidates mirrors the index's order: the least recently checked first. The due rule
+// (which also skips an attached snapshot) is the use case's, so this fake does not repeat it.
+func (f *fakeIndex) ListRefreshCandidates(_ context.Context, limit int) ([]entities.Source, error) {
+	var out []entities.Source
+	for _, s := range f.m {
+		if s.Kind != entities.SourceKindURL {
+			continue
+		}
+		out = append(out, s)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].URLChecked.Equal(out[j].URLChecked) {
+			return out[i].ImportedAt.Before(out[j].ImportedAt)
+		}
+		return out[i].URLChecked.Before(out[j].URLChecked)
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 func TestIntakeStoresAndDedupes(t *testing.T) {
 	ctx := context.Background()
 	store := objects.New(t.TempDir())

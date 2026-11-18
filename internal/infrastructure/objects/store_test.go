@@ -118,7 +118,7 @@ func TestSidecarPathIsTheSameShardingAsTheObject(t *testing.T) {
 		t.Fatalf("put: %v", err)
 	}
 	objectPath := filepath.Join(dir, filepath.FromSlash(obj.Path))
-	for _, suffix := range []string{entities.SidecarRender, entities.SidecarMeta, entities.SidecarOutline, entities.SidecarSummary, entities.SidecarLog} {
+	for _, suffix := range []string{entities.SidecarRender, entities.SidecarMeta, entities.SidecarOutline, entities.SidecarSummary, entities.SidecarChanges, entities.SidecarLog} {
 		side := SidecarPath(dir, obj.Hash, suffix)
 		if filepath.Dir(side) != filepath.Dir(objectPath) {
 			t.Errorf("%s lives in %s, the object in %s", suffix, filepath.Dir(side), filepath.Dir(objectPath))
@@ -142,7 +142,7 @@ func TestRemoveSidecarsTakesTheWholeStory(t *testing.T) {
 	if err := store.PutRendered(obj.Hash, entities.SidecarRender, []byte("# rendering")); err != nil {
 		t.Fatal(err)
 	}
-	for _, suffix := range []string{entities.SidecarMeta, entities.SidecarOutline, entities.SidecarSummary, entities.SidecarLog, entities.SidecarLog + ".1"} {
+	for _, suffix := range []string{entities.SidecarMeta, entities.SidecarOutline, entities.SidecarSummary, entities.SidecarChanges, entities.SidecarLog, entities.SidecarLog + ".1"} {
 		if err := os.WriteFile(SidecarPath(dir, obj.Hash, suffix), []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -151,7 +151,7 @@ func TestRemoveSidecarsTakesTheWholeStory(t *testing.T) {
 	if err := store.RemoveSidecars(obj.Hash, obj.Ext); err != nil {
 		t.Fatalf("remove sidecars: %v", err)
 	}
-	for _, suffix := range []string{entities.SidecarRender, entities.SidecarMeta, entities.SidecarOutline, entities.SidecarSummary, entities.SidecarLog, entities.SidecarLog + ".1"} {
+	for _, suffix := range []string{entities.SidecarRender, entities.SidecarMeta, entities.SidecarOutline, entities.SidecarSummary, entities.SidecarChanges, entities.SidecarLog, entities.SidecarLog + ".1"} {
 		if _, err := os.Stat(SidecarPath(dir, obj.Hash, suffix)); !os.IsNotExist(err) {
 			t.Errorf("sidecar %s survived the deletion", suffix)
 		}

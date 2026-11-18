@@ -561,6 +561,72 @@ func (q *Queries) ListRecentContentSources(ctx context.Context, arg ListRecentCo
 	return items, nil
 }
 
+const listRefreshCandidates = `-- name: ListRefreshCandidates :many
+SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from, url_changed_at FROM sources
+WHERE kind = 'url'
+  AND url <> ''
+  AND NOT (json_valid(meta) AND COALESCE(CAST(json_extract(meta, '$.attached') AS TEXT), '') IN ('true', '1'))
+ORDER BY url_checked_at ASC, imported_at ASC
+LIMIT ?1
+`
+
+// The scheduled refresh's candidate window: URL sources ordered by the last CHECK, oldest first
+// (never checked sorts first). Which of them is DUE is decided in Go (the cadence rule lives there,
+// once), so this query only brings the least recently checked rows to the front. An attached
+// snapshot is excluded here: the cadence never fetches one, and its check time never advances, so
+// left in it would sit at the top of the window forever.
+func (q *Queries) ListRefreshCandidates(ctx context.Context, limit int64) ([]Source, error) {
+	rows, err := q.db.QueryContext(ctx, listRefreshCandidates, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Source
+	for rows.Next() {
+		var i Source
+		if err := rows.Scan(
+			&i.ID,
+			&i.Hash,
+			&i.Kind,
+			&i.Ext,
+			&i.Path,
+			&i.Url,
+			&i.Title,
+			&i.OriginalName,
+			&i.Bytes,
+			&i.Pages,
+			&i.TreeState,
+			&i.Steps,
+			&i.UrlStatus,
+			&i.UrlCheckedAt,
+			&i.Bookmark,
+			&i.ImportedAt,
+			&i.Meta,
+			&i.Tags,
+			&i.AutoTags,
+			&i.AutoTagsAt,
+			&i.FavoriteAt,
+			&i.ReadLaterAt,
+			&i.ReadLaterDoneAt,
+			&i.ReadLaterManual,
+			&i.ReadLaterVia,
+			&i.PublishedAt,
+			&i.PublishedFrom,
+			&i.UrlChangedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSourceActivityRoots = `-- name: ListSourceActivityRoots :many
 SELECT id, hash, kind, ext, path, url, title, original_name, bytes, pages, tree_state, steps, url_status, url_checked_at, bookmark, imported_at, meta, tags, auto_tags, auto_tags_at, favorite_at, read_later_at, read_later_done_at, read_later_manual, read_later_via, published_at, published_from, url_changed_at FROM sources root
 WHERE root.id IN (

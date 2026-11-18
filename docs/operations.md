@@ -52,7 +52,7 @@ sync when a knob changes. Sections:
 | `pipeline` | auto, auto_distill, debounce, run/cluster timeouts, parts per run, parallel parts/runs/queries, auto_continue, reconcile interval/batch |
 | `cluster` | the quality gates of the claim graph (no model) |
 | `assistant` | command `retention` (`168h`), `prune_interval` (`24h`), `max_items` per materialized set, `scan_limit` per resolution |
-| `capture` | URL dedupe, refresh interval (default `168h` — weekly for pages/sitemaps), feed/listing interval (default `24h` — daily), `min_text_chars`, `listing_max_pages` (default 100 — the initial walk of a listing's pagination) |
+| `capture` | URL dedupe, refresh interval (default `168h` — weekly for pages/sitemaps), feed/listing interval (default `24h` — daily), `refresh_min_gap` (default `1m` — the scheduled refresh fetches at most one page per gap; empty or `0s` = a burst), `min_text_chars`, `listing_max_pages` (default 100 — the initial walk of a listing's pagination), `change_min_words` / `change_min_word_length` (default 10 / 5 — how many words a page change must move, and how long they must be on average, to count as an event; `0` words = every difference counts) |
 | `fetch` | timeout, max bytes, user agent, `allow_private` (SSRF guard) |
 | `browser` | the OPTIONAL local renderer: `path` (empty = `lightpanda` from PATH), `timeout`, `wait`, `wait_until` (default `networkidle` — `load` dumps the shell of a single-page app), `load_stylesheets`, `obey_robots` |
 | `pdf` | text tool, max bytes, max pages |
@@ -187,7 +187,10 @@ task hooks             # lefthook install
 `task audit` builds a CycloneDX SBOM with `syft`, scans it with `grype` (configured in
 `.grype.yaml`; fails on high and critical findings) and checks dependency licenses against
 `.grant.yaml` with `grant`. The tool versions are pinned in `mise.toml`; `mise install` provisions
-them.
+them. A finding is tolerated only through an `ignore` rule in `.grype.yaml` scoped to the advisory
+ID (and the package, where that narrows it) with its reason written next to it — a withdrawn
+advisory or an unreachable fix is the usual case. The stale-database rule of thumb: refresh the
+database before adding an ignore, and delete the ignore once the finding is gone.
 
 ### Releases
 
@@ -356,10 +359,14 @@ given commit.
   `capture.listing_max_pages` and followed once, on capture.
 - **Pages and sitemaps are refreshed weekly, feeds and listings daily.**
   `capture.refresh_interval: '168h'` is the cadence one page or sitemap may be revisited;
-  `capture.feed_refresh_interval: '24h'` is the cadence of a feed's item list and of a listing (the
-  worker looks for due sources every hour); either empty means manual only for that kind. The cadence is stored per source (`url_checked_at`), so restarting the app neither
-  postpones nor doubles a refresh. A manual pass — `POST /api/v1/refresh-urls` — ignores it and checks
-  everything now; the **Refresh** button (or `POST /api/v1/sources/{hash}/refresh`) checks ONE source
+  `capture.feed_refresh_interval: '24h'` is the cadence of a feed's item list and of a listing;
+  either empty means manual only for that kind. The cadence is stored per source
+  (`url_checked_at`), so restarting the app neither postpones nor doubles a refresh. The **pace** is
+  `capture.refresh_min_gap` (default `1m`): the scheduled worker fetches at most one due page per
+  gap — the one that has waited longest — so a sweep over N sources takes N × gap (empty or `0s`
+  restores the burst: every due source in one pass). A manual pass — `POST /api/v1/refresh-urls` —
+  ignores both and checks everything now; the **Refresh** button (or
+  `POST /api/v1/sources/{hash}/refresh`) checks ONE source
   now, under the exclusive side of the gate: it replaces the snapshot and resets the derivation, so
   it waits for the document steps like any other rewrite of the vault. A source with a **human-supplied snapshot** is not fetched by the cadence; the source page can
   **Try the URL again** (`POST /api/v1/sources/{hash}/refetch`), which replaces it only when the page

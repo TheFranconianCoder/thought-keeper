@@ -240,6 +240,7 @@ func TestDescribeNamesKindsAndApplyBehaviour(t *testing.T) {
 		restart bool
 	}{
 		{"capture.refresh_interval", "duration", false},
+		{"capture.refresh_min_gap", "duration", false},
 		{"pipeline.auto_distill", "bool", false},
 		{"pipeline.auto", "bool", false},
 		{"vault.root", "path", true},

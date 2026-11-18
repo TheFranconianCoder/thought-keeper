@@ -1024,6 +1024,25 @@ func (r *SourceRepository) ListURLSources(ctx context.Context) ([]entities.Sourc
 	return out, nil
 }
 
+// ListRefreshCandidates returns the URL sources the scheduled refresh may look at, least recently
+// checked first. Which of them is DUE is the use case's decision (one predicate, next to the
+// cadences); the index only answers "what has waited longest". Attached snapshots are excluded here
+// because their check time never advances, so they would otherwise occupy the front forever.
+func (r *SourceRepository) ListRefreshCandidates(ctx context.Context, limit int) ([]entities.Source, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	rows, err := r.q.ListRefreshCandidates(ctx, int64(limit))
+	if err != nil {
+		return nil, fmt.Errorf("list refresh candidates: %w", err)
+	}
+	out := make([]entities.Source, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, toEntity(row))
+	}
+	return out, nil
+}
+
 // ListSourceLinks resolves existing URLs to the sources that own them. One query for the whole set:
 // a rendered page asks once for all its links, never once per link. The caller passes candidate raw
 // forms and matches by URL key, because the stored address and the link may differ in a fragment or

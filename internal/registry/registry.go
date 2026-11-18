@@ -311,6 +311,7 @@ func Build(
 		Favicons: faviconStore, Steps: steps, Languages: languages, SourceLog: sourceLog,
 		Clock: clock, Log: log, MinTextChars: cfg.Capture.MinTextChars,
 		MinAge: refreshMinAge, FeedMinAge: feedRefreshMinAge,
+		ChangeMinWords: cfg.Capture.ChangeMinWords, ChangeMinWordLength: cfg.Capture.ChangeMinWordLength,
 		// A sitemap is a complete list: a page that left it is deleted by its owner. A feed never
 		// deletes; the same use case decides from the parent's marker.
 		Delete: sources.DeleteOwned,

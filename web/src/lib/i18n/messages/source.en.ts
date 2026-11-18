@@ -26,9 +26,17 @@ export const sourceEn: Record<string, string> = {
   'source.tabText': 'Text',
   'source.tabContent': 'Content',
   'source.tabSummary': 'Summary',
+  'source.tabChanges': 'Changes',
   'source.tabLog': 'Log',
   'source.tabFiles': 'Files',
   'source.tabChildren': 'Sub-sources',
+
+  // The change record: the last time the page changed, and the diff of that change.
+  'source.changeStrip': 'Changed {time} — see what changed',
+  'source.changeStripTitle': 'Open the change record',
+  'source.changeStripAction': 'Show diff',
+  'source.changesIntro':
+    'The last material change of this page: when it happened, its title before and after, how many words moved, and a line diff of the readable text. A ticking counter or a typo is not a change here. The snapshot is the current text — an older version is not kept.',
 
   // Summary tab.
   'source.summaryIntro':

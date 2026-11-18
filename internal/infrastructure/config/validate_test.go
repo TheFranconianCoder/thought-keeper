@@ -56,6 +56,10 @@ func TestKeyProblemAcceptsWhatTheAppCanUse(t *testing.T) {
 		{"pipeline.run_timeout", "0s"},
 		{"pipeline.reconcile_interval", ""},
 		{"assistant.prune_interval", ""},
+		{"capture.refresh_min_gap", "0s"},
+		{"capture.refresh_min_gap", ""},
+		{"capture.change_min_words", 0},
+		{"capture.change_min_word_length", 0},
 		{"pdf.max_pages", 0},
 		{"ocr.max_pages", 0},
 		{"app.memory_limit_mb", 0},
@@ -91,6 +95,10 @@ func TestKeyProblemRefusesValuesThatDefaultsWouldMask(t *testing.T) {
 		{"browser.wait_until", "whenever"},
 		{"pipeline.run_timeout", "ten minutes"},
 		{"openai.reasoning_effort_reason", "maximal"},
+		{"capture.refresh_min_gap", "soon"},
+		{"capture.refresh_min_gap", "-1m"},
+		{"capture.change_min_words", -1},
+		{"capture.change_min_word_length", -3},
 	} {
 		if problem := keyProblem(tc.key, tc.value); problem == "" {
 			t.Errorf("%s = %v: accepted, want a problem", tc.key, tc.value)

@@ -711,7 +711,7 @@ func (h SourcesHandler) Raw(w http.ResponseWriter, r *http.Request) {
 			suffix = "." + suffix
 		}
 		switch suffix {
-		case entities.SidecarMeta, entities.SidecarOutline, entities.SidecarSummary, entities.SidecarLog:
+		case entities.SidecarMeta, entities.SidecarOutline, entities.SidecarSummary, entities.SidecarChanges, entities.SidecarLog:
 			open = func(ctx context.Context, hash string) (io.ReadCloser, string, string, error) {
 				return h.Sidecar(ctx, hash, suffix)
 			}

@@ -141,6 +141,17 @@ capture:                                   # URL sources
     feed_refresh_interval: '24h'           # how often ONE RSS/Atom feed (its item list) and ONE
                                            # listing (a blog index) are checked (daily); empty =
                                            # they are not refreshed automatically
+    refresh_min_gap: '1m'                  # the scheduled refresh fetches at most one page per gap:
+                                           # the cadence above stays a source's minimum age, this is
+                                           # the throughput (a sweep over N pages takes N × gap);
+                                           # empty or '0s' = every due page in one burst
+    change_min_words: 10                   # a refresh always writes the new snapshot; only a change
+                                           # of at least this many WORD positions marks the source
+                                           # updated and writes the change record (a replaced word
+                                           # counts once); 0 = every difference counts
+    change_min_word_length: 5              # ...and those changed words must average longer than
+                                           # this many characters, so "Updated 4 minutes ago" stays
+                                           # quiet while prose does not
     min_text_chars: 400                    # below this a page becomes a bookmark
                                            # (video/app), never distilled; a login,
                                            # paywall or consent wall is BLOCKED instead

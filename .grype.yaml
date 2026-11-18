@@ -2,3 +2,19 @@ output:
   - template
 output-template-file: .grype/table.tmpl
 fail-on-severity: high
+
+# Ignored vulnerabilities. Each rule names WHY it is tolerated, so the next reader can re-judge it
+# instead of trusting a bare suppression.
+ignore:
+  # GHSA-fc5q-39xc-vjpf (CVE-2026-112366, picomatch ReDoS) was WITHDRAWN by the GitHub Advisory
+  # Database on 2026-11-18: upstream says the reported behavior is not a security issue
+  # (micromatch/picomatch#235). There is no patched release — 4.0.7 is the latest — and the package
+  # is a dev-only transitive dependency (svelte-check → fdir), never shipped in the PWA or the
+  # binary. A vulnerability database refreshed after the withdrawal should stop reporting it; this
+  # rule only keeps a stale database from failing the audit. Re-check it when the database is
+  # updated, and delete it once the finding is gone.
+  - vulnerability: GHSA-fc5q-39xc-vjpf
+    include-aliases: true
+    package:
+      name: picomatch
+    reason: withdrawn advisory, no patched release, dev-only dependency

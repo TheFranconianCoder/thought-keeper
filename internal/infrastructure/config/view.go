@@ -369,6 +369,7 @@ var durationKeys = map[string]bool{
 	"browser.wait":             true,
 	"ocr.timeout":              true,
 	"fetch.timeout":            true,
+	"capture.refresh_min_gap":  true,
 }
 
 func isDurationKey(key string) bool {

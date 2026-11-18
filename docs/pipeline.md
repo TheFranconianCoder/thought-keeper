@@ -165,10 +165,17 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   link exactly as it was.
 - **A page or sitemap is refreshed once a week, a feed and a listing once a day**
   (`capture.refresh_interval: '168h'`, `capture.feed_refresh_interval: '24h'`), manually at any time. The cadence belongs to the
-  source (`url_checked_at`), not to the process. Attached sources are not fetched by the cadence; an
-  explicit refetch may try one, and a walled normal source is attempted again on the same cadence,
-  because it may become readable. A bookmark is not re-read automatically: it is a collected link
-  until the reader says "try the page again".
+  source (`url_checked_at`), not to the process. The cadence is a source's **minimum age**; the
+  **throughput** is `capture.refresh_min_gap` (default `'1m'`, empty or `0s` = a burst): the scheduled
+  worker fetches at most one due page per gap, the one that has waited longest, chosen by the index
+  and judged due by one predicate in the refresher. A sweep over N sources therefore takes N × gap,
+  which is the price of being polite to the sites (and of a small machine); the manual
+  `POST /api/v1/refresh-urls` and the per-source refresh ignore the gap and act at once. Attached
+  sources are not fetched by the cadence; an explicit refetch may try one, and a walled normal source
+  is attempted again on the same cadence, because it may become readable. A bookmark is not re-read
+  automatically: it is a collected link until the reader says "try the page again". A pass that runs
+  out of time stops where it is: the sources it did not reach keep their old check time, so the next
+  pass finds them still due.
 - **A changed page is not a new source.** When a refresh writes different text — a normal page, a
   feed copy replaced by its page, or a wall that cleared — the snapshot is replaced and the **outline
   is rebuilt** under the exclusive gate. The rebuild keeps the derivation: a node whose text is
@@ -176,8 +183,20 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   new node is derived. "Unchanged" has two tolerances: a reflow keeps the normalized text hash, and
   otherwise a part keeps its claims while at least 99 % of its words survive (a typo fix, or one
   changed word in a long paragraph). A paragraph where more changed is derived again. A title change
-  alone replaces the snapshot and touches no claim. A **human-attached** snapshot is still a full reset:
-  the human replaced the bytes by hand, and the new bytes are the reader's own answer.
+  alone replaces the snapshot and touches no claim.
+- **Only a MATERIAL change is an event.** The snapshot and the outline always follow the bytes, but
+  the change time, the **updated** mark, the change record and the cluster pass are reserved for a
+  change a reader would notice: the title moved, or at least `capture.change_min_words` word
+  positions differ (a replaced word counts once) and those words average more than
+  `capture.change_min_word_length` characters (defaults 10 and 5). A ticking date, a view counter, a
+  typo or a reflow is therefore a `changed` without a `material`: the source log says so, the row
+  stays quiet, and the vault is current. `capture.change_min_words: 0` turns the rule off. The
+  refresh writes **`<hash>.changes.md`** for a material change only: the time, the title before and
+  after, the measurement, and a unified diff of the readable body (see `docs/storage.md` §3a), which
+  the source page shows in its **Changes** tab. A
+  **human-attached** snapshot is still a full reset and always an event: the human replaced the bytes
+  by hand, and the new bytes are the reader's own answer — the record says what the attachment
+  replaced.
 - PDF: extract the text layer with poppler; OCR a page that has none (`pdftocairo` + `tesseract`).
   Write the readable rendering to `sources/<ab>/<cd>/<hash>.capture.md`, with one
   `<!--part …-->` marker per part.

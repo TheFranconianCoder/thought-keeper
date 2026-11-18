@@ -244,8 +244,14 @@ type ReindexResult struct {
 // RefreshResult is the response of POST /api/v1/refresh-urls.
 type RefreshResult struct {
 	Checked int `json:"checked"`
+	// Changed counts pages whose readable content differs from the stored snapshot: the snapshot is
+	// replaced in every one of them.
 	Changed int `json:"changed"`
-	Failed  int `json:"failed"`
+	// Material counts the changes worth telling the reader about (enough words, long enough on
+	// average, or a new title). Only a material change moves the change time and writes the record;
+	// a ticking date or a view counter is a Changed without a Material.
+	Material int `json:"material,omitempty"`
+	Failed   int `json:"failed"`
 	// Blocked counts pages that answered with a wall (a login, a paywall, a consent gate): the source
 	// is fine, the site is not answering with itself.
 	Blocked int `json:"blocked,omitempty"`
