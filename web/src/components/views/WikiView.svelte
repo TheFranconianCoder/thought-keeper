@@ -19,6 +19,7 @@
   import ListHead from '../ui/ListHead.svelte';
   import VirtualList from '../ui/VirtualList.svelte';
   import type { WikiSummary } from '../../lib/api/types';
+  import { tooltip } from '../../lib/tooltip.svelte';
 
   const route = $derived(router.current);
   const isNew = $derived(route.view === 'wiki' && route.id === 'new');
@@ -239,7 +240,7 @@
             class="chip"
             class:chip--accent={favoriteOnly}
             aria-pressed={favoriteOnly}
-            title={t('wiki.favoritesTitle')}
+            use:tooltip={t('wiki.favoritesTitle')}
             onclick={toggleFavoriteFilter}
           >
             <Icon name="star" size={12} /> {t('wiki.favorites')}<span class="chip-count">{n(favoriteCount)}</span>
@@ -307,7 +308,7 @@
             <button
               class="page-item"
               class:active={selected?.id === page.id}
-              title={whyFor(page.id)}
+              use:tooltip={whyFor(page.id)}
               onclick={() => navigate(wikiPath(page.id))}
             >
               <span class="page-title">
@@ -330,7 +331,7 @@
 
   {#if detailOpen}
     <div class="wiki-main">
-      <button class="btn btn--ghost btn--sm back-btn" title={t('wiki.backAll')} onclick={backToList}>
+      <button class="btn btn--ghost btn--sm back-btn" use:tooltip={t('wiki.backAll')} onclick={backToList}>
         <Icon name="arrowLeft" size={15} /> <span>{t('common.back')}</span>
       </button>
 
@@ -401,7 +402,7 @@
                 class="btn btn--primary btn--action"
                 type="submit"
                 disabled={saving}
-                title={saving ? t('wiki.saving') : t('wiki.savePage')}
+                use:tooltip={saving ? t('wiki.saving') : t('wiki.savePage')}
               >
                 {#if saving}<span class="spinner"></span>{:else}<Icon name="check" size={14} />{/if}
                 <span class="btn-label">{saving ? t('wiki.saving') : t('wiki.savePage')}</span>
@@ -409,7 +410,7 @@
               <button
                 class="btn btn--ghost btn--action"
                 type="button"
-                title={t('common.cancel')}
+                use:tooltip={t('common.cancel')}
                 onclick={cancel}
               >
                 <Icon name="close" size={14} /> <span class="btn-label">{t('common.cancel')}</span>
@@ -443,7 +444,7 @@
                 <button
                   class="btn btn--secondary btn--sm btn--action"
                   class:active={!!selected.favorite_at}
-                  title={selected.favorite_at ? t('wiki.unfavorite') : t('wiki.favorite')}
+                  use:tooltip={selected.favorite_at ? t('wiki.unfavorite') : t('wiki.favorite')}
                   aria-pressed={!!selected.favorite_at}
                   onclick={() => void toggleWikiFavorite(selected!.id, !selected.favorite_at)}
                 >
@@ -452,7 +453,7 @@
                 {#if selected.source_hash}
                   <button
                     class="btn btn--secondary btn--sm btn--action"
-                    title={t('wiki.openSource')}
+                    use:tooltip={t('wiki.openSource')}
                     onclick={() => openSource(selected!.source_hash!)}
                   >
                     <Icon name="sources" size={13} /> <span class="btn-label">{t('wiki.openSource')}</span>
@@ -460,14 +461,14 @@
                 {/if}
                 <button
                   class="btn btn--secondary btn--sm btn--action"
-                  title={t('wiki.edit')}
+                  use:tooltip={t('wiki.edit')}
                   onclick={startEdit}
                 >
                   <Icon name="edit" size={13} /> <span class="btn-label">{t('wiki.edit')}</span>
                 </button>
                 <button
                   class="btn btn--danger btn--sm btn--action"
-                  title={t('common.delete')}
+                  use:tooltip={t('common.delete')}
                   onclick={() => deleteWikiPage(selected!.id)}
                 >
                   <Icon name="trash" size={13} /> <span class="btn-label">{t('common.delete')}</span>
@@ -483,7 +484,7 @@
                 {#each selected.auto_tags ?? [] as tag (tag)}
                   <button
                     class="chip"
-                    title={t('wiki.autoTagTitle')}
+                    use:tooltip={t('wiki.autoTagTitle')}
                     onclick={() => chooseTag(tag)}>{tag}<span class="auto-mark">{t('wiki.autoTag')}</span></button
                   >
                 {/each}

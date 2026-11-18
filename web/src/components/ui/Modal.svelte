@@ -1,5 +1,7 @@
 <script lang="ts">
   import { tick, type Snippet } from 'svelte';
+  import { t } from '../../lib/i18n/index.svelte';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import Icon from './Icon.svelte';
 
   interface Props {
@@ -71,7 +73,7 @@
             {#if title}<h2>{title}</h2>{/if}
             {#if description}<p>{description}</p>{/if}
           </div>
-          <button class="icon-btn" title="Close" onclick={onClose}><Icon name="close" /></button>
+          <button class="icon-btn" use:tooltip={t('common.close')} aria-label={t('common.close')} onclick={onClose}><Icon name="close" /></button>
         </header>
       {/if}
       <div class="dialog-body">

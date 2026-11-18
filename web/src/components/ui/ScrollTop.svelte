@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '../../lib/i18n/index.svelte';
   import { scrollToTop, scrollTop } from '../../lib/scroll-top.svelte';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import Icon from './Icon.svelte';
 </script>
 
@@ -10,7 +11,7 @@
 {#if scrollTop.visible}
   <button
     class="scroll-top"
-    title={t('common.scrollTop')}
+    use:tooltip={t('common.scrollTop')}
     aria-label={t('common.scrollTop')}
     onclick={scrollToTop}
   >

@@ -24,6 +24,7 @@
   import { interests } from '../../lib/stores/interests.svelte';
   import { countsOf, canAttachSnapshot, canRefreshSource, progressOf, statusLabel } from '../../lib/source-state';
   import type { InterestMatch, SourceNode, SourceTopic } from '../../lib/api/types';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import CopyId from '../ui/CopyId.svelte';
   import Icon from '../ui/Icon.svelte';
   import Frontmatter from '../ui/Frontmatter.svelte';
@@ -488,14 +489,14 @@
       <div class="source-error-actions">
         <button
           class="btn btn--primary btn--sm btn--action"
-          title={t('common.retry')}
+          use:tooltip={t('common.retry')}
           onclick={() => void sources.refresh(hash)}
         >
           <Icon name="refresh" size={13} /> <span class="btn-label">{t('common.retry')}</span>
         </button>
         <button
           class="btn btn--secondary btn--sm btn--action"
-          title={t('source.backToSources')}
+          use:tooltip={t('source.backToSources')}
           onclick={backToSources}
         >
           <Icon name="arrowLeft" size={13} /> <span class="btn-label">{t('source.backToSources')}</span>
@@ -505,7 +506,7 @@
       <header class="source-head">
         <button
           class="icon-btn"
-          title={t('source.backToSources')}
+          use:tooltip={t('source.backToSources')}
           aria-label={t('source.backToSources')}
           onclick={backToSources}
         >
@@ -528,7 +529,7 @@
               {@const viaSlug = (selected.read_later_via ?? []).find((slug) => !!interests.bySlug(slug))!}
               <button
                 class="chip chip--interest"
-                title={t('source.queuedByInterests')}
+                use:tooltip={t('source.queuedByInterests')}
                 onclick={() => navigate(`#/sources?readlater=1&interest=${encodeURIComponent(viaSlug)}`)}
               >
                 <Icon name="target" size={10} /> {interests.nameOf(viaSlug)}
@@ -540,7 +541,7 @@
           <button
             class="btn btn--secondary btn--sm btn--action"
             class:active={!!selected.favorite_at}
-            title={selected.favorite_at ? t('source.unfavorite') : t('source.favorite')}
+            use:tooltip={selected.favorite_at ? t('source.unfavorite') : t('source.favorite')}
             aria-pressed={!!selected.favorite_at}
             onclick={() => void toggleFavorite(selected!.hash, !selected.favorite_at)}
           >
@@ -549,7 +550,7 @@
           <button
             class="btn btn--secondary btn--sm btn--action"
             class:active={!!selected.read_later}
-            title={selected.read_later ? t('source.markDone') : t('source.readLaterAction')}
+            use:tooltip={selected.read_later ? t('source.markDone') : t('source.readLaterAction')}
             aria-pressed={!!selected.read_later}
             onclick={() => void toggleReadLater(selected!.hash, !selected.read_later)}
           >
@@ -557,7 +558,7 @@
           </button>
           <button
             class="btn btn--primary btn--sm btn--action"
-            title={t('source.ask')}
+            use:tooltip={t('source.ask')}
             onclick={() => navigate(askSourcePath(selected!.hash))}
           >
             <Icon name="ask" size={13} /> <span class="btn-label">{t('source.ask')}</span>
@@ -568,7 +569,7 @@
               href={selected.url}
               target="_blank"
               rel="noopener noreferrer"
-              title={t('source.openUrl')}
+              use:tooltip={t('source.openUrl')}
             >
               <Icon name="external" size={13} /> <span class="btn-label">{t('source.openUrl')}</span>
             </a>
@@ -576,7 +577,7 @@
           {#if selected.rss || selected.sitemap || selected.listing}
             <button
               class="btn btn--secondary btn--sm btn--action"
-              title={t('source.refresh')}
+              use:tooltip={t('source.refresh')}
               onclick={() => void refreshSource(selected!.hash)}
             >
               <Icon name="refresh" size={13} /> <span class="btn-label">{t('source.refresh')}</span>
@@ -585,7 +586,7 @@
             {#if canRefreshSource(selected)}
               <button
                 class="btn btn--secondary btn--sm btn--action"
-                title={t('source.refreshPage')}
+                use:tooltip={t('source.refreshPage')}
                 onclick={() => void refreshSource(selected!.hash)}
               >
                 <Icon name="refresh" size={13} /> <span class="btn-label">{t('source.refresh')}</span>
@@ -593,7 +594,7 @@
             {:else}
               <button
                 class="btn btn--secondary btn--sm btn--action"
-                title={t('source.capture')}
+                use:tooltip={t('source.capture')}
                 onclick={() => void captureSource(selected!.hash)}
               >
                 <Icon name="capture" size={13} /> <span class="btn-label">{t('source.capture')}</span>
@@ -601,21 +602,21 @@
             {/if}
             <button
               class="btn btn--secondary btn--sm btn--action"
-              title={t('source.outline')}
+              use:tooltip={t('source.outline')}
               onclick={() => void rebuildSourceTree(selected!.hash)}
             >
               <Icon name="tree" size={13} /> <span class="btn-label">{t('source.outline')}</span>
             </button>
             <button
               class="btn btn--primary btn--sm btn--action"
-              title={t('source.distill')}
+              use:tooltip={t('source.distill')}
               onclick={() => void distillSource(selected!.hash)}
             >
               <Icon name="distill" size={13} /> <span class="btn-label">{t('source.distill')}</span>
             </button>
             <button
               class="btn btn--secondary btn--sm btn--action"
-              title={t('source.reset')}
+              use:tooltip={t('source.reset')}
               onclick={() => void resetSource(selected!.hash)}
             >
               <Icon name="reset" size={13} /> <span class="btn-label">{t('source.reset')}</span>
@@ -624,7 +625,7 @@
           {#if !selected.origin && !selected.original_name?.startsWith('wiki:')}
             <button
               class="btn btn--danger btn--sm btn--action"
-              title={t('common.delete')}
+              use:tooltip={t('common.delete')}
               onclick={() => void deleteSource(selected!.hash)}
             >
               <Icon name="trash" size={13} /> <span class="btn-label">{t('common.delete')}</span>
@@ -634,7 +635,7 @@
                carries the one-tap way down to it, at the far end of the actions. -->
           <button
             class="icon-btn source-head-jump"
-            title={t('source.jumpToDetails')}
+            use:tooltip={t('source.jumpToDetails')}
             aria-label={t('source.jumpToDetails')}
             onclick={jumpToDetails}
           >
@@ -649,7 +650,7 @@
         <button
           class="change-strip"
           onclick={() => setTab('changes')}
-          title={t('source.changeStripTitle')}
+          use:tooltip={t('source.changeStripTitle')}
         >
           <Icon name="clock" size={14} />
           <span>{t('source.changeStrip', { time: relTime(selected.url_changed_at) })}</span>
@@ -702,7 +703,7 @@
                   <button
                     class="btn btn--ghost btn--sm btn--action"
                     disabled={sources.summaryGenerating}
-                    title={t('source.rewriteTitle')}
+                    use:tooltip={t('source.rewriteTitle')}
                     onclick={() => void sources.generateSummary(selected!.hash)}
                   >
                     <Icon name="refresh" size={13} />
@@ -724,7 +725,7 @@
                     <button
                       class="btn btn--primary btn--sm btn--action"
                       disabled={sources.summaryGenerating}
-                      title={t('source.generateSummary')}
+                      use:tooltip={t('source.generateSummary')}
                       onclick={() => void sources.generateSummary(selected!.hash)}
                     >
                       <Icon name="spark" size={13} />
@@ -768,7 +769,7 @@
             {:else if tab === 'files'}
               {#if openFile}
                 <div class="file-head">
-                  <button class="icon-btn" title={t('source.backToFiles')} onclick={() => go({ tab: 'files' })}>
+                  <button class="icon-btn" use:tooltip={t('source.backToFiles')} aria-label={t('source.backToFiles')} onclick={() => go({ tab: 'files' })}>
                     <Icon name="chevronLeft" size={16} />
                   </button>
                   <code>{openFile.name}</code>
@@ -777,7 +778,7 @@
                   {#if isPDF && openFile.object}
                     <button
                       class="btn btn--secondary btn--sm btn--action"
-                      title={t('source.openPdf')}
+                      use:tooltip={t('source.openPdf')}
                       onclick={() => setTab('pdf')}
                     >
                       <Icon name="filePdf" size={13} /> <span class="btn-label">{t('source.openPdf')}</span>
@@ -855,7 +856,7 @@
               {/if}
             {:else if partID}
               <div class="part-head">
-                <button class="icon-btn" title={t('source.backToOutline')} onclick={() => go({ tab: 'snapshot' })}>
+                <button class="icon-btn" use:tooltip={t('source.backToOutline')} aria-label={t('source.backToOutline')} onclick={() => go({ tab: 'snapshot' })}>
                   <Icon name="chevronLeft" size={16} />
                 </button>
                 <code>{partID}</code>
@@ -866,7 +867,7 @@
                   {t('source.partGone', { error: partError })}
                   <button
                     class="btn btn--secondary btn--sm btn--action"
-                    title={t('source.showWhole')}
+                    use:tooltip={t('source.showWhole')}
                     onclick={() => go({ tab: 'snapshot' })}
                   >
                     <Icon name="eye" size={13} /> <span class="btn-label">{t('source.showWhole')}</span>
@@ -930,7 +931,7 @@
                 {#if isPDF}
                   <button
                     class="btn btn--secondary btn--sm btn--action"
-                    title={t('source.openPdf')}
+                    use:tooltip={t('source.openPdf')}
                     onclick={() => setTab('pdf')}
                   >
                     <Icon name="filePdf" size={13} /> <span class="btn-label">{t('source.openPdf')}</span>
@@ -986,7 +987,7 @@
                 <button
                   class="btn btn--secondary btn--sm btn--action"
                   disabled={attaching}
-                  title={attached ? t('source.replaceSnapshot') : t('source.attachSnapshot')}
+                  use:tooltip={attached ? t('source.replaceSnapshot') : t('source.attachSnapshot')}
                   onclick={() => attachInput?.click()}
                 >
                   <Icon name="upload" size={13} />
@@ -1002,7 +1003,7 @@
                   <button
                     class="btn btn--secondary btn--sm btn--action"
                     disabled={refetching}
-                    title={attached ? t('source.tryUrlAgain') : t('source.tryPage')}
+                    use:tooltip={attached ? t('source.tryUrlAgain') : t('source.tryPage')}
                     onclick={() => void onRefetch()}
                   >
                     <Icon name="refresh" size={13} />
@@ -1035,7 +1036,7 @@
               <span
                 class="v"
                 class:language-unknown={!selected.language}
-                title={selected.language
+                use:tooltip={selected.language
                   ? t('source.languageHint')
                   : selected.bookmark
                     ? t('source.languageBookmarkHint')
@@ -1060,7 +1061,7 @@
               <div class="kv">
                 <span class="k">{t('source.urlLabel')}</span>
                 <span class="v">
-                  <a class="rail-link" href={selected.url} target="_blank" rel="noopener noreferrer" title={selected.url}>
+                  <a class="rail-link" href={selected.url} target="_blank" rel="noopener noreferrer" use:tooltip={selected.url}>
                     {hostOf(selected.url) || selected.url}
                   </a>
                 </span>
@@ -1161,7 +1162,7 @@
               {#if !tagsEditing}
                 <button
                   class="rail-edit"
-                  title={t('source.edit')}
+                  use:tooltip={t('source.edit')}
                   aria-label={t('source.edit')}
                   onclick={beginTags}
                 >
@@ -1181,7 +1182,7 @@
                 <button
                   class="btn btn--primary btn--sm btn--action"
                   disabled={tagsSaving}
-                  title={tagsSaving ? t('source.saving') : t('source.save')}
+                  use:tooltip={tagsSaving ? t('source.saving') : t('source.save')}
                   onclick={() => void saveTags()}
                 >
                   {#if tagsSaving}<span class="spinner"></span>{:else}<Icon name="check" size={13} />{/if}
@@ -1189,7 +1190,7 @@
                 </button>
                 <button
                   class="btn btn--secondary btn--sm btn--action"
-                  title={t('common.cancel')}
+                  use:tooltip={t('common.cancel')}
                   onclick={() => (tagsEditing = false)}
                 >
                   <Icon name="close" size={13} /> <span class="btn-label">{t('common.cancel')}</span>
@@ -1212,7 +1213,7 @@
               <div class="rail-label">{t('source.autoTags')}</div>
               <div class="rail-chips">
                 {#each selected.auto_tags as tag (tag)}
-                  <span class="chip chip--auto" title={t('source.autoTagsTitle')}>{tag}</span>
+                  <span class="chip chip--auto" use:tooltip={t('source.autoTagsTitle')}>{tag}</span>
                 {/each}
               </div>
               <p class="rail-note">{t('source.autoTagsNote')}</p>
@@ -1224,7 +1225,7 @@
               <div class="rail-label">{t('source.topics')} <span class="rail-count">{n(topics.length)}</span></div>
               <div class="rail-chips">
                 {#each topics.slice(0, 5) as topic (topic.name)}
-                  <a class="chip" href={`#/claims?topic=${encodeURIComponent(topic.name)}`} title={tn('source.topicClaims', topic.count)}>
+                  <a class="chip" href={`#/claims?topic=${encodeURIComponent(topic.name)}`} use:tooltip={tn('source.topicClaims', topic.count)}>
                     {topic.name}<span class="chip-count">{n(topic.count)}</span>
                   </a>
                 {/each}
@@ -1237,7 +1238,7 @@
             <section class="rail-block">
               <div class="rail-label">
                 {t('source.interests')}
-                <button class="rail-edit" title={t('interests.manageTitle')} onclick={() => openInterests()}>
+                <button class="rail-edit" use:tooltip={t('interests.manageTitle')} onclick={() => openInterests()}>
                   <Icon name="settings" size={11} /> <span class="btn-label">{t('interests.manage')}</span>
                 </button>
               </div>
@@ -1262,16 +1263,18 @@
                         {#if match.rejected}
                           <button
                             class="icon-btn"
-                            title={t('source.acceptInterest')}
+                            use:tooltip={t('source.acceptInterest')}
+                            aria-label={t('source.acceptInterest')}
                             onclick={() => void decideInterest(match, true)}
                           ><Icon name="check" size={12} /></button>
                         {:else}
                           {#if match.queued}
-                            <span class="interest-queued" title={t('source.queued')}><Icon name="clock" size={11} /></span>
+                            <span class="interest-queued" use:tooltip={t('source.queued')}><Icon name="clock" size={11} /></span>
                           {/if}
                           <button
                             class="icon-btn"
-                            title={t('source.rejectInterest')}
+                            use:tooltip={t('source.rejectInterest')}
+                            aria-label={t('source.rejectInterest')}
                             onclick={() => void decideInterest(match, false)}
                           ><Icon name="close" size={12} /></button>
                         {/if}

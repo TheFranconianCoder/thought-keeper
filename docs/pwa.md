@@ -42,6 +42,14 @@ card (“add the first source”, or ask anyway) |
 | **Attention** | failed source steps, **incomplete derivations** (a distill that stopped with work left) and non-info lint findings — one search narrows all three, and each source list is a window over the server filter; a lens over existing state, not a second health model |
 | **Status** | counts, job queue, summary backfill (missing/queued/running), a **progress bar while the index is rebuilt** (the vault is read-only then: reads work, changes wait), the repairs (consistency check, reindex, outline rebuild, URL refresh), duplicate collapse only while a duplicate exists, vocabulary health, and the **capability chips** — PDF, OCR, **Browser**, agent, vault, search, inbox — where a missing **Browser** says that JavaScript pages are collected as links and never distilled, and a missing capability is a **button into the Config overlay** at the knob that fixes it |
 
+**Hints are the app's own, never the browser's.** No element carries a native `title`: a control that
+needs a hint attaches the shared `use:tooltip` action, and one layer renders it
+(`lib/tooltip.svelte.ts`, `components/ui/TooltipLayer.svelte`). A hover waits 400 ms, a keyboard focus
+shows it at once, and the layer measures itself: it flips below the control when there is no room
+above and stays inside the viewport. The hint is a **description, never a name** — an icon-only
+control keeps its `aria-label`, an `iframe` keeps its `title` — and the layer sits above every
+overlay, so a hint inside a dialog is never clipped.
+
 **The five library lists share one skeleton.** A head carries the title, its count and the lens's
 single action — Sources: add source, Wiki: new page, Bookmarks: add link, Attention: vault status;
 Claims has none because claims are the agent's. Below the head comes a full-width search field; the

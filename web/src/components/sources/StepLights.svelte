@@ -2,6 +2,7 @@
   import type { Source } from '../../lib/api/types';
   import { t } from '../../lib/i18n/index.svelte';
   import { PIPELINE_STEPS, stepStateLabel, stepsOf, stepTitle } from '../../lib/source-state';
+  import { tooltip } from '../../lib/tooltip.svelte';
 
   const { source, size = 'sm' }: { source: Source; size?: 'sm' | 'md' } = $props();
   const steps = $derived(stepsOf(source));
@@ -11,7 +12,7 @@
   {#each PIPELINE_STEPS as step (step)}
     <span
       class="light light--{steps[step].state}"
-      title={stepTitle(step, steps[step])}
+      use:tooltip={stepTitle(step, steps[step])}
       aria-label={t('sources.stepAria', { step, state: stepStateLabel(steps[step].state) })}
     ></span>
   {/each}

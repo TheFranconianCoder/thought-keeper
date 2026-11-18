@@ -16,6 +16,7 @@
   import { sources } from '../../lib/stores/sources.svelte';
   import { system } from '../../lib/stores/system.svelte';
   import { jobStepLabel, repairPhaseLabel } from '../../lib/source-state';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
 
@@ -212,7 +213,7 @@
         {#if cap.target && !cap.ok}
           <button
             class="cap cap--link"
-            title={cap.why ?? t('status.capFix')}
+            use:tooltip={cap.why ?? t('status.capFix')}
             onclick={() => openConfig(cap.target)}
           >
             <span class="cap-dot"></span>
@@ -220,7 +221,7 @@
             <span class="cap-text">{cap.text}</span>
           </button>
         {:else}
-          <span class="cap" class:ok={cap.ok} title={cap.why ?? ''}>
+          <span class="cap" class:ok={cap.ok} use:tooltip={cap.why ?? ''}>
             <span class="cap-dot"></span>
             <span class="cap-label">{cap.label}</span>
             <span class="cap-text">{cap.text}</span>
@@ -246,19 +247,19 @@
             {@const detail = [job.detail, live, live ? '' : (job.why ?? '')].filter(Boolean).join(' · ')}
             <div class="job-row">
               <span class="job-step">{jobStepLabel(job.step)}</span>
-              <span class="job-state job-state--{job.state}" title={job.why ?? ''}>
+              <span class="job-state job-state--{job.state}" use:tooltip={job.why ?? ''}>
                 {job.state === 'pending' ? t('status.jobOwed') : job.state}
               </span>
               {#if job.target}
                 <button class="job-target" onclick={() => navigate(sourcePath(job.target!))}>
                   <Icon name="sources" size={12} />
-                  <span class="truncate" title={job.title || job.target}>{job.title || job.target.slice(0, 12)}</span>
+                  <span class="truncate" use:tooltip={job.title || job.target}>{job.title || job.target.slice(0, 12)}</span>
                 </button>
               {:else}
                 <span class="job-target job-target--none">{t('status.wholeVault')}</span>
               {/if}
-              <span class="job-time" title={job.since ?? ''}>{job.since ? elapsed(job.since, clock) : ''}</span>
-              {#if detail}<span class="job-detail" title={detail}>{detail}</span>{/if}
+              <span class="job-time" use:tooltip={job.since ?? ''}>{job.since ? elapsed(job.since, clock) : ''}</span>
+              {#if detail}<span class="job-detail" use:tooltip={detail}>{detail}</span>{/if}
             </div>
           {/each}
           {#if jobRows.hidden > 0}
@@ -324,22 +325,22 @@
               <span class="vocab-name">{vocab.namespace}</span>
               <span class="vocab-flags">
                 {#if vocab.collisions?.length}
-                  <span class="chip chip--warn" title={t('status.collisionsTitle')}>
+                  <span class="chip chip--warn" use:tooltip={t('status.collisionsTitle')}>
                     {tn('status.collisions', vocab.collision_count ?? vocab.collisions.length)}
                   </span>
                 {/if}
                 {#if vocab.near_duplicates?.length}
-                  <span class="chip" title={t('status.familiesTitle')}>
+                  <span class="chip" use:tooltip={t('status.familiesTitle')}>
                     {tn('status.families', vocab.near_duplicate_count ?? vocab.near_duplicates.length)}
                   </span>
                 {/if}
                 {#if vocab.broad_tokens}
-                  <span class="chip" title={t('status.broadTokensTitle')}>
+                  <span class="chip" use:tooltip={t('status.broadTokensTitle')}>
                     {tn('status.broadTokens', vocab.broad_tokens)}
                   </span>
                 {/if}
                 {#if vocab.oversized_families}
-                  <span class="chip" title={t('status.broadFamiliesTitle')}>
+                  <span class="chip" use:tooltip={t('status.broadFamiliesTitle')}>
                     {tn('status.broadFamilies', vocab.oversized_families)}
                   </span>
                 {/if}

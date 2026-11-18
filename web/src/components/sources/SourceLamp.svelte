@@ -2,6 +2,7 @@
   import type { Source } from '../../lib/api/types';
   import type { LiveProgress } from '../../lib/source-state';
   import { overallPercent, overallState, statusLabel } from '../../lib/source-state';
+  import { tooltip } from '../../lib/tooltip.svelte';
 
   // ONE lamp for the whole derivation: the ring is the slower of the two progress dimensions, the
   // colour is the aggregate state. The narrow Sources list trades four step lights for this.
@@ -16,7 +17,7 @@
   class="lamp lamp--{state}"
   style="--pct:{percent}"
   role="img"
-  title={label}
+  use:tooltip={label}
   aria-label={label}
 >
   <span class="lamp-core"></span>

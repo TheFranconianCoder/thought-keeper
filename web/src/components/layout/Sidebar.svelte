@@ -6,6 +6,7 @@
   import { n, t } from '../../lib/i18n/index.svelte';
   import { navigate, router } from '../../lib/router.svelte';
   import { openAdd } from '../../lib/overlays';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import Icon from '../ui/Icon.svelte';
 
   const active = (name: string): boolean => {
@@ -98,7 +99,7 @@
       <Icon name="plus" size={15} />
       <span>{t('nav.addSource')}</span>
     </button>
-    <div class="connection-line" title={t('connection.title')}>
+    <div class="connection-line" use:tooltip={t('connection.title')}>
       <span class="dot {dotClass}"></span>
       <span>{connectionLabel()}</span>
     </div>

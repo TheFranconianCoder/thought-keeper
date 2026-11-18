@@ -7,6 +7,7 @@
   import { router } from '../../lib/router.svelte';
   import { assistant } from '../../lib/stores/assistant.svelte';
   import { criteriaChips } from '../../lib/assistant';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import Icon from '../ui/Icon.svelte';
 
   // The field is ONE request at a time, on purpose: the answer is a lens, not a conversation. What it
@@ -93,7 +94,7 @@
           <div class="head-title">{t('assistant.title')}</div>
           <p class="head-sub">{t('assistant.sub')}</p>
         </div>
-        <button class="icon-btn" title={t('common.close')} onclick={close}>
+        <button class="icon-btn" use:tooltip={t('common.close')} aria-label={t('common.close')} onclick={close}>
           <Icon name="close" size={14} />
         </button>
       </div>

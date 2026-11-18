@@ -13,6 +13,7 @@
   import { asks, type PendingAsk } from '../../lib/stores/asks.svelte';
   import { visibleCloud } from '../../lib/cloud';
   import { claims } from '../../lib/stores/claims.svelte';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import CloudMore from '../ui/CloudMore.svelte';
   import CopyId from '../ui/CopyId.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
@@ -198,7 +199,7 @@
               <span class="saved-main">
                 <span class="saved-question">{row.run.question}</span>
                 {#if row.run.status === 'failed'}
-                  <span class="run-status run-status--failed" title={row.run.error ?? ''}>
+                  <span class="run-status run-status--failed" use:tooltip={row.run.error ?? ''}>
                     <Icon name="error" size={11} />
                     <span class="truncate">{row.run.error}</span>
                   </span>
@@ -213,14 +214,16 @@
                 <div class="saved-actions saved-actions--shown">
                   <button
                     class="icon-btn"
-                    title={t('ask.askAgain')}
+                    use:tooltip={t('ask.askAgain')}
+                    aria-label={t('ask.askAgain')}
                     onclick={(event) => act(event, () => asks.retry(row.run.key))}
                   >
                     <Icon name="refresh" size={14} />
                   </button>
                   <button
                     class="icon-btn"
-                    title={t('ask.dismissRun')}
+                    use:tooltip={t('ask.dismissRun')}
+                    aria-label={t('ask.dismissRun')}
                     onclick={(event) => act(event, () => asks.dismiss(row.run.key))}
                   >
                     <Icon name="close" size={14} />
@@ -243,14 +246,16 @@
                 <div class="saved-actions">
                   <button
                     class="icon-btn"
-                    title={t('ask.askAgain')}
+                    use:tooltip={t('ask.askAgain')}
+                    aria-label={t('ask.askAgain')}
                     onclick={(event) => act(event, () => askAgain(row.ask.question, row.ask.source))}
                   >
                     <Icon name="refresh" size={14} />
                   </button>
                   <button
                     class="icon-btn icon-btn--danger"
-                    title={t('common.delete')}
+                    use:tooltip={t('common.delete')}
+                    aria-label={t('common.delete')}
                     onclick={(event) => act(event, () => void deleteSavedAsk(row.ask.id))}
                   >
                     <Icon name="trash" size={14} />
@@ -277,7 +282,7 @@
 
   <section class="ask-main" class:split={detailOpen}>
     {#if detailOpen}
-      <button class="btn btn--ghost btn--sm back-btn" title={t('ask.back')} onclick={backToList}>
+      <button class="btn btn--ghost btn--sm back-btn" use:tooltip={t('ask.back')} onclick={backToList}>
         <Icon name="arrowLeft" size={15} /> <span>{t('common.back')}</span>
       </button>
     {:else}
@@ -308,9 +313,9 @@
         <div class="composer-scope">
           <Icon name="sources" size={13} />
           <span class="composer-scope-label">{t('ask.onlySource')}</span>
-          <span class="composer-scope-title truncate" title={sourceName(routeSource)}>{sourceName(routeSource)}</span>
+          <span class="composer-scope-title truncate" use:tooltip={sourceName(routeSource)}>{sourceName(routeSource)}</span>
           <span class="spacer"></span>
-          <button type="button" class="icon-btn" title={t('ask.clearSource')} onclick={clearSource}>
+          <button type="button" class="icon-btn" use:tooltip={t('ask.clearSource')} aria-label={t('ask.clearSource')} onclick={clearSource}>
             <Icon name="close" size={12} />
           </button>
         </div>
@@ -341,7 +346,7 @@
               <div class="answer-meta">
                 <span class="chip">{relTime(selected.updated_at)}</span>
                 {#if selected.source}
-                  <a class="chip" href={sourcePath(selected.source)} title={t('ask.answeredFrom')}>
+                  <a class="chip" href={sourcePath(selected.source)} use:tooltip={t('ask.answeredFrom')}>
                     <Icon name="sources" size={11} /> {sourceName(selected.source)}
                   </a>
                 {/if}
@@ -349,14 +354,14 @@
                 <CopyId text={selected.id} label={t('ask.idLabel')} display={selected.id.slice(0, 10)} />
                 <button
                   class="btn btn--secondary btn--sm btn--action"
-                  title={t('ask.askAgain')}
+                  use:tooltip={t('ask.askAgain')}
                   onclick={() => askAgain(selected!.question, selected!.source)}
                 >
                   <Icon name="refresh" size={13} /> <span class="btn-label">{t('ask.againShort')}</span>
                 </button>
                 <button
                   class="btn btn--danger btn--sm btn--action"
-                  title={t('common.delete')}
+                  use:tooltip={t('common.delete')}
                   onclick={() => deleteSavedAsk(selected!.id)}
                 >
                   <Icon name="trash" size={13} /> <span class="btn-label">{t('common.delete')}</span>

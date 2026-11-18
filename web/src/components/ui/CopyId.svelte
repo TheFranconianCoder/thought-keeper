@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '../../lib/i18n/index.svelte';
   import { toast } from '../../lib/toast.svelte';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import Icon from './Icon.svelte';
 
   const {
@@ -19,7 +20,7 @@
   }
 </script>
 
-<button class="copy-id" title={t('copy.title', { label })} onclick={() => void copy()}>
+<button class="copy-id" use:tooltip={t('copy.title', { label })} onclick={() => void copy()}>
   <code>{display ?? text}</code>
   <Icon name="copy" size={11} />
 </button>

@@ -1,4 +1,5 @@
 import { t } from './i18n/index.svelte';
+import { tooltip } from './tooltip.svelte';
 
 /** clearable adds the "clear" (×) button every text field should have.
  *
@@ -41,7 +42,9 @@ export function clearable(node: Field) {
   button.type = 'button';
   button.className = 'field-clear';
   button.setAttribute('aria-label', t('common.clearField'));
-  button.title = t('common.clearField');
+  // The app's own hint, attached the same way Svelte would attach it: this button is created in
+  // code, so a native `title` would be the only tooltip the app did not draw itself.
+  const hint = tooltip(button, t('common.clearField'));
   // The app's own close glyph, so the × matches the icon set instead of being a text character.
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 20 20');
@@ -90,6 +93,7 @@ export function clearable(node: Field) {
     destroy(): void {
       button.removeEventListener('mousedown', keepFocus);
       button.removeEventListener('click', clear);
+      hint?.destroy?.();
       node.classList.remove('field-clearable');
       node.style.width = wasWidth;
       node.style.paddingRight = wasPad;

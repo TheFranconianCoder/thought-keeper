@@ -9,6 +9,7 @@
   import { router } from '../../lib/router.svelte';
   import { interests } from '../../lib/stores/interests.svelte';
   import { toast } from '../../lib/toast.svelte';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import Icon from '../ui/Icon.svelte';
 
   const open = $derived(interestsOpen());
@@ -336,7 +337,7 @@
             {mode === 'list' ? t('interests.description') : t('interests.editDescription')}
           </p>
         </div>
-        <button class="icon-btn" title={t('common.close')} onclick={closeInterests}>
+        <button class="icon-btn" use:tooltip={t('common.close')} aria-label={t('common.close')} onclick={closeInterests}>
           <Icon name="close" size={14} />
         </button>
       </div>
@@ -380,21 +381,22 @@
                 </span>
                 <span class="rule-end">
                   {#if rule.open > 0}
-                    <span class="rule-open" title={t('interests.openTitle')}>{tn('interests.open', rule.open)}</span>
+                    <span class="rule-open" use:tooltip={t('interests.openTitle')}>{tn('interests.open', rule.open)}</span>
                   {/if}
                   <span class="rule-actions">
                     <button
                       class="icon-btn"
-                      title={rule.enabled ? t('interests.pause') : t('interests.resume')}
+                      use:tooltip={rule.enabled ? t('interests.pause') : t('interests.resume')}
+                      aria-label={rule.enabled ? t('interests.pause') : t('interests.resume')}
                       aria-pressed={rule.enabled}
                       onclick={() => toggleEnabled(rule)}
                     >
                       <Icon name={rule.enabled ? 'check' : 'clock'} size={13} />
                     </button>
-                    <button class="icon-btn" title={t('interests.edit')} onclick={() => startEdit(rule)}>
+                    <button class="icon-btn" use:tooltip={t('interests.edit')} aria-label={t('interests.edit')} onclick={() => startEdit(rule)}>
                       <Icon name="edit" size={13} />
                     </button>
-                    <button class="icon-btn icon-btn--danger" title={t('interests.delete')} onclick={() => void remove(rule)}>
+                    <button class="icon-btn icon-btn--danger" use:tooltip={t('interests.delete')} aria-label={t('interests.delete')} onclick={() => void remove(rule)}>
                       <Icon name="trash" size={13} />
                     </button>
                   </span>
@@ -435,7 +437,8 @@
                   <button
                     type="button"
                     class="term-remove"
-                    title={t('interests.removeTerm')}
+                    use:tooltip={t('interests.removeTerm')}
+                    aria-label={t('interests.removeTerm')}
                     onclick={() => {
                       terms = terms.filter((item) => item !== term);
                       preview = null;
@@ -467,7 +470,7 @@
                   <button
                     type="button"
                     class="chip chip--suggestion"
-                    title={item.kind === 'topic' ? t('interests.suggestTopic') : t('interests.suggestTag')}
+                    use:tooltip={item.kind === 'topic' ? t('interests.suggestTopic') : t('interests.suggestTag')}
                     onclick={() => addTerm(item.value)}
                   >
                     {item.value}<span class="chip-count">{n(item.count)}</span>
@@ -490,7 +493,8 @@
                     <button
                       type="button"
                       class="term-remove"
-                      title={t('interests.removeTerm')}
+                      use:tooltip={t('interests.removeTerm')}
+                      aria-label={t('interests.removeTerm')}
                       onclick={() => {
                         exclude = exclude.filter((item) => item !== term);
                         preview = null;

@@ -41,6 +41,8 @@ One palette, one type scale, one spacing scale, one set of components.
 - **Density:** calm list rows, clear section labels, no boxes inside boxes. Long pages are split into
   a fixed list pane and an independently scrolling reading pane on desktop, and become a single column
   on narrow screens. Fades mark the edges of every scrollable cloud or list.
+- **Hints:** never a native `title`. A hint is the shared `use:tooltip` action plus the one
+  `TooltipLayer` — an inverted note above or below the control, above every overlay.
 
 The whole visual language is in `src/styles/app.css`. Component styles only describe layout; colour,
 type and controls come from the tokens and shared classes.
@@ -65,6 +67,7 @@ src/
     theme.svelte.ts          auto/light/dark, persisted before first paint
     overlays.ts              search/add as URL parameters
     confirm.svelte.ts        in-app questions, never native dialogs
+    tooltip.svelte.ts        the shared hover/focus hint, never a native title
     toast.svelte.ts          bounded transient messages
     scroll-memory.ts         scroll position per history entry
     scroll-top.svelte.ts     which list scrolled furthest; the shared scroll-to-top button
@@ -74,7 +77,7 @@ src/
     views/                   Claims, Wiki, Sources, Source, Ask, Attention, Bookmarks, Status
     sources/                 step lights, source icon, source progress
     overlays/                command palette, add source, duplicate window
-    ui/                      Icon, Markdown, Modal, Confirm, Toasts, EmptyState, CopyId
+    ui/                      Icon, Markdown, Modal, Confirm, Toasts, EmptyState, CopyId, TooltipLayer
 ```
 
 ### Stores, not one god object

@@ -18,6 +18,7 @@
   import { rememberSourcesTop } from '../../lib/sources-scroll';
   import { interestChipSlugs, statusLabel } from '../../lib/source-state';
   import { activateSources, isSourceNew, isSourceUpdated, newSources } from '../../lib/new-sources.svelte';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import NewTag from '../sources/NewTag.svelte';
   import UpdatedTag from '../sources/UpdatedTag.svelte';
   import CloudMore from '../ui/CloudMore.svelte';
@@ -281,7 +282,7 @@
             <button
               class="chip"
               class:chip--accent={interestSlug === rule.slug}
-              title={rule.terms.join(', ')}
+              use:tooltip={rule.terms.join(', ')}
               onclick={() => navigate(withQuery('interest', rule.slug))}
             >
               <Icon name="target" size={11} /> {rule.name}<span class="chip-count">{n(rule.open)}</span>
@@ -321,7 +322,7 @@
           class="chip attached-filter"
           class:chip--accent={readLaterOnly}
           aria-pressed={readLaterOnly}
-          title={t('sources.readLaterTitle')}
+          use:tooltip={t('sources.readLaterTitle')}
           onclick={() => toggleParam('readlater')}
         >
           <Icon name="clock" size={12} /> {t('sources.readLater')}<span class="chip-count">{n(sourceWindow.facets.read_later)}</span>
@@ -332,13 +333,13 @@
           class="chip attached-filter"
           class:chip--accent={favoritesOnly}
           aria-pressed={favoritesOnly}
-          title={t('sources.favoritesTitle')}
+          use:tooltip={t('sources.favoritesTitle')}
           onclick={() => toggleParam('favorite')}
         >
           <Icon name="star" size={12} /> {t('sources.favorites')}<span class="chip-count">{n(sourceWindow.facets.favorites)}</span>
         </button>
       {/if}
-      <button class="chip attached-filter" title={t('interests.manageTitle')} onclick={() => openInterests()}>
+      <button class="chip attached-filter" use:tooltip={t('interests.manageTitle')} onclick={() => openInterests()}>
         <Icon name="target" size={12} /> {t('interests.manage')}
       </button>
       {#if attachedCount > 0 || sources.attachedOnly}
@@ -346,7 +347,7 @@
           class="chip attached-filter"
           class:chip--warn={sources.attachedOnly}
           aria-pressed={sources.attachedOnly}
-          title={t('sources.attachedTitle')}
+          use:tooltip={t('sources.attachedTitle')}
           onclick={() => (sources.attachedOnly = !sources.attachedOnly)}
         >
           <Icon name="paperclip" size={12} /> {t('sources.attached')}<span class="chip-count">{n(attachedCount)}</span>
@@ -357,7 +358,7 @@
           class="chip attached-filter"
           class:chip--accent={changedOnly}
           aria-pressed={changedOnly}
-          title={t('sources.changedTitle')}
+          use:tooltip={t('sources.changedTitle')}
           onclick={() => toggleParam('changed')}
         >
           <Icon name="refresh" size={12} /> {t('sources.changed')}<span class="chip-count">{n(changedCount)}</span>
@@ -451,7 +452,7 @@
             <div class="source-row" class:is-new={fresh} class:is-updated={!fresh && updated}>
               <button
                 class="source-open"
-                title={statusLabel(source, live)}
+                use:tooltip={statusLabel(source, live)}
                 onclick={() => open(source)}
               >
                 <span class="source-icon"><SourceIcon kind={source.kind} hash={source.hash} size={17} /></span>
@@ -463,7 +464,7 @@
                     {#if source.attached}
                       <span
                         class="tag tag--attached"
-                        title={source.attached_from
+                        use:tooltip={source.attached_from
                           ? t('sources.attachedTagTitleFrom', { from: source.attached_from })
                           : t('sources.attachedTagTitle')}
                       >
@@ -473,14 +474,14 @@
                     {#if source.favorite_at || source.read_later}
                       <span class="source-marks">
                         {#if source.favorite_at}
-                          <span class="source-mark" title={t('sources.favorite')}><Icon name="star" size={12} /></span>
+                          <span class="source-mark" use:tooltip={t('sources.favorite')}><Icon name="star" size={12} /></span>
                         {/if}
                         {#if source.read_later}
-                          <span class="source-mark" title={t('sources.readLater')}><Icon name="clock" size={12} /></span>
+                          <span class="source-mark" use:tooltip={t('sources.readLater')}><Icon name="clock" size={12} /></span>
                         {/if}
                       </span>
                     {/if}
-                    <span class="source-name truncate" title={source.title || source.hash.slice(0, 12)}>{source.title || source.hash.slice(0, 12)}</span>
+                    <span class="source-name truncate" use:tooltip={source.title || source.hash.slice(0, 12)}>{source.title || source.hash.slice(0, 12)}</span>
                     {#if source.bookmark}<span class="tag">{t('sources.tagLink')}</span>{/if}
                     {#if source.sitemap}<span class="tag">{t('sources.tagSitemap')}</span>{/if}
                     {#if source.rss}<span class="tag">{t('sources.tagFeed')}</span>{/if}
@@ -489,23 +490,23 @@
                     {#if source.origin === 'listing'}<span class="tag">{t('sources.tagListingArticle')}</span>{/if}
                     {#if source.origin === 'rss'}
                       <span class="tag tag--wide">{t('sources.tagFeedItem')}</span>
-                      <span class="tag tag--narrow" title={t('sources.tagFeedItem')}>{t('sources.tagFeedItemShort')}</span>
+                      <span class="tag tag--narrow" use:tooltip={t('sources.tagFeedItem')}>{t('sources.tagFeedItemShort')}</span>
                     {/if}
                     {#if source.from_feed}
                       <span class="tag tag--wide">{t('sources.tagFeedCopy')}</span>
-                      <span class="tag tag--narrow" title={t('sources.tagFeedCopy')}>{t('sources.tagFeedCopyShort')}</span>
+                      <span class="tag tag--narrow" use:tooltip={t('sources.tagFeedCopy')}>{t('sources.tagFeedCopyShort')}</span>
                     {/if}
                     {#if source.original_name?.startsWith('wiki:')}<span class="tag">{t('sources.tagWiki')}</span>{/if}
                     {#if source.origin === 'wiki'}<span class="tag">{t('sources.tagWikiUrl')}</span>{/if}
                   </div>
                   <div class="source-sub">
                     <span
-                      title={source.url_changed_at
+                      use:tooltip={source.url_changed_at
                         ? t('sources.changedAtTip', {
                             date: pubDate(source.url_changed_at),
                             arrived: pubDate(source.imported_at),
                           })
-                        : undefined}
+                        : ''}
                     >
                       {source.kind} · {fmtBytes(source.bytes)}
                       {#if source.published_at} · {pubDate(source.published_at)}{/if}
@@ -539,7 +540,8 @@
                 <button
                   class="icon-btn"
                   class:is-on={source.read_later}
-                  title={source.read_later ? t('sources.markDone') : t('sources.readLaterAction')}
+                  use:tooltip={source.read_later ? t('sources.markDone') : t('sources.readLaterAction')}
+                  aria-label={source.read_later ? t('sources.markDone') : t('sources.readLaterAction')}
                   aria-pressed={!!source.read_later}
                   onclick={(event) => act(event, () => void toggleReadLater(source.hash, !source.read_later))}
                 >
@@ -548,7 +550,8 @@
                 <button
                   class="icon-btn"
                   class:is-on={!!source.favorite_at}
-                  title={source.favorite_at ? t('sources.unfavorite') : t('sources.favorite')}
+                  use:tooltip={source.favorite_at ? t('sources.unfavorite') : t('sources.favorite')}
+                  aria-label={source.favorite_at ? t('sources.unfavorite') : t('sources.favorite')}
                   aria-pressed={!!source.favorite_at}
                   onclick={(event) => act(event, () => void toggleFavorite(source.hash, !source.favorite_at))}
                 >
@@ -557,7 +560,8 @@
                 {#if !source.origin && !source.original_name?.startsWith('wiki:')}
                   <button
                     class="icon-btn icon-btn--danger"
-                    title={t('sources.actionDelete')}
+                    use:tooltip={t('sources.actionDelete')}
+                    aria-label={t('sources.actionDelete')}
                     onclick={(event) => act(event, () => void deleteSource(source.hash))}
                   >
                     <Icon name="trash" size={14} />

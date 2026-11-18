@@ -8,6 +8,7 @@
   import SearchPalette from './components/overlays/SearchPalette.svelte';
   import ConfirmDialog from './components/ui/ConfirmDialog.svelte';
   import Toasts from './components/ui/Toasts.svelte';
+  import TooltipLayer from './components/ui/TooltipLayer.svelte';
   import FooterNav from './components/layout/FooterNav.svelte';
   import Sidebar from './components/layout/Sidebar.svelte';
   import Topbar from './components/layout/Topbar.svelte';
@@ -189,3 +190,4 @@
 <ConfirmDialog />
 <DuplicateWindow />
 <Toasts />
+<TooltipLayer />

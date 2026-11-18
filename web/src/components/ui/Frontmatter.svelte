@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { tooltip } from '../../lib/tooltip.svelte';
+
   /** Frontmatter renders the YAML header as it was written, but turns bare http(s) URLs into links.
    *  A URL source's header carries the address it came from — the one place a reader can click
    *  through to the page — and a plain <pre> made it dead text. */
@@ -22,7 +24,7 @@
   });
 </script>
 
-<div class="frontmatter">{#each segments as segment, index (index)}{#if segment.url}<a href={segment.url} target="_blank" rel="noopener noreferrer" title={segment.url}>{segment.text}</a>{:else}{segment.text}{/if}{/each}</div>
+<div class="frontmatter">{#each segments as segment, index (index)}{#if segment.url}<a href={segment.url} target="_blank" rel="noopener noreferrer" use:tooltip={segment.url}>{segment.text}</a>{:else}{segment.text}{/if}{/each}</div>
 
 <style>
   .frontmatter {

@@ -14,6 +14,7 @@
   import { interests } from '../../lib/stores/interests.svelte';
   import { sourceWindow } from '../../lib/stores/source-window.svelte';
   import { system } from '../../lib/stores/system.svelte';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import Icon from '../ui/Icon.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
 
@@ -240,7 +241,7 @@
         <span class="mini-label">{t('home.recentQuestions')}</span>
         {#each recentQuestions as ask, index (ask.id)}
           {#if index > 0}<span class="sep">·</span>{/if}
-          <button class="question-chip" onclick={() => navigate(askPath(ask.id))} title={ask.question}>
+          <button class="question-chip" onclick={() => navigate(askPath(ask.id))} use:tooltip={ask.question}>
             {ask.question}
           </button>
         {/each}
@@ -329,7 +330,7 @@
               {#each freshShown as source (source.hash)}
                 <button
                   class="source-chip"
-                  title={source.title || source.hash}
+                  use:tooltip={source.title || source.hash}
                   onclick={() => openSource(source)}
                 >
                   <SourceIcon kind={source.kind} hash={source.hash} size={12} />
@@ -351,7 +352,7 @@
               {#each changedShown as source (source.hash)}
                 <button
                   class="source-chip"
-                  title={source.title || source.hash}
+                  use:tooltip={source.title || source.hash}
                   onclick={() => openSource(source)}
                 >
                   <SourceIcon kind={source.kind} hash={source.hash} size={12} />

@@ -2,6 +2,7 @@
   import type { Source } from '../../lib/api/types';
   import { interestChipSlugs } from '../../lib/source-state';
   import { interests } from '../../lib/stores/interests.svelte';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import Icon from './Icon.svelte';
 
   // ONE meaning everywhere it appears: this source is in the read-later queue because of that rule.
@@ -15,7 +16,7 @@
 </script>
 
 {#if slugs.length > 0}
-  <span class="tag tag--interest" title={names.join(', ')}>
+  <span class="tag tag--interest" use:tooltip={names.join(', ')}>
     <Icon name="target" size={10} /> {names[0]}{#if slugs.length > 1}+{slugs.length - 1}{/if}
   </span>
 {/if}

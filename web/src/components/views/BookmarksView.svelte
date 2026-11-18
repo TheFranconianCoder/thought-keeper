@@ -7,6 +7,7 @@
   import { connection } from '../../lib/stores/connection.svelte';
   import { bookmarkWindow } from '../../lib/stores/source-window.svelte';
   import type { Source } from '../../lib/api/types';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
@@ -128,7 +129,8 @@
               </button>
               <button
                 class="icon-btn bookmark-external"
-                title={t('bookmarks.openExternal')}
+                use:tooltip={t('bookmarks.openExternal')}
+                aria-label={t('bookmarks.openExternal')}
                 onclick={() => {
                   if (source.url) window.open(source.url, '_blank', 'noopener');
                 }}

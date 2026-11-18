@@ -3,6 +3,7 @@
   import { navigate, router } from '../../lib/router.svelte';
   import { connection, connectionLabel } from '../../lib/stores/connection.svelte';
   import { system } from '../../lib/stores/system.svelte';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import Icon from '../ui/Icon.svelte';
 
   // The narrow layout's one navigation surface. It is a footer, not a drawer: every lens is one tap
@@ -57,7 +58,7 @@
       class:active
       aria-current={active ? 'page' : undefined}
       aria-label={item.view === 'status' ? statusTitle : item.label}
-      title={item.view === 'status' ? statusTitle : item.label}
+      use:tooltip={item.view === 'status' ? statusTitle : item.label}
       onclick={() => navigate(item.path)}
     >
       <span class="footer-icon">

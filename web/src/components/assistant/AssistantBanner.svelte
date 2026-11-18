@@ -5,6 +5,7 @@
   import { criteriaChips } from '../../lib/assistant';
   import { navigate } from '../../lib/router.svelte';
   import { assistant } from '../../lib/stores/assistant.svelte';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import Icon from '../ui/Icon.svelte';
 
   interface Props {
@@ -95,7 +96,7 @@
     <button class="banner-action" onclick={clear}>{t('assistant.clear')}</button>
   {:else}
     {#if cmd}
-      <span class="banner-text truncate" title={cmd.text}>„{cmd.text}“</span>
+      <span class="banner-text truncate" use:tooltip={cmd.text}>„{cmd.text}“</span>
       {#if cmd.resolution}
         <span class="banner-route">{t(`assistant.resolution.${cmd.resolution}`)}</span>
       {/if}
@@ -110,10 +111,10 @@
 
     <span class="grow"></span>
 
-    <button class="banner-action" title={cmd ? t('assistant.again') : ''} onclick={again} disabled={!cmd}>
+    <button class="banner-action" use:tooltip={cmd ? t('assistant.again') : ''} onclick={again} disabled={!cmd}>
       <Icon name="refresh" size={12} /> {t('assistant.again')}
     </button>
-    <button class="banner-close" title={t('assistant.clear')} onclick={clear}>
+    <button class="banner-close" use:tooltip={t('assistant.clear')} aria-label={t('assistant.clear')} onclick={clear}>
       <Icon name="close" size={11} />
     </button>
   {/if}

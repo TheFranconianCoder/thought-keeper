@@ -6,6 +6,7 @@
   import { cycleTheme, themeIcon, themeLabel } from '../../lib/theme.svelte';
   import { openAssistant, openConfig, openSearch } from '../../lib/overlays';
   import { assistant } from '../../lib/stores/assistant.svelte';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import { reloadNow, update } from '../../lib/update.svelte';
   import Icon from '../ui/Icon.svelte';
 
@@ -24,7 +25,7 @@
     <span class="topbar-brand-name">{t('app.brand')}</span>
   </div>
 
-  <button class="topbar-search" title={t('nav.searchTitle')} aria-label={t('nav.searchTitle')} onclick={openSearch}>
+  <button class="topbar-search" use:tooltip={t('nav.searchTitle')} aria-label={t('nav.searchTitle')} onclick={openSearch}>
     <Icon name="search" size={15} />
     <span class="topbar-search-label">{t('nav.search')}</span>
     <span class="kbd">⌘K</span>
@@ -36,7 +37,7 @@
   <button
     class="assistant-fab"
     class:is-busy={assistant.busy}
-    title={t('assistant.openTitle')}
+    use:tooltip={t('assistant.openTitle')}
     aria-label={t('assistant.openTitle')}
     aria-busy={assistant.busy}
     onclick={openAssistant}
@@ -50,7 +51,7 @@
            a hidden window reloads on its own. -->
       <button
         class="update-chip"
-        title={t('update.title')}
+        use:tooltip={t('update.title')}
         aria-label={t('update.title')}
         onclick={reloadNow}
       >
@@ -61,23 +62,23 @@
     {#if activity}
       <button
         class="activity-chip"
-        title={t('shell.activity.title')}
+        use:tooltip={t('shell.activity.title')}
         onclick={() => navigate('#/status')}
       >
         <span class="spinner"></span>
         <span class="truncate">{activity}</span>
       </button>
     {/if}
-    <button class="icon-btn topbar-search-icon" title={t('nav.searchTitle')} aria-label={t('nav.searchTitle')} onclick={openSearch}>
+    <button class="icon-btn topbar-search-icon" use:tooltip={t('nav.searchTitle')} aria-label={t('nav.searchTitle')} onclick={openSearch}>
       <Icon name="search" size={17} />
     </button>
-    <button class="icon-btn" title={t('language.title', { language: localeLabel() })} onclick={cycleLocale}>
+    <button class="icon-btn" use:tooltip={t('language.title', { language: localeLabel() })} aria-label={t('language.title', { language: localeLabel() })} onclick={cycleLocale}>
       <Icon name="language" size={17} />
     </button>
-    <button class="icon-btn" title={t('config.title')} aria-label={t('config.title')} onclick={() => openConfig()}>
+    <button class="icon-btn" use:tooltip={t('config.title')} aria-label={t('config.title')} onclick={() => openConfig()}>
       <Icon name="settings" size={17} />
     </button>
-    <button class="icon-btn" title={themeLabel()} onclick={cycleTheme}>
+    <button class="icon-btn" use:tooltip={themeLabel()} aria-label={themeLabel()} onclick={cycleTheme}>
       <Icon name={themeIcon()} size={17} />
     </button>
   </div>

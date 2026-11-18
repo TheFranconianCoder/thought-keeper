@@ -9,6 +9,7 @@
   import type { Finding, Source } from '../../lib/api/types';
   import { n, t, tn } from '../../lib/i18n/index.svelte';
   import { statusLabel } from '../../lib/source-state';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import Icon from '../ui/Icon.svelte';
   import ListHead from '../ui/ListHead.svelte';
@@ -256,7 +257,7 @@
               </span>
               <div class="finding-main">
                 <div class="finding-kind">{finding.kind}</div>
-                <div class="finding-message" title={finding.message}>{finding.message}</div>
+                <div class="finding-message" use:tooltip={finding.message}>{finding.message}</div>
               </div>
               {#if finding.subject_id && (finding.subject_kind === 'atom' || finding.subject_kind === 'source')}
                 <button class="btn btn--secondary btn--sm" onclick={() => openFinding(finding)}>
@@ -278,7 +279,7 @@
               <span class="chip">{finding.severity}</span>
               <div class="finding-main">
                 <div class="finding-kind">{finding.kind}</div>
-                <div class="finding-message" title={finding.message}>{finding.message}</div>
+                <div class="finding-message" use:tooltip={finding.message}>{finding.message}</div>
               </div>
               {#if finding.subject_id && (finding.subject_kind === 'atom' || finding.subject_kind === 'source')}
                 <button class="btn btn--ghost btn--sm" onclick={() => openFinding(finding)}>

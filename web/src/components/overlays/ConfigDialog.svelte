@@ -7,6 +7,7 @@
   import { closeConfig, configOpen } from '../../lib/overlays';
   import { router } from '../../lib/router.svelte';
   import { toast } from '../../lib/toast.svelte';
+  import { tooltip } from '../../lib/tooltip.svelte';
   import Icon from '../ui/Icon.svelte';
 
   // The configuration is a READ of the running process: what it is set to, where each value came
@@ -356,14 +357,14 @@
           <div class="head-title">{t('config.title')}</div>
           <p class="head-sub">{t('config.description')}</p>
         </div>
-        <button class="icon-btn" title={t('common.close')} onclick={closeConfig}>
+        <button class="icon-btn" use:tooltip={t('common.close')} aria-label={t('common.close')} onclick={closeConfig}>
           <Icon name="close" size={14} />
         </button>
       </div>
 
       <div class="config-path">
         <Icon name="file" size={13} />
-        <button class="path" title={t('config.copyPath')} onclick={() => void copyPath()}>
+        <button class="path" use:tooltip={t('config.copyPath')} onclick={() => void copyPath()}>
           <span class="mono truncate">{view?.path ?? '…'}</span>
           <Icon name="copy" size={11} />
         </button>
@@ -375,11 +376,11 @@
       {#if view?.vault_exists}
         <div class="config-path config-path--vault">
           <Icon name="file" size={13} />
-          <button class="path" title={t('config.copyVaultPath')} onclick={() => void copyVaultPath()}>
+          <button class="path" use:tooltip={t('config.copyVaultPath')} onclick={() => void copyVaultPath()}>
             <span class="mono truncate">{view.vault_path}</span>
             <Icon name="copy" size={11} />
           </button>
-          <span class="chip" title={t('config.vaultNote')}>{t('config.vaultFile')}</span>
+          <span class="chip" use:tooltip={t('config.vaultNote')}>{t('config.vaultFile')}</span>
         </div>
       {/if}
 
@@ -431,7 +432,7 @@
           class="btn btn--ghost btn--sm advanced-toggle"
           class:advanced-toggle--on={advanced}
           aria-pressed={advanced}
-          title={t('config.advancedNote')}
+          use:tooltip={t('config.advancedNote')}
           onclick={() => (advanced = !advanced)}
         >
           {t('config.advanced')}
@@ -485,7 +486,7 @@
                                   checked={draft[field.key] === true}
                                   disabled={saving || applying}
                                   aria-label={name(field)}
-                                  title={t('config.writableHint')}
+                                  use:tooltip={t('config.writableHint')}
                                   onchange={(event) => setDraft(field.key, event.currentTarget.checked)}
                                   onkeydown={(event) => {
                                     if (event.key === 'Enter') {
@@ -506,7 +507,7 @@
                               class="value mono"
                               class:value--secret={field.secret}
                               class:value--hidden={editable(field) && isEditing(field.key)}
-                              title={field.secret
+                              use:tooltip={field.secret
                                 ? t('config.secretHint')
                                 : field.kind === 'path' || field.kind === 'tool'
                                   ? String(field.value ?? field.lookup ?? '')
@@ -538,17 +539,17 @@
                           {/if}
                         </span>
                         {#if field.tier === 'advanced'}
-                          <span class="tier" title={t('config.advancedHint')}>
+                          <span class="tier" use:tooltip={t('config.advancedHint')}>
                             {t('config.tierAdvanced')}
                           </span>
                         {/if}
                         {#if field.source}
-                          <span class="source source--{field.source}" title={sourceText(field)}>
+                          <span class="source source--{field.source}" use:tooltip={sourceText(field)}>
                             {sourceText(field)}
                           </span>
                         {/if}
                         {#if !field.restart && field.writable && field.source !== 'environment'}
-                          <span class="live" title={t('config.liveHint')}>
+                          <span class="live" use:tooltip={t('config.liveHint')}>
                             <Icon name="refresh" size={10} /> {t('config.live')}
                           </span>
                         {/if}
@@ -556,7 +557,7 @@
                           {#if isEditing(field.key)}
                             <button
                               class="icon-btn row-cancel"
-                              title={t('config.cancelEdit')}
+                              use:tooltip={t('config.cancelEdit')}
                               aria-label={t('config.cancelEdit')}
                               onclick={() => cancelEdit(field.key)}
                             >
@@ -565,7 +566,7 @@
                           {:else}
                             <button
                               class="icon-btn row-edit"
-                              title={field.scope === 'vault' ? t('config.editVaultValue') : t('config.editValue')}
+                              use:tooltip={field.scope === 'vault' ? t('config.editVaultValue') : t('config.editValue')}
                               aria-label={field.scope === 'vault' ? t('config.editVaultValue') : t('config.editValue')}
                               onclick={() => startEdit(field.key)}
                             >
@@ -578,9 +579,9 @@
                         {#if field.resolved}
                           <!-- Always the absolute path, even when the configured value already is
                                one: the second line is the effective path, the first the config. -->
-                          <span class="resolved mono" title={t('config.resolvedPath')}>{field.resolved}</span>
+                          <span class="resolved mono" use:tooltip={t('config.resolvedPath')}>{field.resolved}</span>
                         {:else if field.kind === 'tool'}
-                          <span class="resolved resolved--missing" title={t('config.toolMissing')}>
+                          <span class="resolved resolved--missing" use:tooltip={t('config.toolMissing')}>
                             {#if field.lookup && field.lookup !== valueText(field)}{field.lookup} · {/if}{t('config.toolMissing')}
                           </span>
                         {/if}
