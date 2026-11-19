@@ -176,21 +176,32 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   automatically: it is a collected link until the reader says "try the page again". A pass that runs
   out of time stops where it is: the sources it did not reach keep their old check time, so the next
   pass finds them still due.
-- **A changed page is not a new source.** When a refresh writes different text — a normal page, a
-  feed copy replaced by its page, or a wall that cleared — the snapshot is replaced and the **outline
-  is rebuilt** under the exclusive gate. The rebuild keeps the derivation: a node whose text is
-  unchanged keeps its claims, a node whose text changed or vanished loses them and is re-armed, and a
-  new node is derived. "Unchanged" has two tolerances: a reflow keeps the normalized text hash, and
-  otherwise a part keeps its claims while at least 99 % of its words survive (a typo fix, or one
-  changed word in a long paragraph). A paragraph where more changed is derived again. A title change
-  alone replaces the snapshot and touches no claim.
-- **Only a MATERIAL change is an event.** The snapshot and the outline always follow the bytes, but
-  the change time, the **updated** mark, the change record and the cluster pass are reserved for a
-  change a reader would notice: the title moved, or at least `capture.change_min_words` word
-  positions differ (a replaced word counts once) and those words average more than
-  `capture.change_min_word_length` characters (defaults 10 and 5). A ticking date, a view counter, a
-  typo or a reflow is therefore a `changed` without a `material`: the source log says so, the row
-  stays quiet, and the vault is current. `capture.change_min_words: 0` turns the rule off. The
+- **A changed page is not a new source.** When a refresh finds a change WORTH an event — a normal
+  page above the threshold, a feed copy replaced by its page, a cleared wall, or a page the human
+  refreshed — the snapshot is replaced and the **outline is rebuilt** under the exclusive gate. The
+  rebuild keeps the derivation: a node whose text is unchanged keeps its claims, a node whose text
+  changed or vanished loses them and is re-armed, and a new node is derived. "Unchanged" has two
+  tolerances: a reflow keeps the normalized text hash, and otherwise a part keeps its claims while at
+  least 99 % of its words survive (a typo fix, or one changed word in a long paragraph). A paragraph
+  where more changed is derived again. A title change alone replaces the snapshot and touches no
+  claim.
+- **Only a MATERIAL change is an event.** The threshold decides what the refresh DOES, not only what
+  the reader sees: a change below it does not touch the stored snapshot at all (see
+  `docs/adr/0003-the-snapshot-moves-only-on-an-event.md`). The stored bytes are the baseline of the
+  derivation — the outline's node text is a byte range into them — so keeping them keeps the outline,
+  the claims and the search index coherent, and the drift ACCUMULATES: the next check measures the
+  fetched page against the stored one. An event replaces the snapshot, rebuilds the outline under the
+  exclusive gate (a node whose text survived keeps its claims; a reflow keeps the normalized hash; a
+  part keeps its claims while at least 99 % of its words survive), re-arms the changed parts, moves the
+  change time, writes the record and asks for a cluster pass. The title moved, or at least
+  `max(capture.change_min_words, ⌈stored words × capture.change_min_percent / 100⌉)` word positions
+  differ (a replaced word counts once) and those words average more than
+  `capture.change_min_word_length` characters (defaults **40 / 1 / 5**) — a ticking date, a view
+  counter, a typo or a reflow is not an event, and costs a check and a log line, never a model call.
+  `capture.change_min_words: 0` turns the rule off; `0` percent turns off only the share. A first
+  read, a human attachment, a cleared wall, a feed copy replaced by its page and a collected link that
+  became a page are always events, and so is the per-source **Refresh** button, which is the human
+  asking for that one page. The
   refresh writes **`<hash>.changes.md`** for a material change only: the time, the title before and
   after, the measurement, and a unified diff of the readable body (see `docs/storage.md` §3a), which
   the source page shows in its **Changes** tab. A

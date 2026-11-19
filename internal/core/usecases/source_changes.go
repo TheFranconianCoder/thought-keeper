@@ -15,12 +15,17 @@ import (
 // close the block early.
 const changesFence = "````"
 
-// materialChange says whether a refresh is worth telling the reader about. The snapshot is replaced
-// whenever the text differs — the vault stays current — but the change time, the updated mark and the
-// change record are reserved for a change a reader would notice: the title moved, or at least
-// ChangeMinWords word positions differ and those words average more than ChangeMinWordLength
+// materialChange says whether a refresh is worth an EVENT: a snapshot the vault replaces, an outline
+// rebuild, a change record, a moved change time and a cluster pass. The snapshot a source holds is
+// the baseline of its derivation — the outline's references are byte ranges into it — so a change
+// below the threshold is not written at all: the bytes stay, the drift accumulates against them, and
+// a page that gains a sentence a week is re-derived once it has gained a paragraph (see
+// docs/adr/0003-the-snapshot-moves-only-on-an-event.md).
+//
+// The measurement is a WORD SHIFT against the STORED body, so it accumulates: the title moved, or at
+// least requiredWords word positions differ and those words average more than ChangeMinWordLength
 // characters. A ticking timestamp, a view counter, a typo or a reflow is not an event. Zero words
-// turns the rule off: any difference in the body is material (the pre-threshold behavior).
+// turns the rule off: any difference in the body is material.
 func (uc URLs) materialChange(oldTitle, newTitle, oldBody, newBody string, bodyDiffers bool) (bool, textdiff.WordShift) {
 	if oldTitle != newTitle {
 		return true, textdiff.WordShift{}
@@ -32,10 +37,28 @@ func (uc URLs) materialChange(oldTitle, newTitle, oldBody, newBody string, bodyD
 	if uc.ChangeMinWords <= 0 {
 		return true, shift
 	}
-	if shift.Words < uc.ChangeMinWords || shift.AvgRunes <= float64(uc.ChangeMinWordLength) {
+	if shift.Words < uc.requiredWords(shift.BaseWords) || shift.AvgRunes <= float64(uc.ChangeMinWordLength) {
 		return false, shift
 	}
 	return true, shift
+}
+
+// requiredWords is how many word positions a change of a body this size must move to be an event: the
+// absolute floor (ChangeMinWords), raised by the share rule (ChangeMinPercent of the page) when that
+// asks for more. A long page must therefore change more than a short one before it is worth a model
+// call, and a short page is still governed by the floor. Zero means the rule is off.
+func (uc URLs) requiredWords(baseWords int) int {
+	if uc.ChangeMinWords <= 0 {
+		return 0
+	}
+	need := uc.ChangeMinWords
+	if uc.ChangeMinPercent > 0 {
+		// Round UP: a share of 1 % of 1 500 words is 15, and 0.9 of a word is still a word.
+		if share := (baseWords*uc.ChangeMinPercent + 99) / 100; share > need {
+			need = share
+		}
+	}
+	return need
 }
 
 // writeChangeRecord writes a source's <hash>.changes.md: the LAST change of its page as a reader can

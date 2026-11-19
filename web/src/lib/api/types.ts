@@ -667,6 +667,10 @@ export interface RefetchResult {
 export interface RefreshResult {
   checked: number;
   changed: number;
+  // The changes that became an event (snapshot replaced, source updated) and the ones below the
+  // threshold, whose snapshot was kept so the drift accumulates. `changed` counts both.
+  material?: number;
+  deferred?: number;
   failed: number;
   // A page that answered with a wall (a login, a paywall) is not a failure: the site is fine, it just
   // did not answer with itself.

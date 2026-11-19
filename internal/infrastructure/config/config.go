@@ -211,16 +211,22 @@ type CaptureConfig struct {
 	// polite (and of a small machine's CPU). Empty or "0s" is the old burst: every due source in one
 	// pass. The manual passes (POST /api/v1/refresh-urls, one source) ignore it.
 	RefreshMinGap string `yaml:"refresh_min_gap"`
-	// ChangeMinWords is the materiality threshold of a page change. The snapshot is rewritten
-	// whenever the text differs — the vault stays current — but only a change of at least this many
-	// WORD POSITIONS marks the source updated, writes the change record and moves its change time.
-	// A ticking timestamp, a view counter or a typo is therefore not an event. 0 turns the rule off:
-	// every difference is a material change (the pre-threshold behavior).
+	// ChangeMinWords is the materiality threshold of a page change. A change below the threshold does
+	// not touch the stored snapshot (its bytes are the baseline the outline and the claims describe),
+	// so the drift accumulates across checks; only a change of at least this many WORD POSITIONS
+	// replaces the page, marks the source updated, writes the change record, moves its change time and
+	// re-derives it. A ticking timestamp, a view counter or a typo therefore costs nothing. 0 turns the
+	// rule off: every difference is a material change.
 	ChangeMinWords int `yaml:"change_min_words"`
 	// ChangeMinWordLength is the average length, in characters, the changed words must exceed: it is
 	// what keeps "Updated 4 minutes ago" or "12 comments" from passing as prose. It only applies
 	// while ChangeMinWords is above 0.
 	ChangeMinWordLength int `yaml:"change_min_word_length"`
+	// ChangeMinPercent is the SHARE of the stored page a change must be to count: at least this
+	// percentage of the page's words must differ, on top of ChangeMinWords. It is what keeps a long
+	// page from being re-derived for one gained sentence while a short one is still governed by the
+	// floor. 0 turns off only the share rule.
+	ChangeMinPercent int `yaml:"change_min_percent"`
 	// MinTextChars: a fetched page with less extracted text than this is kept as a
 	// bookmark (metadata only, never distilled) instead of an indexed document.
 	MinTextChars int `yaml:"min_text_chars"`
@@ -346,7 +352,7 @@ func Defaults() Config {
 		Capture: CaptureConfig{
 			DedupeByURL: true, RefreshInterval: "168h", FeedRefreshInterval: "24h",
 			RefreshMinGap: "1m", MinTextChars: 400, ListingMaxPages: 100,
-			ChangeMinWords: 10, ChangeMinWordLength: 5,
+			ChangeMinWords: 40, ChangeMinWordLength: 5, ChangeMinPercent: 1,
 		},
 		Assistant: AssistantConfig{
 			// A week is long enough to find yesterday's request again, and short enough that the

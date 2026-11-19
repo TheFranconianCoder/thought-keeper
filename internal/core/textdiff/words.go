@@ -21,6 +21,10 @@ type WordShift struct {
 	// AvgRunes is the mean length, in characters, of the words on both sides of the difference
 	// (textmatch.Tokens drops one-character noise, so "a" and "I" never decide anything).
 	AvgRunes float64
+	// BaseWords is how many words the OLD body has. The materiality rule needs it to judge a change
+	// by its SHARE of the page ("a long page that gains one sentence is not a change worth
+	// re-deriving"), and one tokenization answers both questions.
+	BaseWords int
 }
 
 // Same reports whether the two bodies say the same words.
@@ -28,7 +32,8 @@ func (w WordShift) Same() bool { return w.Words == 0 }
 
 // Words compares two bodies word by word, using the vault's one tokenizer (lowercase, folded,
 // letters and digits, one-character noise dropped). It counts the DIFFERENCE of the two word bags:
-// words both sides carry do not count, wherever they sit.
+// words both sides carry do not count, wherever they sit. BaseWords is the old body's size, whatever
+// the difference is — a reflowed page reports zero changed words against a full-sized baseline.
 func Words(oldText, newText string) WordShift {
 	oldWords := textmatch.Tokens(oldText)
 	newWords := textmatch.Tokens(newText)
@@ -37,11 +42,13 @@ func Words(oldText, newText string) WordShift {
 	}
 	// The old body's bag. A word the new body still carries is consumed, not counted.
 	remaining := make(map[string]int, len(oldWords))
+	base := 0
 	for _, word := range oldWords {
 		if utf8.RuneCountInString(word) > maxWordRunes {
 			continue
 		}
 		remaining[word]++
+		base++
 	}
 	added, addedRunes := 0, 0
 	for _, word := range newWords {
@@ -63,10 +70,11 @@ func Words(oldText, newText string) WordShift {
 	}
 	words := max(added, removed)
 	if words == 0 {
-		return WordShift{}
+		return WordShift{BaseWords: base}
 	}
 	return WordShift{
-		Words:    words,
-		AvgRunes: float64(addedRunes+removedRunes) / float64(added+removed),
+		Words:     words,
+		AvgRunes:  float64(addedRunes+removedRunes) / float64(added+removed),
+		BaseWords: base,
 	}
 }

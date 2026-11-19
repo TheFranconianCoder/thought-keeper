@@ -242,6 +242,7 @@ export const sourcesEn: Record<string, string> = {
   'sources.noteBlocked': '{count} blocked',
   'sources.noteAttached': '{count} attached, not fetched',
   'sources.noteRemoved': '{count} removed',
+  'sources.noteDeferred': '{count} below the threshold, the snapshot was kept',
   'sources.urlsChecked': 'URLs checked {checked} · changed {changed} · failed {failed}{notes}.',
   'sources.urlRefreshFailed': 'URL refresh failed: {error}',
 

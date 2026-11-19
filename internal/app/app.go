@@ -3675,7 +3675,9 @@ func (a *App) handleURLJob(job urlJob) {
 	}
 	// A page that a feed supplied as a copy is checked THROUGH THE REFRESH PATH: the page is tried,
 	// the copy is kept when the page is walled/unreadable/less rich, and a page that wins reports the
-	// reset the app must run. AddURL is for a page that has no copy yet.
+	// reset the app must run. AddURL is for a page that has no copy yet. RefreshOne is the button's
+	// path, and its force flag cannot widen anything here: a copy replaced by its page is a provenance
+	// event whether the difference is large or small.
 	if job.Origin == entities.RSSOrigin && child.FromFeed {
 		res, rErr := a.deps().RefreshURLs.RefreshOne(ctx, entities.URLHash(job.URL))
 		a.gate.RUnlock()
@@ -3826,9 +3828,11 @@ func (a *App) refreshWorker() {
 	}
 }
 
-// applyRefreshResult turns one refresh pass into the two app-level actions it owes: an outline
-// rebuild for every source whose snapshot changed (exclusive, after any running run) and a pump for
-// the rest. The rebuild KEEPS the derivation: only the parts whose text changed lose their claims.
+// applyRefreshResult turns one refresh pass into the app-level actions it owes: an outline rebuild for
+// every source whose snapshot was REPLACED (exclusive, after any running run) and a pump for the rest.
+// The rebuild KEEPS the derivation: only the parts whose text changed lose their claims. A change
+// below the threshold replaced nothing, so it owes nothing but its log line — publishing it lets an
+// open source page show the check and the measurement without waking the pipeline.
 func (a *App) applyRefreshResult(res usecases.RefreshResult, focus string) {
 	resets := make(map[string]bool, len(res.Resets))
 	for _, r := range res.Resets {
@@ -3839,6 +3843,9 @@ func (a *App) applyRefreshResult(res usecases.RefreshResult, focus string) {
 		if !resets[s.Hash] {
 			a.onAdded(s.Hash)
 		}
+	}
+	for _, hash := range res.DeferredHashes {
+		a.publish("source", map[string]any{"hash": hash})
 	}
 	if focus != "" && len(res.Sources) == 0 && len(res.Resets) == 0 {
 		// A kept feed copy changed no bytes, but its log and capture detail did.
@@ -3909,11 +3916,12 @@ func (a *App) refreshNow(reason string) {
 	if res.Checked > 0 || res.Changed > 0 || len(res.Discovered) > 0 {
 		a.log.Info("url refresh done", "reason", reason,
 			"checked", res.Checked, "changed", res.Changed, "material", res.Material,
+			"deferred", res.Deferred,
 			"failed", res.Failed, "blocked", res.Blocked, "attached", res.Attached,
 			"discovered", len(res.Discovered), "removed", res.Removed)
 		a.applyRefreshResult(res, "")
 		a.publish("urls", map[string]any{
-			"checked": res.Checked, "changed": res.Changed, "failed": res.Failed,
+			"checked": res.Checked, "changed": res.Changed, "deferred": res.Deferred, "failed": res.Failed,
 			"discovered": len(res.Discovered), "removed": res.Removed,
 		})
 	}
@@ -3931,10 +3939,11 @@ func (a *App) refreshNext(reason string) bool {
 	if found {
 		a.log.Info("url refresh: one page", "reason", reason,
 			"checked", res.Checked, "changed", res.Changed, "material", res.Material,
+			"deferred", res.Deferred,
 			"failed", res.Failed, "blocked", res.Blocked, "discovered", len(res.Discovered))
 		a.applyRefreshResult(res, "")
 		a.publish("urls", map[string]any{
-			"checked": res.Checked, "changed": res.Changed, "failed": res.Failed,
+			"checked": res.Checked, "changed": res.Changed, "deferred": res.Deferred, "failed": res.Failed,
 			"discovered": len(res.Discovered), "removed": res.Removed,
 		})
 	}

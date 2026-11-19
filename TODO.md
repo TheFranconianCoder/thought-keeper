@@ -238,6 +238,12 @@ are.
    delete a record whose members the index cannot confirm. The association layer is the valuable
    artifact; the SQLite membership is the cache. Decide whether the record joins the vault's history
    and stops being removed on an unverified atom set.
+5. **A page that drifts forever is never re-derived.** A change below the materiality threshold keeps
+   the stored snapshot, so the drift accumulates — but a page that gains two words a week may take
+   months to cross the floor, and until then its claims describe an old version. That is the intended
+   trade (no model call for noise) and the per-source Refresh is the escape hatch. If it turns out to
+   bite, a maximum age (`capture.change_max_stale`, e.g. 90 days, `0` = off) would force one event per
+   period without turning the threshold back into a poll.
 
 ## Config
 

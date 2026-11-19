@@ -57,7 +57,8 @@ prose question goes to Ask. Time means arrival (source), creation (claim) or las
 source also carries the date it declares for itself (a feed item, the page's metadata, a date under
 its title, a wiki page's edit), which is shown beside the arrival but never orders the vault. The
 **Sources list orders by activity**: the arrival, or the last time the page's readable content
-actually changed. A check that answered the same page is not an event.
+actually changed. A check that answered the same page is not an event, and neither is a drift below
+the materiality threshold: that snapshot is kept.
 **Start** is the front door: a vault-pulse line, an Ask box, and three thin signals for what runs,
 what needs you and what waits in the read-later queue (open entries, the interests that queued them
 by name, the age of the oldest), all absent when quiet; then a **since your last visit** statistic —
@@ -84,11 +85,16 @@ filtered count is the scroll height. A cluster is
 
 A page that changed is re-read **in place**: the refresh replaces the snapshot and rebuilds the
 outline, and only the parts whose text changed materially lose their claims — a reflow or a single
-changed word keeps them, and a new title touches no claim. The source's record keeps the time of that
-change (`changed_at`, not the check time), and the Sources list marks the row **updated** when the
-change is newer than the Sources watermark. Only a **material** change moves that time: the snapshot
-and the outline always follow the bytes, but a ticking date or a view counter is a change without an
-event (`capture.change_min_words` / `change_min_word_length`, defaults 10 / 5). The refresh also
+changed word keeps them, and a new title touches no claim. **Only an event replaces the snapshot at
+all.** A change below the threshold keeps the stored bytes — they are the baseline the outline, the
+node texts and the claims describe — so the drift accumulates against them, and a page that gains a
+sentence a week is re-derived once it has gained a paragraph. The source's record keeps the time of
+that change (`changed_at`, not the check time), and the Sources list marks the row **updated** when the
+change is newer than the Sources watermark. The event is the title moving, or at least
+`max(capture.change_min_words, ⌈stored words × capture.change_min_percent / 100⌉)` word positions
+differing (a replaced word counts once) with an average length above
+`capture.change_min_word_length` (defaults 40 / 1 / 5); a ticking date, a view counter or a typo costs
+a check and a log line, never a model call. The refresh also
 writes a **change record** (`<hash>.changes.md`: time, title before and after, the word measurement
 and a diff of the readable body), which the source page offers one click from its head, on every tab.
 
@@ -196,8 +202,8 @@ paths stay read-only.
 | **read later** | The reader's queue of sources. Open until marked done; otherwise a filter of the Sources list, ordered oldest entry first. | the source record + `?readlater=1` |
 | **interest** | A standing rule the reader writes: terms that make a NEW source join the read-later queue. A strong match queues; a weak one is only a suggestion. | `interests/<slug>.md` |
 | **seen watermark** | The instant up to which one lens's activity has been seen — an arrival or the last real content change of a page. Two per vault: Start's answers its statistic, Sources' answers its **new** and **updated** marks. A Start visit advances Start's alone; a Sources visit advances both, because the list answers the batch the statistic summarizes. Shared by every client. A record, not a cache. | `.thought-keeper/reader/seen.md` |
-| **updated** | A source whose recorded page content changed **materially** after the Sources watermark (and that did not also just arrive). A material change moves at least `capture.change_min_words` word positions (a replaced word counts once) whose average length exceeds `capture.change_min_word_length` (defaults 10 and 5), or it moves the title; a ticked counter, a typo or a reflow is a change of the snapshot but not an event. The change time is a RECORD; the mark is a display rule in memory, like **new**. | the source's `<hash>.meta` + the Sources row |
-| **change record** | What the last MATERIAL change of a URL page did: the time, the title before and after, the word measurement, and a unified diff of the readable body. The reader's view is the **Changes** tab. | `sources/<ab>/<cd>/<hash>.changes.md` |
+| **updated** | A source whose stored page content was **replaced** after the Sources watermark (and that did not also just arrive). An event is the title moving, or at least `max(capture.change_min_words, ⌈stored words × capture.change_min_percent / 100⌉)` word positions differing (a replaced word counts once) with an average length above `capture.change_min_word_length` (defaults 40 / 1 / 5), or the human refreshing that one source. Below the threshold the snapshot is KEPT, so the drift accumulates and a check that only saw a ticked counter, a typo or a reflow leaves no mark at all. The change time is a RECORD; the mark is a display rule in memory, like **new**. | the source's `<hash>.meta` + the Sources row |
+| **change record** | What the last EVENT of a URL page did: the time, the title before and after, the word measurement, and a unified diff of the readable body. The reader's view is the **Changes** tab. | `sources/<ab>/<cd>/<hash>.changes.md` |
 | **reconcile / reindex / cleanup** | The repairs: check records against the vault; rebuild the index from the vault; prune dead cluster members. The first two are buttons in Status → Vault; cleanup settles every cluster pass by itself. | Status → Vault |
 
 **The URL is the truth about UI state — with one exception that is deliberate.** A command's address

@@ -244,13 +244,17 @@ type ReindexResult struct {
 // RefreshResult is the response of POST /api/v1/refresh-urls.
 type RefreshResult struct {
 	Checked int `json:"checked"`
-	// Changed counts pages whose readable content differs from the stored snapshot: the snapshot is
-	// replaced in every one of them.
+	// Changed counts pages whose readable content differs from the stored snapshot — whether the
+	// snapshot was replaced (Material) or kept (Deferred).
 	Changed int `json:"changed"`
-	// Material counts the changes worth telling the reader about (enough words, long enough on
-	// average, or a new title). Only a material change moves the change time and writes the record;
-	// a ticking date or a view counter is a Changed without a Material.
+	// Material counts the changes that became an EVENT: the title moved, the drift is above the
+	// threshold (capture.change_min_words / change_min_percent / change_min_word_length), or the
+	// human refreshed the page. Only these replace the snapshot, move the change time and write the
+	// record.
 	Material int `json:"material,omitempty"`
+	// Deferred counts the changes BELOW the threshold: the snapshot is kept (it is the baseline the
+	// outline and the claims describe) and the drift accumulates against it. No model is called.
+	Deferred int `json:"deferred,omitempty"`
 	Failed   int `json:"failed"`
 	// Blocked counts pages that answered with a wall (a login, a paywall, a consent gate): the source
 	// is fine, the site is not answering with itself.

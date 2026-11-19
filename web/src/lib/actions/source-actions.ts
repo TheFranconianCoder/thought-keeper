@@ -413,6 +413,7 @@ export async function refreshURLs(): Promise<void> {
   try {
     const result = await api.refreshURLs();
     const notes = [
+      result.deferred ? t('sources.noteDeferred', { count: result.deferred }) : '',
       result.blocked ? t('sources.noteBlocked', { count: result.blocked }) : '',
       result.attached ? t('sources.noteAttached', { count: result.attached }) : '',
       result.discovered ? tn('sources.counts.newPages', result.discovered) : '',

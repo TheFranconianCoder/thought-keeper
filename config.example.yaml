@@ -145,10 +145,15 @@ capture:                                   # URL sources
                                            # the cadence above stays a source's minimum age, this is
                                            # the throughput (a sweep over N pages takes N × gap);
                                            # empty or '0s' = every due page in one burst
-    change_min_words: 10                   # a refresh always writes the new snapshot; only a change
-                                           # of at least this many WORD positions marks the source
-                                           # updated and writes the change record (a replaced word
-                                           # counts once); 0 = every difference counts
+    change_min_words: 40                   # a change below the threshold does not touch the stored
+                                           # snapshot (its bytes are the baseline the outline and the
+                                           # claims describe), so the drift ACCUMULATES across checks;
+                                           # only a change of at least this many WORD positions
+                                           # replaces the page, marks it updated and re-derives it
+                                           # (a replaced word counts once); 0 = every difference
+    change_min_percent: 1                  # ...and it must move at least this share of the page:
+                                           # a long page that gains one sentence is not worth a model
+                                           # call, a short one is governed by the floor above; 0 = off
     change_min_word_length: 5              # ...and those changed words must average longer than
                                            # this many characters, so "Updated 4 minutes ago" stays
                                            # quiet while prose does not

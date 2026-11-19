@@ -27,6 +27,7 @@ var vaultKeys = map[string]bool{
 	"capture.refresh_min_gap":        true,
 	"capture.change_min_words":       true,
 	"capture.change_min_word_length": true,
+	"capture.change_min_percent":     true,
 	"capture.min_text_chars":         true,
 	"capture.listing_max_pages":      true,
 	"cluster.neighbor_k":             true,

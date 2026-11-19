@@ -73,6 +73,7 @@ var writableKeys = map[string]string{
 	"capture.listing_max_pages":      TierAdvanced,
 	"capture.change_min_words":       TierAdvanced,
 	"capture.change_min_word_length": TierAdvanced,
+	"capture.change_min_percent":     TierAdvanced,
 
 	// Cluster: step 4's arithmetic. A change applies to the next pass, never to a running one.
 	"cluster.neighbor_k":            TierAdvanced,
@@ -291,6 +292,14 @@ func keyProblem(key string, value any) string {
 		items, err := asStrings(value)
 		if err != nil || len(items) == 0 {
 			return key + ": must list at least one language"
+		}
+		return ""
+	case "capture.change_min_percent":
+		// A share, so 100 is the ceiling: a page cannot change more than entirely. Zero is
+		// meaningful — it turns off only the share rule, leaving the absolute floor.
+		n, err := asInt(value)
+		if err != nil || n < 0 || n > 100 {
+			return fmt.Sprintf("%s: %v is not a percentage", key, value)
 		}
 		return ""
 	}

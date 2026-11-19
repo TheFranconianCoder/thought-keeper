@@ -8,7 +8,7 @@ true.
 
 | Entity | Meaning |
 | --- | --- |
-| `Source` | An immutable input: `id`, `hash`, `kind`, `ext`, `path`, `url`, `title`, `original_name`, `tags` (human labels), `auto_tags` (derived labels) and `auto_tags_at`, the reader's marks (`favorite_at`, `read_later_at`, `read_later_done_at`, `read_later_manual`, `read_later_via`), `bytes`, `pages`, `tree_state`, `steps`, `url_status`, `url_checked_at`, `url_changed_at` (the last MATERIAL content change — `capture.change_min_words` / `change_min_word_length`; `url_checked_at` is only the last fetch), `bookmark`, `meta`. |
+| `Source` | An immutable input: `id`, `hash`, `kind`, `ext`, `path`, `url`, `title`, `original_name`, `tags` (human labels), `auto_tags` (derived labels) and `auto_tags_at`, the reader's marks (`favorite_at`, `read_later_at`, `read_later_done_at`, `read_later_manual`, `read_later_via`), `bytes`, `pages`, `tree_state`, `steps`, `url_status`, `url_checked_at`, `url_changed_at` (the last time the stored snapshot was REPLACED — the event threshold is `capture.change_min_words` / `change_min_percent` / `change_min_word_length`; a drift below it keeps the bytes, and `url_checked_at` is only the last fetch), `bookmark`, `meta`. |
 | `SourceNode` | A tree node: `node_id`, `parent_id`, `depth`, `ord`, `title`, `summary`, `start_page`, `end_page`, `text_hash`. |
 | `Atom` | One claim: `id`, `topic`, `claim`, `type`, `status`, `body`, `sources`. |
 | `WikiPage` | User-authored Markdown: `id`, `title`, `tags` (human), `auto_tags` (derived), `urls`, `source` (stable `WikiHash`), `favorite_at`, timestamps, body. |

@@ -145,19 +145,28 @@ Body: +12 -3 lines.
 ```
 
 It is written while BOTH bodies are in hand — the refresher already reads the old snapshot to decide
-whether the outline has to be rebuilt — so it costs no extra I/O and keeps no second copy of the
-page, and it is written only for a **material** change: the title moved, or at least
-`capture.change_min_words` word positions differ (a replaced word counts once) with an average length
-above `capture.change_min_word_length` (defaults 10 and 5). A first read is an arrival, not a change;
-an unchanged check never touches the file; a ticked counter or a typo updates the snapshot and the
-outline but leaves the record — and the change time — alone, and the source log says so. A
+whether the page changed enough to be derived again — so it costs no extra I/O and keeps no second
+copy of the page, and it is written only for an **event**: the title moved, or at least
+`max(capture.change_min_words, ⌈stored words × capture.change_min_percent / 100⌉)` word positions
+differ (a replaced word counts once) with an average length above `capture.change_min_word_length`
+(defaults 40 / 1 / 5), or the human refreshed the page. A first read is an arrival, not a change; an
+unchanged check never touches the file; and a **ticked counter or a typo is not an event at all**: the
+snapshot is kept (it is the baseline the outline and the claims describe), the drift accumulates
+against it, and the source log names the measurement and the threshold it missed. A
 **title-only** change replaces an older body diff with `Body: unchanged.`: the record is always about
-the last material change, and the `Words:` line names the measurement that made it one. The diff is
-line based (a reflow of a material change therefore shows), capped at 2000 lines / 256 KiB with a
+the last event, and the `Words:` line names the measurement that made it one. The diff is
+line based (a reflow of an event therefore shows), capped at 2000 lines / 256 KiB with a
 closing note, and the record is a **record**: the bytes it compares are gone once the new snapshot is
 written, so it cannot be rebuilt. It is served by
 `GET /api/v1/sources/{hash}/raw?which=.changes.md` and shown in the **Changes** tab; it goes away with
 the source.
+
+The invariant behind it: **`content_hash` in `<hash>.meta` is the hash of the bytes the source holds**,
+and those bytes are replaced only by an event. A check that does not replace the snapshot must not
+write the fetched hash either — the next check would believe the drift was already stored, and the
+accumulated difference would be lost. The snapshot's own `fetched_at` therefore names when those bytes
+were taken, `url_checked_at` when the page was last seen, and `changed_at` when it last said something
+new; the three are shown beside each other and never conflated.
 
 ## 4. Sources
 

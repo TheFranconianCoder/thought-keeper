@@ -27,6 +27,21 @@ func readChanges(t *testing.T, store *objects.Store, hash string) (string, bool)
 	return string(b), true
 }
 
+// readSnapshot returns the bytes a source holds NOW, so a test can prove a check touched nothing.
+func readSnapshot(t *testing.T, store *objects.Store, hash, ext string) string {
+	t.Helper()
+	rc, err := store.Open(hash, ext)
+	if err != nil {
+		t.Fatalf("open snapshot: %v", err)
+	}
+	defer func() { _ = rc.Close() }()
+	b, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read snapshot: %v", err)
+	}
+	return string(b)
+}
+
 // changeRecordPage is long enough to be an indexed page rather than a bookmark.
 const changeRecordPara = "alpha beta gamma delta epsilon zeta. "
 
@@ -146,9 +161,9 @@ const immaterialTail = "\n\nUpdated 3 minutes ago."
 // materialParagraph is real prose: twelve words, all long enough to pass the length rule.
 const materialParagraph = "\n\nDatabase invalidation requires careful versioning strategies because stale entries quietly corrupt rendering."
 
-// TestAnImmaterialChangeIsNotAnEvent: a page whose date counter ticked is still replaced (the vault
-// stays current) and still rebuilt (the outline's byte references move), but it does not move the
-// change time, does not write a record, and does not mark the source updated.
+// TestAnImmaterialChangeIsNotAnEvent: a page whose date counter ticked is not replaced at all. The
+// stored snapshot is the baseline the outline and the claims describe, so the drift accumulates
+// against it; the check time moves, a log line explains the silence, and no model is called.
 func TestAnImmaterialChangeIsNotAnEvent(t *testing.T) {
 	ctx := context.Background()
 	idx := newFakeIndex()
@@ -166,36 +181,53 @@ func TestAnImmaterialChangeIsNotAnEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
+	stored, storedMeta := readSnapshot(t, store, src.Hash, src.Ext), idx.m[src.Hash].Meta
 
 	conv.markdown = changeRecordPage(false) + immaterialTail
 	res, err := uc.RefreshAll(ctx)
 	if err != nil {
 		t.Fatalf("immaterial refresh: %v", err)
 	}
-	if res.Changed != 1 || res.Material != 0 {
-		t.Fatalf("refresh = changed %d material %d, want 1/0", res.Changed, res.Material)
+	if res.Changed != 1 || res.Material != 0 || res.Deferred != 1 {
+		t.Fatalf("refresh = changed %d material %d deferred %d, want 1/0/1",
+			res.Changed, res.Material, res.Deferred)
+	}
+	if len(res.DeferredHashes) != 1 || res.DeferredHashes[0] != src.Hash {
+		t.Errorf("the deferred source is not named for the app: %v", res.DeferredHashes)
+	}
+	if len(res.Resets) != 0 {
+		t.Errorf("a sub-threshold drift rebuilt the outline: %+v", res.Resets)
+	}
+	if after := readSnapshot(t, store, src.Hash, src.Ext); after != stored {
+		t.Errorf("a sub-threshold drift replaced the snapshot")
+	}
+	if idx.m[src.Hash].Meta != storedMeta {
+		t.Errorf("a sub-threshold drift rewrote the record: %s", idx.m[src.Hash].Meta)
 	}
 	if got, ok := steps.changed[src.Hash]; ok {
-		t.Errorf("a ticked counter moved the change time: %v", got)
+		t.Errorf("a sub-threshold drift moved the change time: %v", got)
 	}
 	if _, ok := readChanges(t, store, src.Hash); ok {
-		t.Fatalf("an immaterial change wrote a change record")
+		t.Fatalf("a sub-threshold drift wrote a change record")
 	}
-	if len(res.Resets) != 1 {
-		t.Errorf("the first body change did not rebuild the outline: %+v", res.Resets)
+	if !log.contains("below the threshold") {
+		t.Errorf("the source log does not explain the missing update: %v", log.lines)
 	}
-	if !log.contains("immaterially") {
-		t.Errorf("the source log does not explain the missing mark: %v", log.lines)
+	if idx.m[src.Hash].URLChecked.IsZero() {
+		t.Errorf("the check was not recorded")
 	}
 
-	// A paragraph is a change a reader would notice. It moves the time and leaves the record.
+	// A paragraph is a change a reader would notice. It replaces the snapshot, moves the time and
+	// leaves the record — measured against the STORED page, so the counter that was deferred counts
+	// too.
 	conv.markdown = changeRecordPage(false) + immaterialTail + materialParagraph
 	res, err = uc.RefreshAll(ctx)
 	if err != nil {
 		t.Fatalf("material refresh: %v", err)
 	}
-	if res.Changed != 1 || res.Material != 1 {
-		t.Fatalf("refresh = changed %d material %d, want 1/1", res.Changed, res.Material)
+	if res.Changed != 1 || res.Material != 1 || res.Deferred != 0 {
+		t.Fatalf("refresh = changed %d material %d deferred %d, want 1/1/0",
+			res.Changed, res.Material, res.Deferred)
 	}
 	if got := steps.changed[src.Hash]; !got.Equal(fixedClock{}.Now()) {
 		t.Errorf("a material change did not move the change time: %v", got)
@@ -204,7 +236,7 @@ func TestAnImmaterialChangeIsNotAnEvent(t *testing.T) {
 	if !ok {
 		t.Fatalf("a material change wrote no change record")
 	}
-	if !strings.Contains(record, "Words: 12 changed") {
+	if !strings.Contains(record, "Words: 15 changed") {
 		t.Errorf("the record does not name the measurement:\n%s", record)
 	}
 }

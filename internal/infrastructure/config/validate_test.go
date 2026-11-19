@@ -60,6 +60,9 @@ func TestKeyProblemAcceptsWhatTheAppCanUse(t *testing.T) {
 		{"capture.refresh_min_gap", ""},
 		{"capture.change_min_words", 0},
 		{"capture.change_min_word_length", 0},
+		{"capture.change_min_percent", 0},
+		{"capture.change_min_percent", 1},
+		{"capture.change_min_percent", 100},
 		{"pdf.max_pages", 0},
 		{"ocr.max_pages", 0},
 		{"app.memory_limit_mb", 0},
@@ -99,6 +102,8 @@ func TestKeyProblemRefusesValuesThatDefaultsWouldMask(t *testing.T) {
 		{"capture.refresh_min_gap", "-1m"},
 		{"capture.change_min_words", -1},
 		{"capture.change_min_word_length", -3},
+		{"capture.change_min_percent", -1},
+		{"capture.change_min_percent", 101},
 	} {
 		if problem := keyProblem(tc.key, tc.value); problem == "" {
 			t.Errorf("%s = %v: accepted, want a problem", tc.key, tc.value)

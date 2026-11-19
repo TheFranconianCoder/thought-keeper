@@ -245,6 +245,7 @@ export const sourcesDe: Record<string, string> = {
   'sources.noteBlocked': '{count} blockiert',
   'sources.noteAttached': '{count} angehängt, nicht abgerufen',
   'sources.noteRemoved': '{count} entfernt',
+  'sources.noteDeferred': '{count} unter der Schwelle, der Snapshot bleibt',
   'sources.urlsChecked': 'URLs geprüft {checked} · geändert {changed} · fehlgeschlagen {failed}{notes}.',
   'sources.urlRefreshFailed': 'Das Aktualisieren der URLs ist fehlgeschlagen: {error}',
 

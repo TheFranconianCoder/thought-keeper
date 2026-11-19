@@ -342,11 +342,15 @@ type URLs struct {
 	MinAge       time.Duration
 	FeedMinAge   time.Duration
 	MinTextChars int
-	// ChangeMinWords / ChangeMinWordLength are the materiality threshold of a page change: how many
-	// word positions must differ, and how long those words must be on average, before the change
-	// counts as an event. ChangeMinWords <= 0 turns the rule off.
+	// ChangeMinWords / ChangeMinWordLength / ChangeMinPercent are the materiality threshold of a page
+	// change: how many word positions must differ, how long those words must be on average, and how
+	// large a SHARE of the stored page the difference must be, before the change counts as an event.
+	// A change below the threshold does not move the snapshot at all, so the drift accumulates against
+	// the version the claims describe. ChangeMinWords <= 0 turns the whole rule off; ChangeMinPercent
+	// <= 0 turns off only the share.
 	ChangeMinWords      int
 	ChangeMinWordLength int
+	ChangeMinPercent    int
 }
 
 // URLAdder adds one URL source. A handler holds this value; nil means the feature is not wired.
@@ -1201,16 +1205,25 @@ type DiscoveredChildren struct {
 // RefreshResult summarizes one pass.
 type RefreshResult struct {
 	Checked int
-	// Changed counts the pages whose readable content differs from the stored snapshot — the vault is
-	// updated in every one of them.
+	// Changed counts the pages whose readable content differs from the stored snapshot — whether the
+	// vault replaced it (Material) or kept it (Deferred).
 	Changed int
-	// Material counts the changes worth telling the reader about: the title moved, or enough words
-	// changed (capture.change_min_words) and they are prose (capture.change_min_word_length). Only a
-	// material change moves the change time, writes the change record and asks for a cluster pass.
+	// Material counts the changes that became an EVENT: the title moved, the drift is above the
+	// threshold (capture.change_min_words / change_min_percent / change_min_word_length), or the human
+	// refreshed the page. Only these replace the snapshot, move the change time, write the change
+	// record and ask for a cluster pass.
 	Material int
-	Failed   int
-	Blocked  int
-	Attached int
+	// Deferred counts the changes BELOW the threshold. The snapshot is kept — the stored bytes are the
+	// baseline the outline and the claims describe — so the drift accumulates against them and the
+	// next check measures the total. Nothing is derived, and no model is called: only the check time
+	// and a line in the source's log move.
+	Deferred int
+	// DeferredHashes names the deferred sources, so the app can publish each one's log line and check
+	// time to an open window.
+	DeferredHashes []string
+	Failed         int
+	Blocked        int
+	Attached       int
 	// Replaced counts attached snapshots a forced fetch replaced with a regular one. A wall or a
 	// failure leaves the attachment in place and does not count here.
 	Replaced int
@@ -1220,8 +1233,8 @@ type RefreshResult struct {
 	Removed int
 	Sources []partialentities.PartialSource
 	// ChangedURLs are the pages whose readable content differs, so the caller knows whether the
-	// association layer has something to regroup. One of them may be an immaterial change (a date,
-	// a counter) — see Material.
+	// association layer has something to regroup. A changed page may be deferred (a date, a counter)
+	// — see Deferred.
 	ChangedURLs []string
 	// Resets are the sources whose snapshot was replaced by a DIFFERENT body. The refresh runs under
 	// the shared gate, so it must not touch a derivation itself: a document run may be in flight. The
@@ -1250,7 +1263,9 @@ func (uc URLs) RefreshAll(ctx context.Context) (RefreshResult, error) {
 	return uc.refreshPass(ctx, false)
 }
 
-// RefreshOne refreshes one URL source.
+// RefreshOne refreshes one URL source. It is the Refresh button on a source page, so the human's
+// request is the answer: a difference below the materiality threshold is applied too, because the
+// reader asked for THIS page and a page that quietly refuses to update is not a refresh.
 func (uc URLs) RefreshOne(ctx context.Context, hash string) (RefreshResult, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
@@ -1260,7 +1275,7 @@ func (uc URLs) RefreshOne(ctx context.Context, hash string) (RefreshResult, erro
 		return RefreshResult{}, types.New("unsupported_source",
 			"this source has no URL to refresh", types.ErrUnsupportedSource)
 	}
-	return uc.executeRows(ctx, []entities.Source{src}, false, false)
+	return uc.executeRows(ctx, []entities.Source{src}, false, false, true)
 }
 
 // RefreshOneForce refreshes one URL source even when it is not due.
@@ -1282,7 +1297,7 @@ func (uc URLs) RefreshOneForce(ctx context.Context, hash string) (RefreshResult,
 			"this snapshot is not attached and not a collected link; refresh the URL instead",
 			types.ErrUnsupportedSource)
 	}
-	return uc.executeRows(ctx, []entities.Source{src}, false, true)
+	return uc.executeRows(ctx, []entities.Source{src}, false, true, true)
 }
 
 func (uc URLs) refreshPass(ctx context.Context, scheduled bool) (RefreshResult, error) {
@@ -1290,7 +1305,7 @@ func (uc URLs) refreshPass(ctx context.Context, scheduled bool) (RefreshResult, 
 	if err != nil {
 		return RefreshResult{}, err
 	}
-	return uc.executeRows(ctx, rows, scheduled, false)
+	return uc.executeRows(ctx, rows, scheduled, false, false)
 }
 
 // RefreshNext refreshes the ONE URL source that has waited longest among those the cadence finds
@@ -1317,7 +1332,7 @@ func (uc URLs) RefreshNext(ctx context.Context) (RefreshResult, bool, error) {
 			if s.URL == "" || !uc.dueOnCadence(s, now) {
 				continue
 			}
-			res, err := uc.executeRows(ctx, []entities.Source{s}, true, false)
+			res, err := uc.executeRows(ctx, []entities.Source{s}, true, false, false)
 			return res, true, err
 		}
 		if len(rows) < window {
@@ -1346,7 +1361,11 @@ func (uc URLs) dueOnCadence(s entities.Source, now time.Time) bool {
 	return s.URLChecked.IsZero() || now.Sub(s.URLChecked) >= age
 }
 
-func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, scheduled, ignoreAttached bool) (RefreshResult, error) {
+// executeRows refreshes one row at a time. scheduled honors the cadence, ignoreAttached asks even
+// when the human supplied the bytes, and force makes ANY difference an event: it is what the
+// per-source Refresh button asks for, and the one place where a request overrides the materiality
+// threshold that keeps a scheduled pass from paying for noise.
+func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, scheduled, ignoreAttached, force bool) (RefreshResult, error) {
 	var res RefreshResult
 	seen := make(map[string]bool)
 	for _, s := range rows {
@@ -1644,37 +1663,24 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		}
 
 		contentHash := contentHashOf(title, body)
-		// What the SOURCE said before this fetch. The favicon repair below writes the new hash into
-		// s.Meta; comparing after it would call every changed page "unchanged" on a source whose
-		// icon was missing (LWN was exactly that case).
+		// What the SOURCE holds before this fetch: the hash of the bytes the outline and the claims
+		// describe. A check never compares against the LIVE page alone, so a drift below the threshold
+		// ACCUMULATES instead of being flattened by every visit.
 		previousContentHash := contentHashFromMeta(s.Meta)
 		// A URL record written before the identity carried the icon has no favicon reference. A
-		// refresh is the natural repair: fetch it, write it into the index AND the source record,
-		// then the next reindex cannot lose it again.
+		// refresh is the natural repair — but the icon belongs to the SITE, not to one snapshot, so it
+		// is written with the content hash of the bytes the source still holds (repairFavicon). A check
+		// that replaces nothing must not rewrite what the record says its bytes are.
 		favicon := faviconFromMeta(s.Meta)
 		if favicon == nil {
 			favicon = fetchFavicon(ctx, uc.Fetch, uc.Favicons, uc.Log, s.URL, conv.Favicon)
-			if favicon != nil {
-				s.Meta = metaWithFavicon(s.Meta, s.URL, contentHash, favicon)
-				_ = uc.Index.SetSourceMeta(ctx, s.Hash, s.Meta) //nolint:errcheck // the index and the step records are a light; the vault is the truth
-				if language != "" {
-					_ = uc.Index.SetSourceLanguage(ctx, s.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
-				}
-				if uc.Steps != nil {
-					_ = uc.Steps.SetIdentity(s.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
-						Kind: entities.SourceKindURL, URL: s.URL, Bookmark: s.Bookmark, Language: language,
-						OriginalName: s.OriginalName, ContentHash: contentHash,
-						FaviconHash: faviconHash(favicon), FaviconExt: faviconExt(favicon),
-						FromFeed: s.FromFeed, FeedHash: s.FeedHash,
-					})
-				}
-			}
 		}
 		sameContent := contentHash == previousContentHash
 		if sameContent && !attached && !fromFeed && !wasWalled {
 			// Same content: just record that we checked and the page still answers. A feed copy or a
 			// source whose last fetch was walled falls through: the provenance must change even when
 			// the text did not (the page WAS read).
+			uc.repairFavicon(ctx, s, language, previousContentHash, favicon)
 			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
 			if uc.Log != nil {
 				uc.Log.Debug("url unchanged", "url", s.URL, "status", page.Status)
@@ -1693,13 +1699,52 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		// A source that already HAS a snapshot is being updated; one that had none (a queued link)
 		// is arriving. The change time is about the former: a first read is an arrival, not an edit.
 		changed := !sameContent && s.Path != ""
-		// ...and only SOME changes are worth an event. The snapshot is always replaced (the vault
-		// stays current); the change time, the updated mark and the record are reserved for a change
-		// a reader would notice. A missing snapshot has nothing to compare: it counts as material.
+		// A collected link that the render finally made readable is a page from now on.
+		becamePage := s.Bookmark && ignoreAttached
+		// ...and only a change a reader would NOTICE is an event. A missing snapshot has nothing to
+		// compare: it counts as material. force is the human's own Refresh button — it asks for THIS
+		// page, so its answer is applied however small the difference is.
 		material := changed
 		var shift textdiff.WordShift
 		if changed && hadSnapshot {
 			material, shift = uc.materialChange(s.Title, title, oldBody, body, !sameBody)
+			if force {
+				material = true
+			}
+		}
+		// A provenance change is an event the threshold cannot judge: the bytes a reader sees are
+		// replaced by the page behind a feed's copy, by a page that cleared its wall, by the page a
+		// collected link finally became, or by the human's own attachment.
+		if changed && (fromFeed || wasWalled || becamePage || attached) {
+			material = true
+		}
+		// A change below the threshold does not touch the bytes. The stored snapshot is the BASELINE
+		// of the derivation — the outline's node references are byte ranges into it — so replacing it
+		// without rebuilding the outline would corrupt every node's text, and rebuilding the outline
+		// (a title call, the distill of the changed parts, a fresh summary) is the expensive half of a
+		// refresh. Keeping the bytes instead makes the drift accumulate against the version the claims
+		// describe: the next check measures the total, and the page is derived again once the
+		// difference is worth it. A feed copy replaced by its page, a wall that cleared and a collected
+		// link that became a page are provenance events and always go through.
+		if changed && !material && !attached && !fromFeed && !wasWalled && !becamePage {
+			uc.repairFavicon(ctx, s, language, previousContentHash, favicon)
+			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
+			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "info",
+				"the page drifted below the threshold — the snapshot is kept; the drift accumulates",
+				map[string]any{
+					"words": shift.Words, "base_words": shift.BaseWords,
+					"required_words": uc.requiredWords(shift.BaseWords),
+					"avg_chars":      fmt.Sprintf("%.1f", shift.AvgRunes),
+					"min_word_chars": uc.ChangeMinWordLength, "min_percent": uc.ChangeMinPercent,
+				})
+			res.Changed++
+			res.Deferred++
+			res.DeferredHashes = append(res.DeferredHashes, s.Hash)
+			if uc.Log != nil {
+				uc.Log.Info("url drift below the threshold", "url", s.URL, "hash", s.Hash,
+					"words", shift.Words, "base_words", shift.BaseWords)
+			}
+			continue
 		}
 
 		snapshot := renderURLSnapshot(s.URL, title, page.Status, now, body, engine)
@@ -1716,19 +1761,10 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		}
 		// The record a reader can open, written only once the new snapshot IS the snapshot: both
 		// bodies are in hand here, and the old title is the one the source carried until this fetch
-		// (the title the reader saw). An immaterial change gets a log line instead — the snapshot is
-		// current, but a date or a counter is not news.
+		// (the title the reader saw). A sub-threshold change never reaches this point: it kept the
+		// bytes and wrote a log line instead.
 		if changed && hadSnapshot {
-			if material {
-				writeChangeRecord(uc.Store, uc.Log, s.Hash, s.Title, title, oldBody, body, sameBody, shift, now)
-			} else {
-				appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "info",
-					"the page changed immaterially — the snapshot is updated, the change is not an event",
-					map[string]any{
-						"words": shift.Words, "avg_chars": fmt.Sprintf("%.1f", shift.AvgRunes),
-						"min_words": uc.ChangeMinWords, "min_avg_chars": uc.ChangeMinWordLength,
-					})
-			}
+			writeChangeRecord(uc.Store, uc.Log, s.Hash, s.Title, title, oldBody, body, sameBody, shift, now)
 		}
 		// The icon belongs to the SITE, not to one snapshot: the fetch above already repaired a
 		// missing icon; if it was still unavailable, keep the reference we had rather than writing a
@@ -1752,7 +1788,6 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		// A COLLECTED LINK that the render finally made readable stops being a bookmark: the page is
 		// indexed from now on, and the record says why it changed. This is the explicit "try the page
 		// again" only — the weekly pass leaves a bookmark alone.
-		becamePage := s.Bookmark && ignoreAttached
 		if becamePage {
 			meta = metaWith(meta, map[string]any{"bookmark": nil})
 			appendSourceLog(ctx, uc.SourceLog, uc.Clock, s.Hash, "info",
@@ -1854,6 +1889,8 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 				reason = "the page replaced the feed copy — the outline is rebuilt"
 			case wasWalled:
 				reason = "the wall cleared and the page was read — the outline is rebuilt"
+			case force:
+				reason = "you refreshed this page — the outline is rebuilt"
 			}
 			res.Resets = append(res.Resets, SnapshotReplacement{Hash: s.Hash, Reason: reason})
 		}
@@ -2068,6 +2105,30 @@ func metaWithFavicon(raw, url, contentHash string, favicon *faviconMeta) string 
 		set["favicon"] = favicon
 	}
 	return metaWith(raw, set)
+}
+
+// repairFavicon stores an icon a check has just fetched for a source whose SNAPSHOT DOES NOT MOVE:
+// the unchanged check and the below-threshold drift. The icon belongs to the site, not to one
+// snapshot, so it is repaired by any check — but it is written with the content hash of the bytes the
+// source still holds, not the one the fetch produced. Writing the new hash there would tell the next
+// check that the drift was already stored, and the accumulated difference would be lost.
+func (uc URLs) repairFavicon(ctx context.Context, s entities.Source, language, contentHash string, favicon *faviconMeta) {
+	if favicon == nil {
+		return
+	}
+	_ = uc.Index.SetSourceMeta(ctx, s.Hash, metaWithFavicon(s.Meta, s.URL, contentHash, favicon)) //nolint:errcheck // the index and the step records are a light; the vault is the truth
+	if language != "" {
+		_ = uc.Index.SetSourceLanguage(ctx, s.Hash, language) //nolint:errcheck // the index and the step records are a light; the vault is the truth
+	}
+	if uc.Steps == nil {
+		return
+	}
+	_ = uc.Steps.SetIdentity(s.Hash, entities.SourceIdentity{ //nolint:errcheck // the index and the step records are a light; the vault is the truth
+		Kind: entities.SourceKindURL, URL: s.URL, Bookmark: s.Bookmark, Language: language,
+		OriginalName: s.OriginalName, ContentHash: contentHash,
+		FaviconHash: faviconHash(favicon), FaviconExt: faviconExt(favicon),
+		FromFeed: s.FromFeed, FeedHash: s.FeedHash,
+	})
 }
 
 func contentHashOf(title, body string) string {

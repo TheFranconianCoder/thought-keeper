@@ -281,12 +281,13 @@ One SSE connection (`GET /api/v1/events`) replaces polling. Event types:
   summary, the log, the object. The tree is the table of contents; clicking a node opens that part of
   the text.
 - A source's log is shown verbatim in the **Log** tab.
-- **A page that changed says so in one click.** A URL source whose last refresh rewrote it carries a
+- **A page that changed says so in one click.** A URL source whose last refresh REWROTE it carries a
   quiet strip under its head, on every tab — *Changed 2 days ago — Show the diff* — and the **Changes**
   tab renders `<hash>.changes.md`: the time, the title before and after, the word measurement and the
   unified diff of the readable body. The rail's **Changed** time opens the same tab. A source that
-  never changed materially has no strip and no tab — a ticking counter or a typo does not create one;
-  the record is the LAST material change only (an older version is not kept).
+  never changed materially has no strip and no tab — a ticking counter or a typo does not even replace
+  the snapshot, and the drift below the threshold accumulates instead; the record is the LAST event
+  only (an older version is not kept).
 - **A link that already IS a source opens that source.** In a wiki page's prose and in a sitemap's,
   feed's or listing's snapshot, a link whose address the vault already holds opens `#/sources/<hash>` instead of
   the web. The addresses are matched by key (a fragment or a trailing slash does not matter), and a
