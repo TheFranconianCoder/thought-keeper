@@ -164,11 +164,26 @@ type App struct {
 	queryQueue         chan runJob
 	lintQueue          chan runJob
 	urlQueue           chan urlJob
+	// autoURLQueue carries the URLs the vault discovered itself: the pages a sitemap, feed or listing
+	// declared and the links a wiki page brought. One fetch worker serves it, one page per
+	// capture.refresh_min_gap. urlQueue carries only what the HUMAN queued, and a human's URL acts at
+	// once: the pace is politeness toward sites, not a limit on the reader.
+	autoURLQueue chan urlJob
 	// urlPending is the set of sources whose page fetch is queued or in flight. The pipeline must not
 	// outline or distill such a source: its snapshot is about to be replaced, and a derivation built
 	// on the copy that is leaving is wrong the moment the page arrives.
 	urlPendingMu sync.Mutex
 	urlPending   map[string]bool
+	// admissionAt is when the last source was taken into the update path, and admitted holds the
+	// sources whose turn is paid for until their document steps are through. One turn per gap, shared
+	// by the automatic fetch and the pump; see pace.go.
+	admissionMu sync.Mutex
+	admissionAt time.Time
+	admitted    map[string]bool
+	// pumpTurnAt guards the deferred pump pass: the pump never blocks on the turn, it asks for the
+	// pass that will find it free.
+	pumpTurnMu sync.Mutex
+	pumpTurnAt time.Time
 	// pumpWake is the coalesced request for a pipeline pass. A wiki page that queues 150 links would
 	// otherwise ask for 150 passes, and a pass walks every source: that is what made one save take
 	// minutes (and made it quadratic in the size of the vault).
@@ -357,7 +372,9 @@ func New(opts Options) (*App, error) {
 		// names are worth a pass, and a seven-minute model call at minute one is not a good morning.
 		vocabLast:        time.Now(),
 		urlQueue:         make(chan urlJob, 4096),
+		autoURLQueue:     make(chan urlJob, 4096),
 		urlPending:       make(map[string]bool),
+		admitted:         make(map[string]bool),
 		pumpWake:         make(chan string, 1),
 		hub:              stream.NewHub(),
 		retries:          make(map[string]int),
@@ -453,6 +470,9 @@ func (a *App) Reset(hash string) (usecases.ResetResult, error) {
 	if err != nil {
 		return res, err
 	}
+	// A reset the human pressed is not paced: the source is taken in now, and its fresh derivation
+	// (plus every continuation run) follows without waiting for a turn.
+	a.bookAdmission(hash)
 	// A run for this source may still be writing what the reset just swept away. It cannot be
 	// cancelled from here, so mark it: the run's own end queues a FRESH derivation.
 	if !a.distillFree(hash) {
@@ -469,6 +489,9 @@ func (a *App) Reset(hash string) (usecases.ResetResult, error) {
 // onAdded reacts to a freshly stored source (watcher, POST /add, upload, URL):
 // it notifies subscribers and schedules tree building off the request path.
 func (a *App) onAdded(hash string) {
+	// The update path's turn for this source is already paid for: an automatic fetch took it in the
+	// fetch worker, a human's own add is not paced at all. The pump must not charge it again.
+	a.bookAdmission(hash)
 	a.hub.Publish("source", map[string]string{"hash": hash})
 	a.pumpPipeline("source added")
 	// A new source is checked against the reader's interests immediately: a bookmark will never be
@@ -706,6 +729,9 @@ func (a *App) pumpOnce(reason string) {
 			}
 		}
 	}
+	// The update path's ledger: a source whose steps are through is no longer taken in, so a later
+	// event (a refresh, a repair) takes a fresh turn. The prune runs before this pass claims.
+	a.forgetFinishedAdmissions(records, known)
 	for _, step := range []entities.Step{entities.StepCapture, entities.StepOutline, entities.StepDistill} {
 		all := true
 		for hash, rec := range records {
@@ -737,6 +763,7 @@ func (a *App) pumpOnce(reason string) {
 		// overflow, only spread over minutes (345 claims for 64 queue slots, observed).
 		window := a.distillWindow()
 		claimed := a.claimedDistills()
+		deferred := false
 		for hash, rec := range records {
 			if len(known) > 0 && !known[hash] {
 				continue
@@ -752,13 +779,31 @@ func (a *App) pumpOnce(reason string) {
 			}
 			switch step {
 			case entities.StepCapture:
+				if a.captureRunning(hash) {
+					continue
+				}
+				// Taking the source IN is what the pace gates: at most one per gap, whether it is a
+				// due refresh, a discovered page or this first step. A source its fetch or a human
+				// already booked costs nothing here.
+				if !a.admitSourceForStep(hash, &deferred) {
+					continue
+				}
 				a.enqueueCapture(hash)
 			case entities.StepOutline:
 				// The barrier was checked above, for the whole pass: re-asking per source would turn
 				// one pass into one vault scan per source.
+				if a.treeRunning(hash) {
+					continue
+				}
+				if !a.admitSourceForStep(hash, &deferred) {
+					continue
+				}
 				a.queueTree(hash)
 			case entities.StepDistill:
-				if claimed >= window {
+				if claimed >= window || a.needsAttention(hash) || a.distillRunning(hash) {
+					continue
+				}
+				if !a.admitSourceForStep(hash, &deferred) {
 					continue
 				}
 				if a.autoDistill(hash) {
@@ -993,7 +1038,7 @@ func (a *App) startWorkers() {
 	go a.urlWorker()
 	go a.urlWorker()
 	go a.urlWorker()
-	go a.refreshWorker()
+	go a.fetchWorker()
 	go a.watchClaims()
 	go a.reconcileWorker()
 }
@@ -1598,6 +1643,9 @@ func (a *App) ScheduleDistill(hash string, reset bool) (string, error) {
 	if !a.claimDistill(hash) {
 		return "", types.New("conflict", "a run for this source is already queued or running", types.ErrConflict)
 	}
+	// A run the human pressed is not paced, and the runs that continue a long document are not a
+	// second source: the source stays taken in until its steps are through.
+	a.bookAdmission(hash)
 	runID, err := a.deps().StartRun.Start(ctx, entities.RunPipeline, a.conf().OpenAI.ModelCompile, entities.StepDistill, hash)
 	if err != nil {
 		a.releaseDistill(hash)
@@ -2522,6 +2570,9 @@ func (a *App) ScheduleCapture(hash string) (bool, string, error) {
 	if !src.ToEntity().NeedsCapture() {
 		return false, "the source is readable as it is — its title comes from the object (reindex restores it)", nil
 	}
+	// A capture the human pressed is not paced: its capture and the steps that follow it belong to
+	// one source, and that source is taken in now.
+	a.bookAdmission(hash)
 	a.enqueuePipeline(hash)
 	return true, "", nil
 }
@@ -2601,6 +2652,13 @@ func (a *App) captureRunning(hash string) bool {
 	a.captureMu.Lock()
 	defer a.captureMu.Unlock()
 	return a.capturesInflight[hash]
+}
+
+// distillRunning reports whether a run for this source is queued or executing.
+func (a *App) distillRunning(hash string) bool {
+	a.distillMu.Lock()
+	defer a.distillMu.Unlock()
+	return a.distillActive[hash]
 }
 
 // claimDistill marks a source hash as being derived; false when a run for it is already
@@ -3301,9 +3359,6 @@ func (a *App) runOne(job runJob) {
 	}
 }
 
-// refreshWorker re-fetches URL sources on the configured cadence. Changed pages are
-// stored as new snapshots and run through the normal document path (capture → outline → distill).
-
 // ScheduleURLs accepts a batch of URLs (e.g. a bookmarks file, one per line) and
 // fetches them in the background. Each finished fetch emits an SSE event, so a long
 // list streams into the inbox instead of blocking the request.
@@ -3604,7 +3659,9 @@ func (a *App) ScheduleWikiCleanup(pageID, staleHash string) {
 	}()
 }
 
-// urlWorker fetches queued URLs one at a time. Several workers run in parallel.
+// urlWorker fetches the URLs the HUMAN queued — a pasted batch — one at a time. Several workers run
+// in parallel: a person's list is not paced. The pages the vault discovered itself go through
+// fetchWorker instead, one per capture.refresh_min_gap.
 func (a *App) urlWorker() {
 	for {
 		select {
@@ -3625,8 +3682,14 @@ func (a *App) enqueueURL(job urlJob) bool {
 	a.urlPendingMu.Lock()
 	a.urlPending[hash] = true
 	a.urlPendingMu.Unlock()
+	queue := a.urlQueue
+	if job.Origin != "" {
+		// A page a sitemap, feed, listing or wiki page declared is taken in by the vault, not by the
+		// reader: it waits for the update path's turn.
+		queue = a.autoURLQueue
+	}
 	select {
-	case a.urlQueue <- job:
+	case queue <- job:
 		return true
 	case <-a.quit:
 		a.clearURLPending(hash)
@@ -3651,6 +3714,12 @@ func (a *App) urlFetchPending(hash string) bool {
 // handleURLJob runs one queued fetch and always releases the source's "snapshot in flight" mark.
 func (a *App) handleURLJob(job urlJob) {
 	defer a.clearURLPending(entities.URLHash(job.URL))
+	// An automatic job's turn was taken by the fetch worker before it handed the job over: the page
+	// it creates or updates is booked, so the pump does not charge the derivation again. A human's
+	// job needs no booking — nothing about it is paced.
+	if job.Origin != "" {
+		a.bookAdmission(entities.URLHash(job.URL))
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	// A URL fetch writes a source object and its row: shared gate, so it may run beside a document
 	// step but never beside the cluster pass.
@@ -3764,9 +3833,22 @@ func (a *App) reportLinkFailure(job urlJob, cause error) {
 	a.publish("urls", map[string]any{"failed": 1, "url": job.URL})
 }
 
-func (a *App) refreshWorker() {
+// fetchWorker is the ONE worker of the automatic update path. Per capture.refresh_min_gap it takes
+// one source in — a page the vault discovered (a sitemap's page, a feed's item, a listing's article,
+// a wiki page's link) or the due source that has waited longest — and fetches it. The pump takes the
+// same turn for a source that has no fetch of its own (an inbox drop, a feed's own copy), so the
+// whole update path moves one source per gap. A source's document steps, including the continuation
+// runs of a long document, belong to its turn.
+//
+// The two kinds of work alternate: a sitemap's backlog must not starve the weekly sweep, and the
+// sweep must not starve the backlog. An idle look gives the turn back, so looking costs nothing.
+func (a *App) fetchWorker() {
 	// The cadence is read on EVERY tick: a config apply changes it without restarting the worker.
 	bad := map[string]string{}
+	intakeFirst := true
+	// refreshAt anchors the burst's sweep: a discovered page that arrives between two ticks must not
+	// push the sweep back another whole tick.
+	var refreshAt time.Time
 	for {
 		cadence := func(name, raw string) time.Duration {
 			raw = strings.TrimSpace(raw)
@@ -3786,21 +3868,21 @@ func (a *App) refreshWorker() {
 		}
 		interval := cadence("capture.refresh_interval", a.conf().Capture.RefreshInterval)
 		feedInterval := cadence("capture.feed_refresh_interval", a.conf().Capture.FeedRefreshInterval)
-		if gap := cadence("capture.refresh_min_gap", a.conf().Capture.RefreshMinGap); gap > 0 {
-			// PACED: one page per gap, chosen by the cadence. The wait after a check is the gap; a
-			// check that found nothing waits a minute at most, so a newly due source (or a cadence
-			// changed in the overlay) is noticed without a restart.
-			found := a.refreshNext("scheduled")
-			wait := gap
-			if !found && wait > time.Minute {
-				wait = time.Minute
-			}
-			timer := time.NewTimer(wait)
-			select {
-			case <-a.quit:
-				timer.Stop()
+		if gap := a.admissionGap(); gap > 0 {
+			refreshAt = time.Time{}
+			// PACED: one source per gap, whether it comes from the intake queue or the cadence.
+			prev, ok := a.awaitAdmission()
+			if !ok {
 				return
-			case <-timer.C:
+			}
+			if a.fetchOneAutomatic(&intakeFirst) {
+				continue // the next loop waits for the next turn
+			}
+			// Nothing was due: hand the turn back, then look again soon — the turn is the update
+			// path's, and an idle look must not spend it on a source that is waiting for the pump.
+			a.releaseAdmission(prev)
+			if !a.waitFor(min(gap, time.Minute)) {
+				return
 			}
 			continue
 		}
@@ -3817,14 +3899,53 @@ func (a *App) refreshWorker() {
 			// Disabled: look again soon, so enabling it in the overlay takes effect without a restart.
 			tick = time.Minute
 		}
-		timer := time.NewTimer(tick)
+		// The burst (empty or "0s"): a discovered page is fetched as it arrives, and every due source
+		// goes in one pass on each tick.
+		if refreshAt.IsZero() {
+			refreshAt = time.Now().Add(tick)
+		}
+		wait := max(time.Until(refreshAt), 0)
+		timer := time.NewTimer(wait)
 		select {
 		case <-a.quit:
 			timer.Stop()
 			return
+		case job := <-a.autoURLQueue:
+			timer.Stop()
+			a.handleURLJob(job)
 		case <-timer.C:
 			a.refreshNow("scheduled")
+			refreshAt = time.Time{}
 		}
+	}
+}
+
+// fetchOneAutomatic runs ONE automatic fetch: a discovered page that waits in the intake queue, or
+// the due source that has waited longest. The preference alternates so neither side starves.
+func (a *App) fetchOneAutomatic(intakeFirst *bool) bool {
+	preferIntake := *intakeFirst
+	*intakeFirst = !*intakeFirst
+	if preferIntake {
+		if a.fetchQueuedPage() {
+			return true
+		}
+		return a.refreshNext("scheduled")
+	}
+	if a.refreshNext("scheduled") {
+		return true
+	}
+	return a.fetchQueuedPage()
+}
+
+// fetchQueuedPage takes ONE discovered page off the automatic queue and fetches it. It never blocks:
+// the queue is empty whenever the cadence is the only work there is.
+func (a *App) fetchQueuedPage() bool {
+	select {
+	case job := <-a.autoURLQueue:
+		a.handleURLJob(job)
+		return true
+	default:
+		return false
 	}
 }
 
@@ -3871,6 +3992,9 @@ func (a *App) ScheduleSnapshotRebuild(hash, reason string) {
 	if hash == "" {
 		return
 	}
+	// The refresh that replaced the snapshot was this source's turn: the rebuild and the parts it
+	// re-arms follow it without waiting for the next gap.
+	a.bookAdmission(hash)
 	go func() {
 		err := a.ExclusiveWrite(context.Background(), "outline rebuild", func(ctx context.Context) error {
 			if a.deps().Steps != nil {

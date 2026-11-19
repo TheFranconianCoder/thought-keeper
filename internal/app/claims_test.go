@@ -145,6 +145,9 @@ func TestOnePumpPassClaimsOnlyAWindow(t *testing.T) {
 	cfg := a.conf()
 	cfg.Pipeline.ParallelRuns = 4
 	cfg.Pipeline.AutoDistill = true
+	// The update path's pace (one source per capture.refresh_min_gap) is a separate rule: this test
+	// is about the CLAIM window, so it runs the burst the window was built for.
+	cfg.Capture.RefreshMinGap = ""
 	a.setConfig(cfg)
 	a.distillQueue = make(chan runJob, 256)
 

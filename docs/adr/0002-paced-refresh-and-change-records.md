@@ -3,7 +3,9 @@
 Status: accepted, 2026-11-18. Superseded in part by
 [ADR 0003](0003-the-snapshot-moves-only-on-an-event.md): the snapshot no longer follows every byte
 difference, and the threshold is 40 / 1 % / 5. The pacing, the change record and the one-place due
-rule stand.
+rule stand. The pacing is extended by
+[ADR 0004](0004-one-source-per-gap-for-the-whole-update-path.md): the gap now takes one SOURCE into
+the update path, not one due page.
 
 ## Context
 

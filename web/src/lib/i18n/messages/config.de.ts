@@ -112,6 +112,7 @@ export const configDe: Record<string, string> = {
   'config.field.capture.dedupe_by_url': 'Eine Quelle pro URL',
   'config.field.capture.refresh_interval': 'Aktualisierung von Seiten und Sitemaps',
   'config.field.capture.feed_refresh_interval': 'Aktualisierung von Feeds und Listings',
+  'config.field.capture.refresh_min_gap': 'Takt der Verarbeitung (eine Quelle pro Abstand)',
   'config.field.capture.min_text_chars': 'Mindesttext für eine Seite',
   'config.field.capture.listing_max_pages': 'Seiten eines Listings',
   'config.field.capture.change_min_words': 'Geänderte Wörter, ab denen es zählt',

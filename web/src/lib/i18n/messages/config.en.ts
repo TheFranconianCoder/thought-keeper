@@ -112,6 +112,7 @@ export const configEn: Record<string, string> = {
   'config.field.capture.dedupe_by_url': 'One source per URL',
   'config.field.capture.refresh_interval': 'Page and sitemap refresh',
   'config.field.capture.feed_refresh_interval': 'Feed and listing refresh',
+  'config.field.capture.refresh_min_gap': 'Update pace (one source per gap)',
   'config.field.capture.min_text_chars': 'Minimum text for a page',
   'config.field.capture.listing_max_pages': 'Listing pages to walk',
   'config.field.capture.change_min_words': 'Changed words that count',

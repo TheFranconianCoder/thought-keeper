@@ -240,10 +240,13 @@ scheduling: `docs/pipeline.md`.
 - **Cluster** prunes, attaches, graphs, splits, overlaps and writes titleless memberships. No model.
 
 A page or sitemap is refreshed once a week (`capture.refresh_interval: '168h'`), a feed and a listing
-once a day (`capture.feed_refresh_interval: '24h'`), at most one due page per
-`capture.refresh_min_gap` (`1m`; empty = a burst). The cadence is a source's minimum age, the gap is
-the throughput — a sweep over N sources takes N × gap, and the manual passes ignore it. An attached
-snapshot is never fetched by the
+once a day (`capture.feed_refresh_interval: '24h'`). The cadence is a source's minimum age;
+`capture.refresh_min_gap` (`1m`; empty = a burst) is the throughput of the **whole update path**: at
+most one source is taken in per gap — a due check, a page a sitemap, feed or listing declared, a wiki
+page's link, a feed's own copy, an inbox drop. Its fetch and its document steps (capture, outline,
+distill, including the continuation runs of a long document) belong to that one turn; everything
+after it waits for the next gap. The manual actions (a paste, a single add, the Refresh button, a
+run, a reset) are not paced. An attached snapshot is never fetched by the
 cadence, only by the explicit refetch of its source. A sitemap refresh reconciles its pages 1:1, a
 feed refresh only adds, and a listing refresh reads its first page (new articles appear there first).
 A URL the human added by hand is released from its page/sitemap/feed/listing, so it outlives its

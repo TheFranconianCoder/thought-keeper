@@ -205,11 +205,14 @@ type CaptureConfig struct {
 	// new posts far more often than a page changes; empty disables the automatic feed refresh while
 	// leaving pages and sitemaps on RefreshInterval.
 	FeedRefreshInterval string `yaml:"feed_refresh_interval"`
-	// RefreshMinGap paces the SCHEDULED refresh: at most one page is fetched per gap. The cadences
-	// above stay the minimum age of a source; the gap is the throughput. A vault with more pages
-	// than minutes per cadence needs more than one cadence to sweep, which is the price of being
-	// polite (and of a small machine's CPU). Empty or "0s" is the old burst: every due source in one
-	// pass. The manual passes (POST /api/v1/refresh-urls, one source) ignore it.
+	// RefreshMinGap paces the WHOLE update path: at most one source is taken in per gap — a due
+	// check, a page a sitemap, feed or listing declared, a wiki page's link, a feed's own copy, an
+	// inbox drop — and its fetch plus its document steps (capture, outline, distill, including a long
+	// document's continuation runs) belong to that turn. The cadences above stay the minimum age of a
+	// source; the gap is the throughput, and a sweep over N sources takes N × gap. A vault with more
+	// pages than minutes per cadence needs more than one cadence to sweep, which is the price of being
+	// polite (and of a small machine's CPU). Empty or "0s" is the old burst: every source at once.
+	// The manual actions (POST /api/v1/refresh-urls, one source, a paste, a run, a reset) ignore it.
 	RefreshMinGap string `yaml:"refresh_min_gap"`
 	// ChangeMinWords is the materiality threshold of a page change. A change below the threshold does
 	// not touch the stored snapshot (its bytes are the baseline the outline and the claims describe),

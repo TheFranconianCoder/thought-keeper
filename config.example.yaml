@@ -141,10 +141,14 @@ capture:                                   # URL sources
     feed_refresh_interval: '24h'           # how often ONE RSS/Atom feed (its item list) and ONE
                                            # listing (a blog index) are checked (daily); empty =
                                            # they are not refreshed automatically
-    refresh_min_gap: '1m'                  # the scheduled refresh fetches at most one page per gap:
-                                           # the cadence above stays a source's minimum age, this is
-                                           # the throughput (a sweep over N pages takes N × gap);
-                                           # empty or '0s' = every due page in one burst
+    refresh_min_gap: '1m'                  # the whole update path takes one source in per gap:
+                                           # a due check, a discovered page, a feed's copy, an inbox
+                                           # drop — and that source's fetch AND document steps
+                                           # (capture, outline, distill) belong to the turn (a sweep
+                                           # over N sources takes N × gap). The cadences above stay
+                                           # a source's minimum age. empty or '0s' = every source
+                                           # at once. Manual actions (a paste, one URL, the Refresh
+                                           # button, a run) are not paced.
     change_min_words: 40                   # a change below the threshold does not touch the stored
                                            # snapshot (its bytes are the baseline the outline and the
                                            # claims describe), so the drift ACCUMULATES across checks;

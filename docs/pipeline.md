@@ -166,11 +166,15 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
 - **A page or sitemap is refreshed once a week, a feed and a listing once a day**
   (`capture.refresh_interval: '168h'`, `capture.feed_refresh_interval: '24h'`), manually at any time. The cadence belongs to the
   source (`url_checked_at`), not to the process. The cadence is a source's **minimum age**; the
-  **throughput** is `capture.refresh_min_gap` (default `'1m'`, empty or `0s` = a burst): the scheduled
-  worker fetches at most one due page per gap, the one that has waited longest, chosen by the index
-  and judged due by one predicate in the refresher. A sweep over N sources therefore takes N × gap,
-  which is the price of being polite to the sites (and of a small machine); the manual
-  `POST /api/v1/refresh-urls` and the per-source refresh ignore the gap and act at once. Attached
+  **throughput** of the whole update path is `capture.refresh_min_gap` (default `'1m'`, empty or `0s`
+  = a burst). One source is **taken in** per gap: a due check (the one that has waited longest,
+  chosen by the index and judged due by one predicate in the refresher), a page a sitemap, feed or
+  listing declared, a wiki page's link, a feed's own copy, or an inbox drop. Its fetch and its
+  document steps (capture, outline, distill — including the continuation runs of a long document)
+  belong to that turn, and everything after it waits for the next gap; a sweep over N sources
+  therefore takes N × gap, which is the price of being polite to the sites (and of a small machine).
+  The manual actions — `POST /api/v1/refresh-urls`, the per-source refresh, the Refresh button, a
+  single add, a pasted batch, a run, a reset — ignore the gap and act at once. Attached
   sources are not fetched by the cadence; an explicit refetch may try one, and a walled normal source
   is attempted again on the same cadence, because it may become readable. A bookmark is not re-read
   automatically: it is a collected link until the reader says "try the page again". A pass that runs
@@ -465,6 +469,14 @@ carry the reason (`link failed · …`). A light that disagrees with its own num
   blocked a goroutine per overflow and let the watchdog expire claims that were only waiting; a window
   that counted from zero every pass did the same thing spread over minutes (the pump runs after every
   finished run, and each pass added its whole window on top of a queue nobody had drained).
+- **A source is taken INTO the update path once per gap.** The automatic fetch worker and the pump
+  share one turn (`capture.refresh_min_gap`): a source that arrives by a fetch is booked by that
+  fetch, a source a human adds or runs is booked by the action, and a source only the pump can start
+  (an inbox drop, a feed's own copy) waits for the turn. A booked source keeps its whole path — the
+  continuation runs of a long document never wait for another turn. The turn is in memory (a restart
+  begins with one), and the ledger is pruned when a source's steps are through, so a later event
+  takes a fresh turn. The pump never blocks on the turn: it claims the sources already taken in and
+  asks for another pass when the turn is free.
 - **A user-initiated run goes first**, on its own queue. Queueing never blocks.
 - **Automatic continuation is bounded by progress**: a new claim or less work left. Two runs without
   progress stop it and say why.

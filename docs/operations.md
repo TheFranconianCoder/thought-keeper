@@ -52,7 +52,7 @@ sync when a knob changes. Sections:
 | `pipeline` | auto, auto_distill, debounce, run/cluster timeouts, parts per run, parallel parts/runs/queries, auto_continue, reconcile interval/batch |
 | `cluster` | the quality gates of the claim graph (no model) |
 | `assistant` | command `retention` (`168h`), `prune_interval` (`24h`), `max_items` per materialized set, `scan_limit` per resolution |
-| `capture` | URL dedupe, refresh interval (default `168h` — weekly for pages/sitemaps), feed/listing interval (default `24h` — daily), `refresh_min_gap` (default `1m` — the scheduled refresh fetches at most one page per gap; empty or `0s` = a burst), `min_text_chars`, `listing_max_pages` (default 100 — the initial walk of a listing's pagination), `change_min_words` / `change_min_percent` / `change_min_word_length` (default 40 / 1 / 5 — how many words a page change must move, how large a share of the stored page it must be, and how long those words must be on average, before it counts as an event and replaces the snapshot; `0` words = every difference counts, `0` percent = only the floor) |
+| `capture` | URL dedupe, refresh interval (default `168h` — weekly for pages/sitemaps), feed/listing interval (default `24h` — daily), `refresh_min_gap` (default `1m` — the whole update path takes one source in per gap: a due refresh, a discovered page, a feed's copy, an inbox drop, and that source's fetch plus its document steps; empty or `0s` = a burst), `min_text_chars`, `listing_max_pages` (default 100 — the initial walk of a listing's pagination), `change_min_words` / `change_min_percent` / `change_min_word_length` (default 40 / 1 / 5 — how many words a page change must move, how large a share of the stored page it must be, and how long those words must be on average, before it counts as an event and replaces the snapshot; `0` words = every difference counts, `0` percent = only the floor) |
 | `fetch` | timeout, max bytes, user agent, `allow_private` (SSRF guard) |
 | `browser` | the OPTIONAL local renderer: `path` (empty = `lightpanda` from PATH), `timeout`, `wait`, `wait_until` (default `networkidle` — `load` dumps the shell of a single-page app), `load_stylesheets`, `obey_robots` |
 | `pdf` | text tool, max bytes, max pages |
@@ -361,13 +361,16 @@ given commit.
   `capture.refresh_interval: '168h'` is the cadence one page or sitemap may be revisited;
   `capture.feed_refresh_interval: '24h'` is the cadence of a feed's item list and of a listing;
   either empty means manual only for that kind. The cadence is stored per source
-  (`url_checked_at`), so restarting the app neither postpones nor doubles a refresh. The **pace** is
-  `capture.refresh_min_gap` (default `1m`): the scheduled worker fetches at most one due page per
-  gap — the one that has waited longest — so a sweep over N sources takes N × gap (empty or `0s`
-  restores the burst: every due source in one pass). A manual pass — `POST /api/v1/refresh-urls` —
-  ignores both and checks everything now; the **Refresh** button (or
-  `POST /api/v1/sources/{hash}/refresh`) checks ONE source
-  now, under the exclusive side of the gate: it replaces the snapshot and resets the derivation, so
+  (`url_checked_at`), so restarting the app neither postpones nor doubles a refresh. The **pace** of
+  the whole update path is `capture.refresh_min_gap` (default `1m`): one source is taken in per gap —
+  a due check (the one that has waited longest), a page a sitemap, feed or listing declared, a wiki
+  page's link, a feed's own copy, an inbox drop — and that source's fetch plus its document steps
+  (capture, outline, distill, including a long document's continuation runs) belong to that turn. A
+  sweep over N sources therefore takes N × gap (empty or `0s` restores the burst: every source at
+  once). A manual action — `POST /api/v1/refresh-urls`, the **Refresh** button
+  (`POST /api/v1/sources/{hash}/refresh`), a single add, a pasted batch, a run, a reset — is not paced
+  and acts at once; the Refresh button still checks ONE source now, under the exclusive side of the
+  gate: it replaces the snapshot and resets the derivation, so
   it waits for the document steps like any other rewrite of the vault. A source with a **human-supplied snapshot** is not fetched by the cadence; the source page can
   **Try the URL again** (`POST /api/v1/sources/{hash}/refetch`), which replaces it only when the page
   is readable. A **blocked** page (a login, a paywall, a consent gate) is attempted again on the same
