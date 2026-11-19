@@ -331,7 +331,7 @@
 
   {#if detailOpen}
     <div class="wiki-main">
-      <button class="btn btn--ghost btn--sm back-btn" use:tooltip={t('wiki.backAll')} onclick={backToList}>
+      <button class="btn btn--ghost btn--sm back-btn" onclick={backToList}>
         <Icon name="arrowLeft" size={15} /> <span>{t('common.back')}</span>
       </button>
 
@@ -402,7 +402,6 @@
                 class="btn btn--primary btn--action"
                 type="submit"
                 disabled={saving}
-                use:tooltip={saving ? t('wiki.saving') : t('wiki.savePage')}
               >
                 {#if saving}<span class="spinner"></span>{:else}<Icon name="check" size={14} />{/if}
                 <span class="btn-label">{saving ? t('wiki.saving') : t('wiki.savePage')}</span>
@@ -410,7 +409,6 @@
               <button
                 class="btn btn--ghost btn--action"
                 type="button"
-                use:tooltip={t('common.cancel')}
                 onclick={cancel}
               >
                 <Icon name="close" size={14} /> <span class="btn-label">{t('common.cancel')}</span>
@@ -444,7 +442,6 @@
                 <button
                   class="btn btn--secondary btn--sm btn--action"
                   class:active={!!selected.favorite_at}
-                  use:tooltip={selected.favorite_at ? t('wiki.unfavorite') : t('wiki.favorite')}
                   aria-pressed={!!selected.favorite_at}
                   onclick={() => void toggleWikiFavorite(selected!.id, !selected.favorite_at)}
                 >
@@ -453,7 +450,6 @@
                 {#if selected.source_hash}
                   <button
                     class="btn btn--secondary btn--sm btn--action"
-                    use:tooltip={t('wiki.openSource')}
                     onclick={() => openSource(selected!.source_hash!)}
                   >
                     <Icon name="sources" size={13} /> <span class="btn-label">{t('wiki.openSource')}</span>
@@ -461,14 +457,12 @@
                 {/if}
                 <button
                   class="btn btn--secondary btn--sm btn--action"
-                  use:tooltip={t('wiki.edit')}
                   onclick={startEdit}
                 >
                   <Icon name="edit" size={13} /> <span class="btn-label">{t('wiki.edit')}</span>
                 </button>
                 <button
                   class="btn btn--danger btn--sm btn--action"
-                  use:tooltip={t('common.delete')}
                   onclick={() => deleteWikiPage(selected!.id)}
                 >
                   <Icon name="trash" size={13} /> <span class="btn-label">{t('common.delete')}</span>

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
@@ -70,12 +71,7 @@ func IsSidecar(name string) bool {
 	if name == SidecarLog+".1" {
 		return true
 	}
-	for _, suffix := range SidecarSuffixes() {
-		if name == suffix {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(SidecarSuffixes(), name)
 }
 
 // SourceRecord is what a source's <hash>.meta file holds about its DOCUMENT steps: the state of

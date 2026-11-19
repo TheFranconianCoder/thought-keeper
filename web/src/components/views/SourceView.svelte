@@ -489,14 +489,12 @@
       <div class="source-error-actions">
         <button
           class="btn btn--primary btn--sm btn--action"
-          use:tooltip={t('common.retry')}
           onclick={() => void sources.refresh(hash)}
         >
           <Icon name="refresh" size={13} /> <span class="btn-label">{t('common.retry')}</span>
         </button>
         <button
           class="btn btn--secondary btn--sm btn--action"
-          use:tooltip={t('source.backToSources')}
           onclick={backToSources}
         >
           <Icon name="arrowLeft" size={13} /> <span class="btn-label">{t('source.backToSources')}</span>
@@ -541,7 +539,6 @@
           <button
             class="btn btn--secondary btn--sm btn--action"
             class:active={!!selected.favorite_at}
-            use:tooltip={selected.favorite_at ? t('source.unfavorite') : t('source.favorite')}
             aria-pressed={!!selected.favorite_at}
             onclick={() => void toggleFavorite(selected!.hash, !selected.favorite_at)}
           >
@@ -550,7 +547,6 @@
           <button
             class="btn btn--secondary btn--sm btn--action"
             class:active={!!selected.read_later}
-            use:tooltip={selected.read_later ? t('source.markDone') : t('source.readLaterAction')}
             aria-pressed={!!selected.read_later}
             onclick={() => void toggleReadLater(selected!.hash, !selected.read_later)}
           >
@@ -558,7 +554,6 @@
           </button>
           <button
             class="btn btn--primary btn--sm btn--action"
-            use:tooltip={t('source.ask')}
             onclick={() => navigate(askSourcePath(selected!.hash))}
           >
             <Icon name="ask" size={13} /> <span class="btn-label">{t('source.ask')}</span>
@@ -569,7 +564,6 @@
               href={selected.url}
               target="_blank"
               rel="noopener noreferrer"
-              use:tooltip={t('source.openUrl')}
             >
               <Icon name="external" size={13} /> <span class="btn-label">{t('source.openUrl')}</span>
             </a>
@@ -577,7 +571,6 @@
           {#if selected.rss || selected.sitemap || selected.listing}
             <button
               class="btn btn--secondary btn--sm btn--action"
-              use:tooltip={t('source.refresh')}
               onclick={() => void refreshSource(selected!.hash)}
             >
               <Icon name="refresh" size={13} /> <span class="btn-label">{t('source.refresh')}</span>
@@ -586,7 +579,6 @@
             {#if canRefreshSource(selected)}
               <button
                 class="btn btn--secondary btn--sm btn--action"
-                use:tooltip={t('source.refreshPage')}
                 onclick={() => void refreshSource(selected!.hash)}
               >
                 <Icon name="refresh" size={13} /> <span class="btn-label">{t('source.refresh')}</span>
@@ -594,7 +586,6 @@
             {:else}
               <button
                 class="btn btn--secondary btn--sm btn--action"
-                use:tooltip={t('source.capture')}
                 onclick={() => void captureSource(selected!.hash)}
               >
                 <Icon name="capture" size={13} /> <span class="btn-label">{t('source.capture')}</span>
@@ -602,21 +593,18 @@
             {/if}
             <button
               class="btn btn--secondary btn--sm btn--action"
-              use:tooltip={t('source.outline')}
               onclick={() => void rebuildSourceTree(selected!.hash)}
             >
               <Icon name="tree" size={13} /> <span class="btn-label">{t('source.outline')}</span>
             </button>
             <button
               class="btn btn--primary btn--sm btn--action"
-              use:tooltip={t('source.distill')}
               onclick={() => void distillSource(selected!.hash)}
             >
               <Icon name="distill" size={13} /> <span class="btn-label">{t('source.distill')}</span>
             </button>
             <button
               class="btn btn--secondary btn--sm btn--action"
-              use:tooltip={t('source.reset')}
               onclick={() => void resetSource(selected!.hash)}
             >
               <Icon name="reset" size={13} /> <span class="btn-label">{t('source.reset')}</span>
@@ -625,7 +613,6 @@
           {#if !selected.origin && !selected.original_name?.startsWith('wiki:')}
             <button
               class="btn btn--danger btn--sm btn--action"
-              use:tooltip={t('common.delete')}
               onclick={() => void deleteSource(selected!.hash)}
             >
               <Icon name="trash" size={13} /> <span class="btn-label">{t('common.delete')}</span>
@@ -650,7 +637,6 @@
         <button
           class="change-strip"
           onclick={() => setTab('changes')}
-          use:tooltip={t('source.changeStripTitle')}
         >
           <Icon name="clock" size={14} />
           <span>{t('source.changeStrip', { time: relTime(selected.url_changed_at) })}</span>
@@ -703,7 +689,6 @@
                   <button
                     class="btn btn--ghost btn--sm btn--action"
                     disabled={sources.summaryGenerating}
-                    use:tooltip={t('source.rewriteTitle')}
                     onclick={() => void sources.generateSummary(selected!.hash)}
                   >
                     <Icon name="refresh" size={13} />
@@ -725,7 +710,6 @@
                     <button
                       class="btn btn--primary btn--sm btn--action"
                       disabled={sources.summaryGenerating}
-                      use:tooltip={t('source.generateSummary')}
                       onclick={() => void sources.generateSummary(selected!.hash)}
                     >
                       <Icon name="spark" size={13} />
@@ -778,7 +762,6 @@
                   {#if isPDF && openFile.object}
                     <button
                       class="btn btn--secondary btn--sm btn--action"
-                      use:tooltip={t('source.openPdf')}
                       onclick={() => setTab('pdf')}
                     >
                       <Icon name="filePdf" size={13} /> <span class="btn-label">{t('source.openPdf')}</span>
@@ -867,7 +850,6 @@
                   {t('source.partGone', { error: partError })}
                   <button
                     class="btn btn--secondary btn--sm btn--action"
-                    use:tooltip={t('source.showWhole')}
                     onclick={() => go({ tab: 'snapshot' })}
                   >
                     <Icon name="eye" size={13} /> <span class="btn-label">{t('source.showWhole')}</span>
@@ -931,7 +913,6 @@
                 {#if isPDF}
                   <button
                     class="btn btn--secondary btn--sm btn--action"
-                    use:tooltip={t('source.openPdf')}
                     onclick={() => setTab('pdf')}
                   >
                     <Icon name="filePdf" size={13} /> <span class="btn-label">{t('source.openPdf')}</span>
@@ -987,7 +968,6 @@
                 <button
                   class="btn btn--secondary btn--sm btn--action"
                   disabled={attaching}
-                  use:tooltip={attached ? t('source.replaceSnapshot') : t('source.attachSnapshot')}
                   onclick={() => attachInput?.click()}
                 >
                   <Icon name="upload" size={13} />
@@ -1003,7 +983,6 @@
                   <button
                     class="btn btn--secondary btn--sm btn--action"
                     disabled={refetching}
-                    use:tooltip={attached ? t('source.tryUrlAgain') : t('source.tryPage')}
                     onclick={() => void onRefetch()}
                   >
                     <Icon name="refresh" size={13} />
@@ -1162,7 +1141,6 @@
               {#if !tagsEditing}
                 <button
                   class="rail-edit"
-                  use:tooltip={t('source.edit')}
                   aria-label={t('source.edit')}
                   onclick={beginTags}
                 >
@@ -1182,7 +1160,6 @@
                 <button
                   class="btn btn--primary btn--sm btn--action"
                   disabled={tagsSaving}
-                  use:tooltip={tagsSaving ? t('source.saving') : t('source.save')}
                   onclick={() => void saveTags()}
                 >
                   {#if tagsSaving}<span class="spinner"></span>{:else}<Icon name="check" size={13} />{/if}
@@ -1190,7 +1167,6 @@
                 </button>
                 <button
                   class="btn btn--secondary btn--sm btn--action"
-                  use:tooltip={t('common.cancel')}
                   onclick={() => (tagsEditing = false)}
                 >
                   <Icon name="close" size={13} /> <span class="btn-label">{t('common.cancel')}</span>
@@ -1238,7 +1214,7 @@
             <section class="rail-block">
               <div class="rail-label">
                 {t('source.interests')}
-                <button class="rail-edit" use:tooltip={t('interests.manageTitle')} onclick={() => openInterests()}>
+                <button class="rail-edit" onclick={() => openInterests()}>
                   <Icon name="settings" size={11} /> <span class="btn-label">{t('interests.manage')}</span>
                 </button>
               </div>

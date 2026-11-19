@@ -44,7 +44,9 @@ card (“add the first source”, or ask anyway) |
 
 **Hints are the app's own, never the browser's.** No element carries a native `title`: a control that
 needs a hint attaches the shared `use:tooltip` action, and one layer renders it
-(`lib/tooltip.svelte.ts`, `components/ui/TooltipLayer.svelte`). A hover waits 400 ms, a keyboard focus
+(`lib/tooltip.svelte.ts`, `components/ui/TooltipLayer.svelte`). A control that already shows its
+label carries no hint — the tooltip is for icon-only controls and for text the layout truncates. A
+hover waits 400 ms, a keyboard focus
 shows it at once, and the layer measures itself: it flips below the control when there is no room
 above and stays inside the viewport. The hint is a **description, never a name** — an icon-only
 control keeps its `aria-label`, an `iframe` keeps its `title` — and the layer sits above every

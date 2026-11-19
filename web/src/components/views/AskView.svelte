@@ -282,7 +282,7 @@
 
   <section class="ask-main" class:split={detailOpen}>
     {#if detailOpen}
-      <button class="btn btn--ghost btn--sm back-btn" use:tooltip={t('ask.back')} onclick={backToList}>
+      <button class="btn btn--ghost btn--sm back-btn" onclick={backToList}>
         <Icon name="arrowLeft" size={15} /> <span>{t('common.back')}</span>
       </button>
     {:else}
@@ -354,14 +354,12 @@
                 <CopyId text={selected.id} label={t('ask.idLabel')} display={selected.id.slice(0, 10)} />
                 <button
                   class="btn btn--secondary btn--sm btn--action"
-                  use:tooltip={t('ask.askAgain')}
                   onclick={() => askAgain(selected!.question, selected!.source)}
                 >
                   <Icon name="refresh" size={13} /> <span class="btn-label">{t('ask.againShort')}</span>
                 </button>
                 <button
                   class="btn btn--danger btn--sm btn--action"
-                  use:tooltip={t('common.delete')}
                   onclick={() => deleteSavedAsk(selected!.id)}
                 >
                   <Icon name="trash" size={13} /> <span class="btn-label">{t('common.delete')}</span>
