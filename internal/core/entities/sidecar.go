@@ -61,6 +61,23 @@ func SidecarSuffixes() []string {
 	return []string{SidecarRender, SidecarMeta, SidecarOutline, SidecarSummary, SidecarChanges, SidecarLog}
 }
 
+// IsSidecar reports whether name is a file a source can carry. It is THE predicate: the Files view
+// lists what it accepts, and the raw endpoint serves what it accepts — the two drifted once, and a
+// record that was listed with a size answered "no file named .changes.md", so the Changes tab showed
+// an error instead of the diff it had just been told exists. The rotated older half of the log counts
+// as the log's file.
+func IsSidecar(name string) bool {
+	if name == SidecarLog+".1" {
+		return true
+	}
+	for _, suffix := range SidecarSuffixes() {
+		if name == suffix {
+			return true
+		}
+	}
+	return false
+}
+
 // SourceRecord is what a source's <hash>.meta file holds about its DOCUMENT steps: the state of
 // capture, outline and distill, the title, and the record of the PARTS behind the distill step.
 //

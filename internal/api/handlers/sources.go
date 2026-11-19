@@ -695,8 +695,9 @@ func (h SourcesHandler) Raw(w http.ResponseWriter, r *http.Request) {
 	}
 	hash := chi.URLParam(r, "hash")
 	// `which` names what to serve: the object (default), the readable rendering, or one of the
-	// derived files the Files view lists. Anything else is a 404 — the names are fixed, so a request
-	// can never walk out of the source's folder.
+	// derived files the Files view lists. Anything else is a 404 — the names come from the domain's
+	// own list (entities.IsSidecar), so a request can never walk out of the source's folder and the
+	// endpoint cannot disagree with the view about which files a source has.
 	var open func(ctx context.Context, hash string) (io.ReadCloser, string, string, error)
 	if h.Content != nil {
 		open = h.Content
@@ -710,14 +711,12 @@ func (h SourcesHandler) Raw(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(suffix, ".") {
 			suffix = "." + suffix
 		}
-		switch suffix {
-		case entities.SidecarMeta, entities.SidecarOutline, entities.SidecarSummary, entities.SidecarChanges, entities.SidecarLog:
-			open = func(ctx context.Context, hash string) (io.ReadCloser, string, string, error) {
-				return h.Sidecar(ctx, hash, suffix)
-			}
-		default:
+		if !entities.IsSidecar(suffix) {
 			payloads.WriteError(w, types.New("not_found", "this source has no file named "+which, types.ErrNotFound))
 			return
+		}
+		open = func(ctx context.Context, hash string) (io.ReadCloser, string, string, error) {
+			return h.Sidecar(ctx, hash, suffix)
 		}
 	}
 	rc, ext, title, err := open(r.Context(), hash)

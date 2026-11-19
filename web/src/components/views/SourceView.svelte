@@ -745,7 +745,7 @@
               {/if}
             {:else if tab === 'children'}
               {#if sources.childrenError}
-                <p class="notice notice--error file-notice">{sources.childrenError}</p>
+                <p class="notice notice--error tab-notice">{sources.childrenError}</p>
               {:else if !sources.childrenLoaded}
                 <p class="file-notice muted">{t('common.loading')}</p>
               {:else if sources.children.length === 0}
@@ -786,7 +786,7 @@
                   {/if}
                 </div>
                 {#if fileError}
-                  <p class="notice notice--error file-notice">{fileError}</p>
+                  <p class="notice notice--error tab-notice">{fileError}</p>
                 {:else if (isPDF || isEPUB) && openFile.object}
                   <p class="file-notice muted">{isEPUB ? t('source.epubNotText') : t('source.pdfNotText')}</p>
                 {:else if fileText === null}
@@ -831,7 +831,7 @@
               {/if}
             {:else if tab === 'changes'}
               {#if changesError}
-                <p class="notice notice--error file-notice">{changesError}</p>
+                <p class="notice notice--error tab-notice">{changesError}</p>
               {:else if changesText === null}
                 <p class="file-notice muted">{t('common.loading')}</p>
               {:else}
@@ -897,7 +897,7 @@
                 {#if sources.contentMissing}
                   <p class="file-notice muted">{sources.contentError}</p>
                 {:else}
-                  <p class="notice notice--error file-notice">{sources.contentError}</p>
+                  <p class="notice notice--error tab-notice">{sources.contentError}</p>
                 {/if}
               {:else}
                 <p class="file-notice muted">{t('common.loading')}</p>
@@ -1607,6 +1607,13 @@
   .file-notice {
     padding: 4px 0 12px;
     font-size: 12.5px;
+  }
+
+  /* An error inside a tab body is the app's boxed notice, with room below it. It must never also carry
+     `.file-notice`: that class zeroes the horizontal padding (it is the muted inline hint), which left
+     the message flush against the danger background and off the row every other notice sits on. */
+  .tab-notice {
+    margin: 0 0 14px;
   }
 
   .summary-empty {

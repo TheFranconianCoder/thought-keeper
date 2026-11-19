@@ -32,7 +32,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/sources/{hash}/tree` | The tree outline (`has_text` marks parts) |
 | `GET` | `/api/v1/sources/{hash}/nodes/{node}` | A node's text |
 | `GET` | `/api/v1/sources/{hash}/atoms` | The claims extracted from a source |
-| `GET` | `/api/v1/sources/{hash}/raw` | Bytes inline (`?which=render`, `.meta`, `.outline`, `.summary.md`, `.changes.md`, `.log`) |
+| `GET` | `/api/v1/sources/{hash}/raw` | Bytes inline (`?which=render`, or any file the source lists: `.meta`, `.outline`, `.summary.md`, `.capture.md`, `.changes.md`, `.log`, `.log.1`). The accepted names are `entities.IsSidecar` — the same list the Files view shows, so the two cannot disagree |
 | `GET` | `/api/v1/sources/{hash}/children` | The sources this one owns: a sitemap's pages, a wiki page's linked URLs |
 | `GET` | `/api/v1/sources/{hash}/summary` | The source's overview as Markdown (404 until one exists) |
 | `POST` | `/api/v1/sources/{hash}/summary` | Write (or rewrite) the overview; answers 202 with the run id |

@@ -44,9 +44,10 @@ func (uc Sources) Sidecar(ctx context.Context, hash, suffix string) (io.ReadClos
 	if err != nil {
 		return nil, "", "", err
 	}
-	switch suffix {
-	case entities.SidecarMeta, entities.SidecarOutline, entities.SidecarSummary, entities.SidecarLog:
-	default:
+	// The accepted names are the FILES a source has (entities.IsSidecar), the same list the Files view
+	// shows. A hand-written copy of it drifted once and refused .changes.md — the record the Changes
+	// tab reads — while the same copy in the handler accepted it.
+	if !entities.IsSidecar(suffix) {
 		return nil, "", "", types.New("not_found",
 			"this source has no file named "+suffix, types.ErrNotFound)
 	}

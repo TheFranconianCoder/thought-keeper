@@ -383,3 +383,47 @@ func TestSourceListParsesTheArrivalWindow(t *testing.T) {
 		t.Fatalf("status = %d, want 400 for a duration", rec.Code)
 	}
 }
+
+// rawRequest builds a /raw request whose hash arrives as the chi URL parameter.
+func rawRequest(t *testing.T, hash, which string) *http.Request {
+	t.Helper()
+	req := httptest.NewRequestWithContext(context.Background(), "GET",
+		"/api/v1/sources/"+hash+"/raw?which="+which, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("hash", hash)
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
+
+// TestRawServesTheChangeRecord: the Changes tab reads <hash>.changes.md through the same raw endpoint
+// the Files view uses. The endpoint's own whitelist had drifted from the domain's, so a record that
+// the view listed with a size answered 404 and the tab showed an error where the diff belongs.
+func TestRawServesTheChangeRecord(t *testing.T) {
+	hash := strings.Repeat("ab", 32)
+	h := SourcesHandler{
+		Content: func(context.Context, string) (io.ReadCloser, string, string, error) {
+			return io.NopCloser(strings.NewReader("the object")), ".md", "The Page", nil
+		},
+		Sidecar: func(_ context.Context, _, suffix string) (io.ReadCloser, string, string, error) {
+			if suffix != entities.SidecarChanges {
+				t.Errorf("served sidecar %q, want %q", suffix, entities.SidecarChanges)
+			}
+			return io.NopCloser(strings.NewReader("# Changed\n\nBody: +1 -1 lines.\n")), suffix, "The Page", nil
+		},
+	}
+
+	rec := httptest.NewRecorder()
+	h.Raw(rec, rawRequest(t, hash, entities.SidecarChanges))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Body: +1 -1 lines.") {
+		t.Errorf("the record did not reach the reader: %q", rec.Body.String())
+	}
+
+	// A name the domain does not know stays a 404 — the list is the gate, not the request.
+	rec = httptest.NewRecorder()
+	h.Raw(rec, rawRequest(t, hash, ".secrets"))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 for an unknown file", rec.Code)
+	}
+}
