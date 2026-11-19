@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -22,6 +23,27 @@ func TestLoadMissingFileUsesDefaults(t *testing.T) {
 	}
 	if !cfg.App.Tray || cfg.App.Autostart {
 		t.Errorf("app defaults wrong: %+v", cfg.App)
+	}
+	if got := strings.Join(cfg.OpenAI.BlockedWindows, ","); got != "01:00-04:00,06:00-10:00" {
+		t.Errorf("blocked_windows = %q, want the DeepSeek pair", got)
+	}
+}
+
+// TestBlockedWindowsCanBeEmptied: the default is a pair of windows, and a reader who wants the
+// derivation around the clock says so with an explicit empty list — which must not fall back to the
+// default again.
+func TestBlockedWindowsCanBeEmptied(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yaml")
+	body := "openai:\n    blocked_windows: []\n"
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.OpenAI.BlockedWindows == nil || len(cfg.OpenAI.BlockedWindows) != 0 {
+		t.Errorf("blocked_windows = %#v, want an explicit empty list", cfg.OpenAI.BlockedWindows)
 	}
 }
 

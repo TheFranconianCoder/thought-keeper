@@ -447,7 +447,10 @@ carry the reason (`link failed · …`). A light that disagrees with its own num
 - **Per source:** `POST /api/v1/add`, `POST /api/v1/sources/{hash}/capture`,
   `POST /api/v1/sources/{hash}/rebuild-tree`, `POST /api/v1/sources/{hash}/distill`,
   `POST /api/v1/sources/{hash}/reset`, and `POST /api/v1/sources/{hash}/refresh` for a URL (a feed
-  or a sitemap re-expands its list, a page is re-fetched; the cadence is ignored).
+  or a sitemap re-expands its list, a page is re-fetched; the cadence is ignored). A derivation
+  action pressed inside a model window (`openai.blocked_windows`) answers `409` and names the
+  instant the window opens; it starts nothing, because the rule is about when the model may run,
+  not about who asked.
 - **Globally:** `POST /api/v1/cluster` (queued by hand; it waits for the gate),
   `POST /api/v1/lint` and `POST /api/v1/query` (read-only, never gated, answered by a pool of
   `pipeline.parallel_queries` workers).
@@ -478,6 +481,18 @@ carry the reason (`link failed · …`). A light that disagrees with its own num
   takes a fresh turn. The pump never blocks on the turn: it claims the sources already taken in and
   asks for another pass when the turn is free.
 - **A user-initiated run goes first**, on its own queue. Queueing never blocks.
+- **The derivation keeps its model windows.** `openai.blocked_windows` names UTC ranges
+  (`HH:MM-HH:MM`, start inclusive; a range whose start is later than its end wraps midnight) in
+  which no derivation may call the model: the outline's naming, distill, the summary, the source and
+  wiki auto tags, the vocabulary curation and the retopic. The pump claims no such step inside a
+  window, the backlog walk queues no such run, and a manual action answers `409` with the reopening
+  instant. A call still in flight at the boundary is cut there (the gateway's guard): the run is
+  recorded `aborted` with `deferred: the model window is closed until …`, never `failed`, and
+  finished parts, claims and merges stay. One wake is armed for the opening; it asks for a pipeline
+  pass, tops the summary and tag backfills up, checks the vocabulary and re-queues a wiki page whose
+  tagging was held. **Capture is not held** (fetch, extract and OCR are local), nor is the cluster
+  step (no model), a query or the assistant: those are interactive reads. The default is DeepSeek's
+  pair, `01:00-04:00` and `06:00-10:00`; an explicit empty list turns the rule off.
 - **Automatic continuation is bounded by progress**: a new claim or less work left. Two runs without
   progress stop it and say why.
 - **The watchdog never releases a run that is executing.** A claim is stale only when nothing is

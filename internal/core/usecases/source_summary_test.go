@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 
@@ -175,5 +176,46 @@ func TestCleanSourceDropsTheSummary(t *testing.T) {
 	}
 	if len(store.removed) != 1 || store.removed[0] != hash+entities.SidecarSummary {
 		t.Fatalf("removed = %v, want the source's summary", store.removed)
+	}
+}
+
+// windowGateway answers the way the guarded gateway does inside a blocked window.
+type windowGateway struct{ reopen time.Time }
+
+func (g windowGateway) Complete(context.Context, interfaces.AgentRequest) (interfaces.AgentResponse, error) {
+	return interfaces.AgentResponse{}, interfaces.WindowClosed(g.reopen)
+}
+
+// TestSourceSummaryDefersInsideAModelWindow: a window is not a failed summary. The run says
+// `aborted` with the reopening instant, the sentinel survives to the caller (so the app keeps the
+// source in the backlog instead of retrying it), and no sidecar is written.
+func TestSourceSummaryDefersInsideAModelWindow(t *testing.T) {
+	ctx := context.Background()
+	hash := strings.Repeat("c3", 32)
+	idx := newFakeIndex()
+	summarySource(t, idx, hash, entities.StepOK)
+	store := &summaryStore{}
+	runs := &fakeRunRepo{}
+	reopen := fixedClock{}.Now().Add(2 * time.Hour)
+	uc := usecases.Sources{
+		Index: idx,
+		Atoms: &fakeAtomRepo{saved: []entities.Atom{
+			{ID: ulid.Make(), Topic: "caching", Claim: "A cache trades freshness for speed.", Body: ""},
+		}},
+		Store: store, Gateway: windowGateway{reopen: reopen}, Model: "test",
+		Clock: fixedClock{}, Runs: runs,
+	}
+
+	if _, err := uc.Summary(ctx, ulid.Make(), hash); !interfaces.IsWindowClosed(err) {
+		t.Fatalf("err = %v, want the window deferral", err)
+	}
+	if runs.run.Status != entities.RunAborted {
+		t.Fatalf("run status = %q, want aborted", runs.run.Status)
+	}
+	if !strings.Contains(runs.run.Error, "deferred") || !strings.Contains(runs.run.Error, reopen.Format(time.RFC3339)) {
+		t.Fatalf("run error = %q, want the deferral and the reopening instant", runs.run.Error)
+	}
+	if len(store.written) != 0 {
+		t.Fatalf("a deferred summary wrote a sidecar: %v", store.written)
 	}
 }

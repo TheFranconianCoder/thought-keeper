@@ -96,6 +96,14 @@ export interface Pipeline {
   asking: number;
   jobs?: Job[];
   repair?: Repair;
+  /** The derivation's closed model window: the work waits, nothing is broken. */
+  model_window?: ModelWindow;
+}
+
+/** ModelWindow is a closed derivation window as the reader sees it (the instants are UTC). */
+export interface ModelWindow {
+  closed: boolean;
+  opens_at?: string;
 }
 
 /** Repair is the index rebuild as the reader sees it. */

@@ -45,6 +45,9 @@ export const statusDe: Record<string, string> = {
   'status.waiting': 'wartet',
   'status.liveParts.one': ' · {done}/{total} Teil',
   'status.liveParts.many': ' · {done}/{total} Teile',
+  // Die Modellfenster der Destillation: nichts ist kaputt, die Arbeit wartet auf die Öffnung.
+  'status.modelWindowTitle': 'Destillation pausiert',
+  'status.modelWindowNote': 'Die Modellfenster sind bis {time} geschlossen. Outline, Destillieren, Zusammenfassungen, Tags und Vokabular warten; Ask und der Assistent laufen weiter.',
   'status.jobQueue': 'Warteschlange',
   'status.noJobs': 'Es läuft nichts — kein Dokumentschritt, kein Cluster-Lauf, keine Frage.',
   'status.jobOwed': 'fällig',

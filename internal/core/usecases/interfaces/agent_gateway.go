@@ -25,6 +25,38 @@ func Transient(err error) error {
 // IsTransient reports whether an error is worth another attempt.
 func IsTransient(err error) bool { return errors.Is(err, ErrTransient) }
 
+// ErrModelWindow marks a DERIVATION call the app refused because its configured model windows are
+// closed. It is not a failure of the endpoint: the work is deferred and resumes when the window
+// closes, so the caller must not count it as a retryable error.
+var ErrModelWindow = errors.New("agent: the derivation's model windows are closed")
+
+// WindowClosedError says which instant opens the window again.
+type WindowClosedError struct {
+	Reopen time.Time
+}
+
+func (e WindowClosedError) Error() string {
+	return fmt.Sprintf("%s until %s", ErrModelWindow, e.Reopen.UTC().Format(time.RFC3339))
+}
+
+// Is makes errors.Is(err, ErrModelWindow) true, so a use case can tell a deferral from a failure
+// however the error was wrapped.
+func (e WindowClosedError) Is(target error) bool { return target == ErrModelWindow }
+
+// WindowClosed builds the deferral error for an instant the window opens again.
+func WindowClosed(reopen time.Time) error { return WindowClosedError{Reopen: reopen} }
+
+// IsWindowClosed reports whether err is the model-window refusal.
+func IsWindowClosed(err error) bool { return errors.Is(err, ErrModelWindow) }
+
+// WindowReopen returns when the derivation may call the model again.
+func WindowReopen(err error) (time.Time, bool) {
+	if closed, ok := errors.AsType[WindowClosedError](err); ok {
+		return closed.Reopen, true
+	}
+	return time.Time{}, false
+}
+
 // AgentMessage is one message in an agent conversation.
 type AgentMessage struct {
 	Role       string // "system" | "user" | "assistant" | "tool"

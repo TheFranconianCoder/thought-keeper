@@ -80,6 +80,13 @@ openai:
     model_reason: 'gpt-4o'                 # queries + lint (strong)
     # reasoning_effort_compile: 'minimal'   # grouping and filing is mechanical
     # reasoning_effort_distill: 'low'      # deciding what one claim is, is a judgement
+    # The DERIVATION keeps these hours: the outline's naming, distill, the summary, the auto tags
+    # and the vocabulary verbs do not call the model inside them. UTC, start inclusive, end
+    # exclusive; a range whose start is later than its end wraps midnight. A call still running when
+    # a window opens is cut at the boundary — the work is kept and resumes when the window closes.
+    # Ask and the assistant are interactive reads and stay allowed. Empty = no window at all.
+    # The default is DeepSeek's pair; set [] to derive around the clock.
+    blocked_windows: ['01:00-04:00', '06:00-10:00']
     max_iterations: 16
     retries: 3                             # per-call retries for a TRANSIENT failure (timeout, 429, 5xx)
     retry_backoff: '2s'                    # first wait; doubles per attempt

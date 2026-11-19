@@ -112,6 +112,7 @@ func TestWriteRejectsWhatItMustNot(t *testing.T) {
 		"unknown knob": {Patch{"vault.root": "/elsewhere"}, ErrNotWritable},
 		"zero workers": {Patch{"pipeline.parallel_runs": 0}, ErrInvalidValue},
 		"bad language": {Patch{"language.ui": "deutsch"}, ErrInvalidValue},
+		"bad window":   {Patch{"openai.blocked_windows": []string{"01:00-25:00"}}, ErrInvalidValue},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Write(path, tc.patch); !errors.Is(err, tc.want) {

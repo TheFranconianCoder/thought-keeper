@@ -41,13 +41,15 @@ type DocumentRunResult struct {
 	Summary     string
 }
 
-// log records one source-scoped event (no-op when no log is configured).
-func (uc Derivation) logRun(ctx context.Context, runID ulid.ULID, hash, level, phase, msg string, fields map[string]any) {
+// logRun records one source-scoped event of a document run (no-op when no log is configured).
+// Every event of a document run belongs to the distill step, so the phase is fixed here.
+func (uc Derivation) logRun(ctx context.Context, runID ulid.ULID, hash, level, msg string, fields map[string]any) {
 	if uc.SourceLog == nil {
 		return
 	}
 	uc.SourceLog.Append(ctx, hash, interfaces.SourceLogEvent{
-		At: uc.Clock.Now(), RunID: runID.String(), Phase: phase, Level: level, Message: msg, Fields: fields,
+		At: uc.Clock.Now(), RunID: runID.String(), Phase: string(entities.StepDistill),
+		Level: level, Message: msg, Fields: fields,
 	})
 }
 
@@ -64,7 +66,7 @@ func (uc Derivation) Run(ctx context.Context, runID ulid.ULID, hash string, rese
 	if uc.Log != nil {
 		uc.Log.Info("document run start", "hash", hash, "run", runID.String(), "model", uc.Model)
 	}
-	uc.logRun(ctx, runID, hash, "info", "distill", "document run start", map[string]any{
+	uc.logRun(ctx, runID, hash, "info", "document run start", map[string]any{
 		"model": uc.Model, "mode": map[bool]string{true: "reset", false: "continue"}[reset],
 	})
 	startedAt := uc.Clock.Now()
@@ -103,7 +105,7 @@ func (uc Derivation) Run(ctx context.Context, runID ulid.ULID, hash string, rese
 	}
 
 	pending := a.PartsLeft > 0
-	uc.logRun(ctx, runID, hash, "info", "distill", "document run finished", map[string]any{
+	uc.logRun(ctx, runID, hash, "info", "document run finished", map[string]any{
 		"atoms": a.Atoms, "written": a.Written, "parts_done": a.PartsDone, "parts_total": a.PartsTotal,
 		"parts_left": a.PartsLeft, "tokens": run.TotalTokens,
 		"dur": uc.Clock.Now().Sub(startedAt).Round(time.Second).String(),
@@ -127,6 +129,15 @@ func (uc Derivation) Run(ctx context.Context, runID ulid.ULID, hash string, rese
 // user only finds out by reading the log. `finish` returns the error of the *recording*, which
 // is almost always nil — hence this wrapper.
 func (uc Derivation) fail(ctx context.Context, run entities.Run, cause error) error {
+	// A closed model window is not a failure of the document: the parts already derived are kept and
+	// the source is derived again when the window opens. The run row says `aborted` and why.
+	if deferred, why := windowDeferral(cause); deferred {
+		uc.logRun(ctx, run.ID, run.TargetID, "info", "document run deferred", map[string]any{"reason": why})
+		if recErr := uc.finish(ctx, run, entities.RunAborted, why); recErr != nil {
+			return fmt.Errorf("%w (recording the deferral: %w)", cause, recErr)
+		}
+		return cause
+	}
 	if recErr := uc.finish(ctx, run, entities.RunFailed, cause.Error()); recErr != nil {
 		// Both stay in the chain: the caller acts on the CAUSE (a stale outline is rebuilt), and the
 		// recording error is still there to be read.
@@ -140,7 +151,7 @@ func (uc Derivation) finish(ctx context.Context, run entities.Run, status entiti
 	run.Error = errMsg
 	run.EndedAt = uc.Clock.Now()
 	if status == entities.RunFailed {
-		uc.logRun(ctx, run.ID, run.TargetID, "error", "distill", "document run failed", map[string]any{"err": errMsg})
+		uc.logRun(ctx, run.ID, run.TargetID, "error", "document run failed", map[string]any{"err": errMsg})
 	}
 	return uc.Runs.FinishRun(ctx, run)
 }

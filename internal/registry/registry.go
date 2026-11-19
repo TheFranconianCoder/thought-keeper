@@ -13,6 +13,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/handlers"
 	"github.com/TheFranconianCoder/thought-keeper/internal/api/router"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/modelwindow"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/asks"
@@ -227,6 +228,19 @@ func Build(
 		gw = agent
 	}
 
+	// The DERIVATION keeps the configured model windows (openai.blocked_windows): the document steps,
+	// the summary, the auto tags and the vocabulary verbs get the guarded gateway, which refuses a
+	// call inside a window and cuts one at the boundary. Ask and the assistant keep the raw gateway —
+	// they are interactive reads, not derivation, and the reader waiting for an answer is not a batch
+	// job. A window set the app cannot read is no window: the config is the broken part, and the
+	// derivation should not silently stop because of a typo.
+	windows, winErr := modelwindow.Parse(cfg.OpenAI.BlockedWindows)
+	if winErr != nil && log != nil {
+		log.Warn("model windows: the derivation runs around the clock", "err", winErr)
+		windows = modelwindow.Windows{}
+	}
+	deriveGW := gateways.NewWindowedAgent(gw, windows, clock)
+
 	sourceLog := sourcelog.New(cfg.SourcesDir())
 	// Every line of a source's log is pushed as it is written: the overlay shows the run live.
 	sourceLog.OnAppend = func(hash string, e interfaces.SourceLogEvent, line string) {
@@ -285,7 +299,7 @@ func Build(
 	}
 	treesUC := usecases.Trees{
 		Store: store, Index: index, Trees: trees, Extractor: extractor,
-		SourceLog: sourceLog, Clock: clock, Gateway: gw, Model: cfg.OpenAI.ModelCompile,
+		SourceLog: sourceLog, Clock: clock, Gateway: deriveGW, Model: cfg.OpenAI.ModelCompile,
 		Steps: steps, Languages: languages,
 	}
 
@@ -295,13 +309,13 @@ func Build(
 	vocabulary := usecases.Vocabulary{
 		Atoms: atomRepo, AtomStore: atomStore, Wiki: wikiStore, Reader: index, Sources: steps,
 		Tags: steps, Index: index, Vocab: vocabStore, Runs: runRepo, SourceLog: sourceLog,
-		Gateway: gw, Model: cfg.OpenAI.ModelCompile, Apply: true, Clock: clock, Log: log,
+		Gateway: deriveGW, Model: cfg.OpenAI.ModelCompile, Apply: true, Clock: clock, Log: log,
 	}
 	sources := usecases.Sources{
 		Store: store, Pages: wikiStore, Index: index, Atoms: atomRepo, AtomStore: atomStore,
 		CommandStore: commandStore, Tags: steps, Shelf: index, Favicons: faviconStore,
 		Trees: trees, Convert: converter, Extractor: extractor,
-		Gateway: gw, SourceLog: sourceLog, Steps: steps, Languages: languages, Runs: runRepo,
+		Gateway: deriveGW, SourceLog: sourceLog, Steps: steps, Languages: languages, Runs: runRepo,
 		Clock: clock, Log: log, Model: cfg.OpenAI.ModelCompile, Language: cfg.Language.Summary,
 		MaxBytes: cfg.PDF.MaxBytes,
 	}
@@ -385,14 +399,14 @@ func Build(
 	}
 
 	if agentOK {
-		derivation.Gateway = gw
-		query.Gateway = gw
+		derivation.Gateway = deriveGW
 		// The assistant reads an utterance, it does not write the vault; a wrong key must not take
-		// the deterministic parser with it.
+		// the deterministic parser with it. It is an interactive read, so it keeps the raw gateway.
+		query.Gateway = gw
 		commands.Gateway = gw
-		// The rebranch pass is the one claim repair that asks the model; without a gateway it stays
-		// a dry run of the deterministic part.
-		claims.Gateway = gw
+		// The rebranch pass is the one claim repair that asks the model; it rewrites labels, so it is
+		// derivation and keeps the windows.
+		claims.Gateway = deriveGW
 		claims.Model = cfg.OpenAI.ModelCompile
 		commands.Model = cfg.OpenAI.ModelCompile
 	}

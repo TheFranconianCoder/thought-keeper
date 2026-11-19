@@ -18,7 +18,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `POST` | `/api/v1/config/reload` | Apply the file as it is on disk (an edit over SSH), without a restart. `202 {queued:true, config}` |
 | `GET` | `/api/v1/reader` | The two independent **seen watermarks**: `{start_seen_at, sources_seen_at}` (RFC3339, each absent until a client acknowledges that scope). Start's answers its statistic; Sources' answers its **new**/**updated** marks. One record per vault (`<vault>/.thought-keeper/reader/seen.md`), one value per scope, not per client |
 | `POST` | `/api/v1/reader/active?scope=start\|sources` | A client became active while ONE lens is visible: acknowledge everything that happened up to now for that lens — arrivals and content changes — and answer the baseline it uses. `200 {scope, since, seen_at, settled}` — `since` is absent on that scope's first acknowledgment (nothing is new then); `seen_at` is the watermark after it, the newest activity; `settled` lists EVERY watermark the visit moved. A **Start** visit settles Start alone; a **Sources** visit settles both, because the list answers the same batch the front door summarizes. An absent or empty `scope` means `start`, so a stale client can never clear the Sources marks; any other value is `400 invalid_body`. A watermark only moves forward, and only when there is something later than it; every moved scope publishes a `reader` event naming it. No gate: it is app state, not a pipeline write. The repair guard still refuses it while the index is rebuilt |
-| `GET` | `/api/v1/pipeline` | Global step status: documents or clusters, queued counts, `jobs`, and the index rebuild (`repair`) while one runs |
+| `GET` | `/api/v1/pipeline` | Global step status: documents or clusters, queued counts, `jobs`, the index rebuild (`repair`) while one runs, and `model_window: {closed, opens_at}` while a derivation window is closed (the work waits, nothing is broken; capture, the cluster step and Ask are not held) |
 | `POST` | `/api/v1/cluster` | Queue the cluster step by hand (waits for the gate) |
 | `POST` | `/api/v1/reconcile` | Run the consistency job by hand |
 | `POST` | `/api/v1/reindex` | Rebuild index + clusters from the vault |
@@ -109,6 +109,11 @@ is read by id.
   step and every synchronous vault rewrite take it exclusively (attaching or refetching a snapshot
   may reset claims and tree, so both are exclusive). The router applies the same gate to
   the write endpoints.
+- **The derivation keeps its model windows.** `openai.blocked_windows` holds UTC ranges in which
+  no derivation calls the model. A manual action that would start one (distill, summary, source tag,
+  vocabulary curation, retopic) answers `409` with `deferred: the model window is closed until …`;
+  automatic work simply waits. A run cut at a window's start is recorded `aborted` with the same
+  reason and keeps what it derived. Ask, the assistant, captures and the cluster step are unaffected.
 - **A query answer is saved automatically** to `asks/<run-id>.md`; there is no explicit filing step.
 - **A query may be scoped to one source.** `source` is that source's SHA-256 hash; the run records it
   as its target, the agent may only read that source and its claims, and the saved ask keeps the

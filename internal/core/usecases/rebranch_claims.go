@@ -70,6 +70,11 @@ func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchRes
 			run.Status = entities.RunFailed
 			run.Error = err.Error()
 			run.Answer = ""
+			if deferred, why := windowDeferral(err); deferred {
+				// The window cut the batch: the labels this pass wrote are real, the rest waits.
+				run.Status = entities.RunAborted
+				run.Error = why
+			}
 		}
 		_ = uc.Runs.FinishRun(ctx, run) //nolint:errcheck // the run row is an audit trail; the work already ended
 	}()

@@ -63,6 +63,17 @@ type Pipeline struct {
 	Jobs []Job `json:"jobs,omitempty"`
 	// Repair is the index rebuild in flight, so every open window follows it over the event stream.
 	Repair *Repair `json:"repair,omitempty"`
+	// ModelWindow is the derivation's blocked window while one is open: the outline's naming,
+	// distill, the summary, the tags and the vocabulary verbs wait for it. Capture (fetch, extract,
+	// OCR), the cluster step and Ask are not held.
+	ModelWindow *ModelWindow `json:"model_window,omitempty"`
+}
+
+// ModelWindow is a closed derivation window as the reader sees it: nothing is broken, the work
+// waits for the opening.
+type ModelWindow struct {
+	Closed  bool   `json:"closed"`
+	OpensAt string `json:"opens_at,omitempty"`
 }
 
 // Repair is the index rebuild as the reader sees it. A rebuild happens BEFORE the app serves

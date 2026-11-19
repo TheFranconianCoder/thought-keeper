@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/TheFranconianCoder/thought-keeper/internal/core/modelwindow"
 )
 
 // Errors the Config writer reports. The HTTP layer maps ErrNotWritable to 400 and ErrInvalidValue
@@ -39,6 +41,7 @@ var writableKeys = map[string]string{
 	"openai.reasoning_effort_compile": TierBasic,
 	"openai.reasoning_effort_distill": TierBasic,
 	"openai.reasoning_effort_reason":  TierBasic,
+	"openai.blocked_windows":          TierBasic,
 	"pipeline.auto":                   TierBasic,
 	"pipeline.auto_distill":           TierBasic,
 	"pipeline.debounce":               TierBasic,
@@ -292,6 +295,15 @@ func keyProblem(key string, value any) string {
 		items, err := asStrings(value)
 		if err != nil || len(items) == 0 {
 			return key + ": must list at least one language"
+		}
+		return ""
+	case "openai.blocked_windows":
+		items, err := asStrings(value)
+		if err != nil {
+			return fmt.Sprintf("%s: %v", key, err)
+		}
+		if _, err := modelwindow.Parse(items); err != nil {
+			return fmt.Sprintf("%s: %v", key, err)
 		}
 		return ""
 	case "capture.change_min_percent":

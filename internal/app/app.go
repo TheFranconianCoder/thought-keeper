@@ -188,6 +188,12 @@ type App struct {
 	// otherwise ask for 150 passes, and a pass walks every source: that is what made one save take
 	// minutes (and made it quadratic in the size of the vault).
 	pumpWake chan string
+	// windowMu guards the model-window wake (windowWakeAt, one armed timer) and wikiTags, the pages
+	// whose tag run a window held back — a wiki page has no backfill to walk, so it is kept here until
+	// the window opens.
+	windowMu     sync.Mutex
+	windowWakeAt time.Time
+	wikiTags     map[string]bool
 	// curate is the name-vocabulary curation: it asks the model and applies the answer.
 	vocabularyQueue chan runJob
 	// The automatic vocabulary pass: at most one at a time, at most every vocabularyCooldown.
@@ -732,6 +738,13 @@ func (a *App) pumpOnce(reason string) {
 	// The update path's ledger: a source whose steps are through is no longer taken in, so a later
 	// event (a refresh, a repair) takes a fresh turn. The prune runs before this pass claims.
 	a.forgetFinishedAdmissions(records, known)
+	// The derivation keeps its model windows: no step that calls the model is claimed inside one.
+	// Capture (fetch, extract, OCR) is local work and still runs; the cluster step has no model.
+	// The wake resumes the derivation when the window opens instead of polling for it.
+	blocked, reopen := a.modelWindowClosed()
+	if blocked {
+		a.modelWindowPause(reopen)
+	}
 	for _, step := range []entities.Step{entities.StepCapture, entities.StepOutline, entities.StepDistill} {
 		all := true
 		for hash, rec := range records {
@@ -750,6 +763,13 @@ func (a *App) pumpOnce(reason string) {
 		}
 		if all {
 			continue
+		}
+		if blocked && step != entities.StepCapture {
+			// Outline (the title is model-named) and distill both call the derivation's model. The
+			// pass stops here; the window's wake asks again.
+			a.log.Debug("derivation waits for the model window", "step", string(step),
+				"until", reopen.UTC().Format(time.RFC3339), "reason", reason)
+			break
 		}
 		if step == entities.StepDistill && !a.conf().Pipeline.AutoDistill {
 			return
@@ -1627,6 +1647,10 @@ func (a *App) ScheduleDistill(hash string, reset bool) (string, error) {
 	if !a.deps().AgentAvailable {
 		return "", agentNotConfigured()
 	}
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		a.modelWindowPause(reopen)
+		return "", modelWindowRefusal(reopen)
+	}
 	if !reset && !a.stepBarrierAllows(entities.StepDistill) {
 		return "", types.New("conflict", "distill waits until every source has finished the outline step", types.ErrConflict)
 	}
@@ -1680,6 +1704,10 @@ func (a *App) ScheduleSummary(hash string) (string, error) {
 	if !a.deps().AgentAvailable {
 		return "", agentNotConfigured()
 	}
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		a.modelWindowPause(reopen)
+		return "", modelWindowRefusal(reopen)
+	}
 	ctx := context.Background()
 	if _, err := a.deps().GetSource.Get(ctx, hash); err != nil {
 		return "", err
@@ -1710,6 +1738,12 @@ func (a *App) requestSummary(hash string) {
 	if !a.deps().AgentAvailable || hash == "" {
 		return
 	}
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		// The overview is owed, not refused: the backlog carries it to the window's wake.
+		a.mergeSummaryMissing([]string{hash})
+		a.modelWindowPause(reopen)
+		return
+	}
 	if _, err := a.ScheduleSummary(hash); err != nil && !errors.Is(err, types.ErrConflict) {
 		a.log.Warn("summary: could not schedule", "hash", hash, "err", err)
 	}
@@ -1737,6 +1771,10 @@ func (a *App) summaryBackfillBudget() int {
 // so the budget is spent on the OLDEST debt, not on whatever the current slice re-found.
 func (a *App) requestSummaries(missing []string) {
 	if !a.deps().AgentAvailable || len(missing) == 0 {
+		return
+	}
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		a.modelWindowPause(reopen)
 		return
 	}
 	budget := a.summaryBackfillBudget()
@@ -1938,6 +1976,10 @@ func (a *App) ScheduleSourceTag(hash string) (string, error) {
 	if !a.deps().AgentAvailable {
 		return "", agentNotConfigured()
 	}
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		a.modelWindowPause(reopen)
+		return "", modelWindowRefusal(reopen)
+	}
 	ctx := context.Background()
 	if _, err := a.deps().GetSource.Get(ctx, hash); err != nil {
 		return "", err
@@ -2025,6 +2067,12 @@ func (a *App) requestSourceTag(hash string) {
 	if !a.deps().AgentAvailable || hash == "" {
 		return
 	}
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		// The labels are owed, not refused: the backlog carries them to the window's wake.
+		a.mergeSourceTagMissing([]string{hash})
+		a.modelWindowPause(reopen)
+		return
+	}
 	if _, err := a.ScheduleSourceTag(hash); err != nil && !errors.Is(err, types.ErrConflict) {
 		a.log.Warn("source tags: could not schedule", "hash", hash, "err", err)
 	}
@@ -2033,6 +2081,10 @@ func (a *App) requestSourceTag(hash string) {
 // requestSourceTags queues never-tagged sources up to the watermark.
 func (a *App) requestSourceTags(missing []string) {
 	if !a.deps().AgentAvailable || len(missing) == 0 {
+		return
+	}
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		a.modelWindowPause(reopen)
 		return
 	}
 	budget := a.sourceTagBackfillBudget()
@@ -2454,6 +2506,10 @@ func (a *App) requestVocabularyIfDue(reason string) {
 	if !a.deps().AgentAvailable {
 		return
 	}
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		a.modelWindowPause(reopen)
+		return
+	}
 	a.vocabMu.Lock()
 	if a.vocabActive || time.Since(a.vocabLast) < vocabularyCooldown {
 		a.vocabMu.Unlock()
@@ -2490,6 +2546,9 @@ func (a *App) requestVocabularyIfDue(reason string) {
 	if _, err := a.ScheduleVocabularyCurate(""); err != nil {
 		a.vocabMu.Lock()
 		a.vocabActive = false
+		// The cooldown starts only once a pass is really queued: a refusal (a closed model window, a
+		// full queue) must not postpone the next attempt by the whole cooldown.
+		a.vocabLast = time.Time{}
 		a.vocabMu.Unlock()
 		a.log.Warn("vocabulary: automatic pass not queued", "err", err)
 		return
@@ -2502,6 +2561,10 @@ func (a *App) requestVocabularyIfDue(reason string) {
 func (a *App) ScheduleVocabularyRebranch() (string, error) {
 	if !a.deps().AgentAvailable {
 		return "", agentNotConfigured()
+	}
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		a.modelWindowPause(reopen)
+		return "", modelWindowRefusal(reopen)
 	}
 	// Fail BEFORE a run row exists: an unwired use case used to start a run that died in the worker with
 	// "no model or no atom repository configured" — a run nobody can act on. (That is exactly what a
@@ -2526,6 +2589,10 @@ func (a *App) ScheduleVocabularyRebranch() (string, error) {
 func (a *App) ScheduleVocabularyCurate(ns entities.VocabularyNamespace) (string, error) {
 	if !a.deps().AgentAvailable {
 		return "", agentNotConfigured()
+	}
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		a.modelWindowPause(reopen)
+		return "", modelWindowRefusal(reopen)
 	}
 	target := "vocabulary:all"
 	if ns != "" {
@@ -3054,6 +3121,17 @@ func (a *App) runOne(job runJob) {
 		})
 	}()
 
+	// The scheduler does not claim derivation inside a window; a run that was queued just before it
+	// opened still reaches a worker. Close it as deferred, hand its claim back, and let the window's
+	// wake ask again — a worker must not sit on the work for hours either.
+	if jobNeedsModel(job) {
+		if blocked, reopen := a.modelWindowClosed(); blocked {
+			a.deferRun(job, reopen)
+			status, failure = "aborted", "deferred: "+modelWindowReason(reopen)
+			return
+		}
+	}
+
 	switch job.op {
 	case entities.RunPipeline:
 		// The DOCUMENT run (outline → distill). It takes the shared side of the gate, so the cluster
@@ -3078,6 +3156,15 @@ func (a *App) runOne(job runJob) {
 		release()
 		a.releaseDistill(job.hash)
 		if err != nil {
+			if reopen, deferred := windowDeferralOf(err); deferred {
+				// The window cut the run at its boundary. The finished parts are kept; the pump derives
+				// the source again when the window opens.
+				status, failure = "aborted", "deferred: "+modelWindowReason(reopen)
+				a.log.Info("document run deferred: the model window is closed",
+					"hash", job.hash, "run", run, "until", reopen.UTC().Format(time.RFC3339))
+				a.modelWindowPause(reopen)
+				return
+			}
 			status = "failed"
 			failure = err.Error()
 			a.log.Warn("document run failed", "hash", job.hash, "run", run, "err", err)
@@ -3158,6 +3245,16 @@ func (a *App) runOne(job runJob) {
 		a.markSummaryRunning(job.hash, false)
 		a.releaseSummary(job.hash)
 		if err != nil {
+			if reopen, deferred := windowDeferralOf(err); deferred {
+				// The source is still owed its overview: it stays in the backlog and the window's
+				// wake asks again. It is not a failed summary and does not leave the walk.
+				a.mergeSummaryMissing([]string{job.hash})
+				status, failure = "aborted", "deferred: "+modelWindowReason(reopen)
+				a.log.Info("summary deferred: the model window is closed",
+					"hash", job.hash, "run", run, "until", reopen.UTC().Format(time.RFC3339))
+				a.modelWindowPause(reopen)
+				return
+			}
 			status = "failed"
 			failure = err.Error()
 			a.log.Warn("source summary failed", "hash", job.hash, "run", run, "err", err)
@@ -3211,6 +3308,15 @@ func (a *App) runOne(job runJob) {
 			})
 			a.releaseSourceTag(job.hash)
 			if err != nil {
+				if reopen, deferred := windowDeferralOf(err); deferred {
+					// Still owed its labels: the backlog keeps it and the window's wake asks again.
+					a.mergeSourceTagMissing([]string{job.hash})
+					status, failure = "aborted", "deferred: "+modelWindowReason(reopen)
+					a.log.Info("source tags deferred: the model window is closed",
+						"hash", job.hash, "run", run, "until", reopen.UTC().Format(time.RFC3339))
+					a.modelWindowPause(reopen)
+					return
+				}
 				status = "failed"
 				failure = err.Error()
 				a.log.Warn("source auto tags failed", "hash", job.hash, "run", run, "err", err)
@@ -3230,6 +3336,15 @@ func (a *App) runOne(job runJob) {
 			return tErr
 		})
 		if err != nil {
+			if reopen, deferred := windowDeferralOf(err); deferred {
+				// A wiki page has no backlog to walk: keep it for the wake that follows the window.
+				status, failure = "aborted", "deferred: "+modelWindowReason(reopen)
+				a.rememberWikiTag(job.page.String())
+				a.log.Info("tagging deferred: the model window is closed",
+					"page", job.page.String(), "run", run, "until", reopen.UTC().Format(time.RFC3339))
+				a.modelWindowPause(reopen)
+				return
+			}
 			status = "failed"
 			failure = err.Error()
 			a.log.Warn("tagging failed", "page", job.page.String(), "run", run, "err", err)
@@ -3256,6 +3371,14 @@ func (a *App) runOne(job runJob) {
 			runCancel()
 			a.gate.Unlock()
 			if err != nil {
+				if reopen, deferred := windowDeferralOf(err); deferred {
+					// The labels this pass wrote stay; the rest is for the next press.
+					status, failure = "aborted", "deferred: "+modelWindowReason(reopen)
+					a.log.Info("retopic deferred: the model window is closed",
+						"run", run, "until", reopen.UTC().Format(time.RFC3339))
+					a.modelWindowPause(reopen)
+					return
+				}
 				status = "failed"
 				failure = err.Error()
 				a.log.Warn("rebranch failed", "run", run, "err", err)
@@ -3344,6 +3467,17 @@ func (a *App) runOne(job runJob) {
 			summary = append(summary, line)
 		}
 		if err != nil {
+			if reopen, deferred := windowDeferralOf(err); deferred {
+				// The merges applied before the boundary are real; the rest waits for the window.
+				status, failure = "aborted", "deferred: "+modelWindowReason(reopen)
+				a.vocabularyDeferred()
+				a.log.Info("vocabulary curation deferred: the model window is closed",
+					"run", run, "until", reopen.UTC().Format(time.RFC3339))
+				a.publish("clusters", map[string]any{"vocabulary": "partial"})
+				a.publish("vocabulary", map[string]any{"namespaces": summary})
+				a.modelWindowPause(reopen)
+				return
+			}
 			status = "failed"
 			failure = err.Error()
 			a.log.Warn("vocabulary curation failed", "run", run, "err", err)
@@ -3574,6 +3708,13 @@ func (a *App) ScheduleWikiTag(pageID string) {
 	if !a.deps().AgentAvailable || a.deps().TagWikiPage.Wiki == nil {
 		return
 	}
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		// A wiki page has no backfill to walk: keep it until the window opens.
+		a.rememberWikiTag(pageID)
+		a.modelWindowPause(reopen)
+		return
+	}
+	a.forgetWikiTag(pageID)
 	id, err := ulid.ParseStrict(pageID)
 	if err != nil {
 		return
@@ -4337,6 +4478,11 @@ func (a *App) requestDistill(hash string) {
 // autoDistill claims one source and queues its run. It reports whether it claimed — the pump uses that
 // to bound how much of the backlog one pass takes on.
 func (a *App) autoDistill(hash string) bool {
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		// Auto-continue and the retry ladder reach this without the pump: the window holds them too.
+		a.modelWindowPause(reopen)
+		return false
+	}
 	if a.needsAttention(hash) {
 		a.log.Warn("auto-distill skipped: this source made no progress in its last runs", "hash", hash)
 		return false

@@ -295,6 +295,17 @@ order. It never writes a URL, never invents a hash and never answers the request
 
 - **Two models.** `model_compile` (cheap) runs the document steps, tagging and vocabulary calls;
   `model_reason` (strong) answers queries and will run semantic lint. The cluster step uses none.
+- **The derivation keeps window hours.** `openai.blocked_windows` is a list of UTC ranges
+  (`HH:MM-HH:MM`, start inclusive and end exclusive; `23:00-02:00` wraps midnight) in which no
+  derivation calls the model — outline naming, distill, summary, source and wiki auto tags,
+  vocabulary curation and retopic. Ask and the assistant are interactive reads and stay allowed, as
+  do capture (fetch, extract, OCR) and the cluster step, which has no model. The scheduler states the
+  rule twice: no such run is claimed or queued inside a window, and the guarded gateway refuses a
+  call that reaches it anyway. A call in flight when a window opens is **cut at the boundary**; the
+  run row says `aborted` with `deferred: the model window is closed until …` (not `failed`) and
+  everything already derived is kept. One wake is armed for the opening and resumes the pump, the
+  summary/tag backfills, the vocabulary check and the wiki pages whose tagging waited. The default
+  is DeepSeek's `01:00-04:00` and `06:00-10:00`; an explicit empty list means around the clock.
 - **Think less where thinking buys nothing.** `reasoning_effort_compile` and
   `reasoning_effort_distill` default to `minimal`; `reasoning_effort_reason` too.
 - **`reasoning_content` is echoed even when empty.** A thinking endpoint rejects a conversation

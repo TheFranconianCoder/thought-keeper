@@ -239,6 +239,13 @@ scheduling: `docs/pipeline.md`.
   language, provenance to a source node, then an audit for statements left uncovered.
 - **Cluster** prunes, attaches, graphs, splits, overlaps and writes titleless memberships. No model.
 
+**The derivation keeps model windows.** `openai.blocked_windows` lists the UTC ranges in which no
+derivation calls the model — outline naming, distill, summaries, source and wiki auto tags, the
+vocabulary verbs. Nothing starts inside a window and a call in flight is cut at its boundary; the
+run says `aborted` ("deferred"), keeps what it derived and resumes when the window opens. Ask and
+the assistant stay allowed, as do capture and the cluster step, which use no model. The default is
+DeepSeek's `01:00-04:00` and `06:00-10:00`; `[]` means around the clock.
+
 A page or sitemap is refreshed once a week (`capture.refresh_interval: '168h'`), a feed and a listing
 once a day (`capture.feed_refresh_interval: '24h'`). The cadence is a source's minimum age;
 `capture.refresh_min_gap` (`1m`; empty = a burst) is the throughput of the **whole update path**: at

@@ -47,6 +47,9 @@ export const statusEn: Record<string, string> = {
   'status.waiting': 'waiting',
   'status.liveParts.one': ' · {done}/{total} part',
   'status.liveParts.many': ' · {done}/{total} parts',
+  // The derivation's model windows: nothing is broken, the work waits for the opening.
+  'status.modelWindowTitle': 'Derivation paused',
+  'status.modelWindowNote': 'The model windows are closed until {time}. Outline, distill, summaries, tags and the vocabulary wait; Ask and the assistant keep running.',
   'status.jobQueue': 'Job queue',
   'status.noJobs': 'Nothing is running — no document step, no cluster pass, no ask.',
   'status.jobOwed': 'owed',

@@ -83,8 +83,9 @@ plainly). The overlay re-reads the file on every request: when it no longer matc
 runs (an edit over SSH), it says so.
 
 Two sets are writable. The **curated set** is shown unasked: language, the models and reasoning
-efforts, the inbox / auto-distill / debounce knobs, parallel runs/queries/parts, the capture
-cadences, `browser.path`, OCR enable/languages and the heap ceiling. The **Advanced** set is behind
+efforts, `openai.blocked_windows` (the derivation's UTC windows), the inbox / auto-distill / debounce
+knobs, parallel runs/queries/parts, the capture cadences, `browser.path`, OCR enable/languages and the
+heap ceiling. The **Advanced** set is behind
 a reveal in the toolbar: the request and fetch timeouts, `openai.retries`/`retry_backoff`/
 `max_iterations`, the run/cluster ceilings, `auto_continue`, the reconcile cadence and batch, the
 capture thresholds, the whole `cluster.*` arithmetic, the assistant retention/prune/limits, the
@@ -107,6 +108,18 @@ to **new** work (a run already in flight keeps what it started with), and a `clu
 on the **next cluster pass** — the overlay never starts a pass by itself. The assistant prune cadence
 is read on the consistency worker's tick (and checked every minute even when the consistency pass is
 off), so turning it on or off needs no restart.
+
+**The derivation's hours.** `openai.blocked_windows` lists UTC ranges (`HH:MM-HH:MM`, start
+inclusive; `23:00-02:00` wraps midnight) in which the derivation may not call the model: outline
+naming, distill, summaries, source and wiki auto tags, the vocabulary curation and the retopic. Ask,
+the assistant, capture (fetch, extract, OCR) and the cluster step are not held. The default is
+DeepSeek's pair, `01:00-04:00` and `06:00-10:00`; write `[]` to derive around the clock. The running
+process reads the list on every decision, and a call that is in flight when a window opens is cut at
+the boundary: its run says `aborted` (deferred, not failed), the work already derived is kept, and
+the opening resumes it. While a window is closed the Status lens says so and names the opening, and
+a pressed derivation answers `409` with that instant. The instants are always UTC — the provider's
+clock, not the reader's zone — and the knob is the MACHINE's (the provider's hours are not a property
+of the vault, so it does not travel in `vault.yaml`).
 
 The rest stays read-only: `vault.*`, `index.*`, `server.addr`, `app.tray`/`autostart`,
 `openai.api_key`/`headers`/`base_url`, `fetch.allow_private`, `capture.dedupe_by_url` (URL identity is

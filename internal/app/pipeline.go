@@ -104,6 +104,9 @@ func (a *App) PipelineStatus() payloads.Pipeline {
 	// The jobs are collected BEFORE this lock is taken: Jobs reads the same pipe state, and a mutex is
 	// not reentrant.
 	jobs := a.Jobs()
+	// The model window is read before the pipe lock for the same reason the jobs are: a plain config
+	// read, no shared state.
+	windowClosed, windowReopen := a.modelWindowClosed()
 
 	a.pipeMu.Lock()
 	defer a.pipeMu.Unlock()
@@ -114,6 +117,12 @@ func (a *App) PipelineStatus() payloads.Pipeline {
 		Queued:  map[string]int{},
 		Asking:  a.pipe.asking,
 		Repair:  a.repairStatus(),
+	}
+	if windowClosed {
+		p.ModelWindow = &payloads.ModelWindow{
+			Closed:  true,
+			OpensAt: windowReopen.UTC().Format(time.RFC3339),
+		}
 	}
 	for _, step := range entities.PipelineSteps {
 		if n := a.pipe.docRunning[step]; n > 0 {

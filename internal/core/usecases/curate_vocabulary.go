@@ -57,7 +57,7 @@ func (uc Vocabulary) Curate(ctx context.Context, runID ulid.ULID) (res CurateRes
 			ID: runID, Op: entities.RunVocabulary, Model: uc.Model, Status: status,
 			Answer: answer, TotalTokens: res.Tokens, EndedAt: uc.Clock.Now(),
 		}
-		if status == entities.RunFailed {
+		if status != entities.RunSucceeded {
 			run.Error = answer
 			run.Answer = ""
 		}
@@ -68,6 +68,11 @@ func (uc Vocabulary) Curate(ctx context.Context, runID ulid.ULID) (res CurateRes
 			return
 		}
 		if err != nil {
+			if deferred, why := windowDeferral(err); deferred {
+				// The window cut the curation: the merges it applied stay, the rest waits.
+				finish(entities.RunAborted, why)
+				return
+			}
 			finish(entities.RunFailed, err.Error())
 			return
 		}

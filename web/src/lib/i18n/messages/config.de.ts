@@ -82,6 +82,7 @@ export const configDe: Record<string, string> = {
   'config.field.openai.reasoning_effort_reason': 'Denkaufwand (Ask)',
   'config.field.openai.model_reason': 'Modell (Ask)',
   'config.field.openai.max_iterations': 'Werkzeug-Runden pro Zug',
+  'config.field.openai.blocked_windows': 'Destillations-Fenster (UTC, z. B. 01:00-04:00)',
   'config.field.openai.retries': 'Wiederholungen',
   'config.field.openai.retry_backoff': 'Wartezeit vor Wiederholung',
   'config.field.openai.timeout': 'Zeitlimit pro Anfrage',

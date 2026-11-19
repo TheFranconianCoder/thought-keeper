@@ -82,6 +82,7 @@ export const configEn: Record<string, string> = {
   'config.field.openai.reasoning_effort_reason': 'Reasoning effort (Ask)',
   'config.field.openai.model_reason': 'Model (Ask)',
   'config.field.openai.max_iterations': 'Tool iterations per turn',
+  'config.field.openai.blocked_windows': 'Derivation windows (UTC, e.g. 01:00-04:00)',
   'config.field.openai.retries': 'Retries',
   'config.field.openai.retry_backoff': 'Retry backoff',
   'config.field.openai.timeout': 'Request timeout',

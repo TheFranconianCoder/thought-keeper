@@ -71,7 +71,7 @@ func (uc Vocabulary) TagSource(ctx context.Context, runID ulid.ULID, hash string
 			},
 		})
 		if cErr != nil {
-			return res, uc.fail(ctx, run, "the model call failed: "+cErr.Error())
+			return res, uc.failCall(ctx, run, cErr)
 		}
 		res.Tokens = resp.TotalTokens
 		run.TotalTokens = resp.TotalTokens
@@ -169,6 +169,24 @@ func normalizeSourceAutoTags(raw []string, limit int, absorbed map[string]string
 		}
 	}
 	return out
+}
+
+// failCall finishes a tag run whose MODEL call failed. A closed window aborts the run with the
+// reopening instant instead of failing it; the backlog then asks again after the window.
+func (uc Vocabulary) failCall(ctx context.Context, run entities.Run, cause error) error {
+	if deferred, why := windowDeferral(cause); deferred {
+		run.Status = entities.RunAborted
+		run.Error = why
+		run.EndedAt = uc.Clock.Now()
+		if uc.Runs != nil {
+			if fErr := uc.Runs.FinishRun(ctx, run); fErr != nil && uc.Log != nil {
+				uc.Log.Warn("source tags: the deferred run could not be recorded", "hash", run.TargetID, "run", run.ID.String(), "err", fErr)
+			}
+		}
+		uc.log(ctx, run.TargetID, run.ID, "info", "auto tags deferred", map[string]any{"reason": why})
+		return cause
+	}
+	return uc.fail(ctx, run, "the model call failed: "+cause.Error())
 }
 
 func (uc Vocabulary) fail(ctx context.Context, run entities.Run, msg string) error {

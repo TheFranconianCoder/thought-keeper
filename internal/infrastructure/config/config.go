@@ -132,7 +132,14 @@ type OpenAIConfig struct {
 	ReasoningEffortDistill string `yaml:"reasoning_effort_distill"`
 	ReasoningEffortReason  string `yaml:"reasoning_effort_reason"`
 	ModelReason            string `yaml:"model_reason"`
-	MaxIterations          int    `yaml:"max_iterations"`
+	// BlockedWindows are the UTC ranges ("HH:MM-HH:MM", start inclusive) in which the DERIVATION may
+	// not call the model: the outline's naming, distill, the summary, the auto tags and the
+	// vocabulary verbs. Ask and the assistant are interactive reads and stay allowed. A call still in
+	// flight when a window opens is cut at the boundary; the work is kept and resumes afterwards.
+	// Empty = no window at all. The default is the pair DeepSeek is used for: 01:00-04:00 and
+	// 06:00-10:00 UTC.
+	BlockedWindows []string `yaml:"blocked_windows"`
+	MaxIterations  int      `yaml:"max_iterations"`
 	// Retries and RetryBackoff make a slow endpoint transparent: a transient failure (timeout,
 	// 429, 5xx) is retried with a doubling backoff instead of ending the run. A wrong key or a
 	// bad request is not retried.
@@ -326,6 +333,10 @@ func Defaults() Config {
 		OpenAI: OpenAIConfig{
 			ModelCompile: "gpt-4o-mini",
 			ModelReason:  "gpt-4o",
+			// The derivation keeps these hours: DeepSeek is the endpoint this app is run against, and
+			// these are its expensive windows. A call that is running when one opens is cut at the
+			// boundary; the work resumes when it closes. An empty list turns the rule off.
+			BlockedWindows: []string{"01:00-04:00", "06:00-10:00"},
 			// Minimal everywhere: this is mechanical work (grouping, filing, looking up).
 			ReasoningEffortCompile: "minimal",
 			ReasoningEffortDistill: "minimal",

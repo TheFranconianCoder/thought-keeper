@@ -82,7 +82,7 @@ func (uc Sources) Summary(ctx context.Context, runID ulid.ULID, hash string) (So
 			OnRetry: retryNotice(ctx, uc.SourceLog, uc.Clock, hash, "summary", runID.String()),
 		})
 		if cErr != nil {
-			return res, uc.fail(ctx, run, "the model call failed: "+cErr.Error())
+			return res, uc.failCall(ctx, run, cErr)
 		}
 		res.Tokens = resp.TotalTokens
 		run.PromptTokens, run.CompletionTokens, run.TotalTokens = resp.PromptTokens, resp.CompletionTokens, resp.TotalTokens
@@ -183,6 +183,25 @@ func stripCodeFence(s string) string {
 	t = strings.TrimSpace(t)
 	t = strings.TrimSuffix(t, "```")
 	return strings.TrimSpace(t)
+}
+
+// failCall finishes a run whose MODEL call failed. A closed window is not a failure: the run is
+// aborted with the reopening instant, and the error keeps the sentinel so the worker requeues the
+// source instead of counting a retry.
+func (uc Sources) failCall(ctx context.Context, run entities.Run, cause error) error {
+	if deferred, why := windowDeferral(cause); deferred {
+		run.Status = entities.RunAborted
+		run.Error = why
+		run.EndedAt = uc.Clock.Now()
+		if uc.Runs != nil {
+			if fErr := uc.Runs.FinishRun(ctx, run); fErr != nil && uc.Log != nil {
+				uc.Log.Warn("summary: the deferred run could not be recorded", "hash", run.TargetID, "run", run.ID.String(), "err", fErr)
+			}
+		}
+		uc.log(ctx, run.TargetID, run.ID, "info", "summary deferred", map[string]any{"reason": why})
+		return cause
+	}
+	return uc.fail(ctx, run, "the model call failed: "+cause.Error())
 }
 
 // fail records the failed run and returns the error. The caller (the worker) publishes it; the row is

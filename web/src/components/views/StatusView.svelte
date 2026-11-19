@@ -10,7 +10,7 @@
     retopicClaims,
   } from '../../lib/actions';
   import { elapsed, relTime } from '../../lib/format';
-  import { n, t, tn } from '../../lib/i18n/index.svelte';
+  import { i18n, n, t, tn } from '../../lib/i18n/index.svelte';
   import { openConfig } from '../../lib/overlays';
   import { navigate, router, sourcePath } from '../../lib/router.svelte';
   import { sources } from '../../lib/stores/sources.svelte';
@@ -29,6 +29,22 @@
   const repairPercent = $derived(
     repair && repair.total > 0 ? Math.min(100, Math.round((repair.done / repair.total) * 100)) : 0,
   );
+  // The derivation's model window. The instants are UTC (the knob's clock), so the note names the
+  // opening in UTC instead of pretending the reader's zone was meant.
+  const modelWindowClosed = $derived(system.pipeline?.model_window?.closed === true);
+  const modelWindowNote = $derived.by(() => {
+    const iso = system.pipeline?.model_window?.opens_at;
+    if (!iso) return t('status.modelWindowNote', { time: '—' });
+    const parsed = Date.parse(iso);
+    const time = Number.isNaN(parsed)
+      ? iso
+      : `${new Date(parsed).toLocaleTimeString(i18n.locale, {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'UTC',
+        })} UTC`;
+    return t('status.modelWindowNote', { time });
+  });
 
 
   let clock = $state(Date.now());
@@ -199,6 +215,13 @@
         <div class="repair-bar" aria-hidden="true"><span style="width: {repairPercent}%"></span></div>
         <p class="muted small section-note">{t('status.repairNote')}</p>
       </section>
+    {/if}
+
+    {#if modelWindowClosed}
+      <div class="notice" role="status" aria-live="polite">
+        <Icon name="clock" size={15} />
+        <span><b>{t('status.modelWindowTitle')}</b> {modelWindowNote}</span>
+      </div>
     {/if}
 
     <div class="stat-grid">
