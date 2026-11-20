@@ -218,9 +218,9 @@
     {/if}
 
     {#if modelWindowClosed}
-      <div class="notice" role="status" aria-live="polite">
+      <div class="notice notice--warn model-window" role="status" aria-live="polite">
         <Icon name="clock" size={15} />
-        <span><b>{t('status.modelWindowTitle')}</b> {modelWindowNote}</span>
+        <span class="model-window-text"><b>{t('status.modelWindowTitle')}</b> {modelWindowNote}</span>
       </div>
     {/if}
 
@@ -443,6 +443,31 @@
 
   .page-notice {
     margin-bottom: 16px;
+  }
+
+  /* The closed model window is a state of the whole vault, so it outranks the counters: it gets the
+     warning surface, an amber icon and title, and the same breathing room the repair banner has. Its
+     body stays in ink — the amber carries the emphasis, the sentence stays readable. */
+  .model-window {
+    align-items: flex-start;
+    gap: 9px;
+    margin-bottom: 18px;
+    padding: 11px 13px;
+    line-height: 1.55;
+  }
+
+  .model-window :global(svg) {
+    color: var(--warning);
+    margin-top: 1px;
+  }
+
+  .model-window-text {
+    color: var(--ink-2);
+  }
+
+  .model-window-text b {
+    color: var(--warning);
+    font-weight: 600;
   }
 
   /* The index rebuild outranks the counters: while it runs, nothing can be written. */
