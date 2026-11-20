@@ -73,7 +73,10 @@ export const statusDe: Record<string, string> = {
   // Vokabular.
   'status.vocabulary': 'Vokabular',
   'status.curate': 'Kuratieren',
+  'status.coarsen': 'Einsortieren',
   'status.retopic': 'Themen neu ableiten',
+  'status.coarsenNote':
+    'sortiert die Namen außerhalb des Shelves darauf ein: zuerst die deterministischen Familien, dann das Modell in Stapeln von 600. Es schreibt Claim-Labels um, deshalb wartet die Pipeline, solange es läuft; ein gestoppter Lauf setzt beim nächsten Druck fort. Ein Vault, der älter ist als der Shelf, bekommt ihn von selbst — hier geht es um den bereits benutzten langen Rest.',
   'status.vocabNote':
     'fragt das Modell, was aus den Namen werden soll — Aussagenthemen, Wiki-Schlagwörter und Quellenschlagwörter — und wendet die Antwort als Umbenennung an. Eine Aussage behält Text, Knoten und Verknüpfungen; eine Seite und eine Quelle behalten ihre Prosa. Nur die Bezeichnung ändert sich. Themen sind flach.',
   'status.vocabNames.one': '{count} Name',
@@ -82,6 +85,8 @@ export const statusDe: Record<string, string> = {
   'status.vocabUses.many': '{count} Verwendungen',
   'status.vocabSingletons': '{count} einmal genutzt',
   'status.vocabTop': 'Top {pct}%',
+  'status.vocabShelf': 'Shelf {shelf}/{target}',
+  'status.vocabRemaining': '{count} offen',
   'status.vocabCanonical': '{canonical} kanonisch, {absorbed} übernommen',
   'status.vocabNew': '{count} neu',
   'status.collisionsTitle': 'Zwei Schreibweisen eines Namens — immer ein Fehler',
@@ -174,6 +179,8 @@ export const statusDe: Record<string, string> = {
   'status.outlinesFailed': 'Gliederungen konnten nicht neu gebaut werden: {error}',
   'status.curateStarted': 'Das Aussagenthemen-Vokabular wird kuratiert…',
   'status.curateFailed': 'Vokabular-Kuratierung fehlgeschlagen: {error}',
+  'status.coarsenStarted': 'Der lange Rest wird auf den Shelf einsortiert…',
+  'status.coarsenFailed': 'Einsortieren fehlgeschlagen: {error}',
   'status.retopicStarted': 'Die Aussagenthemen werden aus den Aussagentexten neu abgeleitet…',
   'status.retopicFailed': 'Themen-Ableitung fehlgeschlagen: {error}',
   'status.collapseNothing': 'Nichts zusammenzufassen — jede Aussage existiert einmal.',

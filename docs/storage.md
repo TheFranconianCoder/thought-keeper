@@ -498,6 +498,13 @@ onto the shelf, `POST /api/v1/vocabulary/retopic` re-derives claim topics, and a
 — no claim text is rewritten and no cluster moves. The file carries `target:` (the size the shelf was
 built for) and a `# Shelf` section next to `# Canonical`, `# Decided` and `# Absorbed`.
 
+The **shelf of the topics namespace is written by the app itself** when a vault predates it: the
+reconcile tick reads the report, and a catalog that runs past the target gets a shelf of its most used
+names — no model, no gate, and not one claim rewritten. That is the record the derivation reads, so
+new claims are filed onto the bounded vocabulary from then on. The tag namespaces have no such build:
+their write path reads `Canonical`, so their shelf is written by the coarsening, which rewrites
+`Canonical` with it.
+
 ## 9. Ask records
 
 Every successful query writes `asks/<run-id>.md`: YAML frontmatter plus the answer body. The id is

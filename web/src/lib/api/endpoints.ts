@@ -241,6 +241,8 @@ export const api = {
   vocabulary: () => request<{ namespaces: VocabularyHealth[] }>('/vocabulary'),
   curateVocabulary: () =>
     request<{ run_id: string; status: string }>('/vocabulary/curate', { method: 'POST' }),
+  coarsenVocabulary: () =>
+    request<{ run_id: string; status: string }>('/vocabulary/coarsen', { method: 'POST' }),
   retopicClaims: () =>
     request<{ run_id: string; status: string }>('/vocabulary/retopic', { method: 'POST' }),
 

@@ -586,6 +586,12 @@ export interface VocabularyHealth {
   broad_tokens_learned?: boolean;
   oversized_families?: number;
   oversized_names?: number;
+  unreviewed_families?: number;
+  /** The bounded target vocabulary and the size it was built for. */
+  shelf: number;
+  target: number;
+  /** The names in use that are neither on the shelf nor absorbed: what a coarsening would file. */
+  remaining: number;
   canonical: number;
   absorbed: number;
   new?: string[];

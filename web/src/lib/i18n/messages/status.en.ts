@@ -74,7 +74,10 @@ export const statusEn: Record<string, string> = {
   // Vocabulary.
   'status.vocabulary': 'Vocabulary',
   'status.curate': 'Curate',
+  'status.coarsen': 'Coarsen',
   'status.retopic': 'Re-topic claims',
+  'status.coarsenNote':
+    'files the names outside the shelf onto it: the deterministic families first, then the model in batches of 600. It rewrites claim labels, so the pipeline waits while it runs; a stopped pass continues on the next press. A vault that predates the shelf gets one on its own — this is the long tail that is already in use.',
   'status.vocabNote':
     'asks the model what the names should become — claim topics, wiki tags and source tags — and applies the answer as a rename. A claim keeps its text, its node and its associations; a page and a source keep their prose. Only the label changes. Topics are flat.',
   'status.vocabNames.one': '{count} name',
@@ -83,6 +86,8 @@ export const statusEn: Record<string, string> = {
   'status.vocabUses.many': '{count} uses',
   'status.vocabSingletons': '{count} used once',
   'status.vocabTop': 'top {pct}%',
+  'status.vocabShelf': 'shelf {shelf}/{target}',
+  'status.vocabRemaining': '{count} to file',
   'status.vocabCanonical': '{canonical} canonical, {absorbed} absorbed',
   'status.vocabNew': '{count} new',
   'status.collisionsTitle': 'Two spellings of one name — always a bug',
@@ -175,6 +180,8 @@ export const statusEn: Record<string, string> = {
   'status.outlinesFailed': 'Outline rebuild failed: {error}',
   'status.curateStarted': 'Curating the claim-topic vocabulary…',
   'status.curateFailed': 'Vocabulary curation failed: {error}',
+  'status.coarsenStarted': 'Filing the long tail onto the shelf…',
+  'status.coarsenFailed': 'Coarsening failed: {error}',
   'status.retopicStarted': 'Re-deriving claim topics from the claim texts…',
   'status.retopicFailed': 'Topic re-derivation failed: {error}',
   'status.collapseNothing': 'Nothing to collapse — every claim exists once.',

@@ -290,10 +290,19 @@ order. It never writes a URL, never invents a hash and never answers the request
   to the vocabulary's `Decided` list, and the next pass only asks about names that are new or were
   never reviewed — the catalogue is not re-questioned each cooldown. Losing that list turned every
   automatic pass into a full-catalogue model run over thousands of names.
+- **The shelf of `topics` is built on its own.** A vault that predates the shelf has a catalog of tens
+  of thousands of names and a target it never reached, and no other unit would build it: the curation
+  merges synonyms, it cannot fix granularity (−4 % measured, ADR 0006). The reconcile tick therefore
+  writes `vocabulary/topics.md` with the shelf the target asks for — the most used names, no model, no
+  gate, no claim rewritten — and trims it when `vocabulary.topics.max_names` moves down. That is the
+  record the **derivation reads**: candidates come from the shelf, and a proposed name that is not on
+  it is mapped onto the best fitting shelf name at the write. The tag namespaces get no such build
+  (their write path reads `Canonical`); their shelf comes with the coarsening.
 - **`POST /vocabulary/coarsen`** files a namespace's long tail onto its shelf. Deterministic families
   first (no model), then the model in batches of 600 names, each applied through the same rename the
   curation uses and each recorded in `Absorbed` — the watermark, so a stopped pass continues where it
-  was. It is the repair for a vocabulary that grew before the shelf existed, and it is idempotent.
+  was. It is the repair for a vocabulary that grew before the shelf existed, it holds the exclusive
+  gate for the whole pass, and it is what the **Coarsen** button on Status asks for.
 - **`POST /vocabulary/retopic`** re-derives each claim's flat topic from the claim text (bounded per
   run; the next press continues). It maps onto the shelf, never around it. The queue is the clock: it reads the OLDEST claims through the
   index (`updated_at, id`), so a budget of 12k claims reads 12k rows — not the corpus. Only a claim

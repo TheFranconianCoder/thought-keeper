@@ -221,6 +221,7 @@ func (uc Vocabulary) health(observed []partialentities.NameUses, vocab entities.
 	}
 	h.Shelf = len(vocab.Shelf)
 	h.Target = vocab.Target
+	h.Remaining = remainingNames(observed, vocab)
 	h.BroadTokens = len(broad)
 	h.BroadTokensLearned = len(vocab.BroadTokens) > 0
 	h.NearDuplicates, h.OversizedFamilies, h.OversizedNames = nearDuplicates(observed, broad)
@@ -234,6 +235,30 @@ func (uc Vocabulary) health(observed []partialentities.NameUses, vocab entities.
 		}
 	}
 	return h
+}
+
+// remainingNames is what the coarsening still has to file: the names in use that are neither on the
+// shelf nor already absorbed. Without a shelf the whole catalog is remaining — the shelf is the
+// target, everything beside it is the tail.
+func remainingNames(observed []partialentities.NameUses, vocab entities.Vocabulary) int {
+	if len(observed) == 0 {
+		return 0
+	}
+	onShelf := make(map[string]bool, len(vocab.Shelf))
+	for _, name := range vocab.Shelf {
+		onShelf[name] = true
+	}
+	n := 0
+	for _, o := range observed {
+		if onShelf[o.Name] {
+			continue
+		}
+		if _, absorbed := vocab.Absorbed[o.Name]; absorbed {
+			continue
+		}
+		n++
+	}
+	return n
 }
 
 // nearDuplicates groups the names whose token sets overlap strongly. It reports GROUPS, not pairs:

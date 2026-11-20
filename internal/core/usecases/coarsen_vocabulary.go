@@ -105,10 +105,6 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 	if err != nil {
 		return res, err
 	}
-	uses := make(map[string]int, len(observed))
-	for _, o := range observed {
-		uses[o.Name] = o.Uses
-	}
 
 	// Stage 1: the deterministic families. A family whose members already mean the same subject
 	// needs no question — and asking would cost a request per family.
@@ -129,10 +125,6 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 					break
 				}
 			}
-			uses = make(map[string]int, len(observed))
-			for _, o := range observed {
-				uses[o.Name] = o.Uses
-			}
 		}
 	}
 
@@ -142,13 +134,8 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 	if target <= 0 {
 		target = len(observed)
 	}
-	if len(v.Shelf) == 0 {
-		v.Shelf = topObserved(observed, target)
-		v.Target = target
-	}
-	// A shrunken target (the knob moved down) trims the shelf to the most used entries.
-	if len(v.Shelf) > target {
-		v.Shelf = topObserved(observedUses(v.Shelf, uses), target)
+	if len(v.Shelf) == 0 || len(v.Shelf) > target {
+		v.Shelf = shelfSizing(v.Shelf, observed, target)
 		v.Target = target
 	}
 	if uc.Clock != nil {
@@ -349,6 +336,27 @@ func topObserved(observed []partialentities.NameUses, limit int) []string {
 		out = append(out, o.Name)
 	}
 	return out
+}
+
+// shelfSizing returns the bounded target vocabulary for a namespace: the most used names, trimmed to
+// target when there is none yet or the knob moved down. A shelf that already fits is left alone — it
+// is a record of the decision, not a cache. The automatic build (EnsureShelf) and the coarsening both
+// call it, so the two cannot disagree about what the shelf is.
+func shelfSizing(shelf []string, observed []partialentities.NameUses, target int) []string {
+	if target <= 0 {
+		return shelf
+	}
+	if len(shelf) == 0 {
+		return topObserved(observed, target)
+	}
+	if len(shelf) > target {
+		uses := make(map[string]int, len(observed))
+		for _, o := range observed {
+			uses[o.Name] = o.Uses
+		}
+		return topObserved(observedUses(shelf, uses), target)
+	}
+	return shelf
 }
 
 // observedUses turns a name list into the NameUses list topNames expects, keeping its order.

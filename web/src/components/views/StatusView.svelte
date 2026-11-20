@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     clusterClaims,
+    coarsenVocabulary,
     collapseDuplicateClaims,
     curateVocabulary,
     rebuildAllTrees,
@@ -334,12 +335,18 @@
         <button class="btn btn--primary btn--sm" disabled={busy('vocabulary') || repairing} onclick={() => void curateVocabulary()}>
           <Icon name="spark" size={13} /> <span class="btn-text">{t('status.curate')}</span>
         </button>
+        <button class="btn btn--secondary btn--sm" disabled={busy('vocabulary') || repairing} onclick={() => void coarsenVocabulary()}>
+          <Icon name="tree" size={13} /> <span class="btn-text">{t('status.coarsen')}</span>
+        </button>
         <button class="btn btn--secondary btn--sm" disabled={busy('vocabulary') || repairing} onclick={() => void retopicClaims()}>
           <Icon name="distill" size={13} /> <span class="btn-text">{t('status.retopic')}</span>
         </button>
       </div>
       <p class="muted small section-note">
         <b>{t('status.curate')}</b> {t('status.vocabNote')}
+      </p>
+      <p class="muted small section-note">
+        <b>{t('status.coarsen')}</b> {t('status.coarsenNote')}
       </p>
       {#if system.vocabulary && system.vocabulary.length > 0}
         <div class="vocab-list">
@@ -371,6 +378,8 @@
               <div class="vocab-numbers">
                 {tn('status.vocabNames', vocab.names)} · {tn('status.vocabUses', vocab.uses)} · {t('status.vocabSingletons', { count: vocab.singletons })}
                 ({n(Math.round(vocab.singleton_share * 100))}%) · {t('status.vocabTop', { pct: Math.round(vocab.coverage * 100) })}
+                {#if vocab.target}· {t('status.vocabShelf', { shelf: vocab.shelf, target: vocab.target })}{/if}
+                {#if vocab.shelf && vocab.remaining}· {t('status.vocabRemaining', { count: n(vocab.remaining) })}{/if}
                 {#if vocab.canonical || vocab.absorbed}· {t('status.vocabCanonical', { canonical: vocab.canonical, absorbed: vocab.absorbed })}{/if}
                 {#if vocab.new?.length}· <b>{t('status.vocabNew', { count: vocab.new.length })}</b>{/if}
               </div>

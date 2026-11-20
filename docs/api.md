@@ -72,7 +72,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `GET` | `/api/v1/atoms/{id}/cluster` | The same peer answer, named for what it is |
 | `GET` | `/api/v1/atoms/duplicates` | Claims that exist more than once |
 | `POST` | `/api/v1/atoms/collapse` | Keep one copy of each duplicate |
-| `GET` | `/api/v1/vocabulary` | The health of the name vocabularies (`topics`, `wiki-tags`, `source-tags`), each with its `shelf` (the bounded target vocabulary) and `target` (the size it was built for) |
+| `GET` | `/api/v1/vocabulary` | The health of the name vocabularies (`topics`, `wiki-tags`, `source-tags`), each with its `shelf` (the bounded target vocabulary), `target` (the size it was built for) and `remaining` (the names in use that are neither on the shelf nor absorbed — what a coarsening would file) |
 | `POST` | `/api/v1/vocabulary/curate` | Curate the vocabularies (observes, asks the model, renames) |
 | `POST` | `/api/v1/vocabulary/coarsen` | File a namespace's long tail onto its **shelf**: deterministic families first, then the model in batches, each applied and recorded in `Absorbed` (the watermark, so a stopped pass continues). Body `{namespace}` is optional; no body means every namespace. `202 {run_id}` |
 | `POST` | `/api/v1/vocabulary/retopic` | Re-derive claim topics from the claims themselves |

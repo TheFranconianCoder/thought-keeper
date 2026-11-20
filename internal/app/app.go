@@ -200,6 +200,10 @@ type App struct {
 	vocabMu     sync.Mutex
 	vocabActive bool
 	vocabLast   time.Time
+	// shelfLast is the same clock for the SHELF build: a migration with no model and no gate, so it
+	// does not wait for a fresh name the way a curation does — only for the cooldown, so a broken
+	// vocabulary file is not reopened on every tick.
+	shelfLast time.Time
 	// maint is every background job that is NOT one of the four steps: a maintenance pass the reader
 	// can watch. The four steps are reported from their own state (per source, per gate); everything
 	// else — a reindex, a reconcile, a cleanup, a rebuild of the outlines, a URL refresh, a name
@@ -2500,12 +2504,21 @@ const vocabularyCooldown = 20 * time.Minute
 // the model.
 const vocabularyReportTimeout = 30 * time.Second
 
-// requestVocabularyIfDue runs the name curation on its own. Names drift on every write — the
-// compile invents a topic beside the one the vocabulary already settled — and a pass that only ever
-// runs when a reader presses a button fixes the drift only when a reader happens to look. The pass is
-// bounded twice: one at a time, and at most once per cooldown; and it is skipped entirely when the
-// report says the vocabulary has nothing undecided.
+// requestVocabularyIfDue runs the name maintenance on its own. Two jobs, in cost order:
+//
+//  1. The SHELF. A vault that predates the shelf has a catalog of tens of thousands of names and no
+//     bounded target vocabulary, and nothing else in the app would ever build one: the curation
+//     merges synonyms, it cannot fix granularity. It is a migration, not a model call — no agent, no
+//     gate, no claim write — so it runs before both guards and a vault without an API key still gets
+//     its shelf.
+//  2. The CURATION. Names drift on every write — the compile invents a topic beside the one the
+//     vocabulary already settled — and a pass that only ever runs when a reader presses a button
+//     fixes the drift only when a reader happens to look. It is bounded twice: one at a time, and at
+//     most once per cooldown; and it is skipped entirely when the report says the vocabulary has
+//     nothing undecided.
 func (a *App) requestVocabularyIfDue(reason string) {
+	a.ensureShelfIfDue(reason)
+
 	if !a.deps().AgentAvailable {
 		return
 	}
@@ -2526,6 +2539,13 @@ func (a *App) requestVocabularyIfDue(reason string) {
 	if err != nil {
 		return
 	}
+	// The LOOK is the cooldown. A report that finds nothing fresh used to return without stamping,
+	// so the next tick read the whole catalog again — a GROUP BY over every claim, every minute, on
+	// a vault of hundreds of thousands.
+	a.vocabMu.Lock()
+	a.vocabLast = time.Now()
+	a.vocabMu.Unlock()
+
 	fresh := 0
 	for _, h := range report {
 		fresh += len(h.New)
@@ -2557,6 +2577,35 @@ func (a *App) requestVocabularyIfDue(reason string) {
 		return
 	}
 	a.log.Info("vocabulary: automatic pass queued", "reason", reason, "new_names", fresh)
+}
+
+// ensureShelfIfDue writes the bounded target vocabulary a vault that predates the shelf does not have
+// yet. It is the one-time migration: deterministic, no model, no gate, and it rewrites no claim. It
+// runs at most once per cooldown, so a vocabulary file that cannot be written is not reopened on
+// every reconcile tick, and it stands aside while a vocabulary run holds the queue (a coarsening
+// writes the shelf itself).
+func (a *App) ensureShelfIfDue(reason string) {
+	a.vocabMu.Lock()
+	skip := a.vocabActive || time.Since(a.shelfLast) < vocabularyCooldown
+	a.vocabMu.Unlock()
+	if skip {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), vocabularyReportTimeout)
+	defer cancel()
+	res, err := a.deps().VocabularyCurate.EnsureShelf(ctx, a.vocabularyTarget)
+	a.vocabMu.Lock()
+	a.shelfLast = time.Now()
+	a.vocabMu.Unlock()
+	if err != nil {
+		a.log.Warn("vocabulary: the shelf could not be built", "reason", reason, "err", err)
+		return
+	}
+	if len(res.Built) == 0 && len(res.Trimmed) == 0 {
+		return
+	}
+	a.log.Info("vocabulary: shelf written", "reason", reason, "built", res.Built, "trimmed", res.Trimmed)
+	a.publish("vocabulary", map[string]any{"shelves": res.Built, "trimmed": res.Trimmed})
 }
 
 // ScheduleVocabularyRebranch queues the topic-label repair: the claims are re-labelled from their own text, in

@@ -85,6 +85,14 @@ are.
     carrying the divergence stays that way, and a `reindex` would rebuild it as a document with
     skipped lights. Decide whether the consistency job may heal this one field from the index.
 
+15. **The tag namespaces have no bounded write path.** `source-tags` carries 969 names against a
+    target of 200, and neither the summary run nor the tag backfill reads a shelf:
+    `sourceTagVocabulary` hands `Canonical` to the prompt, and `normalizeSourceAutoTags` maps only
+    through `Absorbed`. The coarsening is what bounds them (it rewrites `Canonical`), and it is
+    manual. The follow-up is the topics treatment: prefer the shelf when one exists, and map a
+    proposed tag onto the nearest shelf name — it changes the tag prompt's contract, not just a
+    lookup.
+
 ## Open design questions
 
 - **Topic namespace stability.** Topics are free names; two runs can invent `caching` and

@@ -130,7 +130,7 @@ func (uc Derivation) distill(ctx context.Context, hash string, rec *StepRecorder
 	// ONE read of the topic catalog per run, shared by every part: the candidates a part is offered
 	// and the name the write resolves are both answered from it. Calling list_topics per part read
 	// the same 57k rows again for every request and answered with a truncated 2.3 MB list.
-	catalog := newTopicCatalog(uc.claimTopics(ctx))
+	catalog := newTopicCatalog(uc.topicCatalog(ctx))
 	catalog.budget = uc.TopicBudget
 
 	// writeClaims is the APP's write, and it is the only one: the model answered with data, and this
@@ -512,6 +512,44 @@ func (uc Derivation) claimTopics(ctx context.Context) []entities.TopicUse {
 		return nil
 	}
 	return topics
+}
+
+// topicCatalog is the vocabulary the derivation FILES AGAINST: the shelf when one exists, the observed
+// claim topics otherwise. The shelf is the bounded target vocabulary — with it, a proposed name that
+// is not on the shelf is mapped onto the best fitting shelf name at the write, so a run can no longer
+// invent a fine name beside the shelf. Without a shelf (a vault that never built one) the observed
+// catalog is the whole story, exactly as before.
+func (uc Derivation) topicCatalog(ctx context.Context) []entities.TopicUse {
+	observed := uc.claimTopics(ctx)
+	if uc.Vocab == nil {
+		return observed
+	}
+	v, err := uc.Vocab.Read(entities.VocabularyTopics)
+	if err != nil || len(v.Shelf) == 0 {
+		return observed
+	}
+	return shelfCatalog(v.Shelf, observed)
+}
+
+// shelfCatalog turns the shelf into the derivation's catalog: every shelf name, in the shelf's order,
+// with the use count the vault has for it (0 for a name nobody has filed under yet). The counts are
+// only for the reader; the candidate selection works on the names.
+func shelfCatalog(shelf []string, observed []entities.TopicUse) []entities.TopicUse {
+	counts := make(map[string]int, len(observed))
+	for _, t := range observed {
+		counts[t.Topic] = t.Count
+	}
+	out := make([]entities.TopicUse, 0, len(shelf))
+	seen := make(map[string]bool, len(shelf))
+	for _, name := range shelf {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, entities.TopicUse{Topic: name, Count: counts[name]})
+	}
+	return out
 }
 
 type writeAtomArgs struct {

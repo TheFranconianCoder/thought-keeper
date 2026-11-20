@@ -51,6 +51,10 @@ type VocabularyHealth struct {
 	// report whose Names run far past the Target is a namespace the coarsening still has to file.
 	Shelf  int
 	Target int
+	// Remaining is what the coarsening would file: the names in use that are neither on the shelf
+	// nor already absorbed. A namespace without a shelf has its whole catalog remaining, which is
+	// what it is — the shelf is the target, the rest is the tail.
+	Remaining int
 	// New are the observed names the vocabulary has no opinion about yet.
 	New []string
 	// Top is the biggest names, for the reader and for a curation prompt.

@@ -48,3 +48,23 @@ Deterministic consolidation (the near-duplicate detector's Jaccard families) rea
   is resumable, because each batch is applied and recorded before the next is asked.
 - 3,000 is a TARGET, not a wall: the hard guard at 1.5× the target is what prevents a relapse, and
   the shelf is trimmed to the most used names when the knob moves down.
+
+## Addendum (2026-11-20): the shelf is built, not assumed
+
+The decision above assumed the shelf would appear with a coarsening press. A vault that predates it
+therefore kept its 57k names, and the derivation kept filing new claims onto them: the catalog came
+from the observed claims, not from the record, so the shelf was a file nothing read.
+
+Two amendments:
+
+- The app **writes** the topics shelf itself when a catalog runs past the target: the most used
+  names, on the reconcile tick, with no model, no gate and no claim rewritten. A shelf that exists
+  and fits the target is a record and is left alone; a target that moved down trims it. A vault
+  without an API key gets one too.
+- The derivation **reads** it: candidates come from the shelf when one exists, and an off-shelf
+  proposal is mapped onto the best fitting shelf name by the budget path. The observed catalog stays
+  the fallback for a vault that has none.
+
+The long tail is still the repair: filing 57k names onto 3,000 rewrites claims, holds the exclusive
+gate and costs a model pass, so it stays a press (the Coarsen button on Status) — and the tag
+namespaces keep their coarsening-only shelf, because their write path reads `Canonical`.
