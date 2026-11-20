@@ -149,7 +149,11 @@ whether the page changed enough to be derived again — so it costs no extra I/O
 copy of the page, and it is written only for an **event**: the title moved, or at least
 `max(capture.change_min_words, ⌈stored words × capture.change_min_percent / 100⌉)` word positions
 differ (a replaced word counts once) with an average length above `capture.change_min_word_length`
-(defaults 40 / 1 / 5), or the human refreshed the page. A first read is an arrival, not a change; an
+(defaults 40 / 1 / 5), or the human refreshed the page. A first read is an arrival, not a change — and
+so is the **provisional** feed copy replaced by its page on the source's first fetch: the bytes move
+(the outline is built from the page), but the reader never had the copy as this source's text, so
+there is no "before" to show and no record to write. Once the copy has survived a check it is the
+source's text, and its replacement is an event like any other. An
 unchanged check never touches the file; and a **ticked counter or a typo is not an event at all**: the
 snapshot is kept (it is the baseline the outline and the claims describe), the drift accumulates
 against it, and the source log names the measurement and the threshold it missed. A
@@ -251,7 +255,9 @@ new; the three are shown beside each other and never conflated.
   applies when a feed copy is replaced by its page or a wall clears. The source's record keeps the
   **change time** (`changed_at`) — the last moment the readable content actually differed, not the
   last check. It survives a reindex, and it is what the Sources list orders by and the "updated"
-  filter selects. A fetch that answers the same page does not touch it.
+  filter selects. A fetch that answers the same page does not touch it, and neither does a
+  provisional feed copy replaced by its page: that fetch completes the arrival, so the arrival stays
+  the source's only instant (`docs/adr/0008`).
 - **Favicons.** A URL source stores the site's icon content-addressed under
   `.thought-keeper/favicons/`, served at `GET /api/v1/sources/{hash}/favicon`.
 - **Name = SHA-256 of the bytes**, sharded `sources/<ab>/<cd>/<full-hash>.<ext>`. Identical bytes

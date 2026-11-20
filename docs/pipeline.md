@@ -180,9 +180,9 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   automatically: it is a collected link until the reader says "try the page again". A pass that runs
   out of time stops where it is: the sources it did not reach keep their old check time, so the next
   pass finds them still due.
-- **A changed page is not a new source.** When a refresh finds a change WORTH an event — a normal
-  page above the threshold, a feed copy replaced by its page, a cleared wall, or a page the human
-  refreshed — the snapshot is replaced and the **outline is rebuilt** under the exclusive gate. The
+- **A changed page is not a new source.** When a refresh REPLACES the snapshot — a normal page above
+  the threshold, a feed copy replaced by its page, a cleared wall, or a page the human refreshed —
+  the **outline is rebuilt** under the exclusive gate. The
   rebuild keeps the derivation: a node whose text is unchanged keeps its claims, a node whose text
   changed or vanished loses them and is re-armed, and a new node is derived. "Unchanged" has two
   tolerances: a reflow keeps the normalized text hash, and otherwise a part keeps its claims while at
@@ -191,8 +191,10 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   claim.
 - **Only a MATERIAL change is an event.** The threshold decides what the refresh DOES, not only what
   the reader sees: a change below it does not touch the stored snapshot at all (see
-  `docs/adr/0003-the-snapshot-moves-only-on-an-event.md`). The stored bytes are the baseline of the
-  derivation — the outline's node text is a byte range into them — so keeping them keeps the outline,
+  `docs/adr/0003-the-snapshot-moves-only-on-an-event.md`) — apart from the provenance handovers in the
+  next bullet, which are about where the bytes came from, not how far the text moved. The stored bytes
+  are the baseline of the derivation — the outline's node text is a byte range into them — so keeping
+  them keeps the outline,
   the claims and the search index coherent, and the drift ACCUMULATES: the next check measures the
   fetched page against the stored one. An event replaces the snapshot, rebuilds the outline under the
   exclusive gate (a node whose text survived keeps its claims; a reflow keeps the normalized hash; a
@@ -202,16 +204,25 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   differ (a replaced word counts once) and those words average more than
   `capture.change_min_word_length` characters (defaults **40 / 1 / 5**) — a ticking date, a view
   counter, a typo or a reflow is not an event, and costs a check and a log line, never a model call.
-  `capture.change_min_words: 0` turns the rule off; `0` percent turns off only the share. A first
-  read, a human attachment, a cleared wall, a feed copy replaced by its page and a collected link that
-  became a page are always events, and so is the per-source **Refresh** button, which is the human
-  asking for that one page. The
+  `capture.change_min_words: 0` turns the rule off; `0` percent turns off only the share. A human
+  attachment, a cleared wall, a feed copy replaced by its page **after a check**, a collected link
+  that became a page, and the per-source **Refresh** button (the human asking for that one page) are
+  always events — the **provisional** copy is the one exception, below. The
   refresh writes **`<hash>.changes.md`** for a material change only: the time, the title before and
   after, the measurement, and a unified diff of the readable body (see `docs/storage.md` §3a), which
   the source page shows in its **Changes** tab. A
   **human-attached** snapshot is still a full reset and always an event: the human replaced the bytes
   by hand, and the new bytes are the reader's own answer — the record says what the attachment
   replaced.
+- **A provisional feed copy is not an event.** A feed's copy is replaced by its page on the source's
+  FIRST fetch — that replacement is a provenance change and happens whatever the difference is, so the
+  bytes are the page's and the outline is built from them — but the reader never had the copy as this
+  source's text, so it **completes the arrival** instead of editing a page: no change record, no
+  change time (the arrival stays the row's activity), no cluster pass, and the same holds when the
+  human's **Refresh** catches a copy inside that first turn. The source log still names the
+  handover. A first fetch that FAILED writes the check time and keeps the copy, so the source is no
+  longer provisional: a later replacement replaces text the reader has had for a whole check and is
+  an event again (`docs/adr/0008-the-provisional-copy-completes-the-arrival.md`).
 - PDF: extract the text layer with poppler; OCR a page that has none (`pdftocairo` + `tesseract`).
   Write the readable rendering to `sources/<ab>/<cd>/<hash>.capture.md`, with one
   `<!--part …-->` marker per part.

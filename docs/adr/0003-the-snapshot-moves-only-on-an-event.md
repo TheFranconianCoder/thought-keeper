@@ -1,7 +1,9 @@
 # 0003 — The snapshot moves only on an event
 
 Status: accepted, 2026-11-19. Supersedes the bullet "the snapshot and the outline always follow the
-bytes" of [ADR 0002](0002-paced-refresh-and-change-records.md).
+bytes" of [ADR 0002](0002-paced-refresh-and-change-records.md). Amended by
+[ADR 0008](0008-the-provisional-copy-completes-the-arrival.md): the first replacement of a
+**provisional** feed copy completes the arrival and is not an event.
 
 ## Context
 
@@ -37,8 +39,10 @@ not replacing the bytes at all.
   the claims of parts whose text survived), the changed parts are distilled and the cluster pass is
   asked for. Everything else costs a check: `url_checked_at`, one log line naming the measurement.
 - **Always an event, no threshold:** a first read (an arrival, not a change), a human attachment, a
-  wall that cleared, a feed copy replaced by its page, a collected link that became a page, and a
-  sitemap/feed/listing refresh (their snapshot is a list; their children are the value).
+  wall that cleared, a feed copy replaced by its page after a check, a collected link that became a
+  page, and a sitemap/feed/listing refresh (their snapshot is a list; their children are the value).
+  The first replacement of a **provisional** feed copy is the exception: see
+  [ADR 0008](0008-the-provisional-copy-completes-the-arrival.md).
 - **The per-source Refresh button bypasses the threshold.** The human asked for THIS page; a page that
   quietly refuses to update is not a refresh. The scheduled pass and "Refresh URLs" stay strict.
 

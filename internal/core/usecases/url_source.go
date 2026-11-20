@@ -1210,8 +1210,9 @@ type RefreshResult struct {
 	Changed int
 	// Material counts the changes that became an EVENT: the title moved, the drift is above the
 	// threshold (capture.change_min_words / change_min_percent / change_min_word_length), or the human
-	// refreshed the page. Only these replace the snapshot, move the change time, write the change
-	// record and ask for a cluster pass.
+	// refreshed the page. Only these move the change time, write the change record and ask for a
+	// cluster pass. A provisional feed copy replaced by its page moves the bytes without any of them:
+	// it completes the arrival (docs/adr/0008).
 	Material int
 	// Deferred counts the changes BELOW the threshold. The snapshot is kept — the stored bytes are the
 	// baseline the outline and the claims describe — so the drift accumulates against them and the
@@ -1267,6 +1268,20 @@ func (uc URLs) RefreshAll(ctx context.Context) (RefreshResult, error) {
 // request is the answer: a difference below the materiality threshold is applied too, because the
 // reader asked for THIS page and a page that quietly refuses to update is not a refresh.
 func (uc URLs) RefreshOne(ctx context.Context, hash string) (RefreshResult, error) {
+	return uc.refreshOne(ctx, hash, true)
+}
+
+// RefreshCopy refreshes the page behind a feed's copy. It is the APP's job — the page the feed
+// declared, fetched once — so it is not the Refresh button: the cadence does not apply, but the
+// human's "apply it however small the difference" does not either. The copy is replaced by a richer
+// page either way (that is a provenance change, not a threshold question), while a change record is
+// about what the reader had, and a provisional copy gave them nothing (docs/adr/0008).
+func (uc URLs) RefreshCopy(ctx context.Context, hash string) (RefreshResult, error) {
+	return uc.refreshOne(ctx, hash, false)
+}
+
+// refreshOne is the one-source pass both entry points share; force is the human's button.
+func (uc URLs) refreshOne(ctx context.Context, hash string, force bool) (RefreshResult, error) {
 	src, err := uc.Index.GetSourceByHash(ctx, hash)
 	if err != nil {
 		return RefreshResult{}, err
@@ -1275,7 +1290,7 @@ func (uc URLs) RefreshOne(ctx context.Context, hash string) (RefreshResult, erro
 		return RefreshResult{}, types.New("unsupported_source",
 			"this source has no URL to refresh", types.ErrUnsupportedSource)
 	}
-	return uc.executeRows(ctx, []entities.Source{src}, false, false, true)
+	return uc.executeRows(ctx, []entities.Source{src}, false, false, force)
 }
 
 // RefreshOneForce refreshes one URL source even when it is not due.
@@ -1383,6 +1398,14 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		// Capture both BEFORE a successful page write clears them.
 		fromFeed := isFromFeed(s.Meta)
 		wasWalled := wallOf(s.Meta) != entities.WallNone
+		// A feed's copy is PROVISIONAL until this source has been checked once: the fetch that
+		// replaces it completes the arrival instead of editing a page the reader has read. The
+		// replacement itself is not optional — the bytes must be the page's, the outline is built
+		// from them — but nothing a reader can SEE moved: the copy was never the text this source
+		// had, so it gets no change record and no change time (docs/adr/0008). A first fetch that
+		// FAILED sets url_checked_at, so a later replacement of a copy the reader did see is a real
+		// event again.
+		provisionalCopy := fromFeed && s.URLChecked.IsZero()
 		// A snapshot the human attached is not checked at all. It exists BECAUSE the page cannot be
 		// fetched; asking the site every week would only write a 403 onto an article that is fine.
 		// A FORCED fetch (the explicit "try the URL again") asks anyway, and keeps the attachment if
@@ -1718,6 +1741,14 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		if changed && (fromFeed || wasWalled || becamePage || attached) {
 			material = true
 		}
+		// The provisional copy is the one exception even the human's Refresh cannot widen: a record
+		// answers "what did this page say before", and the copy was never the text this source had.
+		// The bytes are still replaced (the guard below lets a feed copy through) — this keeps only
+		// the RECORD, the change time and the cluster pass quiet until the source is older than one
+		// check (docs/adr/0008).
+		if provisionalCopy {
+			material = false
+		}
 		// A change below the threshold does not touch the bytes. The stored snapshot is the BASELINE
 		// of the derivation — the outline's node references are byte ranges into it — so replacing it
 		// without rebuilding the outline would corrupt every node's text, and rebuilding the outline
@@ -1725,7 +1756,9 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		// refresh. Keeping the bytes instead makes the drift accumulate against the version the claims
 		// describe: the next check measures the total, and the page is derived again once the
 		// difference is worth it. A feed copy replaced by its page, a wall that cleared and a collected
-		// link that became a page are provenance events and always go through.
+		// link that became a page are provenance changes: the bytes move even when the text barely
+		// does, because the record behind them would otherwise be a lie. A provisional copy's
+		// replacement is such a provenance change, not an event.
 		if changed && !material && !attached && !fromFeed && !wasWalled && !becamePage {
 			uc.repairFavicon(ctx, s, language, previousContentHash, favicon)
 			_ = uc.Index.SetSourceURLState(ctx, s.Hash, page.Status, now) //nolint:errcheck // the index and the step records are a light; the vault is the truth
@@ -1762,8 +1795,10 @@ func (uc URLs) executeRows(ctx context.Context, rows []entities.Source, schedule
 		// The record a reader can open, written only once the new snapshot IS the snapshot: both
 		// bodies are in hand here, and the old title is the one the source carried until this fetch
 		// (the title the reader saw). A sub-threshold change never reaches this point: it kept the
-		// bytes and wrote a log line instead.
-		if changed && hadSnapshot {
+		// bytes and wrote a log line instead. `material` is the test, not "the bytes moved": a
+		// provisional feed copy replaced by its page moves the bytes without showing the reader a
+		// difference, and a record of it would claim an event that never happened.
+		if changed && hadSnapshot && material {
 			writeChangeRecord(uc.Store, uc.Log, s.Hash, s.Title, title, oldBody, body, sameBody, shift, now)
 		}
 		// The icon belongs to the SITE, not to one snapshot: the fetch above already repaired a

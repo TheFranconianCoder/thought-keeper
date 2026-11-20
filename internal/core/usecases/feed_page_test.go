@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases"
@@ -259,5 +260,88 @@ func TestFeedCopyMarkerIsClearedWhenThePageHasTheSameText(t *testing.T) {
 	snapshot := f.snapshot(t)
 	if strings.Contains(snapshot, "from_feed: true") || !strings.Contains(snapshot, "fetched_at:") {
 		t.Errorf("the snapshot still claims to be the feed's:\n%s", snapshot)
+	}
+}
+
+// TestTheFirstPageReplacementIsNotAnEvent: the feed's copy is PROVISIONAL. The page that replaces it
+// moves the bytes — the outline is rebuilt from them — but the reader never had the copy as this
+// source's text, so there is nothing a change record could call "before": no record, no change time.
+func TestTheFirstPageReplacementIsNotAnEvent(t *testing.T) {
+	f := newFeedPageFixture(t, feedPageConverter{
+		copyTitle: "Copy", copyBody: strings.Repeat("copy text ", 20),
+		pageTitle: "Page", pageBody: strings.Repeat("page text ", 40),
+	})
+
+	res, err := f.refresh.RefreshCopy(f.ctx, f.oneHash)
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if res.Changed != 1 || res.Material != 0 || len(res.Resets) != 1 {
+		t.Fatalf("refresh = %+v, want the bytes replaced without an event", res)
+	}
+	if record, ok := readChanges(t, f.store, f.oneHash); ok {
+		t.Errorf("a provisional copy left a change record:\n%s", record)
+	}
+	if at, ok := f.steps.changed[f.oneHash]; ok {
+		t.Errorf("a provisional copy moved the change time: %v", at)
+	}
+	if changed := f.idx.m[f.oneHash].URLChanged; !changed.IsZero() {
+		t.Errorf("a provisional copy moved the row's change time: %v", changed)
+	}
+	if body := f.snapshot(t); !strings.Contains(body, "page text") {
+		t.Errorf("the page did not replace the copy:\n%s", body)
+	}
+}
+
+// TestALatePageReplacementIsAnEvent: the copy's first fetch failed, so the copy has been the source's
+// text for a whole check. The page that finally replaces it says something else than the copy did —
+// that is a change a reader can open, and the copy is the "before" the record shows.
+func TestALatePageReplacementIsAnEvent(t *testing.T) {
+	f := newFeedPageFixture(t, feedPageConverter{
+		copyTitle: "Copy", copyBody: strings.Repeat("copy text ", 20),
+		pageTitle: "Page", pageBody: strings.Repeat("page text ", 40),
+	})
+	// A FAILED first fetch wrote the check time and kept the copy.
+	one := f.idx.m[f.oneHash]
+	one.URLChecked = fixedClock{}.Now().Add(-24 * time.Hour)
+	f.idx.m[f.oneHash] = one
+
+	res, err := f.refresh.RefreshCopy(f.ctx, f.oneHash)
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if res.Changed != 1 || res.Material != 1 {
+		t.Fatalf("refresh = %+v, want a change that is an event", res)
+	}
+	record, ok := readChanges(t, f.store, f.oneHash)
+	if !ok {
+		t.Fatalf("a replacement of a copy the reader had left no change record")
+	}
+	if !strings.Contains(record, "page text") || !strings.Contains(record, "copy text") {
+		t.Errorf("the record does not show the copy being replaced:\n%s", record)
+	}
+	if f.steps.changed[f.oneHash].IsZero() {
+		t.Errorf("a real change did not move the change time")
+	}
+}
+
+// TestTheRefreshButtonOnAProvisionalCopyWritesNoRecord: the per-source Refresh applies the page
+// however small the difference is, but a change record still needs a baseline the reader had. A
+// provisional copy is none, so the button replaces the bytes and stays quiet.
+func TestTheRefreshButtonOnAProvisionalCopyWritesNoRecord(t *testing.T) {
+	f := newFeedPageFixture(t, feedPageConverter{
+		copyTitle: "Copy", copyBody: strings.Repeat("copy text ", 20),
+		pageTitle: "Page", pageBody: strings.Repeat("page text ", 40),
+	})
+
+	res, err := f.refresh.RefreshOne(f.ctx, f.oneHash)
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if res.Changed != 1 || res.Material != 0 {
+		t.Fatalf("refresh = %+v, want the bytes replaced without an event", res)
+	}
+	if record, ok := readChanges(t, f.store, f.oneHash); ok {
+		t.Errorf("the Refresh button wrote a record for a provisional copy:\n%s", record)
 	}
 }

@@ -253,6 +253,15 @@ are.
    bite, a maximum age (`capture.change_max_stale`, e.g. 90 days, `0` = off) would force one event per
    period without turning the threshold back into a poll.
 
+## Provisional feed copies
+
+1. **Change records written before ADR 0008 are still on disk.** A feed copy replaced by its page used
+   to be an event, so a vault from before 2026-11-20 carries `<hash>.changes.md` for sources that were
+   a minute old, comparing a copy with its page (often a whitespace reflow). Nothing in the record
+   says it was a handover — the only discriminator is the source log's
+   `the page replaced the feed copy` around the record's time — so removing them needs a `reconcile`
+   rule that reads the log, or a decision to leave them as history.
+
 ## Config
 
 1. **`capture.dedupe_by_url` is inert.** No code reads it: URL identity is the hash (of the URL), so

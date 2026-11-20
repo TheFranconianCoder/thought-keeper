@@ -88,7 +88,8 @@ filtered count is the scroll height. A cluster is
 A page that changed is re-read **in place**: the refresh replaces the snapshot and rebuilds the
 outline, and only the parts whose text changed materially lose their claims — a reflow or a single
 changed word keeps them, and a new title touches no claim. **Only an event replaces the snapshot at
-all.** A change below the threshold keeps the stored bytes — they are the baseline the outline, the
+all** — a provenance handover (a feed copy fulfilled by its page, a wall that cleared) is a
+replacement, not an event. A change below the threshold keeps the stored bytes — they are the baseline the outline, the
 node texts and the claims describe — so the drift accumulates against them, and a page that gains a
 sentence a week is re-derived once it has gained a paragraph. The source's record keeps the time of
 that change (`changed_at`, not the check time), and the Sources list marks the row **updated** when the
@@ -99,6 +100,9 @@ differing (a replaced word counts once) with an average length above
 a check and a log line, never a model call. The refresh also
 writes a **change record** (`<hash>.changes.md`: time, title before and after, the word measurement
 and a diff of the readable body), which the source page offers one click from its head, on every tab.
+The **provisional** feed copy is the exception: the source arrives with it, and the page that replaces
+it on the first fetch completes the arrival — the bytes move, the outline is rebuilt, nothing is
+recorded and the arrival stays the row's only instant.
 
 The reader's own marks are **not** lenses either. A **favorite** is a star on a source or a wiki page
 and a filter in that lens; the **read-later queue** is a filter of the Sources list (`?readlater=1`,
@@ -182,7 +186,7 @@ paths stay read-only.
 | **attached** | A URL snapshot the human supplied from their browser because the page is walled. It is part of the source's identity; the automatic refresh never replaces it, but the human may replace the file or try the URL again explicitly. | the source's record + `.meta` |
 | **language** | A source's detected ISO 639-1 hint (ISO 639-3 when no 639-1 exists), stored in `<hash>.meta` and mirrored into the index. It tunes search, never filters a result. | `<hash>.meta` |
 | **sitemap** | A URL source whose snapshot is a page list; it owns the page sources it declared (`origin: sitemap`, `parent_hash`). A sitemap is COMPLETE: a page that left it is removed. | `<hash>.meta` |
-| **feed** | An RSS/Atom URL source whose snapshot is its item list; it owns the page sources its items point at (`origin: rss`, `parent_hash`). A feed is a WINDOW: a page that left it is kept, and only deleting the feed removes its pages. When the feed carries a post, that copy becomes the page's **provisional** snapshot (`from_feed`); the page is still fetched once, and a readable page that carries at least as much text replaces the copy. | `<hash>.meta` |
+| **feed** | An RSS/Atom URL source whose snapshot is its item list; it owns the page sources its items point at (`origin: rss`, `parent_hash`). A feed is a WINDOW: a page that left it is kept, and only deleting the feed removes its pages. When the feed carries a post, that copy becomes the page's **provisional** snapshot (`from_feed`); the page is still fetched once, and a readable page that carries at least as much text replaces the copy — which completes the arrival instead of being an event (ADR 0008). | `<hash>.meta` |
 | **listing** | A URL source whose snapshot is an ARTICLE LIST: a blog index or a newsletter archive whose repeated cards declare articles. It owns the articles (`origin: listing`, `parent_hash`). A listing is a WINDOW like a feed: an article that rotates out of its pagination is kept, and only deleting the listing removes its articles. Its pagination is walked ONCE (on capture, up to `capture.listing_max_pages`); a refresh reads page 1 only. It is never detected silently: the reader confirms the card list before the page becomes an owner. | `<hash>.meta` |
 | **part** | ONE text-bearing node of a document: the unit the distill step derives. | the outline + `distill_parts` |
 | **node** / **node id** | A place in a document's outline; the ADDRESS a claim cites (`0.1`, `2.3`). | `source_nodes` |
@@ -205,7 +209,7 @@ paths stay read-only.
 | **read later** | The reader's queue of sources. Open until marked done; otherwise a filter of the Sources list, ordered oldest entry first. | the source record + `?readlater=1` |
 | **interest** | A standing rule the reader writes: terms that make a NEW source join the read-later queue. A strong match queues; a weak one is only a suggestion. | `interests/<slug>.md` |
 | **seen watermark** | The instant up to which the reader has read the vault's activity — an arrival or the last real content change of a page. ONE per vault, settled by opening the Sources list; the Start statistic summarizes the same batch and settles nothing. Shared by every client. A record, not a cache. | `.thought-keeper/reader/seen.md` |
-| **updated** | A source whose stored page content was **replaced** after the seen watermark (and that did not also just arrive). An event is the title moving, or at least `max(capture.change_min_words, ⌈stored words × capture.change_min_percent / 100⌉)` word positions differing (a replaced word counts once) with an average length above `capture.change_min_word_length` (defaults 40 / 1 / 5), or the human refreshing that one source. Below the threshold the snapshot is KEPT, so the drift accumulates and a check that only saw a ticked counter, a typo or a reflow leaves no mark at all. The change time is a RECORD; the mark is a display rule in memory, like **new**. | the source's `<hash>.meta` + the Sources row |
+| **updated** | A source whose stored page content was **replaced** after the seen watermark (and that did not also just arrive). An event is the title moving, or at least `max(capture.change_min_words, ⌈stored words × capture.change_min_percent / 100⌉)` word positions differing (a replaced word counts once) with an average length above `capture.change_min_word_length` (defaults 40 / 1 / 5), or the human refreshing that one source — never a **provisional** feed copy replaced by its page on the source's first fetch (ADR 0008). Below the threshold the snapshot is KEPT, so the drift accumulates and a check that only saw a ticked counter, a typo or a reflow leaves no mark at all. The change time is a RECORD; the mark is a display rule in memory, like **new**. | the source's `<hash>.meta` + the Sources row |
 | **change record** | What the last EVENT of a URL page did: the time, the title before and after, the word measurement, and a unified diff of the readable body. The reader's view is the **Changes** tab. | `sources/<ab>/<cd>/<hash>.changes.md` |
 | **reconcile / reindex / cleanup** | The repairs: check records against the vault; rebuild the index from the vault; prune dead cluster members. The first two are buttons in Status → Vault; cleanup settles every cluster pass by itself. | Status → Vault |
 

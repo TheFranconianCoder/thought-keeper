@@ -4029,11 +4029,11 @@ func (a *App) handleURLJob(job urlJob) {
 	}
 	// A page that a feed supplied as a copy is checked THROUGH THE REFRESH PATH: the page is tried,
 	// the copy is kept when the page is walled/unreadable/less rich, and a page that wins reports the
-	// reset the app must run. AddURL is for a page that has no copy yet. RefreshOne is the button's
-	// path, and its force flag cannot widen anything here: a copy replaced by its page is a provenance
-	// event whether the difference is large or small.
+	// reset the app must run. AddURL is for a page that has no copy yet. This is the app's own job,
+	// not the reader's Refresh button, so it uses RefreshCopy: the copy is replaced either way, but a
+	// provisional copy's replacement completes the arrival and is not an event (docs/adr/0008).
 	if job.Origin == entities.RSSOrigin && child.FromFeed {
-		res, rErr := a.deps().RefreshURLs.RefreshOne(ctx, entities.URLHash(job.URL))
+		res, rErr := a.deps().RefreshURLs.RefreshCopy(ctx, entities.URLHash(job.URL))
 		a.gate.RUnlock()
 		cancel()
 		if rErr != nil {
