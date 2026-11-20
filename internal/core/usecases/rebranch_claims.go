@@ -113,11 +113,22 @@ func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchRes
 	if total > len(all) {
 		res.Remaining = total - len(all)
 	}
+	// The prompt carries the SHELF's head, not the whole catalog: the names a claim is likely to be
+	// filed under are the most used ones. Handing over all 57,181 names was ~2.3 MB per batch — more
+	// than the question itself, and still not readable.
+	const knownInPrompt = 400
+	if len(branches) > knownInPrompt {
+		branches = branches[:knownInPrompt]
+	}
 	known := make([]string, 0, len(branches))
 	for _, b := range branches {
 		known = append(known, fmt.Sprintf("- %s (%d claims)", b.Topic, b.Count))
 	}
-	sort.Strings(known)
+	// The catalog resolves a proposed label onto the shelf: a repair must not invent a name the write
+	// path would then map away from, and it must not grow the vocabulary it is repairing.
+	catalog := newTopicCatalog(branches)
+	catalog.budget = uc.TopicBudget
+	aliases := vocabularyAliases(uc.Vocab, entities.VocabularyTopics)
 
 	batches := make([][]entities.Atom, 0, (len(all)+rebranchPerCall-1)/rebranchPerCall)
 	for from := 0; from < len(all); from += rebranchPerCall {
@@ -162,6 +173,10 @@ func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchRes
 			}
 			before := answers[i].atoms[num-1]
 			next := coremarkdown.NormalizeTopic(name)
+			if next == "" {
+				continue
+			}
+			next = catalog.resolve(aliases, next, before.Claim+" "+before.Body).Name
 			if next == "" || next == before.Topic {
 				continue
 			}

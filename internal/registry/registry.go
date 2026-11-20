@@ -213,12 +213,13 @@ func Build(
 	}
 	retryPolicy := interfaces.RetryPolicy{Attempts: cfg.OpenAI.Retries, Base: retryBackoff, Budget: timeout}
 	agent, agentOK := gateways.NewOpenAIAgent(gateways.OpenAIConfig{
-		BaseURL: cfg.OpenAI.BaseURL,
-		APIKey:  cfg.OpenAI.APIKey,
-		Timeout: timeout,
-		Headers: cfg.OpenAI.Headers,
-		Log:     log,
-		Retry:   retryPolicy,
+		BaseURL:       cfg.OpenAI.BaseURL,
+		APIKey:        cfg.OpenAI.APIKey,
+		Timeout:       timeout,
+		Headers:       cfg.OpenAI.Headers,
+		Log:           log,
+		Retry:         retryPolicy,
+		MaxConcurrent: cfg.OpenAI.MaxConcurrent,
 	})
 	// The gateway is an INTERFACE on purpose: a typed nil (*OpenAIAgent)(nil) in an interface field is
 	// NOT nil, so every "if uc.Gateway != nil" guard would pass and the first call would dereference
@@ -296,6 +297,7 @@ func Build(
 		PartsPerRun: cfg.Pipeline.PartsPerRun, Parallel: cfg.Pipeline.ParallelParts,
 		MaxIterations: cfg.OpenAI.MaxIterations, Language: cfg.Language.Claims,
 		ReasoningEffort: cfg.OpenAI.ReasoningEffortDistill, Model: cfg.OpenAI.ModelCompile,
+		TopicBudget: cfg.Vocabulary.Topics.MaxNames, AuditEvery: cfg.Pipeline.AuditEvery,
 	}
 	treesUC := usecases.Trees{
 		Store: store, Index: index, Trees: trees, Extractor: extractor,
@@ -313,8 +315,9 @@ func Build(
 	}
 	sources := usecases.Sources{
 		Store: store, Pages: wikiStore, Index: index, Atoms: atomRepo, AtomStore: atomStore,
-		CommandStore: commandStore, Tags: steps, Shelf: index, Favicons: faviconStore,
-		Trees: trees, Convert: converter, Extractor: extractor,
+		CommandStore: commandStore, Tags: steps, Vocab: vocabStore, Shelf: index, Favicons: faviconStore,
+		MaxTags: 6,
+		Trees:   trees, Convert: converter, Extractor: extractor,
 		Gateway: deriveGW, SourceLog: sourceLog, Steps: steps, Languages: languages, Runs: runRepo,
 		Clock: clock, Log: log, Model: cfg.OpenAI.ModelCompile, Language: cfg.Language.Summary,
 		MaxBytes: cfg.PDF.MaxBytes,
@@ -388,6 +391,7 @@ func Build(
 	}
 	claims.CommandStore = commandStore
 	claims.Vocab = vocabStore
+	claims.TopicBudget = cfg.Vocabulary.Topics.MaxNames
 	claims.Runs = runRepo
 	claims.Clock = clock
 	claims.Log = log

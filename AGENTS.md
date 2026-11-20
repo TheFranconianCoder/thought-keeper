@@ -190,8 +190,9 @@ paths stay read-only.
 | **cluster** | A titleless group of related claims: the association the fourth step derives. It is a CACHE. | `clusters/<ab>/<cd>/<id>.meta` |
 | **command** | One assistant request as a RECORD: the utterance, the criteria it was read as, and the **materialized set** it produced. Not a chat — one request, one GUI state. Short-lived: pruned after `assistant.retention`, so the address it hands out expires. | `commands/<ulid>.md` |
 | **assistant** | The UI's command line: the field in the top bar (`⌘J`) and the button beside it. It reads a command into a lens + a filter + a set, and drives the open windows over SSE. It is **not a lens** and has no page. | the top bar + `?assistant=1` |
-| **topic** | The FLAT subject of one claim (`caching`, `llm-agents`). A claim has exactly one. | the claim's `topic` |
-| **vocabulary** | The canonical names of a namespace, what they absorbed (the alias table), and the **broad tokens** learned from this vault for near-duplicate detection. Three namespaces: `topics`, `wiki-tags` and `source-tags`. | `vocabulary/topics.md`, `vocabulary/wiki-tags.md`, `vocabulary/source-tags.md` |
+| **topic** | The SHELF a claim is filed under (`caching`, `llm-agents`): a flat, bounded name vocabulary, not the finest subject of the claim — that is what the claim says. A claim has exactly one. | the claim's `topic` |
+| **shelf** | The bounded set of names a namespace files things onto (3,000 topics, 200 tags by default). The write resolves every proposed name onto it; a name is new only while the shelf has room. | `vocabulary/<namespace>.md` |
+| **vocabulary** | The canonical names of a namespace, its **shelf**, what it absorbed (the alias table), and the **broad tokens** learned from this vault for near-duplicate detection. Three namespaces: `topics`, `wiki-tags` and `source-tags`. | `vocabulary/topics.md`, `vocabulary/wiki-tags.md`, `vocabulary/source-tags.md` |
 | **capture / outline / distill / cluster** | The four steps, in order. The first three are DOCUMENT steps (one source); cluster is the VAULT-LEVEL step (the whole vault). | `.meta` records |
 | **run** | One execution of the pipeline, a query, a lint, a tag or a vocabulary pass. | `runs` |
 | **job** | One piece of work in the queue: what it is, what it is about, whether it runs or waits. | Status → **Job Queue** |
@@ -235,8 +236,8 @@ scheduling: `docs/pipeline.md`.
   may attach the page they can see (HTML or PDF), which becomes the snapshot at the same URL address.
 - **Outline** reads that snapshot and builds the hierarchical tree of parts; it never extracts.
 - **Distill** runs the agent over one part at a time: one self-contained claim per statement, **in
-  the configured claim language** (`language.claims`, default English), a flat topic in the same
-  language, provenance to a source node, then an audit for statements left uncovered.
+  the configured claim language** (`language.claims`, default English), a topic from the shelf in the
+  same language, provenance to a source node, then a sampled audit for statements left uncovered.
 - **Cluster** prunes, attaches, graphs, splits, overlaps and writes titleless memberships. No model.
 
 **The derivation keeps model windows.** `openai.blocked_windows` lists the UTC ranges in which no

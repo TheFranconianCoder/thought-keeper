@@ -110,6 +110,11 @@ func TestJobNeedsModelNamesTheDerivation(t *testing.T) {
 // resume once and clears the armed state, so a later pass can arm a new one.
 func TestModelWindowWakeFiresAndClears(t *testing.T) {
 	a := &App{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	// No windows: the test is about the WAKE, and the default pair would re-arm it for the opening
+	// of the real clock's window whenever the suite runs inside one.
+	cfg := config.Defaults()
+	cfg.OpenAI.BlockedWindows = nil
+	a.setConfig(cfg)
 	a.depsPtr.Store(&registry.Deps{})
 	a.modelWindowPause(time.Now().Add(-time.Second))
 	deadline := time.Now().Add(2 * time.Second)

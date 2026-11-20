@@ -39,6 +39,8 @@ type Vocabulary struct {
 	Apply     bool
 	TopNames  int
 	Max       int
+	// Target is the size the COARSENING builds the shelf for (vocabulary.<namespace>.max_names).
+	Target    int
 	Parallel  int
 	OnPhase   func(phase string)
 	ApplyGate func(ctx context.Context, fn func(ctx context.Context) error) error
@@ -217,6 +219,8 @@ func (uc Vocabulary) health(observed []partialentities.NameUses, vocab entities.
 	if len(broad) == 0 {
 		broad = fallbackBroadTokens(observed)
 	}
+	h.Shelf = len(vocab.Shelf)
+	h.Target = vocab.Target
 	h.BroadTokens = len(broad)
 	h.BroadTokensLearned = len(vocab.BroadTokens) > 0
 	h.NearDuplicates, h.OversizedFamilies, h.OversizedNames = nearDuplicates(observed, broad)

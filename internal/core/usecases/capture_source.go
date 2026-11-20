@@ -37,6 +37,14 @@ type Derivation struct {
 	Model           string
 	Language        string
 	ReasoningEffort string
+	// TopicBudget is the ceiling of the topic vocabulary (vocabulary.topics.max_names). Zero keeps
+	// the old behaviour: a new name is always accepted. Above it the write maps a proposed name
+	// onto the best fitting existing one, so the catalog can only grow by making room.
+	TopicBudget int
+	// AuditEvery turns the completeness audit into a sample: one part in N is checked against its
+	// text. Zero (or one) audits every part, which is what the step did before it was measured —
+	// the second pass was 32.5 % of a morning batch's tokens and found almost nothing.
+	AuditEvery int
 	// KeepTitle preserves the source's current title across a reset. A wiki page save writes the new
 	// title first and resets the old derivation afterwards.
 	KeepTitle bool

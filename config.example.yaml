@@ -88,6 +88,7 @@ openai:
     # The default is DeepSeek's pair; set [] to derive around the clock.
     blocked_windows: ['01:00-04:00', '06:00-10:00']
     max_iterations: 16
+    max_concurrent: 6                      # model calls in flight at once, across every operation
     retries: 3                             # per-call retries for a TRANSIENT failure (timeout, 429, 5xx)
     retry_backoff: '2s'                    # first wait; doubles per attempt
     timeout: '300s'                        # per-call ceiling; a timeout is retried, not fatal
@@ -105,6 +106,8 @@ pipeline:                                  # the four steps: capture → outline
     run_timeout: '10m'                     # hard ceiling for one DOCUMENT run
     cluster_timeout: '30m'                 # hard ceiling for one CLUSTER pass (the claim graph can be large)
     parts_per_run: 12                      # parts (one text-bearing node each) one distill run covers
+    audit_every: 4                         # one part in n is read against its claims after the write;
+                                           # a part with no claim is always audited
     parallel_parts: 4                      # parts distilled at the same time (they are independent)
     parallel_runs: 4                       # document runs at the same time — one per source
     parallel_queries: 3                    # Ask runs at the same time; Ask is never gated, and one
@@ -115,6 +118,17 @@ pipeline:                                  # the four steps: capture → outline
                                            # re-queues the source), and ask step 4 for a pass when there
                                            # is something to do. Empty/0 = off.
     reconcile_batch: 500                   # sources one consistency pass looks at (sliced over ticks)
+vocabulary:                                # the TARGETS of the name vocabularies. A vocabulary is a
+                                           # shelf: the derivation files every new name onto it, so the
+                                           # catalog cannot grow with the corpus. A coarsening pass files
+                                           # an existing long tail onto it (POST /vocabulary/coarsen).
+  topics:
+    max_names: 3000                        # claim topics (a vault that was never bounded reached 57k)
+  source_tags:
+    max_names: 200                         # the shelf a source is filed under in the Sources list
+  wiki_tags:
+    max_names: 200                         # the same for wiki pages
+
 cluster:                                   # the claim graph behind the associations. These are QUALITY gates,
                                            # not target sizes: a broad group is split, a tight group stays.
                                            # No model is involved: the grouping is deterministic.

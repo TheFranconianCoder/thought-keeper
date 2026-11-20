@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,6 +21,8 @@ type SourceSummaryResult struct {
 	Claims int
 	Chars  int
 	Tokens int
+	// Tags are the shelf labels written with the overview (empty when the source already had some).
+	Tags []string
 }
 
 // Summary writes the source page's overview (a background run, never a request path).
@@ -48,6 +51,16 @@ func (uc Sources) Summary(ctx context.Context, runID ulid.ULID, hash string) (So
 	res.Claims = len(atoms)
 
 	body := ""
+	var tags []string
+	// The tags are derived only for a source that has none: they are a DERIVED label, and a source
+	// that the tag pass already filed keeps what the reader has been looking at. The tag backfill
+	// works the same way, so whichever runs first decides and sets the marker.
+	deriveTags := uc.Tags != nil && src.AutoTagsAt.IsZero()
+	knownTags, absorbedTags := "", map[string]string(nil)
+	if deriveTags {
+		known, absorbed := sourceTagVocabulary(uc.Vocab)
+		knownTags, absorbedTags = strings.Join(known, "\n"), absorbed
+	}
 	if len(atoms) == 0 {
 		// A document of metadata (a cover, a table of contents) correctly derives no claim. Saying so
 		// is the honest summary — and it stops the consistency job from asking forever.
@@ -76,7 +89,7 @@ func (uc Sources) Summary(ctx context.Context, runID ulid.ULID, hash string) (So
 			Messages: []interfaces.AgentMessage{
 				{Role: "system", Content: agents.SummarySystemFor(uc.Language)},
 				{Role: "user", Content: agents.SourceSummaryUser(
-					src.Title, src.Language, uc.Language, summaryOutline(nodes), uc.claimLines(atoms),
+					src.Title, src.Language, uc.Language, summaryOutline(nodes), uc.claimLines(atoms), knownTags,
 				)},
 			},
 			OnRetry: retryNotice(ctx, uc.SourceLog, uc.Clock, hash, "summary", runID.String()),
@@ -89,9 +102,15 @@ func (uc Sources) Summary(ctx context.Context, runID ulid.ULID, hash string) (So
 		if resp.Truncated() {
 			return res, uc.fail(ctx, run, "the answer hit the output limit; the summary was not written")
 		}
-		body = stripCodeFence(resp.Message.Content)
-		if body == "" {
-			return res, uc.fail(ctx, run, "the model returned an empty summary")
+		var pErr error
+		body, tags, pErr = parseOverviewAnswer(resp.Message.Content)
+		if pErr != nil {
+			return res, uc.fail(ctx, run, "the summary answer could not be read: "+pErr.Error())
+		}
+		if deriveTags {
+			tags = normalizeSourceAutoTags(tags, uc.MaxTags, absorbedTags)
+		} else {
+			tags = nil
 		}
 	}
 
@@ -99,6 +118,17 @@ func (uc Sources) Summary(ctx context.Context, runID ulid.ULID, hash string) (So
 		return res, uc.fail(ctx, run, "the summary could not be written: "+err.Error())
 	}
 	res.Chars = len(body)
+	if deriveTags {
+		// The overview is the primary product and it is already on disk; a tag write that fails is
+		// reported and leaves the source untagged, which the backfill picks up again.
+		if err := uc.Tags.SetSourceAutoTags(ctx, hash, tags, uc.Clock.Now()); err != nil {
+			if uc.Log != nil {
+				uc.Log.Warn("summary: the auto tags could not be written", "hash", hash, "err", err)
+			}
+		} else {
+			res.Tags = tags
+		}
+	}
 
 	run.Answer = oneLine(body, 300)
 	run.Status = entities.RunSucceeded
@@ -109,11 +139,11 @@ func (uc Sources) Summary(ctx context.Context, runID ulid.ULID, hash string) (So
 		}
 	}
 	uc.log(ctx, hash, runID, "info", "summary written", map[string]any{
-		"claims": res.Claims, "chars": res.Chars, "tokens": res.Tokens,
+		"claims": res.Claims, "chars": res.Chars, "tokens": res.Tokens, "tags": len(res.Tags),
 	})
 	if uc.Log != nil {
 		uc.Log.Info("source summary written", "hash", hash, "run", runID.String(),
-			"claims", res.Claims, "chars", res.Chars, "tokens", res.Tokens)
+			"claims", res.Claims, "chars", res.Chars, "tokens", res.Tokens, "tags", len(res.Tags))
 	}
 	return res, nil
 }
@@ -167,6 +197,59 @@ func summaryOutline(nodes []entities.SourceNode) string {
 		fmt.Fprintf(&b, "%s- %s\n", indent, oneLine(title, 120))
 	}
 	return b.String()
+}
+
+// overviewAnswer is the one answer the summary asks for: the overview as one string per paragraph,
+// and the source's shelf labels. Paragraphs are an ARRAY because Markdown prose cannot be trusted to
+// arrive with its newlines JSON-escaped — one raw line break makes the whole answer unreadable, and a
+// summary that cannot be parsed is a failed run.
+type overviewAnswer struct {
+	Summary json.RawMessage `json:"summary"`
+	Tags    []string        `json:"tags"`
+}
+
+// ParseOverviewAnswer reads the overview answer: the paragraph array (or, tolerantly, a plain string)
+// joined with blank lines, plus the tags.
+func ParseOverviewAnswer(raw string) (string, []string, error) { return parseOverviewAnswer(raw) }
+
+func parseOverviewAnswer(raw string) (string, []string, error) {
+	start := strings.Index(raw, "{")
+	end := strings.LastIndex(raw, "}")
+	if start < 0 || end <= start {
+		return "", nil, fmt.Errorf("the answer carries no JSON object")
+	}
+	var in overviewAnswer
+	if err := json.Unmarshal([]byte(raw[start:end+1]), &in); err != nil {
+		return "", nil, fmt.Errorf("the answer is not valid JSON: %w", err)
+	}
+	body := ""
+	if len(in.Summary) > 0 {
+		var paragraphs []string
+		if err := json.Unmarshal(in.Summary, &paragraphs); err == nil {
+			body = strings.Join(trimmedParagraphs(paragraphs), "\n\n")
+		} else {
+			var single string
+			if err := json.Unmarshal(in.Summary, &single); err != nil {
+				return "", nil, fmt.Errorf("the overview is neither a string nor a list of strings")
+			}
+			body = stripCodeFence(single)
+		}
+	}
+	if strings.TrimSpace(body) == "" {
+		return "", nil, fmt.Errorf("the overview is empty")
+	}
+	return body, in.Tags, nil
+}
+
+// trimmedParagraphs drops empty entries and surrounding whitespace.
+func trimmedParagraphs(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, p := range in {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // stripCodeFence removes a fence a model added around prose it was told to write as Markdown.

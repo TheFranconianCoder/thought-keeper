@@ -52,7 +52,7 @@ func TestSummarySystemForSwitchesTheLanguage(t *testing.T) {
 	if !strings.Contains(german, "Write in GERMAN, regardless of the source's language.") {
 		t.Errorf("German SummarySystem lacks the language clause:\n%s", german)
 	}
-	user := agents.SourceSummaryUser("Titel", "de", "fr", "", "eine Aussage")
+	user := agents.SourceSummaryUser("Titel", "de", "fr", "", "eine Aussage", "")
 	if !strings.Contains(user, "write the summary in French") {
 		t.Errorf("SourceSummaryUser lacks the output language: %q", user)
 	}

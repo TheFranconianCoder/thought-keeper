@@ -106,3 +106,30 @@ func TestVocabularyMissingFileIsEmpty(t *testing.T) {
 		t.Error("an empty vocabulary knows nothing")
 	}
 }
+
+// TestShelfRoundTrip: the shelf is the TARGET vocabulary — the names the long tail is filed onto and
+// the size the last coarsening aimed at. Losing it would make the next pass invent a new target.
+func TestShelfRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	s := New(dir)
+	in := entities.Vocabulary{
+		Namespace: entities.VocabularyTopics,
+		Shelf:     []string{"caching", "kubernetes", "llm-agents"},
+		Target:    3000,
+		Canonical: []string{"caching", "kubernetes", "llm-agents"},
+		Absorbed:  map[string]string{"cache-eviction": "caching"},
+	}
+	if err := s.Write(in); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	got, err := s.Read(entities.VocabularyTopics)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if got.Target != 3000 {
+		t.Errorf("target = %d, want 3000", got.Target)
+	}
+	if strings.Join(got.Shelf, ",") != "caching,kubernetes,llm-agents" {
+		t.Errorf("shelf = %v", got.Shelf)
+	}
+}

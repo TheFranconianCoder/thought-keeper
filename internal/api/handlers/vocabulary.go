@@ -16,6 +16,8 @@ type VocabularyScheduler interface {
 	ScheduleVocabularyCurate(ns entities.VocabularyNamespace) (string, error)
 	// ScheduleVocabularyRebranch re-derives the topic labels of the claims.
 	ScheduleVocabularyRebranch() (string, error)
+	// ScheduleVocabularyCoarsen files a namespace's long tail onto its shelf.
+	ScheduleVocabularyCoarsen(ns entities.VocabularyNamespace) (string, error)
 }
 
 // VocabularyHandler serves GET /api/v1/vocabulary: the health of the name vocabularies — how many
@@ -57,6 +59,28 @@ func (h VocabularyHandler) Curate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runID, err := h.Consume.ScheduleVocabularyCurate(entities.VocabularyNamespace(req.Namespace))
+	if err != nil {
+		payloads.WriteError(w, err)
+		return
+	}
+	payloads.WriteJSON(w, http.StatusAccepted, payloads.DistillResponse{RunID: runID, Status: "running"})
+}
+
+// Coarsen serves POST /api/v1/vocabulary/coarsen: the long tail of a name vocabulary is filed onto
+// its shelf, deterministic families first and then in model batches. It is the repair for a
+// vocabulary that grew into tens of thousands of names, and it is idempotent: an absorbed name is a
+// watermark, so a stopped pass continues where it was.
+func (h VocabularyHandler) Coarsen(w http.ResponseWriter, r *http.Request) {
+	if h.Consume == nil {
+		payloads.WriteError(w, types.New("not_implemented", "vocabulary coarsening is not configured", types.ErrNotImplemented))
+		return
+	}
+	var req payloads.VocabularyCurateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		payloads.WriteError(w, types.New("invalid_body", "invalid JSON body", err))
+		return
+	}
+	runID, err := h.Consume.ScheduleVocabularyCoarsen(entities.VocabularyNamespace(req.Namespace))
 	if err != nil {
 		payloads.WriteError(w, err)
 		return

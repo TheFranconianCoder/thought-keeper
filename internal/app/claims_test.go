@@ -53,7 +53,11 @@ func claimApp(runs *fakeRuns) *App {
 		progress:      map[string]runProgress{},
 		stalled:       map[string]int{},
 	}
-	a.setConfig(config.Defaults())
+	cfg := config.Defaults()
+	// A test must not depend on the hour: the default blocked windows (01:00-04:00 and
+	// 06:00-10:00 UTC) would make the pump claim nothing for eight hours a day.
+	cfg.OpenAI.BlockedWindows = nil
+	a.setConfig(cfg)
 	a.depsPtr.Store(&registry.Deps{StartRun: usecases.Runs{Store: runs, Clock: systemClock{}}})
 	return a
 }

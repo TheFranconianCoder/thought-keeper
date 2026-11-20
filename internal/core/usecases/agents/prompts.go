@@ -7,47 +7,36 @@ import (
 )
 
 // DistillSystem is the system prompt for the distill step.
-const DistillSystem = `You convert ONE source document into atomic claims.
+//
+// It carries the RULES only. The answer shape travels with the user message (DistillAnswerShape),
+// because repeating it here cost 500 of 4,200 characters in every one of the 5,956 requests a single
+// morning batch made — and the rules themselves repeated "stand alone" three times.
+const DistillSystem = `You convert ONE part of a source document into atomic claims.
 
-Rules:
-- One atom = exactly one self-contained claim (a fact, definition, claim, example, counterpoint or quote).
+- One atom = exactly one self-contained claim (a fact, definition, example, counterpoint or quote).
+  A sentence that bundles several facts is SEVERAL atoms: split it. A node of a few hundred
+  characters usually carries more than one claim.
 - Write the topic, claim and body in ENGLISH, regardless of the source's language. Keep proper
-  names, titles, code and quoted terms in their original script. Keep each claim to a single sentence.
-- THE ATOM MUST STAND ALONE. A reader who has never seen the source must understand its topic, claim
-  and body. Never write "Chapter 11", "Appendix A", "this section", "the book", "the author",
-  "as we saw", "above", "below", "the next chapter", "Page 42", or any other pointer into the
-  document. The source is provenance in the sources list, never part of the statement.
+  names, titles, code and quoted terms in their original script. One claim is one sentence.
+- THE ATOM MUST STAND ALONE: a reader who never saw the source must understand it. Never write
+  "Chapter 11", "this section", "the book", "the author", "as we saw", "page 42" or any other
+  pointer into the document. Restate the context a claim needs — system, version, condition,
+  consequence — inside the claim and body.
 - Do NOT extract statements ABOUT the document: what a chapter covers, its reading order, who wrote
-  it, its editions, its table of contents, or where an instruction is printed. Those are not
-  knowledge about the subject; skip them.
-- Restate the context the claim needs inside the claim and body: name the system, version, condition
-  or consequence. Do not rely on surrounding sentences.
-- Assign each atom a short, flat, ENGLISH topic (its subject), e.g. "caching" or "llm-agents". The
-  topic must be derivable from the CLAIM and BODY alone — never from the source title, a chapter, an
-  appendix or the document structure. A topic like "chapter-11" or "book-structure" is invalid.
-  Reuse an existing topic when it fits; call list_topics first if unsure. A topic is flat: no slash,
-  no hierarchy.
-- Cite provenance: pass the source node id(s) the claim came from as "nodes". Only cite node ids that
+  it, its table of contents. Page furniture is not a claim either: a running head, a page number, a
+  copyright line, a link list. A part that carries nothing but furniture gets no atom.
+- Give each atom a short, flat, ENGLISH topic: the subject of the claim, derived from the claim and
+  body alone — never from the title, a chapter, an appendix or the document structure. No slash, no
+  hierarchy. A list of names already in use comes with the text: reuse one whenever it fits, and
+  invent a name only when none does.
+- Cite provenance: pass the source node id(s) the claim came from as "nodes". Only cite ids that
   appear in the outline. Never invent node ids or facts that are not in the source.
-- Page furniture is NOT a claim: a running head, a page number, "Page 42", a copyright line, a
-  "see the next chapter" pointer or a link back to the table of contents says nothing about the
-  subject. Skip it; a part that carries nothing but furniture gets no atom.
-- The body may expand the claim in 1-3 sentences. Do not repeat the claim verbatim.
-- A claim has NO links. Never write a bracketed pair as a reference: a claim's associations are its
-  clusters, not its text.
-- Quote code as code. A declaration, expression, literal, identifier or grammar fragment taken from
-  the source goes in the body as inline code (a backtick span), never as bare prose. Bracket syntax
-  such as an attribute or a grammar production is quoted syntax, not a link. In the claim sentence,
-  name what the code is instead of quoting the raw fragment.
-- Cover the source's substance: aim for one atom per distinct claim. Prefer more, smaller atoms over
-  fewer large ones, but do not split a single claim artificially.
-- A sentence that bundles several facts is SEVERAL claims, not one: "X is fast, close to the
-  hardware, supports A and B, and is widely used" is four atoms, not one compound atom. Split it.
-- A node of a few hundred characters usually carries more than one claim. One atom for a whole
-  paragraph is normally under-derived.
-- Use read_source_node when the text you were given was cut short and you need the rest of a node.
+- The body expands the claim in 1-3 sentences and does not repeat it verbatim.
+- A claim has NO links: its associations are its clusters, not its text. Quote a declaration,
+  expression, literal or grammar fragment as inline code (a backtick span), and name in the claim
+  what the code is.
 - You do NOT write anything. There is no write tool: you ANSWER with the claims as JSON, and the
-  application records them. ` + DistillAnswerShape
+  application records them.`
 
 // DistillAnswerShape is the ONE answer the distill asks for. The model does not call a write tool: a
 // tool call is a full round-trip per claim (measured on a real book: 70 claims, 52 iterations, 116k
@@ -60,11 +49,26 @@ const DistillAnswerShape = `Answer with ONLY this JSON object, no prose and no c
 Name every claim the text carries, one object each. An empty list is only correct when the part
 carries no claim at all — page furniture is not a claim.`
 
+// TopicCandidatesBlock renders the names the part may reuse. The list is SELECTED (IDF-weighted from
+// the part's own text) instead of a catalog dump: a vault with 57,181 topics cannot hand its
+// vocabulary to the model at all — the old list_topics tool answered 2.3 MB and was cut to 6,000
+// bytes mid-JSON, which cost a round trip per part and reused nothing.
+func TopicCandidatesBlock(candidates []string) string {
+	if len(candidates) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Topics already in use that fit this text: ")
+	b.WriteString(strings.Join(candidates, ", "))
+	b.WriteString("\nReuse one when it names the claim's subject; invent a name only when none does.\n\n")
+	return b.String()
+}
+
 // DistillPartUser describes ONE text-bearing node of a source. The work item is exactly that node
 // and its complete text — nothing else. Completeness is a property of a single node, so a small
 // work item is what makes it checkable: no plan to infer, no percentage to guess, and no answer
 // has to swallow a whole document (which is what used to hit the output limit half way).
-func DistillPartUser(title, hash, nodeID, nodeTitle, text string) string {
+func DistillPartUser(title, hash, nodeID, nodeTitle, text string, candidates []string) string {
 	return fmt.Sprintf(`Source hash (provenance only): %s
 Source title (provenance only — never use it in a topic): %s
 
@@ -73,19 +77,19 @@ Its complete text is below. Turn every statement in it into an atom.
 The node title is provenance only: do not put it, the chapter number or the document structure into
 an atom. Every claim, body and topic must make sense without this source.
 
-Text:
+%sText:
 %s
 
 Give one claim per statement, citing node %s. Do not summarise the part into one claim, and do
 not leave a statement out.
 
-`+DistillAnswerShape, hash, title, nodeID, nodeTitle, text, nodeID)
+`+DistillAnswerShape, hash, title, nodeID, nodeTitle, TopicCandidatesBlock(candidates), text, nodeID)
 }
 
 // DistillPartAudit is the completeness check. The model reads the part's text against the claims
 // that now exist for it and writes whatever no claim covers — so "complete" is verified against
 // the text instead of being inferred from a count of cited nodes.
-func DistillPartAudit(nodeID, nodeTitle, text, claims string) string {
+func DistillPartAudit(nodeID, nodeTitle, text, claims string, candidates []string) string {
 	return fmt.Sprintf(`Check ONE part of a source for completeness: node %s "%s".
 
 Its text:
@@ -99,12 +103,12 @@ claims that no existing claim covers yet (one object per statement, citing node 
 repeat or rewrite a claim that already exists, and do not invent facts.
 If every statement of the text is covered, answer exactly: {"complete":true,"claims":[]}
 
-`+DistillAnswerShape, nodeID, nodeTitle, text, claims, nodeID)
+%s`+DistillAnswerShape, nodeID, nodeTitle, text, claims, nodeID, TopicCandidatesBlock(candidates))
 }
 
 // DistillPartTruncated picks a cut-off answer up where it stopped. The model did not choose to end
 // there — the endpoint's output limit did — so the statements it never reached are simply missing.
-func DistillPartTruncated(nodeID, nodeTitle, claims string) string {
+func DistillPartTruncated(nodeID, nodeTitle, claims string, candidates []string) string {
 	return fmt.Sprintf(`Your previous answer was CUT OFF by the output limit — it did not end because the work was
 finished. Continue with node %s "%s" and write the statements that are still missing.
 
@@ -112,17 +116,7 @@ The claims that exist for this part so far:
 %s
 One claim per statement, citing node %s. Do not repeat what is there.
 
-`+DistillAnswerShape, nodeID, nodeTitle, claims, nodeID)
-}
-
-func DistillSourceUser(title, hash, outline string) string {
-	return fmt.Sprintf(`Source hash: %s
-Source title: %s
-
-Outline (node_id — title — pages):
-%s
-
-Extract the source's claims into atoms now.`, hash, title, outline)
+%s`+DistillAnswerShape, nodeID, nodeTitle, claims, nodeID, TopicCandidatesBlock(candidates))
 }
 
 // QuerySystem is the system prompt for the query operation.
@@ -250,8 +244,8 @@ Rules:
 	`sharpest name there is.
 - Never invent a name that is not among the given ones unless it is the honest common name of a group ` +
 	`you are merging.
-- Keep the shape of the namespace: topics are hierarchical paths "<domain>/<topic>" (at most two ` +
-	`levels); topics and tags are short lowercase hyphenated names.
+- Keep the shape of the namespace: a topic and a tag are short, lowercase, hyphenated, flat names. ` +
+	`A topic carries no path and no hierarchy.
 - Leave a name alone when it is already good: an empty mapping is a valid answer.
 
 Answer with ONLY a JSON object, no prose and no code fence:
@@ -318,6 +312,45 @@ Answer with ONLY this JSON object, no prose and no code fence:
 {"claims":[{"n":1,"topic":"short-lowercase-subject"}]}
 One entry per claim, using the NUMBER from the list.`
 
+// ShelfSystem is the role for COARSENING a name vocabulary: file every fine name onto a fixed shelf.
+// It is the opposite of VocabularyNameRules: there the model must not coarsen, here coarsening is the
+// whole job. A vault that follows the "finest level" rule ends up with 57,181 topics for 402,931
+// claims — a vocabulary nobody can navigate, and 2.3 MB that no prompt can carry.
+const ShelfSystem = `You file subjects onto the SHELF of a knowledge base.
+
+The shelf is the fixed list of names a reader navigates and filters by. Assign every given name to the
+ONE shelf name it belongs under.
+
+- Assign by SUBJECT, not by wording: "cache-eviction" belongs under "caching", "k8s-operator" under
+  "kubernetes" when the shelf carries it.
+- A name that already IS a shelf name stays as it is; leave it out of the mapping.
+- Prefer the SMALLEST shelf name that still covers the subject.
+- A name the shelf cannot honestly cover may be left out. Never force an assignment that says
+  something other than the name says.
+- Never invent a name: every value must be one of the shelf names you were given.
+
+Answer with ONLY a JSON object, no prose and no code fence:
+{"mapping":{"the finer name":"the shelf name"}}`
+
+// ShelfUser hands over the shelf and one batch of names. The shelf is filtered per batch by the
+// caller, so a 3,000-name shelf is not re-sent in full for every 600 names.
+func ShelfUser(shelf, names []string) string {
+	var b strings.Builder
+	b.WriteString("The shelf (assign to one of these):\n")
+	for _, name := range shelf {
+		b.WriteString("- ")
+		b.WriteString(name)
+		b.WriteString("\n")
+	}
+	b.WriteString("\nNames to file (one shelf name each):\n")
+	for _, name := range names {
+		b.WriteString("- ")
+		b.WriteString(name)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
 // RebranchUser hands over one batch of claims and the topics in use.
 func RebranchUser(known []string, claims string) string {
 	var b strings.Builder
@@ -367,24 +400,34 @@ Answer with ONLY a JSON object, no prose and no code fence:
 
 // SummarySystem is the role for a source's OVERVIEW. It is written from the claims — not from the
 // document — because the claims are what the vault actually holds: a summary that said more than they
-// do would be a second, unchecked source.
-const SummarySystem = `You write the SUMMARY of one source for a personal knowledge base. The claims below
-are everything the vault distilled from it. Your summary is the overview a reader sees first: what the
-source is about, what it argues, and what it adds.
+// do would be a second, unchecked source. It asks for the source's SHELF LABELS in the same answer:
+// the tag run read the same claims in a second request (measured: one request and ~7k input tokens
+// per source), and a source's tags are decided from exactly what the overview is decided from.
+const SummarySystem = `You write the OVERVIEW of one source for a personal knowledge base, and file it on its shelf.
+The claims below are everything the vault distilled from it. The overview is what a reader sees
+first: what the source is about, what it argues, and what it adds.
 
-Rules:
+Overview:
 - 3 to 6 short paragraphs (or two paragraphs and a short bullet list). 150 to 300 words.
 - Write in ENGLISH, regardless of the source's language. Keep names and quoted terms as they appear.
 - Use ONLY the claims. Never add a fact, name, number or opinion that is not in them.
 - Open with what the source is about, in one sentence a reader can act on. No "This document" filler.
 - Name the through-line and the few strongest points. Do not list every claim.
-- Plain Markdown prose: no title, no frontmatter, no citations, no code fence.
-- If the claims are few, write a short summary. Never pad.`
+- If the claims are few, write a short overview. Never pad.
+
+Tags:
+- 3 to 6 COARSE labels a reader would FILE this source under: short, lowercase, hyphenated.
+- A tag is a shelf, not a subject: "caching" yes, "cache-key-collisions" no.
+- Use a name from the list you are given when it fits; do not invent a synonym.
+
+Answer with ONLY this JSON object, no prose and no code fence. The overview is one string per
+paragraph or bullet — Markdown, no title, no frontmatter, no citations:
+{"summary":["first paragraph","second paragraph"],"tags":["one","two","three"]}`
 
 // SourceSummaryUser hands over the material a summary may use: the title, the outline's structure,
-// and the claims themselves. outputLanguage is the configured summary language; the source's own
-// language is context only and never decides what the summary is written in.
-func SourceSummaryUser(title, language, outputLanguage, outline, claims string) string {
+// the claims themselves, and the shelf labels a tag may reuse. outputLanguage is the configured
+// summary language; the source's own language is context only and never decides what is written.
+func SourceSummaryUser(title, language, outputLanguage, outline, claims, knownTags string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Source title: %s\n", title)
 	if language != "" {
@@ -397,6 +440,10 @@ func SourceSummaryUser(title, language, outputLanguage, outline, claims string) 
 	}
 	b.WriteString("\nClaims (the only knowledge you may use):\n")
 	b.WriteString(claims)
+	if knownTags != "" {
+		b.WriteString("\n\nTags already used in this vault (reuse one when it fits):\n- ")
+		b.WriteString(strings.ReplaceAll(knownTags, "\n", "\n- "))
+	}
 	return b.String()
 }
 

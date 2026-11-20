@@ -77,9 +77,11 @@ func TestSourceSummaryWritesFromTheClaims(t *testing.T) {
 		{ID: ulid.Make(), Topic: "product-development", Claim: "Shape Up fixes time and appetite.", Body: "Six weeks."},
 	}}
 	store := &summaryStore{}
-	gw := &summaryGateway{answer: "## Overview\n\nShape Up replaces estimates with a fixed appetite."}
+	tags := &fakeSourceTags{}
+	gw := &summaryGateway{answer: `{"summary":["## Overview","Shape Up replaces estimates with a fixed appetite."],"tags":["product-development","shape-up"]}`}
 	uc := usecases.Sources{
 		Index: idx, Atoms: atoms, Store: store, Gateway: gw, Model: "test", Clock: fixedClock{},
+		Tags: tags, MaxTags: 6, Vocab: &fakeVocabStore{},
 	}
 
 	res, err := uc.Summary(ctx, ulid.Make(), hash)
@@ -96,6 +98,18 @@ func TestSourceSummaryWritesFromTheClaims(t *testing.T) {
 	if strings.HasPrefix(got, "```") {
 		t.Fatalf("sidecar = %q, want no code fence", got)
 	}
+	// The answer is JSON because it carries the tags too; the FILE is prose. A reader must never see
+	// the envelope, and the paragraphs joined by blank lines.
+	if strings.Contains(got, `"tags"`) || strings.Contains(got, `{"summary"`) {
+		t.Fatalf("sidecar = %q, want plain prose", got)
+	}
+	if !strings.Contains(got, "\n\n") {
+		t.Fatalf("sidecar = %q, want the paragraphs separated", got)
+	}
+	// The labels were decided from the same claims, in the same request.
+	if res.Tags == nil || len(res.Tags) != 2 || tags.auto[hash][0] != "product-development" {
+		t.Fatalf("tags = %v (written %v), want the two labels filed", res.Tags, tags.auto[hash])
+	}
 	if !strings.Contains(gw.prompt, "Shape Up fixes time and appetite.") {
 		t.Fatalf("prompt = %q, want the claim in it", gw.prompt)
 	}
@@ -105,6 +119,21 @@ func TestSourceSummaryWritesFromTheClaims(t *testing.T) {
 	}
 	if !strings.Contains(gw.prompt, "write the summary in English") {
 		t.Fatalf("user prompt = %q, want the English reminder", gw.prompt)
+	}
+}
+
+// TestOverviewAnswerToleratesAPlainString: a model that answers the overview as one string instead of
+// a paragraph list is not a failed run — the prose is what the reader wants.
+func TestOverviewAnswerToleratesAPlainString(t *testing.T) {
+	body, tags, err := usecases.ParseOverviewAnswer(`{"summary":"One paragraph.\n\nAnother.","tags":["a"]}`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !strings.Contains(body, "Another.") || len(tags) != 1 {
+		t.Fatalf("body = %q tags = %v", body, tags)
+	}
+	if _, _, err := usecases.ParseOverviewAnswer("no json here"); err == nil {
+		t.Fatal("an answer without a JSON object must be an error")
 	}
 }
 

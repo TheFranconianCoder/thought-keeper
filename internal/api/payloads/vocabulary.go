@@ -41,6 +41,10 @@ type VocabularyHealth struct {
 	OversizedFamilies  int  `json:"oversized_families,omitempty"`
 	OversizedNames     int  `json:"oversized_names,omitempty"`
 	UnreviewedFamilies int  `json:"unreviewed_families,omitempty"`
+	// Shelf is the bounded target vocabulary and Target the size it was built for: a namespace whose
+	// names run far past its target is one the coarsening still has to file.
+	Shelf  int `json:"shelf"`
+	Target int `json:"target"`
 	// What the vocabulary file already knows, and the names it has no opinion about yet.
 	Canonical int                  `json:"canonical"`
 	Absorbed  int                  `json:"absorbed"`
@@ -71,6 +75,7 @@ func VocabularyFromPartials(in []partialentities.VocabularyHealth) VocabularyRep
 			OversizedFamilies: h.OversizedFamilies, OversizedNames: h.OversizedNames,
 			UnreviewedFamilies: h.UnreviewedFamilies,
 			Canonical:          h.Canonical, Absorbed: h.Absorbed, New: h.New, Top: namesFromPartials(h.Top),
+			Shelf: h.Shelf, Target: h.Target,
 		})
 	}
 	return VocabularyReport{Namespaces: out}

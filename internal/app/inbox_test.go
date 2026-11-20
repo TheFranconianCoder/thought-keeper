@@ -43,6 +43,7 @@ func TestPolledInboxStillTakesADroppedFile(t *testing.T) {
 		distillActive: map[string]bool{},
 	}
 	cfg := config.Defaults()
+	cfg.OpenAI.BlockedWindows = nil // the fixture is about the inbox, not about the hour
 	cfg.Pipeline.Debounce = "10ms"
 	a.setConfig(cfg)
 	a.depsPtr.Store(&registry.Deps{Intake: usecases.Sources{

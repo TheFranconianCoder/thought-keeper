@@ -47,6 +47,10 @@ type VocabularyHealth struct {
 	// Canonical/Absorbed is what the vocabulary file already knows.
 	Canonical int
 	Absorbed  int
+	// Shelf is the size of the bounded target vocabulary and Target the size it was built for. A
+	// report whose Names run far past the Target is a namespace the coarsening still has to file.
+	Shelf  int
+	Target int
 	// New are the observed names the vocabulary has no opinion about yet.
 	New []string
 	// Top is the biggest names, for the reader and for a curation prompt.

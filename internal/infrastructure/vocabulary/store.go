@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,6 +79,9 @@ func render(v entities.Vocabulary) string {
 	if !v.Updated.IsZero() {
 		fmt.Fprintf(&b, "updated: %s\n", v.Updated.UTC().Format(time.RFC3339))
 	}
+	if v.Target > 0 {
+		fmt.Fprintf(&b, "target: %d\n", v.Target)
+	}
 	if v.Run != (ulid.ULID{}) {
 		fmt.Fprintf(&b, "run: %s\n", v.Run.String())
 	}
@@ -108,7 +112,11 @@ func render(v entities.Vocabulary) string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("# Decided\n\n")
+	b.WriteString("# Shelf\n\n")
+	for _, name := range sortedStrings(v.Shelf) {
+		fmt.Fprintf(&b, "- %s\n", name)
+	}
+	b.WriteString("\n# Decided\n\n")
 	for _, name := range sortedStrings(v.Decided) {
 		fmt.Fprintf(&b, "- %s\n", name)
 	}
@@ -146,6 +154,11 @@ func parse(ns entities.VocabularyNamespace, text string) entities.Vocabulary {
 				v.Updated = t.UTC()
 			}
 			continue
+		case strings.HasPrefix(line, "target:"):
+			if n, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "target:"))); err == nil {
+				v.Target = n
+			}
+			continue
 		case strings.HasPrefix(line, "run:"):
 			if id, err := ulid.ParseStrict(strings.TrimSpace(strings.TrimPrefix(line, "run:"))); err == nil {
 				v.Run = id
@@ -172,6 +185,8 @@ func parse(ns entities.VocabularyNamespace, text string) entities.Vocabulary {
 			v.Canonical = append(v.Canonical, item)
 		case "broad tokens":
 			v.BroadTokens = append(v.BroadTokens, strings.ToLower(item))
+		case "shelf":
+			v.Shelf = append(v.Shelf, item)
 		case "decided":
 			// The names the model has already judged. Losing them re-opens the whole catalog on the
 			// next pass: every chunk would write its own names as the only decided ones, and a

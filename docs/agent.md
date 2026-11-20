@@ -17,7 +17,7 @@ task.
 
 | Operation | Tools |
 | --- | --- |
-| Distill (one part) | `list_topics`, `read_source_node` |
+| Distill (one part) | `read_source_node` |
 | Query | `list_topics`, `search` (claims), `read_atom`, `list_atoms`, `list_sources`, `read_source_summary` |
 | Lint (semantic, planned) | the query set plus `report_finding` |
 | Tag / vocabulary | none — one bounded completion, answer as JSON |
@@ -36,7 +36,8 @@ returns the source's claims (or its derivation state while the source is still b
 
 ## 2. The transcript stays bounded
 
-- One tool answer is capped at **6 000 characters**.
+- One tool answer is capped at **6 000 bytes**; a node longer than a page is read with
+  `read_source_node {node_id, offset}`, which answers 5 000 bytes at a time and names the next offset.
 - Older answers are replaced by a one-line note once carried output exceeds **24 000 characters**;
   the newest three stay.
 - **No message is ever empty** (`(tool call)` / `(no output)`).
@@ -63,14 +64,24 @@ Rules the prompt enforces (and the wire shape):
   their original script.
 - **A claim stands alone.** No "Chapter 11", "this section", "the book", "as we saw". The source is
   provenance, never part of the statement.
-- **A flat topic in the same language** derived from the claim and body alone (`caching`,
-  `llm-agents`). Existing names are offered by `list_topics`; a topic is never a chapter, a document
-  or a hierarchy.
+- **A flat topic in the same language**, derived from the claim and body alone (`caching`,
+  `llm-agents`), chosen from the names the request offers: two dozen candidates selected from the
+  shelf by IDF-weighted overlap with the part's text. A topic is never a chapter, a document or a
+  hierarchy, and it is a SHELF — the write resolves the model's name against the catalog, mapping a
+  spelling onto its canonical name and, once the shelf is full, onto the best fitting name.
 - **Provenance cites source node ids** from the outline; unknown ids are rejected.
 - **No links, and code is code.** A claim body carries no links; syntax quoted from the source is
   inline code (a backtick span), and the claim sentence names it in prose.
 - **Page furniture is not a claim**: running heads, page numbers, copyright lines, cross-references.
 - More, smaller atoms beat fewer large ones; a compound sentence is several claims.
+
+### The audit is a sample
+
+The completeness check is a second request per part, and on the measured vault it was 32.5 % of every
+token spent while the sample said "complete" almost always. `pipeline.audit_every` (default 4) audits
+one part in n; a part that produced **no** claim is always audited (that is how a metadata part is
+told apart from a failed derivation), and so is a long text that produced fewer than one claim per
+1,500 characters. The sample is taken over the part id, so the same part always gets the same answer.
 
 ### Part outcomes
 
@@ -86,17 +97,23 @@ Rules the prompt enforces (and the wire shape):
 derived title go; the source itself stays. `distill {reset:true}` also runs capture again. A reset
 never deletes a cluster record: the next cluster pass prunes dead members.
 
-### 3.1 Summary: the overview of one source
+### 3.1 Summary: the overview of one source, and its shelf labels
 
 The summary is written **after** a source's distill step is `ok`, from the claims (capped at 250
 claims / 36 KiB) and the outline's titles — never from the raw document, so it cannot say more than
-the vault holds. One bounded completion, `reasoning_effort=minimal`, no tools. The answer is
-Markdown prose (3–6 short paragraphs or two paragraphs plus bullets, **always in the configured
-summary language** (`language.summary`, default English), whatever the source's language) and is
-written to `<hash>.summary.md`. An answer cut off by the output limit is
-a failure: the file is not written, and the run retries later. A source with zero claims gets the
-honest one-line file without a model call. The consistency job queues summaries that are missing; it
-never writes one inside the check itself.
+the vault holds. One bounded completion, `reasoning_effort=minimal`, no tools. The answer carries
+the overview **and the source's auto tags**: both are decided from the same claims, and asking twice
+was a request and ~7k input tokens per source for the same evidence. The answer is
+`{"summary":[…paragraphs…],"tags":[…]}`: one string per paragraph, because Markdown prose does not
+reliably arrive with its newlines escaped, and the file is written from the paragraphs. The
+overview is 3–6 short paragraphs or two paragraphs plus bullets, **always in the configured summary
+language** (`language.summary`, default English), whatever the source's language, and is written to
+`<hash>.summary.md`; the labels go into the source's record as `auto_tags`, exactly as the tag pass
+would write them, and only when the source has none yet. An answer cut off by the output limit is a
+failure: neither file nor labels are written, and the run retries later. A source with zero claims
+gets the honest one-line file without a model call. The consistency job queues summaries that are
+missing; it never writes one inside the check itself. The tag pass stays as the backfill for a
+source whose summary never ran.
 
 ## 4. Query: question → cited answer
 
@@ -247,6 +264,8 @@ order. It never writes a URL, never invents a hash and never answers the request
 
 - A save queues a `tag` run (its own op and worker, **never on the request path**). The model reads
   the page's title and prose and writes 3–6 **coarse** tags into `auto_tags`.
+- A **source's** labels come with its summary (§3.1). The source tagger remains the backfill for a
+  source whose summary has not run yet; whichever runs first sets `auto_tags_at`.
 - `tags` stays the human's: a tagging run never overwrites what the reader wrote. Deleting a derived
   tag sticks (the next run replaces exactly that key), and a save keeps both.
 - The page tagger reads the `wiki-tags` alias table, so a name a curation merged away is not
@@ -258,6 +277,10 @@ order. It never writes a URL, never invents a hash and never answers the request
 
 ## 6. Vocabulary verbs
 
+- **The topic is a SHELF** (`docs/adr/0006-the-topic-is-a-shelf.md`): a namespace carries a bounded
+  set of names (`vocabulary.topics.max_names`, default 3,000; `vocabulary.source_tags.max_names`,
+  default 200). The write resolves every proposed name onto it, so the catalog cannot grow with the
+  corpus; the units below only keep it healthy inside the shelf.
 - **`POST /vocabulary/curate`** observes all three namespaces (`topics`, `wiki-tags`, `source-tags`), asks the model
   which names mean the same, and applies the answer as renames. It learns **broad tokens** (language
   names, generic categories) from the observed catalog; they live in `vocabulary/topics.md` and are
@@ -267,8 +290,12 @@ order. It never writes a URL, never invents a hash and never answers the request
   to the vocabulary's `Decided` list, and the next pass only asks about names that are new or were
   never reviewed — the catalogue is not re-questioned each cooldown. Losing that list turned every
   automatic pass into a full-catalogue model run over thousands of names.
+- **`POST /vocabulary/coarsen`** files a namespace's long tail onto its shelf. Deterministic families
+  first (no model), then the model in batches of 600 names, each applied through the same rename the
+  curation uses and each recorded in `Absorbed` — the watermark, so a stopped pass continues where it
+  was. It is the repair for a vocabulary that grew before the shelf existed, and it is idempotent.
 - **`POST /vocabulary/retopic`** re-derives each claim's flat topic from the claim text (bounded per
-  run; the next press continues). The queue is the clock: it reads the OLDEST claims through the
+  run; the next press continues). It maps onto the shelf, never around it. The queue is the clock: it reads the OLDEST claims through the
   index (`updated_at, id`), so a budget of 12k claims reads 12k rows — not the corpus. Only a claim
   whose label actually moves is re-read whole before the write, because the save is authoritative
   for its provenance.

@@ -30,6 +30,7 @@ func paceApp(t *testing.T, gap string, recs interfaces.StepTracker) *App {
 		quit:             make(chan struct{}),
 	}
 	cfg := config.Defaults()
+	cfg.OpenAI.BlockedWindows = nil // the fixture is about pacing, not about the hour
 	cfg.Capture.RefreshMinGap = gap
 	a.setConfig(cfg)
 	a.depsPtr.Store(&registry.Deps{Steps: recs})

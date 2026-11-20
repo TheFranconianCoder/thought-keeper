@@ -18,8 +18,10 @@ type Config struct {
 	Index    IndexConfig    `yaml:"index"`
 	OpenAI   OpenAIConfig   `yaml:"openai"`
 	Pipeline PipelineConfig `yaml:"pipeline"`
-	Cluster  ClusterConfig  `yaml:"cluster"`
-	Capture  CaptureConfig  `yaml:"capture"`
+	// Vocabulary holds the targets of the three name vocabularies.
+	Vocabulary VocabularyConfig `yaml:"vocabulary"`
+	Cluster    ClusterConfig    `yaml:"cluster"`
+	Capture    CaptureConfig    `yaml:"capture"`
 	// Browser is the OPTIONAL local browser that renders a page before the converter reads it. It
 	// is nil-free by construction: an absent binary means every page is read from the plain HTTP
 	// response, exactly as before.
@@ -143,10 +145,15 @@ type OpenAIConfig struct {
 	// Retries and RetryBackoff make a slow endpoint transparent: a transient failure (timeout,
 	// 429, 5xx) is retried with a doubling backoff instead of ending the run. A wrong key or a
 	// bad request is not retried.
-	Retries      int               `yaml:"retries"`
-	RetryBackoff string            `yaml:"retry_backoff"`
-	Timeout      string            `yaml:"timeout"`
-	Headers      map[string]string `yaml:"headers"`
+	Retries      int    `yaml:"retries"`
+	RetryBackoff string `yaml:"retry_backoff"`
+	Timeout      string `yaml:"timeout"`
+	// MaxConcurrent caps the model calls that are in flight at once, across every operation. The
+	// pipeline fans out over runs and parts (4 x 4 on the default), and an endpoint that rate-limits
+	// turns that fan-out into a retry storm: one morning batch produced 2,497 retries and 1,004
+	// failed turns. Zero means the default.
+	MaxConcurrent int               `yaml:"max_concurrent"`
+	Headers       map[string]string `yaml:"headers"`
 }
 
 // PipelineConfig tunes the pipeline: the DOCUMENT steps (capture, outline, distill) run per source,
@@ -177,6 +184,9 @@ type PipelineConfig struct {
 	// ParallelParts distills that many parts of a document at the same time. Parts are independent
 	// (they only need the tree), so this divides a long document's wall-clock.
 	ParallelParts int `yaml:"parallel_parts"`
+	// AuditEvery turns the completeness audit into a sample: one part in N is read against its
+	// claims after it was written. Zero or one audits every part.
+	AuditEvery int `yaml:"audit_every"`
 	// ReconcileInterval is how often the consistency job walks the vault: it checks that what the
 	// step records say is on disk (a deleted outline invalidates everything after it), and it asks
 	// the cluster step for a pass whenever there is something for it to do. Empty or "0" turns it off.
@@ -184,6 +194,20 @@ type PipelineConfig struct {
 	// ReconcileBatch is how many sources one consistency pass looks at (the passes walk the vault in
 	// slices, so a huge vault is checked over several ticks).
 	ReconcileBatch int `yaml:"reconcile_batch"`
+}
+
+// VocabularyConfig holds the TARGETS of the name vocabularies. A vocabulary is a shelf: it has a
+// size a reader can still navigate, and the derivation resolves every new name against it. A value
+// of zero (or below) uses the default of 3,000 topics and 200 tags.
+type VocabularyConfig struct {
+	Topics     VocabularyNamespaceConfig `yaml:"topics"`
+	SourceTags VocabularyNamespaceConfig `yaml:"source_tags"`
+	WikiTags   VocabularyNamespaceConfig `yaml:"wiki_tags"`
+}
+
+// VocabularyNamespaceConfig is one namespace's ceiling.
+type VocabularyNamespaceConfig struct {
+	MaxNames int `yaml:"max_names"`
 }
 
 type ClusterConfig struct {
@@ -352,11 +376,22 @@ func Defaults() Config {
 			// or a compile turn over a batch of claims, and 120 s cut both of them off. A timeout is
 			// retried, so the ceiling is patience, not a budget.
 			Timeout: "300s",
+			// Six calls in flight is already a fast batch; sixteen was enough to be rate-limited
+			// into re-deriving a third of the work.
+			MaxConcurrent: 6,
 		},
 		Pipeline: PipelineConfig{
 			Auto: true, AutoDistill: true, Debounce: "3s", RunTimeout: "10m", ClusterTimeout: "30m",
 			PartsPerRun: 12, AutoContinue: true, ParallelParts: 4, ParallelRuns: 4, ParallelQueries: 3,
+			AuditEvery:        4,
 			ReconcileInterval: "1m", ReconcileBatch: 500,
+		},
+		Vocabulary: VocabularyConfig{
+			// A shelf of 3,000 claim topics and 200 source tags is navigable and still specific.
+			// The measured vault grew to 57,181 topics because nothing bounded it.
+			Topics:     VocabularyNamespaceConfig{MaxNames: 3000},
+			SourceTags: VocabularyNamespaceConfig{MaxNames: 200},
+			WikiTags:   VocabularyNamespaceConfig{MaxNames: 200},
 		},
 		Cluster: ClusterConfig{
 			NeighborK: 16, MinClaimScore: 0.05, MergeMinInternal: 0.22, MergeMinGap: 0.04,
@@ -516,6 +551,21 @@ func applyDefaults(c *Config) map[string]string {
 	}
 	if c.OpenAI.RetryBackoff == "" {
 		c.OpenAI.RetryBackoff = d.OpenAI.RetryBackoff
+	}
+	if c.OpenAI.MaxConcurrent <= 0 {
+		c.OpenAI.MaxConcurrent = d.OpenAI.MaxConcurrent
+	}
+	if c.Pipeline.AuditEvery <= 0 {
+		c.Pipeline.AuditEvery = d.Pipeline.AuditEvery
+	}
+	if c.Vocabulary.Topics.MaxNames <= 0 {
+		c.Vocabulary.Topics.MaxNames = d.Vocabulary.Topics.MaxNames
+	}
+	if c.Vocabulary.SourceTags.MaxNames <= 0 {
+		c.Vocabulary.SourceTags.MaxNames = d.Vocabulary.SourceTags.MaxNames
+	}
+	if c.Vocabulary.WikiTags.MaxNames <= 0 {
+		c.Vocabulary.WikiTags.MaxNames = d.Vocabulary.WikiTags.MaxNames
 	}
 	if c.Pipeline.PartsPerRun <= 0 {
 		c.Pipeline.PartsPerRun = d.Pipeline.PartsPerRun

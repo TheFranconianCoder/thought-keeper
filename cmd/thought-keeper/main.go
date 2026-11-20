@@ -81,6 +81,8 @@ func run(args []string) error {
 		return cmdQuery(args[1:])
 	case "lint":
 		return cmdLint(args[1:])
+	case "coarsen":
+		return cmdPost(args[1:], "/vocabulary/coarsen", "coarsen")
 	case "reset":
 		return cmdReset(args[1:])
 	case "reindex":
@@ -128,6 +130,8 @@ Usage:
   thought-keeper search --query Q [--layer atoms|sources]  lexical search
   thought-keeper query --question Q [--wait]          ask the claims (cited answer)
   thought-keeper lint [--wait]                            run health checks
+  thought-keeper coarsen [--wait]                         file the long tail of the name
+                                                          vocabularies onto their shelf
   thought-keeper reindex                              rebuild the source index
   thought-keeper rebuild-trees                        rebuild every source tree
   thought-keeper new-id                               print one ULID

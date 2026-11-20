@@ -22,6 +22,7 @@ type Sources struct {
 	AtomStore    interfaces.AtomStore
 	CommandStore interfaces.CommandStore
 	Tags         interfaces.SourceTagStore
+	Vocab        interfaces.VocabularyStore
 	Shelf        interfaces.ShelfCounter
 	Favicons     interfaces.FaviconStore
 	Trees        interfaces.TreeStore
@@ -40,7 +41,9 @@ type Sources struct {
 	MaxBytes     int64
 	MaxClaims    int
 	MaxChars     int
-	CallTimeout  time.Duration
+	// MaxTags caps the labels written with the overview (the tag pass's own ceiling).
+	MaxTags     int
+	CallTimeout time.Duration
 }
 
 // SourceLister lists one page of sources and the filtered total. A handler holds this value; nil

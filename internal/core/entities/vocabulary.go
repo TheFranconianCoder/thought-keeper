@@ -52,6 +52,13 @@ type Vocabulary struct {
 	// THIS vault ("go", "rust", "benchmark", ...). They are learned from the observed catalog (with
 	// the model) and used only by the near-duplicate detector, never removed from a topic name.
 	BroadTokens []string
+	// Shelf is the namespace's TARGET vocabulary: the names a subject may be filed under. It is what
+	// the coarsening maps the long tail onto, and what the derivation may choose from. Empty means no
+	// shelf has been built yet (a vault whose names were never bounded).
+	Shelf []string
+	// Target is the size the shelf was built for (vocabulary.<namespace>.max_names at the time). It
+	// is a RECORD of the decision, so a later pass knows what the shelf was aiming at.
+	Target int
 	// Decided are the names the model has already judged — merged or deliberately kept. Without it a
 	// curation asks the same head of the catalog forever: the baseline makes every observed name
 	// "canonical", so nothing reads as new, and a catalog of thousands never moves past its top.

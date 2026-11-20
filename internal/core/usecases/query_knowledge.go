@@ -86,13 +86,20 @@ func (uc Query) AskScoped(ctx context.Context, runID ulid.ULID, question, source
 		{
 			Def: interfaces.AgentToolDef{
 				Name:        "list_topics",
-				Description: "List the claim topics with their claim counts.",
+				Description: "List the most used claim topics with their claim counts (a shelf, not the whole catalog).",
 				Parameters:  json.RawMessage(`{"type":"object","properties":{}}`),
 			},
 			Run: func(ctx context.Context, _ json.RawMessage) (string, error) {
 				topics, err := uc.Atoms.ListClaimTopics(ctx)
 				if err != nil {
 					return "", err
+				}
+				// The catalog is a shelf of thousands of names; the whole list is ~90 kB and the loop
+				// cuts a tool answer at 6 kB, so an unfiltered answer was a truncated JSON array. The
+				// most used names are what an orientation question is asking for.
+				const topTopics = 120
+				if len(topics) > topTopics {
+					topics = topics[:topTopics]
 				}
 				m := make([]map[string]any, 0, len(topics))
 				for _, t := range topics {

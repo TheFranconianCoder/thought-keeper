@@ -62,6 +62,7 @@ var writableKeys = map[string]string{
 	"openai.retries":        TierAdvanced,
 	"openai.retry_backoff":  TierAdvanced,
 	"openai.max_iterations": TierAdvanced,
+	"openai.max_concurrent": TierAdvanced,
 
 	// Pipeline: ceilings and background cadences.
 	"pipeline.run_timeout":        TierAdvanced,
@@ -69,6 +70,7 @@ var writableKeys = map[string]string{
 	"pipeline.auto_continue":      TierAdvanced,
 	"pipeline.reconcile_interval": TierAdvanced,
 	"pipeline.reconcile_batch":    TierAdvanced,
+	"pipeline.audit_every":        TierAdvanced,
 
 	// Capture: what counts as a readable page, how far a listing is walked, and what counts as a
 	// change worth telling the reader about.
@@ -228,6 +230,8 @@ var intRules = map[string]int64{
 	"pipeline.parallel_parts":       1,
 	"pipeline.reconcile_batch":      1,
 	"openai.max_iterations":         1,
+	"openai.max_concurrent":         1,
+	"pipeline.audit_every":          1,
 	"openai.retries":                1,
 	"cluster.neighbor_k":            1,
 	"cluster.split_min_core_size":   1,
@@ -248,10 +252,13 @@ var intRules = map[string]int64{
 	"ocr.dpi":                        1,
 
 	// Zero is meaningful here: no heap ceiling, no page ceiling, no minimum text per page.
-	"app.memory_limit_mb":         0,
-	"pdf.max_pages":               0,
-	"ocr.max_pages":               0,
-	"ocr.min_text_chars_per_page": 0,
+	"app.memory_limit_mb":              0,
+	"vocabulary.topics.max_names":      0,
+	"vocabulary.source_tags.max_names": 0,
+	"vocabulary.wiki_tags.max_names":   0,
+	"pdf.max_pages":                    0,
+	"ocr.max_pages":                    0,
+	"ocr.min_text_chars_per_page":      0,
 }
 
 var scoreKeys = map[string]bool{

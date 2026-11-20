@@ -479,8 +479,9 @@ The derivation itself (prune, attach, graph, split, overlap, write) is described
 `vocabulary/topics.md`, `vocabulary/wiki-tags.md` and `vocabulary/source-tags.md` hold three
 namespaces:
 
-- **topics** — the canonical names of claim topics, the aliases they absorbed, and the **broad
-  tokens** learned from this vault (used only by the near-duplicate detector).
+- **topics** — the canonical names of claim topics, the **shelf** (the bounded target vocabulary the
+  long tail is filed onto), the aliases they absorbed, and the **broad tokens** learned from this
+  vault (used only by the near-duplicate detector).
 - **wiki-tags** — the canonical names of page tags, and their aliases.
 - **source-tags** — the canonical names of the labels on sources (the human's and the agent's auto
   tags), and their aliases. It is kept apart from `wiki-tags`: a page and a source are filed
@@ -492,8 +493,10 @@ tags** live there too, with the time they were derived. A curation that merges t
 the records, never a claim or a page. Auto tags are derived from the claims: a full reset clears them
 (and their timestamp), a complete distill writes new ones, and a reindex restores them from the
 record — it never triggers a model call per source.
-`POST /api/v1/vocabulary/curate` merges names, `POST /api/v1/vocabulary/retopic` re-derives claim
-topics, and both are renames — no claim text is rewritten and no cluster moves.
+`POST /api/v1/vocabulary/curate` merges names, `POST /api/v1/vocabulary/coarsen` files the long tail
+onto the shelf, `POST /api/v1/vocabulary/retopic` re-derives claim topics, and all three are renames
+— no claim text is rewritten and no cluster moves. The file carries `target:` (the size the shelf was
+built for) and a `# Shelf` section next to `# Canonical`, `# Decided` and `# Absorbed`.
 
 ## 9. Ask records
 

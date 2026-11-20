@@ -205,6 +205,7 @@ func New(deps Deps, web http.Handler) http.Handler {
 
 		r.Get("/vocabulary", deps.Vocabulary.Get)
 		r.Post("/vocabulary/curate", deps.Vocabulary.Curate)
+		r.Post("/vocabulary/coarsen", deps.Vocabulary.Coarsen)
 		r.Post("/vocabulary/retopic", deps.Vocabulary.Rebranch)
 		r.Post("/vocabulary/rebranch", deps.Vocabulary.Rebranch)
 		// Wiki pages are user-authored Markdown. A save writes the page and its source

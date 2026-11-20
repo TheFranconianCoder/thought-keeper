@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"unicode/utf8"
 
 	"github.com/oklog/ulid/v2"
 
@@ -100,35 +102,15 @@ func (uc Derivation) distill(ctx context.Context, hash string, rec *StepRecorder
 	tools := []agents.Tool{
 		{
 			Def: interfaces.AgentToolDef{
-				Name:        "list_topics",
-				Description: "List the existing claim topics with their counts, so you reuse names.",
-				Parameters:  json.RawMessage(`{"type":"object","properties":{}}`),
-			},
-			Run: func(ctx context.Context, _ json.RawMessage) (string, error) {
-				topics, err := uc.Atoms.ListClaimTopics(ctx)
-				if err != nil {
-					return "", err
-				}
-				m := make([]map[string]any, 0, len(topics))
-				for _, b := range topics {
-					m = append(m, map[string]any{"topic": b.Topic, "count": b.Count})
-				}
-				out, marshalErr := json.Marshal(m)
-				if marshalErr != nil {
-					return "", marshalErr
-				}
-				return string(out), nil
-			},
-		},
-		{
-			Def: interfaces.AgentToolDef{
-				Name:        "read_source_node",
-				Description: "Return the full text of a source node by its node_id.",
-				Parameters:  json.RawMessage(`{"type":"object","properties":{"node_id":{"type":"string"}},"required":["node_id"]}`),
+				Name: "read_source_node",
+				Description: "Return the text of a source node by its node_id, 8000 characters at a " +
+					"time. A longer node answers with the offset to ask for next.",
+				Parameters: json.RawMessage(`{"type":"object","properties":{"node_id":{"type":"string"},"offset":{"type":"integer"}},"required":["node_id"]}`),
 			},
 			Run: func(_ context.Context, args json.RawMessage) (string, error) {
 				var in struct {
 					NodeID string `json:"node_id"`
+					Offset int    `json:"offset"`
 				}
 				if err := json.Unmarshal(args, &in); err != nil {
 					return "", err
@@ -137,15 +119,7 @@ func (uc Derivation) distill(ctx context.Context, hash string, rec *StepRecorder
 				if !ok {
 					return "", fmt.Errorf("unknown node_id %q", in.NodeID)
 				}
-				text := n.Text
-				if strings.TrimSpace(text) == "" {
-					return "(empty part)", nil
-				}
-				const maxChars = 8000
-				if len(text) > maxChars {
-					text = text[:maxChars] + "\n… (truncated)"
-				}
-				return text, nil
+				return nodeTextPage(n.Text, in.Offset, nodeTextPageChars), nil
 			},
 		},
 	}
@@ -153,16 +127,22 @@ func (uc Derivation) distill(ctx context.Context, hash string, rec *StepRecorder
 	// The name vocabulary is a DECISION: an absorbed topic name is mapped onto its canonical one here,
 	// at the write, so the drift the curation repaired does not reappear on the next run.
 	topicAliases := vocabularyAliases(uc.Vocab, entities.VocabularyTopics)
+	// ONE read of the topic catalog per run, shared by every part: the candidates a part is offered
+	// and the name the write resolves are both answered from it. Calling list_topics per part read
+	// the same 57k rows again for every request and answered with a truncated 2.3 MB list.
+	catalog := newTopicCatalog(uc.claimTopics(ctx))
+	catalog.budget = uc.TopicBudget
 
 	// writeClaims is the APP's write, and it is the only one: the model answered with data, and this
 	// records each claim. A failed write is reported, and the part stays open — never a silent drop.
-	writeClaims := func(ctx context.Context, in []writeAtomArgs, defaultNode string) (int, int, error) {
+	writeClaims := func(ctx context.Context, in []writeAtomArgs, defaultNode, unitText string) (int, int, error) {
 		written, rejected, firstErr := 0, 0, error(nil)
 		for _, c := range in {
 			if strings.TrimSpace(c.Claim) == "" {
 				continue
 			}
-			if _, err := uc.writeClaim(ctx, hash, nodeByID, c, topicAliases, defaultNode); err != nil {
+			_, resolved, err := uc.writeClaim(ctx, hash, nodeByID, c, topicAliases, defaultNode, catalog, unitText)
+			if err != nil {
 				if errors.Is(err, claims.ErrNotStandalone) {
 					// A claim about the source's structure is not knowledge. It is dropped, never
 					// written: the part stays open (or is re-read), and lint can show the pattern.
@@ -175,6 +155,13 @@ func (uc Derivation) distill(ctx context.Context, hash string, rec *StepRecorder
 					firstErr = err
 				}
 				continue
+			}
+			if resolved.Mapped {
+				// The write maps a proposed name onto the shelf. It is a decision about a name, so it
+				// is recorded: a vocabulary that silently shrinks cannot be audited.
+				uc.log(ctx, rec.ID(), hash, "info", "topic mapped", map[string]any{
+					"part": defaultNode, "proposed": resolved.Proposed, "topic": resolved.Name, "why": resolved.Why,
+				})
 			}
 			created.Add(1)
 			written++
@@ -291,7 +278,7 @@ func (uc Derivation) distill(ctx context.Context, hash string, rec *StepRecorder
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			err := uc.runPart(ctx, runID, hash, src, part, tools, writeClaims, states,
+			err := uc.runPart(ctx, runID, hash, src, part, tools, writeClaims, states, catalog,
 				&mu, &steps, &failed, &firstErr, &iterations, &tokens, rec)
 			if err == nil || isMaxIterations(err) {
 				return
@@ -383,7 +370,7 @@ func (uc Derivation) distill(ctx context.Context, hash string, rec *StepRecorder
 
 // writeClaimsFunc is the app's write: the claims the model ANSWERED with, recorded. It is a function
 // because the parts run in parallel and the write counts into the shared result.
-type writeClaimsFunc func(ctx context.Context, claims []writeAtomArgs, defaultNode string) (int, int, error)
+type writeClaimsFunc func(ctx context.Context, claims []writeAtomArgs, defaultNode, unitText string) (int, int, error)
 
 // distillAnswer is the structured answer of one part: the claims it carries. `complete` is the audit's
 // word — "nothing is missing" — and it is an answer, not a tool call.
@@ -451,20 +438,23 @@ func salvageClaims(content string) []writeAtomArgs {
 
 // writeClaim records ONE claim the model answered with. It is the distill's only writer of an atom —
 // there is no tool that can write.
-func (uc Derivation) writeClaim(ctx context.Context, hash string, nodeByID map[string]entities.SourceNode, in writeAtomArgs, topicAliases map[string]string, defaultNode string) (entities.Atom, error) {
+func (uc Derivation) writeClaim(ctx context.Context, hash string, nodeByID map[string]entities.SourceNode, in writeAtomArgs, topicAliases map[string]string, defaultNode string, catalog *topicCatalog, unitText string) (entities.Atom, topicResolution, error) {
 	now := uc.Clock.Now()
+	topic := resolveVocabulary(topicAliases, coremarkdown.NormalizeTopic(in.Topic))
+	resolved := catalog.resolve(topicAliases, topic, unitText)
+	resolved.Proposed = topic
 	a := entities.Atom{
 		ID:        ulid.Make(),
 		Claim:     strings.TrimSpace(in.Claim),
 		Body:      strings.TrimSpace(in.Body),
-		Topic:     resolveVocabulary(topicAliases, coremarkdown.NormalizeTopic(in.Topic)),
+		Topic:     resolved.Name,
 		Type:      atomType(in.Type),
 		Status:    entities.AtomActive,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
 	if issues := claims.Issues(a.Topic, a.Claim, a.Body); len(issues) > 0 {
-		return entities.Atom{}, claims.NotStandaloneError{Reasons: issues}
+		return entities.Atom{}, resolved, claims.NotStandaloneError{Reasons: issues}
 	}
 	var unknown []string
 	for _, nodeID := range in.Nodes {
@@ -478,7 +468,7 @@ func (uc Derivation) writeClaim(ctx context.Context, hash string, nodeByID map[s
 	if len(unknown) > 0 {
 		// A provenance row is the claim's trace back to the text. Dropping one silently would make
 		// the atom un-attributable for that part, so the write is rejected instead.
-		return entities.Atom{}, fmt.Errorf("unknown source nodes: %v", unknown)
+		return entities.Atom{}, resolved, fmt.Errorf("unknown source nodes: %v", unknown)
 	}
 	if len(a.Sources) == 0 {
 		// No node named: the claim belongs to the PART it was derived from. A source-wide claim
@@ -495,7 +485,7 @@ func (uc Derivation) writeClaim(ctx context.Context, hash string, nodeByID map[s
 	a.Body, _ = coremarkdown.QuoteBracketSyntax(a.Body)
 	stored, err := uc.AtomStore.Write(ctx, a)
 	if err != nil {
-		return entities.Atom{}, err
+		return entities.Atom{}, resolved, err
 	}
 	if err := uc.Atoms.SaveAtom(ctx, stored); err != nil {
 		// The file is written FIRST (it is the source of truth) and the index row second. A write that
@@ -505,9 +495,23 @@ func (uc Derivation) writeClaim(ctx context.Context, hash string, nodeByID map[s
 			uc.Log.Warn("could not remove the atom file of a failed write",
 				"atom", stored.ID.String(), "path", stored.Path, "err", rmErr)
 		}
-		return entities.Atom{}, err
+		return entities.Atom{}, resolved, err
 	}
-	return stored, nil
+	return stored, resolved, nil
+}
+
+// claimTopics reads the topic catalog this run resolves against. A failed read is an empty catalog:
+// the derivation still works (it just repeats names), and a source is never held back by an index
+// query that timed out.
+func (uc Derivation) claimTopics(ctx context.Context) []entities.TopicUse {
+	topics, err := uc.Atoms.ListClaimTopics(ctx)
+	if err != nil {
+		if uc.Log != nil {
+			uc.Log.Warn("distill: the topic catalog could not be read; names are not reused", "err", err)
+		}
+		return nil
+	}
+	return topics
 }
 
 type writeAtomArgs struct {
@@ -599,7 +603,35 @@ func incompleteReason(err error) string {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return "aborted"
 	}
+	if interfaces.IsTransient(err) {
+		// A rate limit or a timeout is not a verdict about the part: the claims it already wrote are
+		// still good, and the next attempt continues from them instead of deriving them twice.
+		return "transient"
+	}
 	return "error"
+}
+
+// auditsPart reports whether the completeness audit is due for this part. The sample is taken over
+// the PART, not over the run: the same part always gets the same answer, so a re-derived part is not
+// audited by luck.
+func (uc Derivation) auditsPart(unitID string) bool {
+	n := uc.AuditEvery
+	if n <= 1 {
+		return true
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(unitID)) //nolint:errcheck // hash writes never fail
+	return h.Sum32()%uint32(n) == 0
+}
+
+// auditWorthwhile upgrades a sampled part to a mandatory audit: a part that wrote no claim (the
+// audit is what tells a metadata part from a failed derivation) and a long text that produced
+// suspiciously few claims — fewer than one claim per 1,500 characters.
+func auditWorthwhile(sampled bool, chars, written int) bool {
+	if sampled || written == 0 {
+		return true
+	}
+	return chars >= 2000 && written*1500 < chars
 }
 
 // isMaxIterations reports whether the loop stopped because it ran out of turns.
@@ -796,22 +828,58 @@ func (uc Derivation) claimedNodeSet(ctx context.Context, hash string) (map[strin
 	return out, true
 }
 
-// partText renders the part's text. A part is small, so it is handed over whole; the cap only
-// exists for a node that turned out to be a whole chapter, and then the model reads the rest itself.
+// partText renders the part's text. A part is small, so it is handed over whole; the cap only exists
+// for a node that turned out to be a whole chapter, and then the model pages through it.
 func partText(part []entities.SourceNode) string {
-	const perNode = 8000
 	var b strings.Builder
 	for _, n := range part {
 		text := strings.TrimSpace(n.Text)
 		if text == "" {
 			continue
 		}
-		if len(text) > perNode {
-			text = text[:perNode] + "… (cut — read_source_node for the rest)"
+		if len(text) > nodeTextPageChars {
+			// The marker names the OFFSET, not just "there is more": read_source_node pages through a
+			// long node, and the same 8,000 characters twice is how the tail used to be unreachable.
+			text = text[:nodeTextPageChars] +
+				fmt.Sprintf("… (cut — read_source_node with offset=%d for the rest)", nodeTextPageChars)
 		}
 		fmt.Fprintf(&b, "%s\n", text)
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// nodeTextPageChars is how much of one node a request or a tool answer carries, in BYTES. The agent
+// loop caps one tool answer at 6,000 bytes (`defaultMaxToolResult`), so a page of 5,000 leaves room
+// for the marker that names the next offset — a page that filled the cap would be truncated and the
+// offset would be lost, which is the very bug this replaces.
+const nodeTextPageChars = 5000
+
+// nodeTextPage returns one page of a node's text and names the offset of the next one. A node above
+// the page size used to be unreachable past the first page: partText and the tool shared one cap, so
+// "read the rest" handed back the same characters.
+func nodeTextPage(text string, offset, limit int) string {
+	if strings.TrimSpace(text) == "" {
+		return "(empty part)"
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= len(text) {
+		return fmt.Sprintf("(end of the node — its text is %d characters and offset %d is past it)", len(text), offset)
+	}
+	end := min(offset+limit, len(text))
+	// Never split a rune: a page that ends inside a multi-byte character is a broken page.
+	if end < len(text) {
+		for end > offset+1 && !utf8.RuneStart(text[end]) {
+			end--
+		}
+	}
+	page := text[offset:end]
+	if end < len(text) {
+		page += fmt.Sprintf("\n… (%d of %d characters — call read_source_node again with offset=%d for the rest)",
+			end, len(text), end)
+	}
+	return page
 }
 
 // runPart derives ONE part (one text-bearing node): it drops what an earlier attempt left
@@ -819,23 +887,38 @@ func partText(part []entities.SourceNode) string {
 // of these run at the same time (bounded by pipeline.parallel_parts).
 func (uc Derivation) runPart(
 	ctx context.Context, runID ulid.ULID, hash string, src entities.Source, part []entities.SourceNode,
-	tools []agents.Tool, write writeClaimsFunc, states map[string]entities.PartState,
+	tools []agents.Tool, write writeClaimsFunc, states map[string]entities.PartState, catalog *topicCatalog,
 	mu *sync.Mutex, steps, failed *int, firstErr *string, iterations, tokens *int, rec *StepRecorder,
 ) error {
 	head := partHead(part)
 	rejected := 0
 
-	// Whatever an earlier attempt left inside this part goes first: a half-done part is
-	// re-derived as a whole, never half-duplicated.
-	if n := uc.dropPartAtoms(ctx, hash, part); n > 0 {
-		mu.Lock()
-		reason := "no record"
-		if st, ok := states[head]; ok {
-			reason = st.Reason
+	// A part whose last attempt ended on a TRANSIENT failure keeps its claims: the text it already
+	// turned into atoms is not wrong because the endpoint answered 429 afterwards. The next attempt
+	// is the audit — "what is still missing relative to these claims" — instead of a second full
+	// derivation. Measured on one morning batch: 1,007 parts were thrown away and derived again, and
+	// the redo was 12.9 % of every token spent.
+	resume := false
+	if st, ok := states[head]; ok && st.State == entities.PartIncomplete && st.Reason == "transient" && st.Atoms > 0 {
+		resume = true
+	}
+	if !resume {
+		// Whatever an earlier attempt left inside this part goes first: a half-done part is
+		// re-derived as a whole, never half-duplicated.
+		if n := uc.dropPartAtoms(ctx, hash, part); n > 0 {
+			mu.Lock()
+			reason := "no record"
+			if st, ok := states[head]; ok {
+				reason = st.Reason
+			}
+			mu.Unlock()
+			uc.log(ctx, runID, hash, "warn", "redoing an unfinished part", map[string]any{
+				"part": head, "reason": reason, "removed_atoms": n,
+			})
 		}
-		mu.Unlock()
-		uc.log(ctx, runID, hash, "warn", "redoing an unfinished part", map[string]any{
-			"part": head, "reason": reason, "removed_atoms": n,
+	} else {
+		uc.log(ctx, runID, hash, "info", "continuing a part after a transient failure", map[string]any{
+			"part": head, "atoms": states[head].Atoms,
 		})
 	}
 	uc.log(ctx, runID, hash, "info", "part start", map[string]any{
@@ -872,9 +955,11 @@ func (uc Derivation) runPart(
 	}
 	// ONE part is the work unit, and it is COMPLETE when its own text has been turned into claims.
 	// That is checked, not inferred: once the claims are written, the model reads the part's text
-	// against them and writes whatever no claim covers. The old flow inferred completeness from a
-	// citation count over a whole part — which is how 25 nodes ended up "covered" by 36 compound
-	// claims while statements inside them had no atom at all.
+	// against them and writes whatever no claim covers. The check is a SAMPLE (pipeline.audit_every):
+	// measured over one morning batch, the second pass was 32.5 % of every token spent and answered
+	// "complete" almost always. A part that produced no claim is always audited — that is how a
+	// metadata part is told apart from a failed derivation — and so is a long text that produced
+	// suspiciously few claims.
 	var (
 		res           agents.Result
 		err           error
@@ -884,20 +969,27 @@ func (uc Derivation) runPart(
 		passes        int
 	)
 	unitID := head
+	unitText := partText(part)
+	sampled := uc.auditsPart(unitID)
+	candidates := catalog.candidates(unitText, topicCandidateLimit)
 	for pass := 1; pass <= maxUnitPasses; pass++ {
 		claims := uc.claimsOfUnit(ctx, hash, unitID)
 		// The write pass comes first, then the audit — that is the pass which CLOSES the part.
 		// A cut-off answer takes the next pass (it was not the model's last word), and only once
 		// nothing is missing any more does the audit run and finish the part.
-		audit := pass > 1 && !truncated
+		audit := (pass > 1 && !truncated) || (pass == 1 && resume)
 		var prompt string
 		switch {
+		case pass == 1 && resume:
+			// A resumed part starts at the audit: its claims exist, and what the text still owes is
+			// exactly what the audit asks for.
+			prompt = agents.DistillPartAudit(unitID, part[0].Title, unitText, bulletClaims(claims), candidates)
 		case pass == 1:
-			prompt = agents.DistillPartUser(src.Title, hash, unitID, part[0].Title, partText(part))
+			prompt = agents.DistillPartUser(src.Title, hash, unitID, part[0].Title, unitText, candidates)
 		case truncated:
-			prompt = agents.DistillPartTruncated(unitID, part[0].Title, bulletClaims(claims))
+			prompt = agents.DistillPartTruncated(unitID, part[0].Title, bulletClaims(claims), candidates)
 		default:
-			prompt = agents.DistillPartAudit(unitID, part[0].Title, partText(part), bulletClaims(claims))
+			prompt = agents.DistillPartAudit(unitID, part[0].Title, unitText, bulletClaims(claims), candidates)
 		}
 		var passRes agents.Result
 		passRes, err = loop.Run(ctx, prompt)
@@ -915,7 +1007,7 @@ func (uc Derivation) runPart(
 			// A cut-off answer is not valid JSON — but the claim objects it DID finish are complete, and
 			// throwing them away would re-derive work the model already did. Salvage them, then continue.
 			if salvaged := salvageClaims(passRes.Content); len(salvaged) > 0 {
-				_, rej, wErr := write(ctx, salvaged, unitID)
+				_, rej, wErr := write(ctx, salvaged, unitID, unitText)
 				rejected += rej
 				if wErr != nil {
 					err = wErr
@@ -932,8 +1024,11 @@ func (uc Derivation) runPart(
 			err = pErr
 			break
 		}
+		written := 0
 		if len(answer.Claims) > 0 {
-			_, rej, wErr := write(ctx, answer.Claims, unitID)
+			var rej int
+			var wErr error
+			written, rej, wErr = write(ctx, answer.Claims, unitID, unitText)
 			rejected += rej
 			if wErr != nil {
 				err = wErr
@@ -943,6 +1038,11 @@ func (uc Derivation) runPart(
 		if audit {
 			auditComplete = answer.Complete
 			break // the part was read against its claims: nothing is missing any more
+		}
+		if pass == 1 && !auditWorthwhile(sampled, len(unitText), written) {
+			// The sample says this part needs no second read, and its text produced claims at a
+			// normal rate: the part is done after one request.
+			break
 		}
 	}
 	mu.Lock()
@@ -968,9 +1068,6 @@ func (uc Derivation) runPart(
 	case err != nil:
 		state.State = entities.PartIncomplete
 		state.Reason = incompleteReason(err)
-		// Cut off again, so this part is not proven complete: it is derived again next time.
-		state.State = entities.PartIncomplete
-		state.Reason = "truncated"
 	case atoms == 0 && (rejected > 0 || auditComplete):
 		// The model read the part, offered nothing that could stand alone (or offered only
 		// document-relative statements that were rejected), and the audit found nothing missing.

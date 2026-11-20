@@ -44,12 +44,18 @@ func (a *WindowedAgent) Complete(ctx context.Context, req interfaces.AgentReques
 	var reopen time.Time
 	if boundary, ok := a.windows.NextClose(now); ok {
 		// The endpoint's own patience (openai.timeout) is the inner gateway's business; this deadline
-		// only says "not one second inside the window".
-		var cancel context.CancelFunc
-		callCtx, cancel = context.WithDeadline(ctx, boundary)
-		defer cancel()
-		if _, until := a.windows.ClosedAt(boundary); until.After(boundary) {
-			reopen = until
+		// only says "not one second inside the window". It is expressed as the REMAINING DURATION,
+		// not as an absolute instant: the clock that decides when the window opens is this struct's,
+		// and a context deadline is measured against the wall clock. Handing the absolute instant
+		// over made a call expire at once whenever the two disagreed — which they always do in a
+		// test that moves the clock, and can do in a process whose clock was corrected.
+		if remaining := boundary.Sub(now); remaining > 0 {
+			var cancel context.CancelFunc
+			callCtx, cancel = context.WithTimeout(ctx, remaining)
+			defer cancel()
+			if _, until := a.windows.ClosedAt(boundary); until.After(boundary) {
+				reopen = until
+			}
 		}
 	}
 	resp, err := a.inner.Complete(callCtx, req)

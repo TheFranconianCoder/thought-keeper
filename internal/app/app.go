@@ -1633,6 +1633,9 @@ type runJob struct {
 	namespace entities.VocabularyNamespace
 	// rebranch says the run re-derives the TOPIC labels of the claims instead of curating a vocabulary.
 	rebranch bool
+	// coarsen says the run files the vocabulary's long tail onto its SHELF instead of merging
+	// synonyms: the same run, the opposite direction.
+	coarsen bool
 	// reset replaces the derivation instead of continuing it. Continuing is the default: a
 	// book needs several runs, and each one must keep the progress of the previous ones.
 	reset bool
@@ -2586,6 +2589,19 @@ func (a *App) ScheduleVocabularyRebranch() (string, error) {
 	return runID.String(), nil
 }
 
+// vocabularyTarget is the configured size of one namespace's shelf.
+func (a *App) vocabularyTarget(ns entities.VocabularyNamespace) int {
+	c := a.conf()
+	switch ns {
+	case entities.VocabularySourceTags:
+		return c.Vocabulary.SourceTags.MaxNames
+	case entities.VocabularyWikiTags:
+		return c.Vocabulary.WikiTags.MaxNames
+	default:
+		return c.Vocabulary.Topics.MaxNames
+	}
+}
+
 func (a *App) ScheduleVocabularyCurate(ns entities.VocabularyNamespace) (string, error) {
 	if !a.deps().AgentAvailable {
 		return "", agentNotConfigured()
@@ -2606,6 +2622,35 @@ func (a *App) ScheduleVocabularyCurate(ns entities.VocabularyNamespace) (string,
 	select {
 	case a.vocabularyQueue <- runJob{runID: runID, op: entities.RunVocabulary, namespace: ns}:
 		a.markQueuedRun(runID, "vocabulary")
+	default:
+		return "", types.New("conflict", "run queue is full", types.ErrConflict)
+	}
+	return runID.String(), nil
+}
+
+// ScheduleVocabularyCoarsen queues the COARSENING of a name vocabulary: the long tail is filed onto
+// the shelf, deterministically first and then by the model, in batches. It rewrites claim names, so it
+// takes the exclusive side of the gate like a curation.
+func (a *App) ScheduleVocabularyCoarsen(ns entities.VocabularyNamespace) (string, error) {
+	if !a.deps().AgentAvailable {
+		return "", agentNotConfigured()
+	}
+	if blocked, reopen := a.modelWindowClosed(); blocked {
+		a.modelWindowPause(reopen)
+		return "", modelWindowRefusal(reopen)
+	}
+	target := "vocabulary:all"
+	if ns != "" {
+		target = "vocabulary:" + string(ns)
+	}
+	runID, err := a.deps().StartRun.Start(context.Background(), entities.RunVocabulary,
+		a.conf().OpenAI.ModelCompile, entities.StepCluster, target)
+	if err != nil {
+		return "", err
+	}
+	select {
+	case a.vocabularyQueue <- runJob{runID: runID, op: entities.RunVocabulary, namespace: ns, coarsen: true}:
+		a.markQueuedRun(runID, "vocabulary shelf")
 	default:
 		return "", types.New("conflict", "run queue is full", types.ErrConflict)
 	}
@@ -3389,6 +3434,56 @@ func (a *App) runOne(job runJob) {
 			a.log.Info("claims re-labelled", "run", run, "summary", summary)
 			a.publish("clusters", map[string]any{"vocabulary": "topics"})
 			a.publish("vocabulary", map[string]any{"namespaces": []string{"topics: " + summary}})
+			return
+		}
+		if job.coarsen {
+			defer func() {
+				a.vocabMu.Lock()
+				a.vocabActive = false
+				a.vocabMu.Unlock()
+			}()
+			namespaces := entities.VocabularyNamespaces()
+			if job.namespace != "" {
+				namespaces = []entities.VocabularyNamespace{job.namespace}
+			}
+			a.markMaintWaiting(job.runID, a.gateHolderReason("the coarsening rewrites claim names"))
+			a.log.Info("vocabulary: waiting for the gate", "run", run)
+			a.gate.Lock()
+			defer a.gate.Unlock()
+			a.markRunRunning(job.runID)
+			a.log.Info("vocabulary: coarsening", "run", run, "namespaces", len(namespaces))
+			lines := make([]string, 0, len(namespaces))
+			for _, ns := range namespaces {
+				a.setMaintDetail(job.runID, string(ns))
+				uc := a.deps().VocabularyCurate
+				uc.Namespace = ns
+				uc.Target = a.vocabularyTarget(ns)
+				uc.ApplyGate = func(ctx context.Context, fn func(context.Context) error) error {
+					return fn(ctx)
+				}
+				uc.OnPhase = func(phase string) { a.setMaintDetail(job.runID, string(ns)+" · "+phase) }
+				r, cErr := uc.Coarsen(ctx, job.runID)
+				lines = append(lines, fmt.Sprintf("%s: shelf %d, %d families merged, %d names filed, %d left",
+					r.Namespace, r.Shelf, r.Families, r.Mapped, r.Remaining))
+				if cErr != nil {
+					if reopen, deferred := windowDeferralOf(cErr); deferred {
+						status, failure = "aborted", "deferred: "+modelWindowReason(reopen)
+						a.vocabularyDeferred()
+						a.publish("vocabulary", map[string]any{"namespaces": lines})
+						a.modelWindowPause(reopen)
+						return
+					}
+					status = "failed"
+					failure = cErr.Error()
+					a.log.Warn("vocabulary coarsening failed", "run", run, "err", cErr)
+					a.publish("clusters", map[string]any{"vocabulary": "partial"})
+					a.publish("vocabulary", map[string]any{"namespaces": lines})
+					return
+				}
+			}
+			a.log.Info("vocabulary coarsened", "run", run, "namespaces", strings.Join(lines, " · "))
+			a.publish("clusters", map[string]any{"vocabulary": "all"})
+			a.publish("vocabulary", map[string]any{"namespaces": lines})
 			return
 		}
 		defer func() {

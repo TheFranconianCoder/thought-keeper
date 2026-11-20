@@ -24,7 +24,7 @@ A cluster is visible only as a claim's **peers** (Claims detail view). There is 
 | - | ---- | ------------ | ----- |
 | 1 | **capture** | Take the source in and make it readable locally: Markdown and text are read, a PDF gets its text layer (or OCR), a URL is fetched. The result is a **local, static snapshot**. | per source |
 | 2 | **outline** | Build the hierarchical outline of that snapshot: how the document is structured, part by part. | per source |
-| 3 | **distill** | Turn the outline into **atoms**: one claim per atom, with its flat topic, type and the source node it came from. | per source |
+| 3 | **distill** | Turn the outline into **atoms**: one claim per atom, with a topic from the shelf, its type and the source node it came from. | per source |
 | 4 | **cluster** | Group the claims into **titleless clusters**. | over the whole vault |
 
 `capture → outline → distill` are the **document steps**: they run for ONE source, one after the
@@ -253,9 +253,14 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
 - One part = one text-bearing node. `pipeline.parallel_parts` parts run at once,
   `pipeline.parts_per_run` bounds one run.
 - The agent answers with the claims of that part as JSON (`topic`, `claim`, `body`, `type`,
-  `nodes`). The app writes the atoms; a claim that names no node inherits the part.
+  `nodes`). The app writes the atoms; a claim that names no node inherits the part. The topic is
+  resolved at the write: an alias wins, a spelling of an existing name is mapped onto it, and once
+  the shelf is full the best fitting name wins — a mapping is logged as `topic_mapped`.
 - The agent then audits the part: every statement not covered by a claim is written, or `COMPLETE`
-  is answered.
+  is answered. The audit is a **sample** (`pipeline.audit_every`, default one part in four): a part
+  that produced no claim is always audited, and so is a long text that produced fewer than one claim
+  per 1,500 characters. The sample is taken over the part id, so it is stable across re-derivations.
+  It was 32.5 % of every token a measured morning batch spent.
 - Only `done` parts are skipped next time. A cut-off answer is continued; still cut off →
   `incomplete/truncated`. No claim and no audited completion → `incomplete/no_claims`. An audited
   zero-claim part that is document metadata or a link list → `done/source_relative`.
@@ -266,7 +271,9 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
 
 **After a complete distill** the source earns a **summary**: a run of its own (`op=summary`) writes
 `<hash>.summary.md` from the claims (and the outline's shape), in the configured summary language
-(`language.summary`, default English), and the Summary tab shows it. It is
+(`language.summary`, default English), and the Summary tab shows it. The same answer carries the
+source's **auto tags** — both are decided from the same claims, so asking twice was a request and
+~7k input tokens per source for the same evidence. It is
 not a step: it never gates the pipeline, and a slow model only delays the overview. A source whose
 distill is not `ok` is refused — a summary of a half-derived source would describe a moving target —
 and a RESET is not a completion either: it removes the old summary and schedules no new run. A
@@ -282,11 +289,11 @@ walk swapped in when it ends, so it does not dip to "what the first slice found"
 a run that failed leaves the backlog too: a deterministic failure waits for the next walk instead of
 being retried every minute.
 
-**A complete distill also earns a source's AUTO TAGS**: the agent reads the claims and proposes 3–6
-coarse labels for the Sources filter, kept apart from the human's. The run lands on the tag worker;
-the consistency job backfills sources that were never tagged (`auto_tags_at` in the record/index is
-the marker) from the same kind of backlog, kept topped up two at a time — the rest of that worker's
-queue belongs to wiki pages. A reset clears the derived labels; the next complete distill writes new
+**A complete distill also earns a source's AUTO TAGS**: 3–6 coarse labels for the Sources filter,
+kept apart from the human's. They are written by the summary run above; the tag worker stays as the
+backfill for a source whose summary has not run yet (and for one that was never tagged:
+`auto_tags_at` in the record/index is the marker), kept topped up two at a time — the rest of that
+worker's queue belongs to wiki pages. A reset clears the derived labels; the next complete distill writes new
 ones. The human tags are records and survive both.
 
 **A source is also read against the reader's INTERESTS** at every point that can reveal evidence:

@@ -84,10 +84,12 @@ runs (an edit over SSH), it says so.
 
 Two sets are writable. The **curated set** is shown unasked: language, the models and reasoning
 efforts, `openai.blocked_windows` (the derivation's UTC windows), the inbox / auto-distill / debounce
-knobs, parallel runs/queries/parts, the capture cadences, `browser.path`, OCR enable/languages and the
+knobs, parallel runs/queries/parts, the capture cadences, `browser.path`, OCR enable/languages, the
+vocabulary targets (`vocabulary.topics.max_names` 3,000, `.source_tags`/`.wiki_tags` 200) and the
 heap ceiling. The **Advanced** set is behind
 a reveal in the toolbar: the request and fetch timeouts, `openai.retries`/`retry_backoff`/
-`max_iterations`, the run/cluster ceilings, `auto_continue`, the reconcile cadence and batch, the
+`max_iterations`/`max_concurrent` (the calls in flight at once), `pipeline.audit_every` (one part in
+n is read against its claims), the run/cluster ceilings, `auto_continue`, the reconcile cadence and batch, the
 capture thresholds, the whole `cluster.*` arithmetic, the assistant retention/prune/limits, the
 browser switches, the PDF/OCR tools and page ceilings, and `app.smart_open`. A search shows a match
 whichever set it belongs to.

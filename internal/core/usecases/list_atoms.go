@@ -27,6 +27,9 @@ type Claims struct {
 	MaxClaims    int
 	Parallel     int
 	Apply        bool
+	// TopicBudget is the ceiling of the topic shelf (vocabulary.topics.max_names): a re-labelled claim
+	// is filed onto it instead of inventing a name.
+	TopicBudget int
 }
 
 // AtomLister lists the claims of one topic. A handler holds this value; nil means the feature is not

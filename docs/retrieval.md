@@ -9,7 +9,7 @@ The agent picks the substrate that fits the question:
 
 | Substrate | What it is | Tool / endpoint |
 | --- | --- | --- |
-| Claim topics | every FLAT claim topic with its claim count | `list_topics` |
+| Claim topics | the shelf: the most used FLAT claim topics with their claim counts (a digest is an orientation, not a dump — the whole catalog is ~90 kB and a tool answer is cut at 6 kB) | `list_topics` |
 | Lexical search | FTS5 over claims; the Sources layer matches the list fields (title, original name, URL, tags), answerable in any vault language; a **partial id** finds the claim (a ULID prefix) or the source (a hash prefix) | `search`, `GET /search` |
 | Claim proximity | the same cluster, and separately the same topic | `GET /atoms/{id}/related` |
 | Source recency | the newest sources by vault arrival, paged, with a short overview excerpt | `list_sources`, `read_source_summary` |
