@@ -112,6 +112,17 @@ func (r *fakeAtomRepo) GetAtom(_ context.Context, id ulid.ULID) (entities.Atom, 
 	return entities.Atom{}, nil
 }
 
+func (r *fakeAtomRepo) RenameAtomTopics(_ context.Context, topics map[ulid.ULID]string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.saved {
+		if topic, ok := topics[r.saved[i].ID]; ok {
+			r.saved[i].Topic = topic
+		}
+	}
+	return nil
+}
+
 func (r *fakeAtomRepo) ListAtoms(_ context.Context, topic string, limit, _ int) ([]entities.Atom, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

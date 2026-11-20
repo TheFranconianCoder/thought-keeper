@@ -14,15 +14,19 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
-// The coarsening works in small batches: the shelf plus 600 names is a request a model answers
-// reliably, and each answered batch is applied before the next one is asked. A pass over 57,181 names
-// is therefore ~90 requests and roughly 0.7 Mio. tokens — resumable, because what was absorbed is on
-// disk before the next question starts.
+// The coarsening works in small batches: the shelf plus the batch is one request, and each answered
+// batch is applied before the next one is asked. The batch was 600 names until a measured vault
+// showed the model answering six of them; 150 fits the answer well inside one completion. A press is
+// bounded by names (max batches) and by what the model actually files: three batches in a row that
+// file nothing mean the shelf cannot honestly cover the tail, and the pass stops instead of asking
+// for hours. It is resumable, because what was absorbed is on disk before the next question starts.
 const (
-	coarsenBatchSize   = 600
-	coarsenMaxBatches  = 96
+	coarsenBatchSize   = 150
+	coarsenMaxBatches  = 320
 	coarsenShelfInCall = 700
 	coarsenShelfHead   = 200
+	// coarsenEmptyBatches is how many batches in a row may file nothing before the pass stops.
+	coarsenEmptyBatches = 3
 )
 
 // CoarsenResult is what one coarsening pass did.
@@ -114,6 +118,12 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 		if mErr != nil {
 			return res, mErr
 		}
+		// The families wrote the vocabulary themselves, through the same rename a curation uses. The
+		// copy read above predates every alias they recorded, so it is re-read BEFORE anything writes
+		// it back: writing the stale copy dropped the whole deterministic stage from the record.
+		if v, err = uc.Vocab.Read(uc.Namespace); err != nil {
+			return res, err
+		}
 		if merged > 0 {
 			// The catalog changed: re-read what is left before the shelf is built.
 			if healths, err = uc.Report(ctx); err != nil {
@@ -129,7 +139,8 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 	}
 
 	// The shelf: the most used names of the current catalog, once. It is a RECORD, so a later pass
-	// files onto the same names instead of inventing a new target every time.
+	// files onto the same names instead of inventing a new target every time. A shelf that fits is
+	// left alone, and an unchanged record is not written again.
 	target := uc.Target
 	if target <= 0 {
 		target = len(observed)
@@ -137,12 +148,12 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 	if len(v.Shelf) == 0 || len(v.Shelf) > target {
 		v.Shelf = shelfSizing(v.Shelf, observed, target)
 		v.Target = target
-	}
-	if uc.Clock != nil {
-		v.Updated = uc.Clock.Now()
-	}
-	if wErr := uc.Vocab.Write(v); wErr != nil {
-		return res, wErr
+		if uc.Clock != nil {
+			v.Updated = uc.Clock.Now()
+		}
+		if wErr := uc.Vocab.Write(v); wErr != nil {
+			return res, wErr
+		}
 	}
 	res.Shelf = len(v.Shelf)
 	shelfSet := make(map[string]bool, len(v.Shelf))
@@ -178,13 +189,16 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 
 	head := topObserved(observed, coarsenShelfHead)
 	batches := 0
+	empty := 0
 	for start := 0; start < len(pending) && batches < coarsenMaxBatches; start += coarsenBatchSize {
 		batch := pending[start:min(start+coarsenBatchSize, len(pending))]
 		shelf := shelfForBatch(batch, head, shelfIndex, coarsenShelfInCall)
 		if len(shelf) == 0 {
 			break
 		}
-		uc.phase(fmt.Sprintf("filing %d names onto the shelf (%d left)", len(batch), len(pending)-start))
+		// The number LEFT is what the vault still shows outside the shelf, not a count of the batches
+		// walked: the two differed by everything the model declined to file.
+		uc.phase(fmt.Sprintf("filing %d names onto the shelf (%d left)", len(batch), res.Remaining))
 		answer, aErr := uc.askShelf(ctx, shelf, batch)
 		if aErr != nil {
 			if batches > 0 {
@@ -194,19 +208,39 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 			return res, aErr
 		}
 		res.Tokens += answer.tokens
+		filed := 0
 		if len(answer.mapping) > 0 {
 			applied, wErr := uc.applyShelf(ctx, answer, v.Shelf)
 			if wErr != nil {
 				return res, wErr
 			}
-			res.Mapped += len(applied.Absorbed)
+			filed = len(applied.Absorbed)
+			res.Mapped += filed
 			res.Applied.Atoms += applied.Atoms
 			res.Applied.Sources += applied.Sources
 			res.Applied.Pages += applied.Pages
 			res.Shelf = applied.Canonical
 		}
 		batches++
-		res.Remaining = len(pending) - min(start+coarsenBatchSize, len(pending))
+		res.Remaining -= filed
+		if uc.Log != nil {
+			// THE measurement of this pass: how many of the names asked were actually filed. A batch
+			// that files nothing is the model saying the shelf cannot honestly cover those names.
+			uc.Log.Info("vocabulary: shelf batch", "namespace", string(uc.Namespace),
+				"asked", len(batch), "filed", filed, "left", res.Remaining, "tokens", answer.tokens)
+		}
+		if filed == 0 {
+			empty++
+			if empty >= coarsenEmptyBatches {
+				if uc.Log != nil {
+					uc.Log.Warn("vocabulary: the shelf cannot file what is left", "namespace", string(uc.Namespace),
+						"left", res.Remaining)
+				}
+				break
+			}
+			continue
+		}
+		empty = 0
 	}
 	return res, nil
 }
@@ -258,10 +292,15 @@ func (uc Vocabulary) askShelf(ctx context.Context, shelf, names []string) (chunk
 	for _, name := range shelf {
 		allowed[name] = true
 	}
+	asked := make(map[string]bool, len(names))
+	for _, name := range names {
+		asked[name] = true
+	}
 	for from, to := range mapping {
-		// A value that is not on the shelf is a hallucination, not a decision: drop it, and the name
-		// stays in the tail for the next pass.
-		if !allowed[to] || from == to || strings.TrimSpace(from) == "" {
+		// A value that is not on the shelf is a hallucination, not a decision, and a name that was
+		// not asked cannot be filed here: drop both, and the name stays in the tail for the next
+		// pass. The count of what was ASKED and what was filed is the measurement of the pass.
+		if !asked[from] || !allowed[to] || from == to || strings.TrimSpace(from) == "" {
 			continue
 		}
 		answer.mapping[from] = to

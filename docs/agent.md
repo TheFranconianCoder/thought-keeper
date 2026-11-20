@@ -299,10 +299,18 @@ order. It never writes a URL, never invents a hash and never answers the request
   it is mapped onto the best fitting shelf name at the write. The tag namespaces get no such build
   (their write path reads `Canonical`); their shelf comes with the coarsening.
 - **`POST /vocabulary/coarsen`** files a namespace's long tail onto its shelf. Deterministic families
-  first (no model), then the model in batches of 600 names, each applied through the same rename the
-  curation uses and each recorded in `Absorbed` — the watermark, so a stopped pass continues where it
-  was. It is the repair for a vocabulary that grew before the shelf existed, it holds the exclusive
-  gate for the whole pass, and it is what the **Coarsen** button on Status asks for.
+  first (no model), then the model in batches of **150 names** — a measured vault answered six of 600,
+  so the batch is sized for the answer, not for the request. Each answered batch is applied through the
+  same rename the curation uses and recorded in `Absorbed` — the watermark, so a stopped pass continues
+  where it was. The run reports what it **asked** and what it **filed**, and the number left is what
+  the vault still shows outside the shelf (a batch always walks 150 names; it does not always file
+  them). Three batches in a row that file nothing stop the pass: the shelf cannot honestly cover the
+  tail, and asking again would only spend tokens. A rename writes the claim files and records the new
+  topics in **one transaction per batch** — the text and the provenance do not move, and a transaction
+  per claim is what made a real coarsening take hours. It is the repair for a vocabulary that grew
+  before the shelf existed, it holds the exclusive gate for the whole pass, and it is what the
+  **Coarsen** button on Status asks for. A press takes the one-at-a-time latch: a second press while a
+  pass runs is a conflict, and the automatic shelf look and the curation stay out of its way.
 - **`POST /vocabulary/retopic`** re-derives each claim's flat topic from the claim text (bounded per
   run; the next press continues). It maps onto the shelf, never around it. The queue is the clock: it reads the OLDEST claims through the
   index (`updated_at, id`), so a budget of 12k claims reads 12k rows — not the corpus. Only a claim

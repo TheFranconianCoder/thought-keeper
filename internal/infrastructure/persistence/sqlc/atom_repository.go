@@ -105,6 +105,36 @@ func (r *AtomRepository) SaveAtom(ctx context.Context, a entities.Atom) error {
 	return nil
 }
 
+// RenameAtomTopics rewrites the topic of exactly these claims, in ONE transaction. A rename changes
+// neither the claim's text nor its provenance, so the topic column is all the index records: the
+// UPDATE trigger refreshes the search row from the unchanged text, and no provenance row is touched.
+// SaveAtom would open a transaction and rewrite the provenance for every claim, which is what made a
+// coarsening of a real vault take hours.
+func (r *AtomRepository) RenameAtomTopics(ctx context.Context, topics map[ulid.ULID]string) error {
+	if len(topics) == 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }() //nolint:errcheck // a rollback of a committed transaction has nothing to report
+	stmt, err := tx.PrepareContext(ctx, `UPDATE atoms SET topic = ? WHERE id = ?`)
+	if err != nil {
+		return fmt.Errorf("prepare topic rename: %w", err)
+	}
+	defer func() { _ = stmt.Close() }() //nolint:errcheck // a close has nothing left to report
+	for id, topic := range topics {
+		if _, err := stmt.ExecContext(ctx, topic, id); err != nil {
+			return fmt.Errorf("rename claim %s: %w", id.String(), err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit topic rename: %w", err)
+	}
+	return nil
+}
+
 // GetAtom returns an atom with its provenance.
 func (r *AtomRepository) GetAtom(ctx context.Context, id ulid.ULID) (entities.Atom, error) {
 	return r.getAtomHydrated(ctx, id)

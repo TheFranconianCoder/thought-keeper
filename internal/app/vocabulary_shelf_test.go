@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/interfaces"
 	"github.com/TheFranconianCoder/thought-keeper/internal/infrastructure/config"
 	"github.com/TheFranconianCoder/thought-keeper/internal/registry"
+	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
 // shelfAppAtoms is the observed catalog a shelf build reads. Only ListClaimTopics is reached.
@@ -143,5 +145,21 @@ func TestVocabularyTickDoesNotRepeatAReportThatFoundNothing(t *testing.T) {
 	a.requestVocabularyIfDue("test")
 	if atoms.reads != reads {
 		t.Errorf("the report ran again (%d -> %d)", reads, atoms.reads)
+	}
+}
+
+// TestCoarsenRefusesWhileAVocabularyPassRuns: a manual press claims the one-at-a-time latch the
+// automatic shelf look and the curation also read. Without it the reconcile tick could start a pass on
+// the same vocabulary file while a coarsening was rewriting claims.
+func TestCoarsenRefusesWhileAVocabularyPassRuns(t *testing.T) {
+	a, _, _ := newShelfApp(t, true)
+	a.vocabActive = true
+
+	_, err := a.ScheduleVocabularyCoarsen(entities.VocabularyTopics)
+	if !errors.Is(err, types.ErrConflict) {
+		t.Fatalf("err = %v, want a conflict", err)
+	}
+	if !a.vocabActive {
+		t.Error("a refused press cleared the latch of the running pass")
 	}
 }

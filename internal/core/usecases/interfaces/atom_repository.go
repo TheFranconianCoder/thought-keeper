@@ -11,6 +11,11 @@ import (
 // AtomRepository is the derived index for atoms.
 type AtomRepository interface {
 	SaveAtom(ctx context.Context, a entities.Atom) error
+	// RenameAtomTopics rewrites the topic of exactly these claims, in ONE transaction. A rename
+	// changes neither the claim's text nor its provenance, so the topic column is all the index has
+	// to record. SaveAtom would open a transaction and rewrite the provenance for every claim — that
+	// is what made a coarsening of a real vault take hours.
+	RenameAtomTopics(ctx context.Context, topics map[ulid.ULID]string) error
 	GetAtom(ctx context.Context, id ulid.ULID) (entities.Atom, error)
 	ListAtoms(ctx context.Context, topic string, limit, offset int) ([]entities.Atom, error)
 	// ListAtomsBySource lists the atoms that cite a source.

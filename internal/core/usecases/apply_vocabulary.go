@@ -6,6 +6,8 @@ import (
 	"maps"
 	"strings"
 
+	"github.com/oklog/ulid/v2"
+
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/claims"
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 )
@@ -86,9 +88,13 @@ func (uc Vocabulary) ApplyMapping(ctx context.Context) (ApplyVocabularyResult, e
 }
 
 // renameClaimTopics rewrites the claims' flat topic. The claim keeps everything else: a subject was
-// renamed, not rewritten.
+// renamed, not rewritten. The FILE is written claim by claim (it is the source of truth) and the
+// index follows in ONE transaction: a topic moves no provenance and no search text, so the per-claim
+// transaction SaveAtom opens is pure overhead — it is what made a coarsening of a real vault take
+// hours.
 func (uc Vocabulary) renameClaimTopics(ctx context.Context, mapping map[string]string) (int, error) {
 	n := 0
+	topics := make(map[ulid.ULID]string, len(mapping)*4)
 	for from, to := range mapping {
 		if claims.TopicIsStructural(to) {
 			if uc.Log != nil {
@@ -102,11 +108,21 @@ func (uc Vocabulary) renameClaimTopics(ctx context.Context, mapping map[string]s
 		}
 		for _, a := range atoms {
 			a.Topic = to
-			if err := uc.writeAtom(ctx, a); err != nil {
-				return n, err
+			if uc.AtomStore != nil {
+				// The store normalizes the name and answers what it wrote, so the index records the
+				// same topic the file carries.
+				written, wErr := uc.AtomStore.Write(ctx, a)
+				if wErr != nil {
+					return n, fmt.Errorf("write claim: %w", wErr)
+				}
+				a = written
 			}
+			topics[a.ID] = a.Topic
 			n++
 		}
+	}
+	if err := uc.Atoms.RenameAtomTopics(ctx, topics); err != nil {
+		return n, fmt.Errorf("index claim topics: %w", err)
 	}
 	return n, nil
 }
@@ -194,18 +210,6 @@ func rewriteTags(tags []string, mapping map[string]string) []string {
 		out = append(out, tag)
 	}
 	return out
-}
-
-func (uc Vocabulary) writeAtom(ctx context.Context, a entities.Atom) error {
-	if uc.AtomStore != nil {
-		if _, err := uc.AtomStore.Write(ctx, a); err != nil {
-			return fmt.Errorf("write claim: %w", err)
-		}
-	}
-	if err := uc.Atoms.SaveAtom(ctx, a); err != nil {
-		return fmt.Errorf("index claim: %w", err)
-	}
-	return nil
 }
 
 // resolveMapping drops the entries that say nothing and follows a chain to its end (a→b, b→c means

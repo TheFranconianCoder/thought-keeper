@@ -2679,7 +2679,9 @@ func (a *App) ScheduleVocabularyCurate(ns entities.VocabularyNamespace) (string,
 
 // ScheduleVocabularyCoarsen queues the COARSENING of a name vocabulary: the long tail is filed onto
 // the shelf, deterministically first and then by the model, in batches. It rewrites claim names, so it
-// takes the exclusive side of the gate like a curation.
+// takes the exclusive side of the gate like a curation, and it claims the one-at-a-time latch: the
+// automatic shelf look and the curation must not run beside it (a manual press used to leave the latch
+// free, so the reconcile tick could start a pass on the same file).
 func (a *App) ScheduleVocabularyCoarsen(ns entities.VocabularyNamespace) (string, error) {
 	if !a.deps().AgentAvailable {
 		return "", agentNotConfigured()
@@ -2688,6 +2690,18 @@ func (a *App) ScheduleVocabularyCoarsen(ns entities.VocabularyNamespace) (string
 		a.modelWindowPause(reopen)
 		return "", modelWindowRefusal(reopen)
 	}
+	a.vocabMu.Lock()
+	if a.vocabActive {
+		a.vocabMu.Unlock()
+		return "", types.New("conflict", "a vocabulary pass is already running", types.ErrConflict)
+	}
+	a.vocabActive = true
+	a.vocabMu.Unlock()
+	release := func() {
+		a.vocabMu.Lock()
+		a.vocabActive = false
+		a.vocabMu.Unlock()
+	}
 	target := "vocabulary:all"
 	if ns != "" {
 		target = "vocabulary:" + string(ns)
@@ -2695,12 +2709,14 @@ func (a *App) ScheduleVocabularyCoarsen(ns entities.VocabularyNamespace) (string
 	runID, err := a.deps().StartRun.Start(context.Background(), entities.RunVocabulary,
 		a.conf().OpenAI.ModelCompile, entities.StepCluster, target)
 	if err != nil {
+		release()
 		return "", err
 	}
 	select {
 	case a.vocabularyQueue <- runJob{runID: runID, op: entities.RunVocabulary, namespace: ns, coarsen: true}:
 		a.markQueuedRun(runID, "vocabulary shelf")
 	default:
+		release()
 		return "", types.New("conflict", "run queue is full", types.ErrConflict)
 	}
 	return runID.String(), nil
