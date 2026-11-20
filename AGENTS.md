@@ -61,13 +61,15 @@ actually changed. A check that answered the same page is not an event, and neith
 the materiality threshold: that snapshot is kept.
 **Start** is the front door: a vault-pulse line, an Ask box, and three thin signals for what runs,
 what needs you and what waits in the read-later queue (open entries, the interests that queued them
-by name, the age of the oldest), all absent when quiet; then a **since your last visit** statistic —
-how many sources are **new** and how many **updated** since Start itself was last opened, each count
-paired with the **main sources** that make it concrete (a few chips, then `+n more`; the number
+by name, the age of the oldest), all absent when quiet; then an **unseen in Sources** statistic —
+how many sources are **new** and how many **updated** since the Sources list was last opened, each
+count paired with the **main sources** that make it concrete (a few chips, then `+n more`; the number
 counts the batch, the chip names the feed, sitemap or listing that owns it), and the card is absent
 when both counts are zero, with a way into the Sources list beside it. The counts are information; a
 chip opens its source and the call to action opens the list, whose rows wear the marks for that
-batch. Never a session-restore card and never the newest-claims wall. A **wiki
+batch. The front door **summarizes** the batch and settles nothing: only opening the list
+acknowledges it, so the statistic and the marks can never disagree. Never a session-restore card and
+never the newest-claims wall. A **wiki
 page** is user-authored Markdown with tags; saving it writes a source representation and runs the
 document pipeline from capture. The app also tags a page and a source
 (auto tags, kept apart from the human's tags) and curates the three name vocabularies (`topics`,
@@ -90,7 +92,7 @@ all.** A change below the threshold keeps the stored bytes — they are the base
 node texts and the claims describe — so the drift accumulates against them, and a page that gains a
 sentence a week is re-derived once it has gained a paragraph. The source's record keeps the time of
 that change (`changed_at`, not the check time), and the Sources list marks the row **updated** when the
-change is newer than the Sources watermark. The event is the title moving, or at least
+change is newer than the seen watermark. The event is the title moving, or at least
 `max(capture.change_min_words, ⌈stored words × capture.change_min_percent / 100⌉)` word positions
 differing (a replaced word counts once) with an average length above
 `capture.change_min_word_length` (defaults 40 / 1 / 5); a ticking date, a view counter or a typo costs
@@ -103,13 +105,13 @@ and a filter in that lens; the **read-later queue** is a filter of the Sources l
 oldest entry first), a list on Start and a banner on the list. **Interests** are standing rules in
 `interests/`: a strong lexical match puts a NEW source into the queue, a weak one stays a suggestion
 in the source's rail. They are managed in an overlay, and their matches are computed on demand — no
-index table, no model, no second grouping. The **two seen watermarks** are the shared reader state:
-one record per vault, with one instant for Start and one for Sources, so a source the phone has seen
-is not new on the desktop — no client id, no per-device file. A Start visit advances Start's
-watermark alone, which is why the Sources marks survive the front door; a Sources visit advances
-both, because the list answers the same batch the statistic summarizes. Start's watermark answers its
-statistic; Sources' watermark answers its **new** and **updated** marks: a source whose content
-change is newer than it, unless it also just arrived (the stronger **new** mark wins). Opening a
+index table, no model, no second grouping. The **seen watermark** is the shared reader state: one
+record per vault with one instant, naming the batch the Sources list has not been opened on yet, so a
+source the phone has seen is not new on the desktop — no client id, no per-device file. Only opening
+the list advances it; a Start visit acknowledges nothing, which is why the front door always
+summarizes exactly the batch the list still marks. The watermark answers both that statistic and the
+rows: a source whose arrival or content change is newer than it is **new** or **updated**, unless it
+also just arrived (the stronger **new** mark wins). Opening a
 source drops that row's mark in that window, in memory: the reader answered for one row, and the
 watermark, the batch and every other client stay as they were.
 
@@ -202,8 +204,8 @@ paths stay read-only.
 | **favorite** | The reader's star on a source or a wiki page: "this belongs to me". No lifecycle, no label, never a ranking signal. | the source record / the page frontmatter |
 | **read later** | The reader's queue of sources. Open until marked done; otherwise a filter of the Sources list, ordered oldest entry first. | the source record + `?readlater=1` |
 | **interest** | A standing rule the reader writes: terms that make a NEW source join the read-later queue. A strong match queues; a weak one is only a suggestion. | `interests/<slug>.md` |
-| **seen watermark** | The instant up to which one lens's activity has been seen — an arrival or the last real content change of a page. Two per vault: Start's answers its statistic, Sources' answers its **new** and **updated** marks. A Start visit advances Start's alone; a Sources visit advances both, because the list answers the batch the statistic summarizes. Shared by every client. A record, not a cache. | `.thought-keeper/reader/seen.md` |
-| **updated** | A source whose stored page content was **replaced** after the Sources watermark (and that did not also just arrive). An event is the title moving, or at least `max(capture.change_min_words, ⌈stored words × capture.change_min_percent / 100⌉)` word positions differing (a replaced word counts once) with an average length above `capture.change_min_word_length` (defaults 40 / 1 / 5), or the human refreshing that one source. Below the threshold the snapshot is KEPT, so the drift accumulates and a check that only saw a ticked counter, a typo or a reflow leaves no mark at all. The change time is a RECORD; the mark is a display rule in memory, like **new**. | the source's `<hash>.meta` + the Sources row |
+| **seen watermark** | The instant up to which the reader has read the vault's activity — an arrival or the last real content change of a page. ONE per vault, settled by opening the Sources list; the Start statistic summarizes the same batch and settles nothing. Shared by every client. A record, not a cache. | `.thought-keeper/reader/seen.md` |
+| **updated** | A source whose stored page content was **replaced** after the seen watermark (and that did not also just arrive). An event is the title moving, or at least `max(capture.change_min_words, ⌈stored words × capture.change_min_percent / 100⌉)` word positions differing (a replaced word counts once) with an average length above `capture.change_min_word_length` (defaults 40 / 1 / 5), or the human refreshing that one source. Below the threshold the snapshot is KEPT, so the drift accumulates and a check that only saw a ticked counter, a typo or a reflow leaves no mark at all. The change time is a RECORD; the mark is a display rule in memory, like **new**. | the source's `<hash>.meta` + the Sources row |
 | **change record** | What the last EVENT of a URL page did: the time, the title before and after, the word measurement, and a unified diff of the readable body. The reader's view is the **Changes** tab. | `sources/<ab>/<cd>/<hash>.changes.md` |
 | **reconcile / reindex / cleanup** | The repairs: check records against the vault; rebuild the index from the vault; prune dead cluster members. The first two are buttons in Status → Vault; cleanup settles every cluster pass by itself. | Status → Vault |
 
@@ -377,7 +379,7 @@ instance, not clients of a server you operate.
 ├── interests/        # the reader's standing rules (<slug>.md, records)
 ├── asks/             # saved Ask conversations (<run-id>.md)
 ├── commands/         # the assistant's requests (pruned after a week; git-ignored)
-├── .thought-keeper/  # app state, hidden: favicons/ (derived), reader/seen.md (the two seen watermarks)
+├── .thought-keeper/  # app state, hidden: favicons/ (derived), reader/seen.md (the seen watermark)
 ├── .trash/           # deletions (trash, not delete)
 └── (.git/ if you version the vault — the app keeps .gitignore current)
 ```

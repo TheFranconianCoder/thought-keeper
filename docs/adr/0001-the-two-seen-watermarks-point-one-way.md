@@ -1,6 +1,6 @@
 # 0001 — The two seen watermarks point one way
 
-Status: accepted, 2026-11-15.
+Status: superseded by [0007](0007-one-seen-watermark-the-front-door-summarizes.md), 2026-11-20.
 
 ## Context
 

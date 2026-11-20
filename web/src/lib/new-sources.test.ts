@@ -9,7 +9,6 @@ vi.mock('./api', () => ({
 import { api } from './api';
 import {
   activateSources,
-  activateStart,
   applySharedSeen,
   isNew,
   isSourceNew,
@@ -17,14 +16,15 @@ import {
   markSourceOpened,
   newSources,
   refreshNewSources,
+  retryNewSources,
 } from './new-sources.svelte';
 
 const reset = (): void => {
-  newSources.start = { since: '', seenAt: '', ack: 'idle' };
   newSources.sources = { since: '', seenAt: '', ack: 'idle' };
   newSources.active = false;
   newSources.primary = false;
   newSources.opened = [];
+  newSources.loaded = false;
 };
 
 describe('isNew', () => {
@@ -43,7 +43,7 @@ describe('isNew', () => {
   });
 });
 
-describe('the Sources marks', () => {
+describe('the row marks', () => {
   afterEach(reset);
 
   it('drops the mark of the source the reader opened, and of that source only', () => {
@@ -69,18 +69,12 @@ describe('the Sources marks', () => {
     markSourceOpened('');
     expect(newSources.opened).toEqual(['dd']);
   });
-
-  it('does not use the Start baseline for a row', () => {
-    newSources.start.since = '2026-11-07T08:00:00Z';
-    newSources.sources.since = '';
-    expect(isSourceNew({ hash: 'ee', imported_at: '2026-11-07T09:00:00Z' })).toBe(false);
-  });
 });
 
 describe('the updated mark', () => {
   afterEach(reset);
 
-  it('marks content that changed after the Sources baseline', () => {
+  it('marks content that changed after the baseline', () => {
     newSources.sources.since = '2026-11-07T08:00:00Z';
     const source = {
       hash: 'up',
@@ -126,43 +120,46 @@ describe('the updated mark', () => {
   });
 });
 
-describe('the shared watermarks', () => {
+describe('the shared watermark', () => {
   afterEach(() => {
     reset();
     vi.clearAllMocks();
   });
 
-  it('clears the marks of the scope another client moved', () => {
+  it('clears this window\'s marks when another client moves it', () => {
     newSources.sources.since = '2026-11-07T07:00:00Z';
     newSources.sources.seenAt = '2026-11-07T07:00:00Z';
-    applySharedSeen('sources', '2026-11-07T09:00:00Z');
+    applySharedSeen('2026-11-07T09:00:00Z');
     expect(newSources.sources.seenAt).toBe('2026-11-07T09:00:00Z');
     expect(newSources.sources.since).toBe('2026-11-07T09:00:00Z');
-  });
-
-  it('leaves the other scope untouched', () => {
-    newSources.start.since = '2026-11-07T07:00:00Z';
-    newSources.start.seenAt = '2026-11-07T07:00:00Z';
-    applySharedSeen('sources', '2026-11-07T09:00:00Z');
-    expect(newSources.start.seenAt).toBe('2026-11-07T07:00:00Z');
-    expect(newSources.start.since).toBe('2026-11-07T07:00:00Z');
   });
 
   it('ignores an older frame, so a late arrival cannot re-open what was seen', () => {
     newSources.sources.since = '2026-11-07T09:00:00Z';
     newSources.sources.seenAt = '2026-11-07T09:00:00Z';
-    applySharedSeen('sources', '2026-11-07T08:00:00Z');
+    applySharedSeen('2026-11-07T08:00:00Z');
     expect(newSources.sources.since).toBe('2026-11-07T09:00:00Z');
   });
 
-  it('applies both scopes on a resync', async () => {
-    vi.mocked(api.reader).mockResolvedValue({
-      start_seen_at: '2026-11-07T08:00:00Z',
-      sources_seen_at: '2026-11-07T09:00:00Z',
-    });
+  it('applies the resync and names the baseline as known', async () => {
+    vi.mocked(api.reader).mockResolvedValue({ sources_seen_at: '2026-11-07T09:00:00Z' });
     await refreshNewSources();
-    expect(newSources.start.seenAt).toBe('2026-11-07T08:00:00Z');
     expect(newSources.sources.seenAt).toBe('2026-11-07T09:00:00Z');
+    expect(newSources.sources.since).toBe('2026-11-07T09:00:00Z');
+    expect(newSources.loaded).toBe(true);
+  });
+
+  it('treats an unacknowledged vault as a known, empty baseline', async () => {
+    vi.mocked(api.reader).mockResolvedValue({});
+    await refreshNewSources();
+    expect(newSources.sources.since).toBe('');
+    expect(newSources.loaded).toBe(true);
+  });
+
+  it('resolves even when the server cannot be read, so the front door is not stuck', async () => {
+    vi.mocked(api.reader).mockRejectedValue(new Error('offline'));
+    await refreshNewSources();
+    expect(newSources.loaded).toBe(true);
   });
 });
 
@@ -178,77 +175,22 @@ describe('acknowledging a phase', () => {
     vi.clearAllMocks();
   });
 
-  it('acknowledges Start and keeps the previous watermark as its baseline', async () => {
+  it('keeps the previous watermark as its baseline and moves the shared one', async () => {
     phase();
-    vi.mocked(api.readerActive).mockResolvedValue({
-      scope: 'start',
-      since: '2026-11-07T07:00:00Z',
-      seen_at: '2026-11-07T09:00:00Z',
-    });
-    await activateStart();
-    expect(vi.mocked(api.readerActive)).toHaveBeenCalledWith('start', expect.anything());
-    expect(newSources.start.since).toBe('2026-11-07T07:00:00Z');
-    expect(newSources.start.seenAt).toBe('2026-11-07T09:00:00Z');
-    expect(newSources.start.ack).toBe('done');
-  });
-
-  it('acknowledges Sources on its own baseline and settles Start with it', async () => {
-    phase();
-    newSources.start.since = '2026-11-07T05:00:00Z';
-    newSources.start.seenAt = '2026-11-07T06:00:00Z';
     vi.mocked(api.readerActive).mockResolvedValue({
       scope: 'sources',
       since: '2026-11-07T07:00:00Z',
       seen_at: '2026-11-07T09:00:00Z',
-      settled: [
-        { scope: 'sources', seen_at: '2026-11-07T09:00:00Z' },
-        { scope: 'start', seen_at: '2026-11-07T09:00:00Z' },
-      ],
     });
     await activateSources();
-    // The Sources marks still show this phase: they mark from the previous watermark.
+    expect(vi.mocked(api.readerActive)).toHaveBeenCalledWith('sources', expect.anything());
+    // The rows keep the batch this visit settled for the rest of the phase.
     expect(newSources.sources.since).toBe('2026-11-07T07:00:00Z');
-    // The front door has seen the same batch: its statistic is settled.
-    expect(newSources.start.seenAt).toBe('2026-11-07T09:00:00Z');
-    expect(newSources.start.since).toBe('2026-11-07T09:00:00Z');
-    expect(newSources.start.ack).toBe('idle');
+    expect(newSources.sources.seenAt).toBe('2026-11-07T09:00:00Z');
+    expect(newSources.sources.ack).toBe('done');
   });
 
-  it('leaves the Sources marks alone when Start settles only itself', async () => {
-    phase();
-    newSources.sources.since = '2026-11-07T05:00:00Z';
-    newSources.sources.seenAt = '2026-11-07T06:00:00Z';
-    vi.mocked(api.readerActive).mockResolvedValue({
-      scope: 'start',
-      since: '2026-11-07T06:00:00Z',
-      seen_at: '2026-11-07T09:00:00Z',
-      settled: [{ scope: 'start', seen_at: '2026-11-07T09:00:00Z' }],
-    });
-    await activateStart();
-    expect(newSources.start.since).toBe('2026-11-07T06:00:00Z');
-    expect(newSources.sources.since).toBe('2026-11-07T05:00:00Z');
-    expect(newSources.sources.seenAt).toBe('2026-11-07T06:00:00Z');
-  });
-
-  it('never clears the front door with a stale settle from another client', async () => {
-    phase();
-    newSources.start.since = '2026-11-07T10:00:00Z';
-    newSources.start.seenAt = '2026-11-07T10:00:00Z';
-    vi.mocked(api.readerActive).mockResolvedValue({
-      scope: 'sources',
-      since: '2026-11-07T07:00:00Z',
-      seen_at: '2026-11-07T09:00:00Z',
-      settled: [
-        { scope: 'sources', seen_at: '2026-11-07T09:00:00Z' },
-        { scope: 'start', seen_at: '2026-11-07T09:00:00Z' },
-      ],
-    });
-    await activateSources();
-    expect(newSources.start.seenAt).toBe('2026-11-07T10:00:00Z');
-    expect(newSources.start.since).toBe('2026-11-07T10:00:00Z');
-  });
-
-  it('marks nothing on a scope\'s very first acknowledgment', async () => {
+  it('marks nothing on a vault\'s first acknowledgment', async () => {
     phase();
     vi.mocked(api.readerActive).mockResolvedValue({
       scope: 'sources',
@@ -276,35 +218,25 @@ describe('acknowledging a phase', () => {
 
   it('keeps the last known baseline when the server cannot acknowledge', async () => {
     phase();
-    newSources.start.since = '2026-11-07T09:00:00Z';
-    newSources.start.seenAt = '2026-11-07T09:00:00Z';
+    newSources.sources.since = '2026-11-07T09:00:00Z';
+    newSources.sources.seenAt = '2026-11-07T09:00:00Z';
     vi.mocked(api.readerActive).mockRejectedValue(new Error('repairing'));
-    await activateStart();
-    expect(newSources.start.since).toBe('2026-11-07T09:00:00Z');
-    expect(newSources.start.ack).toBe('failed');
+    await activateSources();
+    expect(newSources.sources.since).toBe('2026-11-07T09:00:00Z');
+    expect(newSources.sources.ack).toBe('failed');
+    retryNewSources();
+    expect(newSources.sources.ack).toBe('idle');
   });
 
   it('never acknowledges from a duplicate window or twice in one phase', async () => {
     newSources.active = true;
     newSources.primary = false;
-    await activateStart();
+    await activateSources();
     expect(vi.mocked(api.readerActive)).not.toHaveBeenCalled();
 
     newSources.primary = true;
-    newSources.start.ack = 'done';
-    await activateStart();
-    expect(vi.mocked(api.readerActive)).not.toHaveBeenCalled();
-  });
-
-  it('acknowledges both lenses once each in the same phase', async () => {
-    phase();
-    vi.mocked(api.readerActive).mockResolvedValue({
-      scope: 'start',
-      since: '2026-11-07T07:00:00Z',
-      seen_at: '2026-11-07T09:00:00Z',
-    });
-    await activateStart();
+    newSources.sources.ack = 'done';
     await activateSources();
-    expect(vi.mocked(api.readerActive)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(api.readerActive)).not.toHaveBeenCalled();
   });
 });

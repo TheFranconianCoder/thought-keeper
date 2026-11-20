@@ -71,10 +71,11 @@ export const api = {
   reloadConfig: () => request<ConfigWriteResult>('/config/reload', { method: 'POST' }),
 
   // ── Reader ─────────────────────────────────────────────────────────────
-  /** reader reads both seen watermarks without acknowledging anything (a resync). */
+  /** reader reads the seen watermark without acknowledging anything (a resync). */
   reader: (signal?: AbortSignal) => request<ReaderState>('/reader', { signal }),
-  /** readerActive acknowledges ONE lens's watermark for every client: Start's statistic or the
-   *  Sources marks. Opening Start never clears the Sources marks, and vice versa. */
+  /** readerActive answers the lens that became active with the batch baseline and lets the Sources
+   *  list acknowledge it for every client. Opening Start settles nothing: the front door only
+   *  summarizes the batch the list still marks. */
   readerActive: (scope: ReaderScope, signal?: AbortSignal) =>
     request<ReaderActivation>(withQuery('/reader/active', { scope }), { method: 'POST', signal }),
 

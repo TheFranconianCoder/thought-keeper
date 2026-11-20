@@ -159,9 +159,9 @@
 
   $effect(() => {
     if (router.current.view !== 'sources') return;
-    // Only Sources acknowledges the Sources marks: opening Start shows its own statistic and must
-    // leave this batch alone until the reader actually visits the list. A wake on a claim or a
-    // source page acknowledges nothing either.
+    // The list is the one lens that acknowledges: opening the front door only summarizes the batch
+    // and must leave the marks alone until the reader actually visits the list. A wake on a claim or
+    // a source page acknowledges nothing either.
     if (newSources.primary && newSources.active && newSources.sources.ack === 'idle') void activateSources();
   });
 

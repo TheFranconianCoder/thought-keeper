@@ -6,38 +6,28 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/entities"
 )
 
-// ReaderState is GET /api/v1/reader: the reader's two seen watermarks. An empty value means that
-// scope has not been acknowledged yet, not that nothing has happened.
+// ReaderState is GET /api/v1/reader: the vault's one seen watermark — the batch of sources the
+// reader has not opened the list on yet. An empty value means the vault has not been acknowledged,
+// not that nothing has happened.
 type ReaderState struct {
-	StartSeenAt   string `json:"start_seen_at,omitempty"`
 	SourcesSeenAt string `json:"sources_seen_at,omitempty"`
 }
 
-// ReaderActivation is POST /api/v1/reader/active. Scope names the watermark that was acknowledged.
-// Since is the baseline that scope marks from; it is empty on the first activation, when nothing is
-// new there. SeenAt is the watermark after the acknowledgment. First says the scope was initialized
-// by this call. Settled lists EVERY watermark the visit moved: opening Sources settles Start's
-// statistic too, so every window clears its front door as well.
+// ReaderActivation is POST /api/v1/reader/active. Scope echoes the lens that became active. Since is
+// the baseline that lens marks from — the watermark before the call — and SeenAt is the watermark
+// after it; an empty Since means the first acknowledgment, when nothing is new. Opening the list
+// moves the watermark; the front door answers it unchanged, so the statistic and the list's marks
+// always describe the same batch.
 type ReaderActivation struct {
-	Scope   string          `json:"scope"`
-	Since   string          `json:"since,omitempty"`
-	SeenAt  string          `json:"seen_at"`
-	First   bool            `json:"first,omitempty"`
-	Settled []ReaderSettled `json:"settled,omitempty"`
-}
-
-// ReaderSettled is one watermark a visit moved.
-type ReaderSettled struct {
 	Scope  string `json:"scope"`
+	Since  string `json:"since,omitempty"`
 	SeenAt string `json:"seen_at"`
+	First  bool   `json:"first,omitempty"`
 }
 
-// ReaderStateFromUseCase maps both watermarks to their wire shape.
+// ReaderStateFromUseCase maps the watermark to its wire shape.
 func ReaderStateFromUseCase(st entities.ReaderState) ReaderState {
-	return ReaderState{
-		StartSeenAt:   readerInstant(st.StartSeenAt),
-		SourcesSeenAt: readerInstant(st.SourcesSeenAt),
-	}
+	return ReaderState{SourcesSeenAt: readerInstant(st.SourcesSeenAt)}
 }
 
 // ReaderActivationFromUseCase maps one acknowledgment to its wire shape.
@@ -49,11 +39,6 @@ func ReaderActivationFromUseCase(act entities.ReaderActivation) ReaderActivation
 	}
 	if !act.First {
 		out.Since = readerInstant(act.Since)
-	}
-	for _, mark := range act.Settled {
-		out.Settled = append(out.Settled, ReaderSettled{
-			Scope: string(mark.Scope), SeenAt: readerInstant(mark.SeenAt),
-		})
 	}
 	return out
 }

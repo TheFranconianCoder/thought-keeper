@@ -10,11 +10,11 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/types"
 )
 
-// ReaderStateProvider returns both seen watermarks without acknowledging anything.
+// ReaderStateProvider returns the seen watermark without acknowledging anything.
 type ReaderStateProvider func(ctx context.Context) (entities.ReaderState, error)
 
-// ReaderActivator acknowledges everything that happened up to now for ONE scope — Start's statistic
-// or the Sources marks — and returns the baseline that scope should mark from.
+// ReaderActivator answers the lens that became active with the baseline it marks from, and lets the
+// list acknowledge the batch.
 type ReaderActivator func(ctx context.Context, scope entities.ReaderScope) (entities.ReaderActivation, error)
 
 // ReaderNotifier broadcasts a watermark change to every connected client, so the sources another
@@ -23,7 +23,7 @@ type ReaderNotifier interface {
 	Publish(typ string, data any)
 }
 
-// ReaderHandler serves the vault's two seen watermarks.
+// ReaderHandler serves the vault's seen watermark.
 type ReaderHandler struct {
 	State     ReaderStateProvider
 	Activator ReaderActivator
@@ -44,12 +44,11 @@ func (h ReaderHandler) Get(w http.ResponseWriter, r *http.Request) {
 	payloads.WriteJSON(w, http.StatusOK, payloads.ReaderStateFromUseCase(st))
 }
 
-// Activate serves POST /api/v1/reader/active?scope=start|sources. It is the client saying "I am
-// active and showing this lens"; the answer carries the baseline that lens marks from. The
-// watermarks only move when there is something later than them, so an activation with nothing new
-// publishes nothing. Opening Sources settles Start's statistic as well, so one frame per moved
-// scope is published. An absent scope means Start: a stale client keeps acknowledging something,
-// and it can never clear the Sources marks by opening the front door.
+// Activate serves POST /api/v1/reader/active?scope=sources|start. It is the client saying "I am
+// active and showing this lens"; the answer carries the baseline that lens marks from. Only the
+// Sources list moves the watermark; the Start lens only summarizes the batch, so its call writes
+// nothing — and an older client that omits the scope can never clear the list's marks. One moved
+// watermark publishes one `reader` frame; a call that changed nothing publishes none.
 func (h ReaderHandler) Activate(w http.ResponseWriter, r *http.Request) {
 	if h.Activator == nil {
 		payloads.WriteError(w, types.ErrNotFound)
@@ -69,16 +68,12 @@ func (h ReaderHandler) Activate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := payloads.ReaderActivationFromUseCase(act)
-	if h.Notifier != nil {
-		// One frame per watermark the visit moved: a Sources visit that also settles Start clears the
-		// front door in every other window, not only the marks here.
-		for _, mark := range out.Settled {
-			data := map[string]any{"scope": mark.Scope, "seen_at": mark.SeenAt}
-			if mark.Scope == out.Scope {
-				data["first"] = out.First
-			}
-			h.Notifier.Publish("reader", data)
+	if h.Notifier != nil && act.SeenAt.After(act.Since) {
+		data := map[string]any{"scope": string(act.Scope), "seen_at": out.SeenAt}
+		if act.First {
+			data["first"] = true
 		}
+		h.Notifier.Publish("reader", data)
 	}
 	payloads.WriteJSON(w, http.StatusOK, out)
 }

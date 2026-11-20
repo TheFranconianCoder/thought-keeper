@@ -9,7 +9,7 @@
   import { readError, readSignal } from '../../lib/read';
   import { askPath, navigate, router, sourcePath } from '../../lib/router.svelte';
   import { pipelineLabel } from '../../lib/source-state';
-  import { activateStart, newSources } from '../../lib/new-sources.svelte';
+  import { newSources } from '../../lib/new-sources.svelte';
   import { asks } from '../../lib/stores/asks.svelte';
   import { interests } from '../../lib/stores/interests.svelte';
   import { sourceWindow } from '../../lib/stores/source-window.svelte';
@@ -19,9 +19,11 @@
   import SourceIcon from '../sources/SourceIcon.svelte';
 
   let question = $state('');
-  // The front door's activity card: what arrived and what actually changed since THIS lens's last
-  // visit. The COUNT is the batch; the chips name its MAIN sources — a feed stands for its articles,
-  // a sitemap for its pages — and `+n more` counts the main sources that did not fit.
+  // The front door's activity card: the batch the Sources list has not been opened on yet — what
+  // arrived and what actually changed since its watermark. The COUNT is the batch; the chips name its
+  // MAIN sources — a feed stands for its articles, a sitemap for its pages — and `+n more` counts the
+  // main sources that did not fit. It marks from the same instant the list's rows do, so the summary
+  // and the marks can never disagree.
   let freshMain = $state<Source[]>([]);
   let changedMain = $state<Source[]>([]);
   let freshCount = $state(0);
@@ -96,23 +98,15 @@
 
   $effect(() => {
     if (router.current.view !== 'home') return;
-    // Opening Start acknowledges only the front door's watermark. Sources keeps its own marks until
-    // the reader actually visits the list.
-    if (newSources.primary && newSources.active && newSources.start.ack === 'idle') void activateStart();
-  });
-
-  $effect(() => {
-    if (router.current.view !== 'home') return;
-    // The statistic waits for this phase's acknowledgment: painting without a baseline and then
-    // reloading with one was a visible flicker. An inactive window (idle) keeps the last known
-    // baseline and loads at once; a failed acknowledgment also loads, with whatever baseline is
-    // known.
-    if (newSources.active && newSources.start.ack !== 'done' && newSources.start.ack !== 'failed') return;
+    // The statistic reads the shared watermark and acknowledges nothing: opening the front door is
+    // reading a summary, so the marks stay until the list itself is visited.
+    if (!newSources.loaded) return;
     // The Start page does not need the full list, only its two counts and the queue — but both
     // change when the vault does. `epoch` moves when the sources are invalidated, never when a page
-    // of some list happens to arrive. `since` moves when another client acknowledged Start.
+    // of some list happens to arrive. `since` moves when the batch is acknowledged, here or in
+    // another window.
     void sourceWindow.epoch;
-    void newSources.start.since;
+    void newSources.sources.since;
     untrack(() => {
       void loadActivity();
       void loadReadLater();
@@ -144,9 +138,10 @@
   }
 
   async function loadActivity(): Promise<void> {
-    const since = newSources.start.since;
+    const since = newSources.sources.since;
     if (!since) {
-      // The scope's first visit has no baseline: nothing is new, and the card stays absent.
+      // Nothing is unseen — either the vault was never acknowledged or the batch is settled. The
+      // card stays absent.
       freshMain = [];
       changedMain = [];
       freshCount = 0;
@@ -158,9 +153,9 @@
       return;
     }
     try {
-      // One read against the SAME baseline: arrivals strictly after it, and pages that already
-      // existed whose content changed. The count is the batch; `main` names the source that owns
-      // it, so a feed's five articles are one chip rather than five.
+      // One read against the SAME baseline the list's rows mark from: arrivals strictly after it,
+      // and pages that already existed whose content changed. The count is the batch; `main` names
+      // the source that owns it, so a feed's five articles are one chip rather than five.
       const activity = await api.sourceActivity(since, readSignal(20_000));
       freshMain = activity.new?.main ?? [];
       freshCount = activity.new?.count ?? 0;
@@ -301,12 +296,12 @@
       </button>
     </section>
   {:else if showActivity}
-    <section class="home-card home-activity" aria-label={t('home.sinceLastVisit')}>
+    <section class="home-card home-activity" aria-label={t('home.unseen')}>
       <div class="card-head">
-        <h2>{t('home.sinceLastVisit')}</h2>
-        {#if newSources.start.since}
+        <h2>{t('home.unseen')}</h2>
+        {#if newSources.sources.since}
           <span class="card-window">
-            {t('home.lastVisit', { age: relTime(newSources.start.since) })}
+            {t('home.unseenOldest', { age: relTime(newSources.sources.since) })}
           </span>
         {/if}
         <button class="card-cta" onclick={openSources}>
@@ -595,7 +590,7 @@
     letter-spacing: 0.01em;
   }
 
-  /* The last visit, said instead of assumed: the statistic always covers what happened after it. */
+  /* Where the batch starts, said instead of assumed: everything above happened after it. */
   .card-window {
     color: var(--faint);
     font-size: 11px;

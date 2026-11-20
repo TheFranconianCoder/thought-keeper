@@ -18,10 +18,11 @@ export const homeDe: Record<string, string> = {
   'home.needsUnclustered.one': '{count} Aussage ohne Cluster',
   'home.needsUnclustered.many': '{count} Aussagen ohne Cluster',
 
-  // Die Aktivitätsstatistik: was seit dem LETZTEN START-BESUCH passiert ist. Sie ist unabhängig
-  // von den Sources-Markierungen, die ihr eigenes Wasserzeichen behalten, bis die Liste geöffnet wird.
-  'home.sinceLastVisit': 'Seit deinem letzten Besuch',
-  'home.lastVisit': 'letzter Besuch {age}',
+  // Die Aktivitätsstatistik: der Stapel, auf den die Quellenliste noch nicht geöffnet wurde. Start
+  // markiert ab demselben Wasserzeichen wie die Zeilen, damit Zusammenfassung und Marken nie
+  // auseinanderlaufen.
+  'home.unseen': 'Ungelesen in den Quellen',
+  'home.unseenOldest': 'ältester {age}',
   'home.newSources.one': '{count} neue Quelle',
   'home.newSources.many': '{count} neue Quellen',
   'home.changedSources.one': '{count} aktualisierte Quelle',

@@ -18,10 +18,10 @@ export const homeEn: Record<string, string> = {
   'home.needsUnclustered.one': '{count} claim without a cluster',
   'home.needsUnclustered.many': '{count} claims without a cluster',
 
-  // The activity statistic: what happened since the LAST START VISIT. It is independent of the
-  // Sources marks, which keep their own watermark until the list is actually opened.
-  'home.sinceLastVisit': 'Since your last visit',
-  'home.lastVisit': 'last visit {age}',
+  // The activity statistic: the batch the Sources list has not been opened on yet. The Start lens
+  // marks from the same watermark as the rows, so the summary and the marks always agree.
+  'home.unseen': 'Unseen in Sources',
+  'home.unseenOldest': 'oldest {age}',
   'home.newSources.one': '{count} new source',
   'home.newSources.many': '{count} new sources',
   'home.changedSources.one': '{count} updated source',

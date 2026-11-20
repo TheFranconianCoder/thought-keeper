@@ -249,28 +249,26 @@ export interface QueueCounts {
   interests?: InterestShare[];
 }
 
-/** ReaderState is the reader's two independent seen watermarks: Start's drives the front door's
- *  statistic, Sources' drives its row marks. One value per vault and scope, never per client.
- *  Empty means that scope has not been acknowledged yet. */
+/** ReaderState is the vault's one seen watermark: the batch of sources the reader has not opened the
+ *  Sources list on yet. One value per vault, never per client; empty means the vault has not been
+ *  acknowledged. */
 export interface ReaderState {
-  start_seen_at?: string;
   sources_seen_at?: string;
 }
 
-/** ReaderActivation is the answer to a client acknowledging one scope. `scope` names the watermark
- *  that moved; `since` is the baseline that scope uses (absent on its first activation, when nothing
- *  is new); `seen_at` is the watermark after the acknowledgment. `settled` lists EVERY watermark the
- *  visit moved: opening Sources settles Start's statistic too, because the list answers the same
- *  batch. */
+/** ReaderActivation is the answer to a client that became active on a lens. `scope` echoes the lens;
+ *  `since` is the baseline it marks from (absent on the vault's first acknowledgment, when nothing is
+ *  new); `seen_at` is the watermark after the call. Opening the list moves it; the front door answers
+ *  it unchanged, because it only summarizes the batch the list still marks. */
 export interface ReaderActivation {
   scope: ReaderScope;
   since?: string;
   seen_at: string;
   first?: boolean;
-  settled?: { scope: ReaderScope; seen_at: string }[];
 }
 
-/** ReaderScope names one of the two independent watermarks. */
+/** ReaderScope names the lens a client became active on. Only the Sources list acknowledges the
+ *  batch; Start is a summary of it. */
 export type ReaderScope = 'start' | 'sources';
 
 /** SourceLink is one URL a document links to that already IS a source: the vault's own page for it. */
