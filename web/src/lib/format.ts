@@ -85,6 +85,21 @@ export function clockTime(iso?: string): string {
   return new Date(parsed).toLocaleTimeString(i18n.locale, { hour: '2-digit', minute: '2-digit' });
 }
 
+/** dateTime is an absolute instant with its time: "18 Nov 2026, 09:12" in English. The change
+ *  record names the exact moment of the last event, so the relative time alone is not enough. */
+export function dateTime(iso?: string): string {
+  if (!iso) return '';
+  const parsed = Date.parse(iso);
+  if (Number.isNaN(parsed)) return iso;
+  return new Date(parsed).toLocaleString(i18n.locale, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }

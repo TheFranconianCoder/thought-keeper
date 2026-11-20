@@ -158,8 +158,8 @@ the last event, and the `Words:` line names the measurement that made it one. Th
 line based (a reflow of an event therefore shows), capped at 2000 lines / 256 KiB with a
 closing note, and the record is a **record**: the bytes it compares are gone once the new snapshot is
 written, so it cannot be rebuilt. It is served by
-`GET /api/v1/sources/{hash}/raw?which=.changes.md` and shown in the **Changes** tab; it goes away with
-the source.
+`GET /api/v1/sources/{hash}/raw?which=.changes.md` and rendered in the **Changes** tab as a parsed
+change report — the raw file stays behind a disclosure — and it goes away with the source.
 
 The invariant behind it: **`content_hash` in `<hash>.meta` is the hash of the bytes the source holds**,
 and those bytes are replaced only by an event. A check that does not replace the snapshot must not

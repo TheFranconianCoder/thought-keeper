@@ -36,7 +36,21 @@ export const sourceEn: Record<string, string> = {
   'source.changeStripTitle': 'Open the change record',
   'source.changeStripAction': 'Show diff',
   'source.changesIntro':
-    'The last material change of this page: when it happened, its title before and after, how many words moved, and a line diff of the readable text. A ticking counter or a typo is not a change here. The snapshot is the current text — an older version is not kept.',
+    'The last time this page really changed: when, the title before and after, how much moved, and the diff. A ticking counter or a typo is not a change, and an older version is not kept.',
+  'source.changeTitle': 'Title',
+  'source.changeHunk': 'Lines {from}–{to}',
+  'source.changeDiffAria': 'Line diff',
+  'source.changeAddedLines.one': '{count} line added',
+  'source.changeAddedLines.many': '{count} lines added',
+  'source.changeRemovedLines.one': '{count} line removed',
+  'source.changeRemovedLines.many': '{count} lines removed',
+  'source.changeWords.one': '{count} word changed, {avg} characters on average',
+  'source.changeWords.many': '{count} words changed, {avg} characters on average',
+  'source.changeBodyUnchanged': 'The body is unchanged — only the title moved.',
+  'source.changeWhitespace': 'Only whitespace or line endings changed.',
+  'source.changeNoDiff': 'No line differences to show.',
+  'source.changeTruncated': 'The diff stops early; the snapshot holds the full text.',
+  'source.changeRaw': 'Raw record',
 
   // Summary tab.
   'source.summaryIntro':

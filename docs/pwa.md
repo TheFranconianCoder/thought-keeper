@@ -284,9 +284,13 @@ One SSE connection (`GET /api/v1/events`) replaces polling. Event types:
   the text.
 - A source's log is shown verbatim in the **Log** tab.
 - **A page that changed says so in one click.** A URL source whose last refresh REWROTE it carries a
-  quiet strip under its head, on every tab — *Changed 2 days ago — Show the diff* — and the **Changes**
-  tab renders `<hash>.changes.md`: the time, the title before and after, the word measurement and the
-  unified diff of the readable body. The rail's **Changed** time opens the same tab. A source that
+  quiet strip under its head, on every tab — *Changed 2 days ago · +12 −3 — Show diff* — and the
+  **Changes** tab renders `<hash>.changes.md` as a **change report**: the time (relative and
+  absolute), the title before and after, the same `+n`/`−m` counters, a two-tone proportion bar and
+  the word measurement, then the unified diff **colored by kind** — removed lines on a red wash,
+  added on a green one, with an old and a new line-number gutter — and the words that actually moved
+  marked inside a paired line. The raw record stays behind a disclosure, and a record that does not
+  parse falls back to it. The rail's **Changed** time opens the same tab. A source that
   never changed materially has no strip and no tab — a ticking counter or a typo does not even replace
   the snapshot, and the drift below the threshold accumulates instead; the record is the LAST event
   only (an older version is not kept).

@@ -14,6 +14,7 @@
     toggleReadLater,
   } from '../../lib/actions';
   import { api } from '../../lib/api';
+  import { changeLineCounts, parseChangeRecord } from '../../lib/changes';
   import { fmtBytes, hostOf, prettyJson, pubDate, relTime, splitFrontmatter } from '../../lib/format';
   import { n, t, tn } from '../../lib/i18n/index.svelte';
   import { askSourcePath, navigate, previousView, router, sourcePath, wikiPath } from '../../lib/router.svelte';
@@ -29,6 +30,7 @@
   import Icon from '../ui/Icon.svelte';
   import Frontmatter from '../ui/Frontmatter.svelte';
   import Markdown from '../ui/Markdown.svelte';
+  import ChangeRecord from '../sources/ChangeRecord.svelte';
   import SourceIcon from '../sources/SourceIcon.svelte';
   import SourceSteps from '../sources/SourceSteps.svelte';
 
@@ -178,6 +180,10 @@
   let changesSeq = 0;
   let loadedChangesKey = '';
 
+  // The record is parsed once per read: the tab renders the report, the strip shows its counters.
+  const change = $derived(parseChangeRecord(changesText ?? ''));
+  const changeCounts = $derived(changeLineCounts(change));
+
   let pdfReady = $state(false);
 
   // A URL the app could not read (a login, a paywall, a JavaScript page that became a bookmark): the
@@ -320,14 +326,15 @@
       });
   });
 
-  // The Changes tab reads the record when it opens and again when a source event bumps the version
-  // (a refresh rewrites the file in place, so a cached read would show the previous change).
+  // The change record is read with the source and again when a source event bumps the version (a
+  // refresh rewrites the file in place, so a cached read would show the previous change). It starts
+  // with the source, not with the tab: the change strip on every tab wears the same +n/−m counters,
+  // so the reader sees the size of the change before clicking.
   $effect(() => {
     const currentHash = hash;
-    const currentTab = tab;
     void sources.version;
     const seq = ++changesSeq;
-    if (!currentHash || currentTab !== 'changes') {
+    if (!currentHash || !hasChanges) {
       changesText = null;
       changesError = '';
       loadedChangesKey = '';
@@ -639,7 +646,23 @@
           onclick={() => setTab('changes')}
         >
           <Icon name="clock" size={14} />
-          <span>{t('source.changeStrip', { time: relTime(selected.url_changed_at) })}</span>
+          <span>{t('source.changeStrip', { time: relTime(selected.url_changed_at || change?.at) })}</span>
+          {#if changeCounts}
+            <span class="change-strip-counts">
+              {#if changeCounts.added > 0}
+                <span
+                  class="change-strip-count change-strip-count--add"
+                  title={tn('source.changeAddedLines', changeCounts.added)}>+{n(changeCounts.added)}</span
+                >
+              {/if}
+              {#if changeCounts.removed > 0}
+                <span
+                  class="change-strip-count change-strip-count--remove"
+                  title={tn('source.changeRemovedLines', changeCounts.removed)}>−{n(changeCounts.removed)}</span
+                >
+              {/if}
+            </span>
+          {/if}
           <span class="grow"></span>
           <span class="change-strip-action">{t('source.changeStripAction')}</span>
         </button>
@@ -818,8 +841,7 @@
               {:else if changesText === null}
                 <p class="file-notice muted">{t('common.loading')}</p>
               {:else}
-                <p class="file-intro muted">{t('source.changesIntro')}</p>
-                <pre class="raw-file">{changesText}</pre>
+                <ChangeRecord record={change} text={changesText} />
               {/if}
             {:else if tab === 'log'}
               {#if sources.log.length > LOG_CAP}
@@ -1384,6 +1406,35 @@
   .change-strip-action {
     color: var(--accent);
     white-space: nowrap;
+  }
+
+  /* The size of the change, before the click: the same counters the report's head wears. */
+  .change-strip-counts {
+    display: flex;
+    flex: none;
+    gap: 5px;
+  }
+
+  .change-strip-count {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 0 7px;
+    border-radius: var(--radius-pill);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  .change-strip-count--add {
+    background: var(--success-soft);
+    color: var(--success);
+  }
+
+  .change-strip-count--remove {
+    background: var(--danger-soft);
+    color: var(--danger);
   }
 
   /* The rail's own way in. It sits beside the content on a wide page and under it once the page

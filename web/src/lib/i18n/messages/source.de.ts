@@ -36,7 +36,21 @@ export const sourceDe: Record<string, string> = {
   'source.changeStripTitle': 'Den Änderungsrecord öffnen',
   'source.changeStripAction': 'Diff anzeigen',
   'source.changesIntro':
-    'Die letzte wesentliche Änderung dieser Seite: wann sie geschah, ihr Titel vorher und nachher, wie viele Wörter sich bewegten, und ein Zeilen-Diff des lesbaren Textes. Ein tickender Zähler oder ein Tippfehler ist hier keine Änderung. Die Momentaufnahme ist der aktuelle Text — eine ältere Fassung wird nicht aufbewahrt.',
+    'Die letzte wesentliche Änderung dieser Seite: wann sie geschah, ihr Titel vorher und nachher, wie viel sich bewegte und der Diff. Ein tickender Zähler oder ein Tippfehler ist hier keine Änderung, und eine ältere Fassung wird nicht aufbewahrt.',
+  'source.changeTitle': 'Titel',
+  'source.changeHunk': 'Zeilen {from}–{to}',
+  'source.changeDiffAria': 'Zeilen-Diff',
+  'source.changeAddedLines.one': '{count} Zeile hinzugefügt',
+  'source.changeAddedLines.many': '{count} Zeilen hinzugefügt',
+  'source.changeRemovedLines.one': '{count} Zeile entfernt',
+  'source.changeRemovedLines.many': '{count} Zeilen entfernt',
+  'source.changeWords.one': '{count} Wort geändert, im Schnitt {avg} Zeichen',
+  'source.changeWords.many': '{count} Wörter geändert, im Schnitt {avg} Zeichen',
+  'source.changeBodyUnchanged': 'Der Text ist unverändert — nur der Titel hat sich bewegt.',
+  'source.changeWhitespace': 'Nur Leerraum oder Zeilenenden haben sich geändert.',
+  'source.changeNoDiff': 'Keine Zeilenunterschiede zum Anzeigen.',
+  'source.changeTruncated': 'Der Diff bricht früh ab; die Momentaufnahme enthält den vollständigen Text.',
+  'source.changeRaw': 'Rohaufzeichnung',
 
   // Tab „Zusammenfassung“.
   'source.summaryIntro':
