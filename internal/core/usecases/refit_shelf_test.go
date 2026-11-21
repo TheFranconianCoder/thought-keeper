@@ -14,7 +14,15 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
-// refitFixture is a settled topics vocabulary with two slots and the observation of one look.
+// refitCorpus is the claim total of the refit tests. A topic is judged by its share of it, so the
+// fixtures need a corpus of the size a shelf is built for: at 100,000 claims the thin floor is ten claims
+// and the catch-all ceiling 2,000. The observation names only the topics a test is about.
+const refitCorpus = 100000
+
+// refitLimits are the shipped defaults of vocabulary.shelf.max_share and min_share.
+var refitLimits = ShelfLimits{MaxShare: 0.02, MinShare: 0.0001}
+
+// refitFixture is a settled topics vocabulary with the given slots and the observation of one look.
 func refitFixture(shelf []string, target int, observed ...partialentities.NameUses) (Vocabulary, *shelfVocab) {
 	store := newShelfVocab()
 	store.v[entities.VocabularyTopics] = entities.Vocabulary{
@@ -23,7 +31,7 @@ func refitFixture(shelf []string, target int, observed ...partialentities.NameUs
 		Target:    target,
 		Absorbed:  map[string]string{},
 	}
-	uc := Vocabulary{Vocab: store, Clock: shelfClock{}}
+	uc := Vocabulary{Vocab: store, Clock: shelfClock{}, Shelf: refitLimits}
 	return uc, store
 }
 
@@ -31,6 +39,7 @@ func healthOf(target int, observed ...partialentities.NameUses) partialentities.
 	return partialentities.VocabularyHealth{
 		Namespace: string(entities.VocabularyTopics),
 		Target:    target,
+		Uses:      refitCorpus,
 		Observed:  observed,
 	}
 }
@@ -40,14 +49,14 @@ func healthOf(target int, observed ...partialentities.NameUses) partialentities.
 // without someone pressing a button.
 func TestRefitShelfPromotesASubjectThatEarnedASlot(t *testing.T) {
 	uc, store := refitFixture([]string{"caching", "databases"}, 2,
-		partialentities.NameUses{Name: "tp-link-router", Uses: 40},
-		partialentities.NameUses{Name: "caching", Uses: 10},
-		partialentities.NameUses{Name: "databases", Uses: 2},
+		partialentities.NameUses{Name: "tp-link-router", Uses: 400},
+		partialentities.NameUses{Name: "caching", Uses: 100},
+		partialentities.NameUses{Name: "databases", Uses: 20},
 	)
 	res, err := uc.RefitShelf(healthOf(2,
-		partialentities.NameUses{Name: "tp-link-router", Uses: 40},
-		partialentities.NameUses{Name: "caching", Uses: 10},
-		partialentities.NameUses{Name: "databases", Uses: 2},
+		partialentities.NameUses{Name: "tp-link-router", Uses: 400},
+		partialentities.NameUses{Name: "caching", Uses: 100},
+		partialentities.NameUses{Name: "databases", Uses: 20},
 	), 2)
 	if err != nil {
 		t.Fatalf("refit: %v", err)
@@ -66,12 +75,12 @@ func TestRefitShelfPromotesASubjectThatEarnedASlot(t *testing.T) {
 // TestRefitShelfUsesAFreeSlot: while the shelf is below its target there is nothing to evict.
 func TestRefitShelfUsesAFreeSlot(t *testing.T) {
 	uc, store := refitFixture([]string{"caching"}, 5,
-		partialentities.NameUses{Name: "caching", Uses: 10},
-		partialentities.NameUses{Name: "tp-link-router", Uses: 4},
+		partialentities.NameUses{Name: "caching", Uses: 100},
+		partialentities.NameUses{Name: "tp-link-router", Uses: 40},
 	)
 	res, err := uc.RefitShelf(healthOf(5,
-		partialentities.NameUses{Name: "caching", Uses: 10},
-		partialentities.NameUses{Name: "tp-link-router", Uses: 4},
+		partialentities.NameUses{Name: "caching", Uses: 100},
+		partialentities.NameUses{Name: "tp-link-router", Uses: 40},
 	), 5)
 	if err != nil {
 		t.Fatalf("refit: %v", err)
@@ -88,9 +97,9 @@ func TestRefitShelfUsesAFreeSlot(t *testing.T) {
 // has two on every refit — that moves claims, costs a retopic pass and buys nothing.
 func TestRefitShelfDoesNotChurnOnASmallMargin(t *testing.T) {
 	observed := []partialentities.NameUses{
-		{Name: "caching", Uses: 10},
-		{Name: "databases", Uses: 2},
-		{Name: "misc", Uses: 3},
+		{Name: "caching", Uses: 100},
+		{Name: "databases", Uses: 20},
+		{Name: "misc", Uses: 30},
 	}
 	uc, store := refitFixture([]string{"caching", "databases"}, 2, observed...)
 	writes := store.writes
@@ -110,9 +119,9 @@ func TestRefitShelfDoesNotChurnOnASmallMargin(t *testing.T) {
 // judged names and the re-derived ones are decisions, not derived values.
 func TestRefitShelfKeepsWhatTheVaultDecided(t *testing.T) {
 	uc, store := refitFixture([]string{"caching", "databases"}, 2,
-		partialentities.NameUses{Name: "caching", Uses: 10},
-		partialentities.NameUses{Name: "databases", Uses: 1},
-		partialentities.NameUses{Name: "tp-link-router", Uses: 20},
+		partialentities.NameUses{Name: "caching", Uses: 100},
+		partialentities.NameUses{Name: "databases", Uses: 20},
+		partialentities.NameUses{Name: "tp-link-router", Uses: 200},
 	)
 	v := store.v[entities.VocabularyTopics]
 	v.Absorbed = map[string]string{"cache-invalidation": "caching"}
@@ -122,9 +131,9 @@ func TestRefitShelfKeepsWhatTheVaultDecided(t *testing.T) {
 	store.v[entities.VocabularyTopics] = v
 
 	if _, err := uc.RefitShelf(healthOf(2,
-		partialentities.NameUses{Name: "tp-link-router", Uses: 20},
-		partialentities.NameUses{Name: "caching", Uses: 10},
-		partialentities.NameUses{Name: "databases", Uses: 1},
+		partialentities.NameUses{Name: "tp-link-router", Uses: 200},
+		partialentities.NameUses{Name: "caching", Uses: 100},
+		partialentities.NameUses{Name: "databases", Uses: 20},
 	), 2); err != nil {
 		t.Fatalf("refit: %v", err)
 	}
@@ -146,7 +155,7 @@ func TestRefitShelfNeverPromotesASingleton(t *testing.T) {
 	uc, store := refitFixture([]string{"caching"}, 5)
 	writes := store.writes
 	res, err := uc.RefitShelf(healthOf(5,
-		partialentities.NameUses{Name: "caching", Uses: 10},
+		partialentities.NameUses{Name: "caching", Uses: 100},
 		partialentities.NameUses{Name: "one-off", Uses: 1},
 	), 5)
 	if err != nil {
@@ -318,9 +327,9 @@ func TestRebranchStopsOnItsBudget(t *testing.T) {
 // way this mechanism could silently stop reducing.
 func TestRefitShelfReopensAnEvictedName(t *testing.T) {
 	uc, store := refitFixture([]string{"caching", "databases"}, 2,
-		partialentities.NameUses{Name: "caching", Uses: 10},
+		partialentities.NameUses{Name: "caching", Uses: 100},
 		partialentities.NameUses{Name: "databases", Uses: 1},
-		partialentities.NameUses{Name: "tp-link-router", Uses: 20},
+		partialentities.NameUses{Name: "tp-link-router", Uses: 200},
 	)
 	v := store.v[entities.VocabularyTopics]
 	v.Decided = []string{"databases", "moral-psychology"}
@@ -328,8 +337,8 @@ func TestRefitShelfReopensAnEvictedName(t *testing.T) {
 	store.v[entities.VocabularyTopics] = v
 
 	if _, err := uc.RefitShelf(healthOf(2,
-		partialentities.NameUses{Name: "tp-link-router", Uses: 20},
-		partialentities.NameUses{Name: "caching", Uses: 10},
+		partialentities.NameUses{Name: "tp-link-router", Uses: 200},
+		partialentities.NameUses{Name: "caching", Uses: 100},
 		partialentities.NameUses{Name: "databases", Uses: 1},
 	), 2); err != nil {
 		t.Fatalf("refit: %v", err)
@@ -437,5 +446,91 @@ func TestCoarsenReopensTheTailUnderANewRule(t *testing.T) {
 		if slices.Contains(got.Decided, name) {
 			t.Errorf("%q kept its old verdict: %v", name, got.Decided)
 		}
+	}
+}
+
+// TestRefitShelfEvictsACatchAllEvenWithRoom: a topic that carries more than the catch-all share of the
+// claims distinguishes nothing, and it gives its slot up while the shelf still has room. Its claims are
+// re-derived by the retopic pass, which the eviction queues.
+func TestRefitShelfEvictsACatchAllEvenWithRoom(t *testing.T) {
+	uc, store := refitFixture([]string{"caching", "software"}, 5,
+		partialentities.NameUses{Name: "software", Uses: 3000},
+		partialentities.NameUses{Name: "caching", Uses: 100},
+	)
+	res, err := uc.RefitShelf(healthOf(5,
+		partialentities.NameUses{Name: "software", Uses: 3000},
+		partialentities.NameUses{Name: "caching", Uses: 100},
+	), 5)
+	if err != nil {
+		t.Fatalf("refit: %v", err)
+	}
+	if !slices.Equal(res.Evicted, []string{"software"}) {
+		t.Errorf("evicted = %v, want the catch-all", res.Evicted)
+	}
+	if got := store.v[entities.VocabularyTopics].Shelf; !slices.Equal(got, []string{"caching"}) {
+		t.Errorf("shelf = %v, want only caching", got)
+	}
+}
+
+// TestRefitShelfNeverPromotesACatchAll: the most used name is not automatically a subject. A candidate
+// above the catch-all share is skipped, even with free slots, so a generic word cannot earn a slot by
+// mass alone.
+func TestRefitShelfNeverPromotesACatchAll(t *testing.T) {
+	uc, store := refitFixture([]string{"caching"}, 5,
+		partialentities.NameUses{Name: "caching", Uses: 100},
+	)
+	res, err := uc.RefitShelf(healthOf(5,
+		partialentities.NameUses{Name: "software", Uses: 3000},
+		partialentities.NameUses{Name: "caching", Uses: 100},
+	), 5)
+	if err != nil {
+		t.Fatalf("refit: %v", err)
+	}
+	if len(res.Promoted) != 0 {
+		t.Errorf("promoted = %v, want no catch-all", res.Promoted)
+	}
+	if got := store.v[entities.VocabularyTopics].Shelf; !slices.Equal(got, []string{"caching"}) {
+		t.Errorf("shelf = %v", got)
+	}
+}
+
+// TestRefitShelfEvictsAThinShelfName: a slot held by a name below the thin share is a slot nobody
+// uses. It gives up its place even while the shelf has room, and it is never kept by mass alone.
+func TestRefitShelfEvictsAThinShelfName(t *testing.T) {
+	uc, store := refitFixture([]string{"caching", "rare-name"}, 5,
+		partialentities.NameUses{Name: "caching", Uses: 100},
+		partialentities.NameUses{Name: "rare-name", Uses: 5},
+	)
+	res, err := uc.RefitShelf(healthOf(5,
+		partialentities.NameUses{Name: "caching", Uses: 100},
+		partialentities.NameUses{Name: "rare-name", Uses: 5},
+	), 5)
+	if err != nil {
+		t.Fatalf("refit: %v", err)
+	}
+	if !slices.Equal(res.Evicted, []string{"rare-name"}) {
+		t.Errorf("evicted = %v, want the thin name", res.Evicted)
+	}
+	if got := store.v[entities.VocabularyTopics].Shelf; !slices.Equal(got, []string{"caching"}) {
+		t.Errorf("shelf = %v", got)
+	}
+}
+
+// TestRefitShelfLimitsAreOffWhenZero: a zero limit is off, so an unconfigured use case (a test or a
+// tool without the knobs) never judges a topic by share.
+func TestRefitShelfLimitsAreOffWhenZero(t *testing.T) {
+	uc, _ := refitFixture([]string{"caching"}, 5,
+		partialentities.NameUses{Name: "caching", Uses: 100},
+	)
+	uc.Shelf = ShelfLimits{}
+	res, err := uc.RefitShelf(healthOf(5,
+		partialentities.NameUses{Name: "software", Uses: 3000},
+		partialentities.NameUses{Name: "caching", Uses: 100},
+	), 5)
+	if err != nil {
+		t.Fatalf("refit: %v", err)
+	}
+	if !slices.Equal(res.Promoted, []string{"software"}) {
+		t.Errorf("promoted = %v, want the name with no share rule", res.Promoted)
 	}
 }

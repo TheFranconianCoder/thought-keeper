@@ -119,7 +119,7 @@ func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchRes
 		v = entities.Vocabulary{Namespace: entities.VocabularyTopics, Absorbed: map[string]string{}}
 	}
 	aliases := vocabularyAliases(uc.Vocab, entities.VocabularyTopics)
-	catalog := shelfCatalogOf(v.Shelf, observed)
+	catalog := shelfCatalogOf(v.Shelf, observed, uc.TopicShelf)
 	started := uc.Clock.Now()
 	spent := func() bool {
 		return uc.Budget > 0 && uc.Clock.Now().Sub(started) >= uc.Budget
@@ -344,13 +344,16 @@ func retopicQueue(observed []entities.TopicUse, v entities.Vocabulary) []string 
 // shelfCatalogOf is the catalog a repair resolves onto: the shelf itself, with no room to grow — the
 // point of the pass is to move claims ONTO it. A vault without a shelf gets the observed head, which
 // is the behaviour of a vault that never built one.
-func shelfCatalogOf(shelf []string, observed []entities.TopicUse) *topicCatalog {
+func shelfCatalogOf(shelf []string, observed []entities.TopicUse, limits ShelfLimits) *topicCatalog {
 	if len(shelf) == 0 {
-		return newTopicCatalog(observed)
+		c := newTopicCatalog(observed)
+		c.judgeBy(limits, claimTotal(observed))
+		return c
 	}
 	uses := shelfUses(shelf, observed)
 	c := newTopicCatalog(uses)
 	c.budget = len(shelf) // no room: an unknown proposal maps onto the best candidate, or is kept
+	c.judgeBy(limits, claimTotal(observed))
 	return c
 }
 

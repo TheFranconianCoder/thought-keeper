@@ -363,6 +363,8 @@
                 {#if vocab.shelf && vocab.remaining}· {t('status.vocabRemaining', { count: n(vocab.remaining) })}{/if}
                 {#if vocab.shelf && vocab.retopic}· {t('status.vocabRetopic', { count: n(vocab.retopic) })}{/if}
                 {#if vocab.shelf && vocab.off_shelf}· {t('status.vocabOffShelf', { count: n(vocab.off_shelf) })}{/if}
+                {#if vocab.catch_all}· {t('status.vocabCatchAll', { count: n(vocab.catch_all) })}{/if}
+                {#if vocab.thin}· {t('status.vocabThin', { count: n(vocab.thin) })}{/if}
                 {#if vocab.canonical || vocab.absorbed}· {t('status.vocabCanonical', { canonical: vocab.canonical, absorbed: vocab.absorbed })}{/if}
                 {#if vocab.new?.length}· <b>{t('status.vocabNew', { count: vocab.new.length })}</b>{/if}
               </div>

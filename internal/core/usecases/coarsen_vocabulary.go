@@ -187,9 +187,17 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 	}
 	res.Shelf = len(v.Shelf)
 	shelfSet := make(map[string]bool, len(v.Shelf))
-	shelfIndex := make(map[string][]string, len(v.Shelf)*2)
 	for _, name := range v.Shelf {
 		shelfSet[name] = true
+	}
+	// A claim is filed onto a shelf name only when that name is in band (ADR 0009): a catch-all would
+	// take every claim it is renamed onto, and a thin name is a slot nobody uses. Membership above still
+	// counts every shelf name, so an out-of-band name is never mistaken for a tail name.
+	offerable := inBandNames(v.Shelf, observed, health.Uses, uc.Shelf)
+	offerableSet := make(map[string]bool, len(offerable))
+	shelfIndex := make(map[string][]string, len(offerable)*2)
+	for _, name := range offerable {
+		offerableSet[name] = true
 		for _, token := range uniqueTokens(name) {
 			shelfIndex[token] = append(shelfIndex[token], name)
 		}
@@ -254,7 +262,7 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 	if len(shelfSet) > 0 {
 		mapping := make(map[string]string, len(pending)/4)
 		for _, name := range pending {
-			if to, ok := shelfVariant(name, shelfSet); ok {
+			if to, ok := shelfVariant(name, offerableSet); ok {
 				mapping[name] = to
 			}
 		}
@@ -309,7 +317,7 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 		return res, nil
 	}
 
-	head := topObserved(observed, coarsenShelfHead)
+	head := keepNames(topObserved(observed, coarsenShelfHead), offerableSet)
 
 	// The questions are independent and one answer takes minutes, so several are in flight at once.
 	// The APPLY stays in order, one batch after another: it rewrites claims, and `Remaining` is its
@@ -624,6 +632,34 @@ func shelfForBatch(batch, head []string, index map[string][]string, limit int) [
 		}
 	}
 	sort.Strings(out)
+	return out
+}
+
+// inBandNames returns the shelf names a claim may be filed under: those whose share of all claims is
+// inside the band. Names the vault does not use at all have no share and are thin.
+func inBandNames(shelf []string, observed []partialentities.NameUses, total int, limits ShelfLimits) []string {
+	uses := make(map[string]int, len(observed))
+	for _, o := range observed {
+		uses[o.Name] = o.Uses
+	}
+	out := make([]string, 0, len(shelf))
+	for _, name := range shelf {
+		if limits.CatchAll(uses[name], total) || limits.Thin(uses[name], total) {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+// keepNames keeps the names that are in the set, in their order.
+func keepNames(names []string, keep map[string]bool) []string {
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if keep[name] {
+			out = append(out, name)
+		}
+	}
 	return out
 }
 

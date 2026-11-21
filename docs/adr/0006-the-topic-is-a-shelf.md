@@ -172,3 +172,12 @@ The write path is deliberately NOT changed: it already resolves a proposal again
 text, and when that text shares no token with any shelf name the name is a subject the shelf does not
 have. Forcing it onto an arbitrary shelf name would say something the claim does not, and the refit —
 which promotes a name by the mass it carries — is the honest way back in.
+
+## Addendum (2026-11-21): judged by share
+
+The refit's absolute floor (three claims) and its count-based promotion are replaced by shares of all
+claims: a catch-all is never promoted and gives its slot up, a thin name gives its slot up, and both
+limits are relative to the corpus. See [ADR 0009](0009-a-topic-is-judged-by-its-share.md).
+
+The write path is no longer "deliberately NOT changed" in one respect: its candidates and mappings are
+in band (ADR 0009). It still never forces a claim onto a name the text does not support.

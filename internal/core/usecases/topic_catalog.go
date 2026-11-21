@@ -42,6 +42,32 @@ type topicCatalog struct {
 	// (it earned the mass) or the coarsening files it in. It is a bounded allowance (a tenth of the
 	// shelf), never an open door, and a vault that is still filing its tail has none.
 	headroom int
+	// limits and total judge a name by its share of ALL claims (ADR 0009): a catch-all or a thin name is
+	// neither offered to the model nor used as a mapping target, so a claim is never filed under one
+	// just to make the count work. Zero limits judge nothing.
+	limits ShelfLimits
+	total  int
+}
+
+// judgeBy makes the catalog judge its names by their share. total is every claim of the namespace, not
+// only the shelf's.
+func (c *topicCatalog) judgeBy(l ShelfLimits, total int) {
+	c.limits, c.total = l, total
+}
+
+// inBand reports whether a name may be offered or used as a mapping target.
+func (c *topicCatalog) inBand(idx int32) bool {
+	n := c.counts[idx]
+	return !c.limits.CatchAll(n, c.total) && !c.limits.Thin(n, c.total)
+}
+
+// claimTotal is the number of claims the catalog's names carry together.
+func claimTotal(topics []entities.TopicUse) int {
+	total := 0
+	for _, t := range topics {
+		total += t.Count
+	}
+	return total
 }
 
 // newTopicCatalog builds the catalog from the names in use. A catalog with a single name yields no
@@ -115,6 +141,9 @@ func (c *topicCatalog) candidates(text string, limit int) []string {
 			continue
 		}
 		for _, idx := range c.posting[token] {
+			if !c.inBand(idx) {
+				continue
+			}
 			scores[idx] += idf
 		}
 	}
@@ -231,6 +260,9 @@ func (c *topicCatalog) contained(name string) (string, bool) {
 	best, bestCount := "", 0
 	for _, token := range proposed {
 		for _, idx := range c.posting[token] {
+			if !c.inBand(idx) {
+				continue
+			}
 			existing := uniqueTokens(c.names[idx])
 			if len(existing) < 2 || len(existing) >= len(proposed) {
 				continue

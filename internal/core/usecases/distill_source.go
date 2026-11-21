@@ -130,10 +130,11 @@ func (uc Derivation) distill(ctx context.Context, hash string, rec *StepRecorder
 	// ONE read of the topic catalog per run, shared by every part: the candidates a part is offered
 	// and the name the write resolves are both answered from it. Calling list_topics per part read
 	// the same 57k rows again for every request and answered with a truncated 2.3 MB list.
-	catalogTopics, headroom := uc.topicCatalog(ctx)
+	catalogTopics, headroom, total := uc.topicCatalog(ctx)
 	catalog := newTopicCatalog(catalogTopics)
 	catalog.budget = uc.TopicBudget
 	catalog.headroom = headroom
+	catalog.judgeBy(uc.TopicShelf, total)
 
 	// writeClaims is the APP's write, and it is the only one: the model answered with data, and this
 	// records each claim. A failed write is reported, and the part stays open — never a silent drop.
@@ -521,16 +522,17 @@ func (uc Derivation) claimTopics(ctx context.Context) []entities.TopicUse {
 // is not on the shelf is mapped onto the best fitting shelf name at the write, so a run can no longer
 // invent a fine name beside the shelf. Without a shelf (a vault that never built one) the observed
 // catalog is the whole story, exactly as before.
-func (uc Derivation) topicCatalog(ctx context.Context) (catalog []entities.TopicUse, headroom int) {
+func (uc Derivation) topicCatalog(ctx context.Context) (catalog []entities.TopicUse, headroom, total int) {
 	observed := uc.claimTopics(ctx)
+	total = claimTotal(observed)
 	if uc.Vocab == nil {
-		return observed, 0
+		return observed, 0, total
 	}
 	v, err := uc.Vocab.Read(entities.VocabularyTopics)
 	if err != nil || len(v.Shelf) == 0 {
-		return observed, 0
+		return observed, 0, total
 	}
-	return shelfCatalog(v.Shelf, observed), shelfHeadroom(v, observed)
+	return shelfCatalog(v.Shelf, observed), shelfHeadroom(v, observed), total
 }
 
 // shelfHeadroom is the allowance of names outside the shelf a run may KEEP: a tenth of the shelf, minus

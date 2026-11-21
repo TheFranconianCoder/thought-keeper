@@ -91,8 +91,9 @@ a reveal in the toolbar: the request and fetch timeouts, `openai.retries`/`retry
 `max_iterations`/`max_concurrent` (the calls in flight at once), `pipeline.audit_every` (one part in
 n is read against its claims), the run/cluster ceilings, `auto_continue`, the reconcile cadence and batch, the
 capture thresholds, the whole `cluster.*` arithmetic, the assistant retention/prune/limits, the
-browser switches, the PDF/OCR tools and page ceilings, and `app.smart_open`. A search shows a match
-whichever set it belongs to.
+browser switches, the PDF/OCR tools and page ceilings, `app.smart_open`, and the shelf's share limits
+(`vocabulary.shelf.max_share` 0.02, `vocabulary.shelf.min_share` 0.0001: a topic above or below them is
+judged by its share of all claims, see ADR 0009). A search shows a match whichever set it belongs to.
 
 Saving writes the right file first: a vault-scoped key goes to `<vault>/vault.yaml` (created on the
 first such save, carrying only the keys that save touched), everything else to the machine's config.

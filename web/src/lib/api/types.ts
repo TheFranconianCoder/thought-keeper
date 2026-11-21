@@ -597,6 +597,11 @@ export interface VocabularyHealth {
   retopiced: number;
   /** The CLAIMS still carrying a name outside the shelf: the distance to the invariant. */
   off_shelf: number;
+  /** Topics above the catch-all share of the claims, and below the thin share, with the claim mass each carries. */
+  catch_all: number;
+  catch_all_uses: number;
+  thin: number;
+  thin_uses: number;
   canonical: number;
   absorbed: number;
   new?: string[];

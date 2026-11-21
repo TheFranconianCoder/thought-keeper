@@ -51,6 +51,8 @@ var vaultKeys = map[string]bool{
 	"vocabulary.retopic.automatic":     true,
 	"vocabulary.retopic.budget":        true,
 	"vocabulary.shelf.refit_interval":  true,
+	"vocabulary.shelf.max_share":       true,
+	"vocabulary.shelf.min_share":       true,
 }
 
 // VaultScoped reports whether a knob belongs in the vault's own config file.

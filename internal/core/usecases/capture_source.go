@@ -41,6 +41,9 @@ type Derivation struct {
 	// the old behaviour: a new name is always accepted. Above it the write maps a proposed name
 	// onto the best fitting existing one, so the catalog can only grow by making room.
 	TopicBudget int
+	// TopicShelf judges a proposed name by its share of all claims (vocabulary.shelf.max_share / min_share):
+	// a catch-all or a thin name is not offered or used as a mapping target. Zero limits judge nothing.
+	TopicShelf ShelfLimits
 	// AuditEvery turns the completeness audit into a sample: one part in N is checked against its
 	// text. Zero (or one) audits every part, which is what the step did before it was measured —
 	// the second pass was 32.5 % of a morning batch's tokens and found almost nothing.

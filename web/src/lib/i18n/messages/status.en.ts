@@ -83,6 +83,8 @@ export const statusEn: Record<string, string> = {
   'status.vocabRemaining': '{count} to file',
   'status.vocabRetopic': '{count} to re-derive',
   'status.vocabOffShelf': '{count} claims off the shelf',
+  'status.vocabCatchAll': '{count} catch-all topics',
+  'status.vocabThin': '{count} thin topics',
   'status.vocabCanonical': '{canonical} canonical, {absorbed} absorbed',
   'status.vocabNew': '{count} new',
   'status.collisionsTitle': 'Two spellings of one name — always a bug',

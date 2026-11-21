@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -223,5 +224,34 @@ func TestRemainingSkipsJudgedNames(t *testing.T) {
 	got = uc.health(observed, vocab, entities.VocabularyTopics)
 	if got.Retopic != 1 || got.OffShelf != 3 {
 		t.Errorf("retopic/off_shelf = %d/%d, want 1/3 after the pass", got.Retopic, got.OffShelf)
+	}
+}
+
+// TestHealthJudgesTopicsByShare: a catch-all and a thin topic are read off the claim SHARES, so the same
+// names are judged the same way in a vault of any size. The filler names only make the total realistic.
+func TestHealthJudgesTopicsByShare(t *testing.T) {
+	observed := make([]partialentities.NameUses, 0, 3+200)
+	observed = append(observed,
+		partialentities.NameUses{Name: "software", Uses: 3000},
+		partialentities.NameUses{Name: "caching", Uses: 100},
+		partialentities.NameUses{Name: "rare-name", Uses: 1},
+	)
+	for i := range 200 {
+		observed = append(observed, partialentities.NameUses{Name: fmt.Sprintf("filler-%03d", i), Uses: 500})
+	}
+	vocab := entities.Vocabulary{Namespace: entities.VocabularyTopics, Shelf: []string{"caching"}}
+	uc := Vocabulary{Shelf: refitLimits}
+	got := uc.health(observed, vocab, entities.VocabularyTopics)
+	if got.CatchAll != 1 || got.CatchAllUses != 3000 {
+		t.Errorf("catch-all = %d/%d, want 1/3000 (software is %.1f%% of the claims)",
+			got.CatchAll, got.CatchAllUses, 100*3000/float64(got.Uses))
+	}
+	if got.Thin != 1 || got.ThinUses != 1 {
+		t.Errorf("thin = %d/%d, want the singleton alone", got.Thin, got.ThinUses)
+	}
+
+	wiki := uc.health(observed, entities.Vocabulary{Namespace: entities.VocabularyWikiTags}, entities.VocabularyWikiTags)
+	if wiki.CatchAll != 0 || wiki.Thin != 0 {
+		t.Errorf("tag namespaces are not judged by share: catch-all %d thin %d", wiki.CatchAll, wiki.Thin)
 	}
 }

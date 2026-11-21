@@ -151,8 +151,14 @@ vocabulary:                                # the TARGETS of the name vocabularie
   shelf:
     refit_interval: 24h                    # a SETTLED vocabulary re-synthesizes its shelf: a subject
                                            # that earned its mass takes a slot, a slot nobody uses
-                                           # gives its up (2x margin, at least 3 claims). Empty = the
-                                           # shelf stays the record it was built as.
+                                           # gives its up (2x margin). Empty = the shelf stays the
+                                           # record it was built as.
+    max_share: 0.02                        # a topic carrying more than this share of ALL claims is a
+                                           # catch-all: never promoted, and evicted from the shelf
+                                           # (its claims are re-derived). A share, so it scales with the corpus.
+    min_share: 0.0001                      # a shelf name below this share of all claims is a thin
+                                           # singleton: it gives up its slot, and a candidate below it
+                                           # is never promoted.
 
 cluster:                                   # the claim graph behind the associations. These are QUALITY gates,
                                            # not target sizes: a broad group is split, a tight group stays.

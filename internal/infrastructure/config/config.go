@@ -220,6 +220,14 @@ type ShelfConfig struct {
 	// it was built as). The claims an eviction removes from the shelf are re-derived by the retopic
 	// pass, which is why a refit is safe to run: it moves a record, never a claim.
 	RefitInterval string `yaml:"refit_interval"`
+	// MaxShare is the largest share of ALL claims one topic may carry before it is a catch-all: a name
+	// that means everything distinguishes nothing, so a refit neither promotes it nor keeps it on the
+	// shelf. It is a share, not a count, so it scales with the corpus. Zero = the default.
+	MaxShare float64 `yaml:"max_share"`
+	// MinShare is the smallest share of all claims a shelf name may carry and keep its slot: below it a
+	// topic is a thin singleton, and its slot is worth more to a subject the vault actually has. Zero =
+	// the default.
+	MinShare float64 `yaml:"min_share"`
 }
 
 // RetopicConfig is the per-claim repair: the claims whose topic the shelf could not take are asked
@@ -456,7 +464,7 @@ func Defaults() Config {
 			// gate is what the document steps wait on, and a migration of hours must not own it.
 			Coarsen: CoarsenConfig{Automatic: true, Budget: "15m"},
 			// A settled shelf follows the corpus once a day; the repair pass runs like the coarsening.
-			Shelf:   ShelfConfig{RefitInterval: "24h"},
+			Shelf:   ShelfConfig{RefitInterval: "24h", MaxShare: 0.02, MinShare: 0.0001},
 			Retopic: RetopicConfig{Automatic: true, Budget: "15m"},
 		},
 		Cluster: ClusterConfig{
@@ -641,6 +649,12 @@ func applyDefaults(c *Config) map[string]string {
 	}
 	if c.Vocabulary.Shelf.RefitInterval == "" {
 		c.Vocabulary.Shelf.RefitInterval = d.Vocabulary.Shelf.RefitInterval
+	}
+	if c.Vocabulary.Shelf.MaxShare <= 0 {
+		c.Vocabulary.Shelf.MaxShare = d.Vocabulary.Shelf.MaxShare
+	}
+	if c.Vocabulary.Shelf.MinShare <= 0 {
+		c.Vocabulary.Shelf.MinShare = d.Vocabulary.Shelf.MinShare
 	}
 	if c.Pipeline.PartsPerRun <= 0 {
 		c.Pipeline.PartsPerRun = d.Pipeline.PartsPerRun

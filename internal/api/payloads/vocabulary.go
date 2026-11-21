@@ -52,6 +52,12 @@ type VocabularyHealth struct {
 	Retopic   int `json:"retopic"`
 	Retopiced int `json:"retopiced"`
 	OffShelf  int `json:"off_shelf"`
+	// CatchAll are the topics above the catch-all share of the claims, Thin the topics below the thin
+	// share; the *Uses fields are the claim mass each carries.
+	CatchAll     int `json:"catch_all"`
+	CatchAllUses int `json:"catch_all_uses"`
+	Thin         int `json:"thin"`
+	ThinUses     int `json:"thin_uses"`
 	// What the vocabulary file already knows, and the names it has no opinion about yet.
 	Canonical int                  `json:"canonical"`
 	Absorbed  int                  `json:"absorbed"`
@@ -84,6 +90,7 @@ func VocabularyFromPartials(in []partialentities.VocabularyHealth) VocabularyRep
 			Canonical:          h.Canonical, Absorbed: h.Absorbed, New: h.New, Top: namesFromPartials(h.Top),
 			Shelf: h.Shelf, Target: h.Target, Remaining: h.Remaining,
 			Retopic: h.Retopic, Retopiced: h.Retopiced, OffShelf: h.OffShelf,
+			CatchAll: h.CatchAll, CatchAllUses: h.CatchAllUses, Thin: h.Thin, ThinUses: h.ThinUses,
 		})
 	}
 	return VocabularyReport{Namespaces: out}

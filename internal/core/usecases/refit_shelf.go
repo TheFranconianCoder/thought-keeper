@@ -19,15 +19,10 @@ type RefitShelfResult struct {
 	Evicted  []string
 }
 
-const (
-	// minPromoteUses is the mass a name needs before it may take a slot: one or two claims are not a
-	// subject, and a shelf of one-offs is exactly the catalog the shelf exists to prevent.
-	minPromoteUses = 3
-	// evictMargin is how much more a candidate must carry than the slot it would take. Without the
-	// margin a name with three uses would trade places with one that has two on every refit — churn
-	// that moves claims, costs a retopic pass and buys nothing.
-	evictMargin = 2
-)
+// evictMargin is how much more a candidate must carry than the slot it would take. Without the margin
+// a name with three uses would trade places with one that has two on every refit — churn that moves
+// claims, costs a retopic pass and buys nothing.
+const evictMargin = 2
 
 // RefitShelf re-synthesizes a namespace's shelf from what the corpus carries right now: a slot nobody
 // uses is given to a subject the vault actually has, and a subject that grew takes one.
@@ -38,6 +33,9 @@ const (
 // RECORD, and the corpus follows on the next passes (the claims on an evicted name are off the shelf,
 // which is exactly the queue the retopic pass works through). That order is the only one that can
 // converge: a shelf that only changed after the claims did would never change at all.
+//
+// A topic is judged by its share of ALL claims (ShelfLimits), never by its count alone: a catch-all is
+// never promoted and gives its slot up, and a thin name neither keeps a slot nor earns one.
 //
 // The report it is given is the observation the tick already made, so a refit costs one file write and
 // no extra read of the claim corpus.
@@ -64,17 +62,34 @@ func (uc Vocabulary) RefitShelf(h partialentities.VocabularyHealth, target int) 
 	// A moved-down target trims first, so the promotions below fill the slots that are really free.
 	shelf := shelfSizing(append([]string(nil), v.Shelf...), h.Observed, target)
 
+	// The shelf is judged by share first: a catch-all or a thin name gives its slot up, even while the
+	// shelf has room. Its claims go off the shelf and the retopic pass re-derives them.
+	total := h.Uses
+	kept := shelf[:0]
+	for _, name := range shelf {
+		if uc.Shelf.CatchAll(uses[name], total) || uc.Shelf.Thin(uses[name], total) {
+			res.Evicted = append(res.Evicted, name)
+			continue
+		}
+		kept = append(kept, name)
+	}
+	shelf = kept
+
 	onShelf := make(map[string]bool, len(shelf))
 	for _, name := range shelf {
 		onShelf[name] = true
 	}
 	for _, o := range h.Observed {
-		// h.Observed is most used first, so the candidates are already in promotion order.
-		if onShelf[o.Name] || o.Uses < minPromoteUses {
+		// h.Observed is most used first, so the candidates are already in promotion order. A candidate
+		// is a subject only inside the share band: a catch-all means everything, a thin name nothing.
+		if onShelf[o.Name] {
 			continue
 		}
 		if _, absorbed := v.Absorbed[o.Name]; absorbed {
 			continue // an absorbed name IS another name already
+		}
+		if uc.Shelf.CatchAll(o.Uses, total) || uc.Shelf.Thin(o.Uses, total) {
+			continue
 		}
 		if len(shelf) < target {
 			shelf = append(shelf, o.Name)

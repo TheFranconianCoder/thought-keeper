@@ -31,6 +31,9 @@ type Claims struct {
 	// TopicBudget is the ceiling of the topic shelf (vocabulary.topics.max_names): a re-labelled claim
 	// is filed onto it instead of inventing a name.
 	TopicBudget int
+	// TopicShelf judges the shelf names a re-labelled claim may be filed under by their share of all
+	// claims. Zero limits judge nothing.
+	TopicShelf ShelfLimits
 	// Budget bounds one automatic retopic pass: it stops asking when it is spent, applies the answers
 	// in flight and returns, so the exclusive gate goes back to the document steps. Zero means the
 	// run's own ceiling (a manual press).

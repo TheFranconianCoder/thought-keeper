@@ -82,6 +82,8 @@ export const statusDe: Record<string, string> = {
   'status.vocabRemaining': '{count} offen',
   'status.vocabRetopic': '{count} neu abzuleiten',
   'status.vocabOffShelf': '{count} Aussagen außerhalb des Shelves',
+  'status.vocabCatchAll': '{count} Sammeltopics',
+  'status.vocabThin': '{count} Einzeltopics',
   'status.vocabCanonical': '{canonical} kanonisch, {absorbed} übernommen',
   'status.vocabNew': '{count} neu',
   'status.collisionsTitle': 'Zwei Schreibweisen eines Namens — immer ein Fehler',

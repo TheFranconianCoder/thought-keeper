@@ -64,6 +64,8 @@ var writableKeys = map[string]string{
 	"vocabulary.coarsen.budget":       TierAdvanced,
 	"vocabulary.retopic.budget":       TierAdvanced,
 	"vocabulary.shelf.refit_interval": TierAdvanced,
+	"vocabulary.shelf.max_share":      TierAdvanced,
+	"vocabulary.shelf.min_share":      TierAdvanced,
 
 	// Agent: patience with one endpoint, not a different endpoint.
 	"openai.timeout":        TierAdvanced,
@@ -277,6 +279,8 @@ var scoreKeys = map[string]bool{
 	"cluster.merge_min_internal": true,
 	"cluster.merge_min_gap":      true,
 	"cluster.attach_min_score":   true,
+	"vocabulary.shelf.max_share": true,
+	"vocabulary.shelf.min_share": true,
 }
 
 // keyProblem checks ONE knob and returns a sentence naming it, or "". Both the writer (a single

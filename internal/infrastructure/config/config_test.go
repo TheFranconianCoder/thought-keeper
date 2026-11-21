@@ -29,6 +29,25 @@ func TestLoadMissingFileUsesDefaults(t *testing.T) {
 	}
 }
 
+// TestShelfQualityDefaults: the share limits have defaults, and a zero or negative value is not a
+// limit the app can use, so it falls back to the default instead of marking every topic a catch-all.
+func TestShelfQualityDefaults(t *testing.T) {
+	cfg, err := Load(filepath.Join(t.TempDir(), "does-not-exist.yaml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Vocabulary.Shelf.MaxShare != 0.02 || cfg.Vocabulary.Shelf.MinShare != 0.0001 {
+		t.Errorf("shelf shares = %v/%v, want 0.02/0.0001", cfg.Vocabulary.Shelf.MaxShare, cfg.Vocabulary.Shelf.MinShare)
+	}
+	c := Defaults()
+	c.Vocabulary.Shelf.MaxShare = 0
+	c.Vocabulary.Shelf.MinShare = -1
+	applyDefaults(&c)
+	if c.Vocabulary.Shelf.MaxShare != 0.02 || c.Vocabulary.Shelf.MinShare != 0.0001 {
+		t.Errorf("zero shares were not replaced by the defaults: %v/%v", c.Vocabulary.Shelf.MaxShare, c.Vocabulary.Shelf.MinShare)
+	}
+}
+
 // TestBlockedWindowsCanBeEmptied: the default is a pair of windows, and a reader who wants the
 // derivation around the clock says so with an explicit empty list — which must not fall back to the
 // default again.

@@ -525,6 +525,9 @@ namespace still has names outside the shelf, so the file is written batch after 
 passes instead of in one press a reader has to make again and again. When nothing is left to ask, the
 tick **re-fits** the shelf from the corpus — a name that earned its mass takes a slot, a slot nobody
 uses gives its up — so `# Shelf` follows the content instead of freezing on the day it was built.
+A topic is judged by its **share** of all claims, not by its count: above `vocabulary.shelf.max_share` it
+is a catch-all (never on the shelf), below `vocabulary.shelf.min_share` it is thin (it gives its slot up).
+The shares are relative to the corpus, so the same limits hold in a vault of any size (ADR 0009).
 
 ## 9. Ask records
 

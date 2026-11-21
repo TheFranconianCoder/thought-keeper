@@ -266,7 +266,8 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
 - The agent answers with the claims of that part as JSON (`topic`, `claim`, `body`, `type`,
   `nodes`). The app writes the atoms; a claim that names no node inherits the part. The topic is
   resolved at the write: an alias wins, a spelling of an existing name is mapped onto it, and once
-  the shelf is full the best fitting name wins — a mapping is logged as `topic_mapped`.
+  the shelf is full the best fitting IN-BAND name wins (a catch-all or a thin name is never a target, ADR 0009)
+  — a mapping is logged as `topic_mapped`.
 - The agent then audits the part: every statement not covered by a claim is written, or `COMPLETE`
   is answered. The audit is a **sample** (`pipeline.audit_every`, default one part in four): a part
   that produced no claim is always audited, and so is a long text that produced fewer than one claim

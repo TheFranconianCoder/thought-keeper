@@ -68,7 +68,8 @@ Rules the prompt enforces (and the wire shape):
   `llm-agents`), chosen from the names the request offers: two dozen candidates selected from the
   shelf by IDF-weighted overlap with the part's text. A topic is never a chapter, a document or a
   hierarchy, and it is a SHELF — the write resolves the model's name against the catalog, mapping a
-  spelling onto its canonical name and, once the shelf is full, onto the best fitting name.
+  spelling onto its canonical name and, once the shelf is full, onto the best fitting IN-BAND name
+  (ADR 0009: never a catch-all or a thin name). A proposal no in-band name fits is kept, not forced.
 - **Provenance cites source node ids** from the outline; unknown ids are rejected.
 - **No links, and code is code.** A claim body carries no links; syntax quoted from the source is
   inline code (a backtick span), and the claim sentence names it in prose.
@@ -295,8 +296,8 @@ order. It never writes a URL, never invents a hash and never answers the request
   merges synonyms, it cannot fix granularity (−4 % measured, ADR 0006). The reconcile tick therefore
   writes `vocabulary/topics.md` with the shelf the target asks for — the most used names, no model, no
   gate, no claim rewritten — and trims it when `vocabulary.topics.max_names` moves down. That is the
-  record the **derivation reads**: candidates come from the shelf, and a proposed name that is not on
-  it is mapped onto the best fitting shelf name at the write. The tag namespaces get no such build
+  record the **derivation reads**: candidates come from the in-band shelf (ADR 0009), and a proposed name that is
+  not on it is mapped onto the best fitting in-band shelf name at the write. The tag namespaces get no such build
   (their write path reads `Canonical`); their shelf comes with the coarsening.
 - **`POST /vocabulary/coarsen`** files a namespace's long tail onto its shelf. Three passes, cheapest
   first. The deterministic **families** (near-duplicates, no model). The **variants**: a tail name that
@@ -328,9 +329,11 @@ order. It never writes a URL, never invents a hash and never answers the request
 - **The shelf follows the corpus.** The derivation files new claims onto the shelf, so without a
   refit the shelf could only shrink and a new subject could never appear. When a namespace has
   nothing left to ask (no name to file, no claim to re-derive) the reconcile tick re-synthesizes its
-  shelf at most once per `vocabulary.shelf.refit_interval` (24h): a name outside the shelf that carries
-  at least `2×` the coldest slot (and never fewer than three claims) takes that slot; with free slots
-  below `max_names` it simply joins. The refit writes a RECORD — no model, no gate, no claim — and the
+  shelf at most once per `vocabulary.shelf.refit_interval` (24h). A topic is judged by its SHARE of all
+  claims (ADR 0009): a name above `vocabulary.shelf.max_share` (0.02) is a catch-all, one below
+  `vocabulary.shelf.min_share` (0.0001) is thin. A catch-all or a thin name gives its slot up, even with
+  free slots, and is never promoted; a name inside the band that carries at least `2×` the coldest slot
+  takes that slot, with free slots below `max_names` it simply joins. The refit writes a RECORD — no model, no gate, no claim — and the
   corpus follows: the claims on an evicted name are off the shelf again, which is exactly the queue the
   retopic pass works through. And so that a genuinely new subject can appear at all, the derivation
   keeps a proposal that is not on the shelf while the names outside it stay under its **headroom**

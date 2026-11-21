@@ -65,6 +65,14 @@ type VocabularyHealth struct {
 	// cannot say: a hundred names carrying one claim each and a hundred names carrying a hundred
 	// claims each are very different work.
 	OffShelf int
+	// CatchAll are the topics whose share of ALL claims is above the catch-all limit, and CatchAllUses
+	// the claim mass they carry. Thin are the topics below the thin limit (a singleton is thin in a
+	// vault of any size). Both are judged by share alone, so they scale with the corpus. Only the topics
+	// namespace is judged: the tag namespaces have no shelf refit.
+	CatchAll     int
+	CatchAllUses int
+	Thin         int
+	ThinUses     int
 	// New are the observed names the vocabulary has no opinion about yet.
 	New []string
 	// Top is the biggest names, for the reader and for a curation prompt.

@@ -317,6 +317,7 @@ func Build(
 		MaxIterations: cfg.OpenAI.MaxIterations, Language: cfg.Language.Claims,
 		ReasoningEffort: cfg.OpenAI.ReasoningEffortDistill, Model: cfg.OpenAI.ModelCompile,
 		TopicBudget: cfg.Vocabulary.Topics.MaxNames, AuditEvery: cfg.Pipeline.AuditEvery,
+		TopicShelf: usecases.ShelfLimits{MaxShare: cfg.Vocabulary.Shelf.MaxShare, MinShare: cfg.Vocabulary.Shelf.MinShare},
 	}
 	treesUC := usecases.Trees{
 		Store: store, Index: index, Trees: trees, Extractor: extractor,
@@ -331,6 +332,7 @@ func Build(
 		Atoms: atomRepo, AtomStore: atomStore, Wiki: wikiStore, Reader: index, Sources: steps,
 		Tags: steps, Index: index, Vocab: vocabStore, Runs: runRepo, SourceLog: sourceLog,
 		Gateway: deriveGW, Model: cfg.OpenAI.ModelCompile, Apply: true, Clock: clock, Log: log,
+		Shelf: usecases.ShelfLimits{MaxShare: cfg.Vocabulary.Shelf.MaxShare, MinShare: cfg.Vocabulary.Shelf.MinShare},
 	}
 	sources := usecases.Sources{
 		Store: store, Pages: wikiStore, Index: index, Atoms: atomRepo, AtomStore: atomStore,
@@ -411,6 +413,7 @@ func Build(
 	claims.CommandStore = commandStore
 	claims.Vocab = vocabStore
 	claims.TopicBudget = cfg.Vocabulary.Topics.MaxNames
+	claims.TopicShelf = usecases.ShelfLimits{MaxShare: cfg.Vocabulary.Shelf.MaxShare, MinShare: cfg.Vocabulary.Shelf.MinShare}
 	claims.Runs = runRepo
 	claims.Clock = clock
 	claims.Log = log

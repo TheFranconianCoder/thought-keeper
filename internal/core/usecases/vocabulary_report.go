@@ -50,12 +50,32 @@ type Vocabulary struct {
 	Budget time.Duration
 	// Target is the size the COARSENING builds the shelf for (vocabulary.<namespace>.max_names).
 	Target int
+	// Shelf holds the share limits a topic is judged by (vocabulary.shelf.max_share / min_share).
+	Shelf ShelfLimits
 	// Parallel bounds the model calls one run keeps in flight: the rebranch's claims, and the
 	// coarsening's shelf questions (whose APPLY stays in order regardless). 0 = the use case's own
 	// default.
 	Parallel  int
 	OnPhase   func(phase string)
 	ApplyGate func(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+// ShelfLimits are the relative shares a topic is judged by. A share is a topic's claims over ALL
+// claims, so the limits hold for any corpus size. A zero limit is off: MaxShare 0 never calls a topic a
+// catch-all, MinShare 0 never calls one thin.
+type ShelfLimits struct {
+	MaxShare float64
+	MinShare float64
+}
+
+// CatchAll reports whether a topic carries more than the catch-all share of the claims.
+func (l ShelfLimits) CatchAll(uses, total int) bool {
+	return l.MaxShare > 0 && total > 0 && float64(uses) > l.MaxShare*float64(total)
+}
+
+// Thin reports whether a topic carries less than the thin share of the claims (zero uses included).
+func (l ShelfLimits) Thin(uses, total int) bool {
+	return l.MinShare > 0 && total > 0 && float64(uses) < l.MinShare*float64(total)
 }
 
 // VocabularyReporter reports how healthy the vocabularies are. A handler holds this value; nil means
@@ -202,6 +222,18 @@ func (uc Vocabulary) health(observed []partialentities.NameUses, vocab entities.
 	}
 	if h.Names > 0 {
 		h.SingletonShare = float64(h.Singletons) / float64(h.Names)
+	}
+	if ns == entities.VocabularyTopics {
+		for _, o := range observed {
+			if uc.Shelf.CatchAll(o.Uses, h.Uses) {
+				h.CatchAll++
+				h.CatchAllUses += o.Uses
+			}
+			if uc.Shelf.Thin(o.Uses, h.Uses) {
+				h.Thin++
+				h.ThinUses += o.Uses
+			}
+		}
 	}
 	h.Observed = append(h.Observed, observed...)
 	top := uc.TopNames
