@@ -42,6 +42,13 @@ const (
 	// coarsenVariantChunk bounds one rename of the deterministic variants: one transaction and one
 	// read of the claims per chunk.
 	coarsenVariantChunk = 2000
+	// coarsenSettleVersion is the version of the ASSIGNMENT RULE recorded in the vocabulary
+	// (`settle:`). Version 0 — a file that does not carry one — was "a name the shelf cannot honestly
+	// cover may be left out", which settled two thirds of a measured tail and left 82 % of its claims
+	// on fine labels. Version 2 makes assignment the rule. A pass that finds an older version drops the
+	// verdicts of the names OUTSIDE the shelf and asks them again; a verdict about a shelf name is not
+	// touched by the rule change.
+	coarsenSettleVersion = 2
 )
 
 // CoarsenResult is what one coarsening pass did.
@@ -185,6 +192,29 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 		shelfSet[name] = true
 		for _, token := range uniqueTokens(name) {
 			shelfIndex[token] = append(shelfIndex[token], name)
+		}
+	}
+
+	// The assignment rule moved: the names an older rule settled as unfilable are questions again.
+	if v.Settle != coarsenSettleVersion {
+		kept := make([]string, 0, len(v.Decided))
+		for _, name := range v.Decided {
+			if shelfSet[name] {
+				kept = append(kept, name)
+			}
+		}
+		dropped := len(v.Decided) - len(kept)
+		v.Decided = kept
+		v.Settle = coarsenSettleVersion
+		if uc.Clock != nil {
+			v.Updated = uc.Clock.Now()
+		}
+		if wErr := uc.Vocab.Write(v); wErr != nil {
+			return res, wErr
+		}
+		if uc.Log != nil && dropped > 0 {
+			uc.Log.Info("vocabulary: a new assignment rule re-opens the settled tail",
+				"namespace", string(uc.Namespace), "names", dropped)
 		}
 	}
 

@@ -355,3 +355,87 @@ func TestTailStateWithoutAShelfAnswersNoWork(t *testing.T) {
 		t.Errorf("tail = %+v, want the catalog as remaining and nothing off a shelf that does not exist", st)
 	}
 }
+
+// TestRebranchBatchesAcrossNames is the throughput guard: the question is the CLAIM's text, not the
+// name it was filed under, so one call takes claims from several names. Asking one name's claims at a
+// time spent a call per name — on the measured vault that was 45,000 calls for 341,000 claims.
+func TestRebranchBatchesAcrossNames(t *testing.T) {
+	ctx := context.Background()
+	atoms := newRetopicAtoms(map[string]int{
+		"caching": 10,
+		"n-one":   2,
+		"n-two":   2,
+		"n-three": 1,
+	})
+	store := newShelfVocab()
+	store.v[entities.VocabularyTopics] = entities.Vocabulary{
+		Namespace: entities.VocabularyTopics,
+		Shelf:     []string{"caching"},
+		Absorbed:  map[string]string{},
+	}
+	gw := &sequenceGateway{answers: []string{
+		`{"claims":[{"n":1,"topic":"caching"},{"n":2,"topic":"caching"},{"n":3,"topic":"caching"},{"n":4,"topic":"caching"},{"n":5,"topic":"caching"}]}`,
+	}}
+	uc := Claims{
+		Atoms: atoms, Vocab: store, Gateway: gw, Model: "test-model", Clock: shelfClock{},
+		Apply: true, Parallel: 1,
+	}
+	res, err := uc.Rebranch(ctx, ulid.Make())
+	if err != nil {
+		t.Fatalf("retopic: %v", err)
+	}
+	if gw.calls != 1 {
+		t.Errorf("model calls = %d, want 1 for the three names' five claims", gw.calls)
+	}
+	if res.Names != 3 || res.Examined != 5 || res.Remaining != 0 {
+		t.Errorf("names/examined/remaining = %d/%d/%d, want 3/5/0", res.Names, res.Examined, res.Remaining)
+	}
+	if len(store.v[entities.VocabularyTopics].Relabelled) != 3 {
+		t.Errorf("relabelled = %v, want the three names", store.v[entities.VocabularyTopics].Relabelled)
+	}
+}
+
+// TestCoarsenReopensTheTailUnderANewRule: a verdict made under the old "may be left out" rule has to be
+// asked again, or the tail it settled is closed for good. A verdict about a SHELF name is untouched:
+// the rule is about filing, not about the shelf.
+func TestCoarsenReopensTheTailUnderANewRule(t *testing.T) {
+	ctx := context.Background()
+	catalog := map[string]int{"shelf-a": 50, "shelf-b": 40, "shelf-c": 30}
+	for i := 1; i <= 4; i++ {
+		catalog[fmt.Sprintf("tail-%03d", i)] = 1
+	}
+	atoms := newCoarsenAtoms(catalog)
+	store := newShelfVocab()
+	store.v[entities.VocabularyTopics] = entities.Vocabulary{
+		Namespace:   entities.VocabularyTopics,
+		Shelf:       []string{"shelf-a", "shelf-b", "shelf-c"},
+		Target:      3,
+		Absorbed:    map[string]string{},
+		BroadTokens: []string{"tail", "shelf"},
+		Decided:     []string{"shelf-a", "tail-001", "tail-002"},
+	}
+	gw := &sequenceGateway{answers: []string{`{"mapping":{}}`}}
+
+	res, err := coarsenFixture(atoms, store, gw, 3).Coarsen(ctx, ulid.Make())
+	if err != nil {
+		t.Fatalf("coarsen: %v", err)
+	}
+	if gw.calls == 0 {
+		t.Error("the settled tail was not asked again")
+	}
+	if res.Remaining != 4 {
+		t.Errorf("remaining = %d, want the four tail names open again", res.Remaining)
+	}
+	got := store.v[entities.VocabularyTopics]
+	if got.Settle != coarsenSettleVersion {
+		t.Errorf("settle = %d, want %d", got.Settle, coarsenSettleVersion)
+	}
+	if !slices.Contains(got.Decided, "shelf-a") {
+		t.Errorf("a verdict about a shelf name was dropped: %v", got.Decided)
+	}
+	for _, name := range []string{"tail-001", "tail-002"} {
+		if slices.Contains(got.Decided, name) {
+			t.Errorf("%q kept its old verdict: %v", name, got.Decided)
+		}
+	}
+}

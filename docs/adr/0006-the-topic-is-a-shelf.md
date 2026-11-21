@@ -148,3 +148,27 @@ Three amendments, and they are one mechanism:
 A repair pass never rewrites the vocabulary record: the shelf, the alias table (`Absorbed`), the judged
 names (`Decided`) and the re-derived ones (`Relabelled`) are decisions, and the old retopic pass threw
 all of them away by writing a fresh `Canonical` from what the claims said.
+
+## Addendum (2026-11-21): assignment is the rule, and a batch is not a name
+
+Two numbers from the same running vault changed the last two decisions.
+
+- **Two thirds of the tail was passed over.** With the prompt saying "a name the shelf cannot honestly
+  cover may be left out", the model filed ~35 % of every batch. After the tail settled, 82 % of the
+  claims (341,194 of 415,000) still carried a fine label, and the passes that were supposed to reduce
+  them had nothing left to ask. The permission was the bug: a shelf name that is merely BROADER than a
+  name is still the right place for it. The prompt now assigns every name and leaves one out only when
+  no shelf name covers its subject at all. That is a policy, so it has a **version**: the vocabulary
+  records `settle:`, and a pass that finds an older version drops the verdicts of the names OUTSIDE
+  the shelf and asks them again. A verdict about a shelf name is untouched — the rule is about filing,
+  not about the shelf.
+- **A retopic batch is taken across names.** The question is the claim's own text; the name it was
+  filed under only decides when it is settled. Batching per name therefore spent one call per name —
+  45,000 calls for 341,000 claims, each carrying ~7.5 claims — while batches of a hundred drawn from
+  the whole queue need ~3,400. A name is recorded in `Relabelled` when its last claim has been asked,
+  so the convergence property does not change, only the unit of asking.
+
+The write path is deliberately NOT changed: it already resolves a proposal against the whole part
+text, and when that text shares no token with any shelf name the name is a subject the shelf does not
+have. Forcing it onto an arbitrary shelf name would say something the claim does not, and the refit —
+which promotes a name by the mass it carries — is the honest way back in.

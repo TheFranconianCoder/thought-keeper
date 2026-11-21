@@ -82,6 +82,9 @@ func render(v entities.Vocabulary) string {
 	if v.Target > 0 {
 		fmt.Fprintf(&b, "target: %d\n", v.Target)
 	}
+	if v.Settle > 0 {
+		fmt.Fprintf(&b, "settle: %d\n", v.Settle)
+	}
 	if v.Run != (ulid.ULID{}) {
 		fmt.Fprintf(&b, "run: %s\n", v.Run.String())
 	}
@@ -156,6 +159,11 @@ func parse(ns entities.VocabularyNamespace, text string) entities.Vocabulary {
 		case strings.HasPrefix(line, "updated:"):
 			if t, err := time.Parse(time.RFC3339, strings.TrimSpace(strings.TrimPrefix(line, "updated:"))); err == nil {
 				v.Updated = t.UTC()
+			}
+			continue
+		case strings.HasPrefix(line, "settle:"):
+			if n, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "settle:"))); err == nil {
+				v.Settle = n
 			}
 			continue
 		case strings.HasPrefix(line, "target:"):

@@ -316,6 +316,12 @@ One entry per claim, using the NUMBER from the list.`
 // It is the opposite of VocabularyNameRules: there the model must not coarsen, here coarsening is the
 // whole job. A vault that follows the "finest level" rule ends up with 57,181 topics for 402,931
 // claims — a vocabulary nobody can navigate, and 2.3 MB that no prompt can carry.
+//
+// ASSIGNMENT IS THE RULE, leaving a name out the exception. The measured vault proved why: with the
+// old wording ("a name the shelf cannot honestly cover may be left out") the model passed over two
+// thirds of the tail, the names were settled as unfilable, and 82 % of the claims stayed on fine
+// labels that no pass was left to move. A shelf name that is merely BROADER than the name is still
+// the right place for it — a shelf is a shelf, not a synonym list.
 const ShelfSystem = `You file subjects onto the SHELF of a knowledge base.
 
 The shelf is the fixed list of names a reader navigates and filters by. Assign every given name to the
@@ -325,8 +331,12 @@ ONE shelf name it belongs under.
   "kubernetes" when the shelf carries it.
 - A name that already IS a shelf name stays as it is; leave it out of the mapping.
 - Prefer the SMALLEST shelf name that still covers the subject.
-- A name the shelf cannot honestly cover may be left out. Never force an assignment that says
-  something other than the name says.
+- Assign EVERY name. A shelf name that is broader than the name is the right place for it: a shelf is
+  a shelf, not a synonym list, and "cache-invalidation-strategy" belongs under "caching" even though
+  the shelf name says less.
+- Leave a name out only when NO shelf name covers its subject at all — not because the match is
+  imperfect. An unmapped name is a subject the shelf does not have: it stays in the vault and comes
+  back as a candidate for a slot of its own.
 - Never invent a name: every value must be one of the shelf names you were given.
 
 Answer with ONLY a JSON object, no prose and no code fence:

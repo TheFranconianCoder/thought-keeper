@@ -502,7 +502,9 @@ record — it never triggers a model call per source.
 `POST /api/v1/vocabulary/curate` merges names, `POST /api/v1/vocabulary/coarsen` files the long tail
 onto the shelf, `POST /api/v1/vocabulary/retopic` re-derives claim topics, and all three are renames
 — no claim text is rewritten and no cluster moves. The file carries `target:` (the size the shelf was
-built for) and a `# Shelf` section next to `# Canonical`, `# Decided` and `# Absorbed`.
+built for) and `settle:` (the version of the assignment rule the coarsening judged under, so a rule
+change can re-open the names an older one closed) and a `# Shelf` section next to `# Canonical`,
+`# Decided`, `# Relabelled` and `# Absorbed`.
 
 `# Decided` is the memory of every name the model has a verdict about: merged, deliberately kept, or
 passed over by a coarsening that could not file it onto the shelf. A judged name is never a question

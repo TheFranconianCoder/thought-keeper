@@ -69,7 +69,12 @@ type Vocabulary struct {
 	// retopic pass). A name that keeps its claims after that is the subject itself, not an unplaced
 	// tail: it is a remainder the report shows, never a question that comes back.
 	Relabelled []string
-	Updated    time.Time
+	// Settle is the version of the ASSIGNMENT RULE the coarsening decided under. A new rule has to
+	// reach the names an older one settled as "cannot be filed", or the tail it closed stays closed
+	// forever; a version the file does not carry is version 0 (the rule that let two thirds of the tail
+	// through), and the next pass asks those names again.
+	Settle  int
+	Updated time.Time
 	// Run is the run that last wrote this vocabulary (zero for a file written before the runs existed).
 	Run ulid.ULID
 }

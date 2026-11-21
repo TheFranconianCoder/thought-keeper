@@ -140,12 +140,39 @@ func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchRes
 	}
 	known := nameLines(shelfUses(v.Shelf, observed), knownInPrompt)
 
+	// A batch is filled from SEVERAL names. The question does not depend on the name a claim was filed
+	// under — the claim's own text decides its topic — so asking one name's seven claims at a time
+	// spent a model call per name: 45,000 calls for 341,000 claims. A hundred claims across the queue
+	// are the same question with a tenth of the calls. `open` is how many claims of each name have not
+	// been asked yet, and a name is settled when its last one has.
+	open := make(map[string]int, len(queue))
+	buffer := make([]rebranchClaim, 0, rebranchPerCall)
+	stop := false
+	flush := func() {
+		if len(buffer) == 0 {
+			return
+		}
+		batch := append([]rebranchClaim(nil), buffer...)
+		buffer = buffer[:0]
+		applied := uc.askAndApply(ctx, batch, known, catalog, aliases, spent, &res)
+		for _, c := range batch {
+			open[c.name]--
+			if open[c.name] == 0 {
+				settle(c.name)
+				res.Names++
+				res.Remaining--
+			}
+		}
+		if !applied {
+			stop = true
+		}
+	}
+
 	for _, name := range queue {
-		if spent() || res.Examined >= claimBudget {
+		if stop || spent() || res.Examined+len(buffer) >= claimBudget {
 			break
 		}
 		uc.phase(fmt.Sprintf("re-deriving %q (%d left)", name, res.Remaining))
-		complete := true
 		offset := 0
 		for {
 			atoms, lErr := uc.Atoms.ListAtoms(ctx, name, rebranchPage, offset)
@@ -156,55 +183,71 @@ func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchRes
 				break
 			}
 			offset += len(atoms)
-			if room := claimBudget - res.Examined; len(atoms) > room {
-				atoms = atoms[:room]
-				complete = false
-			}
-			if !uc.askAndApply(ctx, atoms, known, catalog, aliases, spent, &res) {
-				complete = false
-				break
-			}
-			if len(atoms) < rebranchPage || res.Examined >= claimBudget {
-				if res.Examined >= claimBudget {
-					complete = false
+			for _, atom := range atoms {
+				if res.Examined+len(buffer) >= claimBudget {
+					stop = true
+					break
 				}
+				open[name]++
+				buffer = append(buffer, rebranchClaim{atom: atom, name: name})
+				if len(buffer) >= rebranchPerCall {
+					flush()
+				}
+				if stop {
+					break
+				}
+			}
+			if stop || len(atoms) < rebranchPage {
 				break
 			}
 		}
-		// A name is the unit of memory: it is answered for only when every batch was attempted, so a
-		// pass that ran out of budget hands it back instead of pretending it was done.
-		if complete {
-			settle(name)
-			res.Names++
-			res.Remaining--
-		}
+	}
+	if !stop {
+		flush()
 	}
 	return res, nil
 }
 
-// askAndApply asks one page of claims in batches (several in flight) and applies the answers IN ORDER:
-// a question writes nothing, and the labels must land in the order the budget was accounted for.
-func (uc Claims) askAndApply(ctx context.Context, atoms []entities.Atom, known []string, catalog *topicCatalog, aliases map[string]string, spent func() bool, res *RebranchResult) bool {
-	batches := make([][]entities.Atom, 0, (len(atoms)+rebranchPerCall-1)/rebranchPerCall)
-	for from := 0; from < len(atoms); from += rebranchPerCall {
-		batches = append(batches, atoms[from:min(from+rebranchPerCall, len(atoms))])
+// rebranchClaim is one claim in the queue with the name it was filed under. The name is only what the
+// pass settles afterwards: the question itself is the claim's text.
+type rebranchClaim struct {
+	atom entities.Atom
+	name string
+}
+
+// askAndApply asks one batch of claims (chunks of a hundred, a few in flight, possibly from several
+// names) and applies the answers IN ORDER. It reports whether the pass may continue: everything it
+// asked is applied — an answer costs nothing to write — and a spent budget stops the NEXT batch, never
+// this one.
+func (uc Claims) askAndApply(ctx context.Context, batch []rebranchClaim, known []string, catalog *topicCatalog, aliases map[string]string, spent func() bool, res *RebranchResult) bool {
+	if len(batch) == 0 {
+		return true
 	}
-	answers := make([]labelledBatch, len(batches))
+	chunks := make([][]entities.Atom, 0, (len(batch)+rebranchPerCall-1)/rebranchPerCall)
+	for from := 0; from < len(batch); from += rebranchPerCall {
+		to := min(from+rebranchPerCall, len(batch))
+		atoms := make([]entities.Atom, 0, to-from)
+		for _, c := range batch[from:to] {
+			atoms = append(atoms, c.atom)
+		}
+		chunks = append(chunks, atoms)
+	}
+	answers := make([]labelledBatch, len(chunks))
 	width := uc.Parallel
 	if width <= 0 {
 		width = 4
 	}
-	if width > len(batches) {
-		width = len(batches)
+	if width > len(chunks) {
+		width = len(chunks)
 	}
 	slots := make(chan struct{}, width)
 	var wg sync.WaitGroup
-	for i := range batches {
+	for i := range chunks {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			slots <- struct{}{}
-			answers[i] = uc.ask(ctx, batches[i], known)
+			answers[i] = uc.ask(ctx, chunks[i], known)
 			<-slots
 		}(i)
 	}
@@ -212,20 +255,16 @@ func (uc Claims) askAndApply(ctx context.Context, atoms []entities.Atom, known [
 	for i := range answers {
 		res.Batches++
 		res.Tokens += answers[i].tokens
+		res.Examined += len(chunks[i])
 		if answers[i].err != nil {
 			if uc.Log != nil {
 				uc.Log.Warn("retopic: a question failed", "err", answers[i].err)
 			}
 			continue
 		}
-		if spent() {
-			// Stop between batches, never inside one: what was asked is applied, what was not waits.
-			return false
-		}
-		res.Examined += len(answers[i].atoms)
 		uc.label(ctx, answers[i], catalog, aliases, res)
 	}
-	return true
+	return !spent()
 }
 
 // settleRecords records that names' claims have been re-derived, so they are not questions again.
@@ -369,8 +408,12 @@ func (uc Claims) rebranchOldest(ctx context.Context, observed []entities.TopicUs
 	}
 	known := nameLines(observed, knownInPrompt)
 	uc.phase(fmt.Sprintf("labelling %d claim(s) from the oldest", len(all)))
-	spent := func() bool { return false }
-	_ = uc.askAndApply(ctx, all, known, catalog, aliases, spent, res)
+	noBudget := func() bool { return false }
+	batch := make([]rebranchClaim, 0, len(all))
+	for _, atom := range all {
+		batch = append(batch, rebranchClaim{atom: atom})
+	}
+	uc.askAndApply(ctx, batch, known, catalog, aliases, noBudget, res)
 	return *res, nil
 }
 

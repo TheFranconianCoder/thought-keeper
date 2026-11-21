@@ -311,7 +311,13 @@ order. It never writes a URL, never invents a hash and never answers the request
   pass continues where it was. The run reports what it **asked** and what it **filed**, and the number
   left is what the vault still shows outside the shelf (a batch always walks 150 names; it does not
   always file them). Three questions in a row that come back empty or fail stop the pass: the shelf
-  cannot be asked any further right now, and the budget is not worth burning. A rename writes the
+  cannot be asked any further right now, and the budget is not worth burning. **Assignment is the
+  rule**: a shelf name that is merely broader than the name is the right place for it, so the model
+  leaves a name out only when no shelf name covers its subject at all. That is a POLICY with a
+  version: the vocabulary file records `settle:`, and a pass that finds an older version drops the
+  verdicts of the names outside the shelf and asks them again — without it a rule change could never
+  reach the tail the previous rule had closed (the measured vault had settled two thirds of its tail
+  and left 82 % of its claims on fine labels). A rename writes the
   claim files and records
   the new topics in **one transaction per batch** — the text and the provenance do not move, and a
   transaction per claim is what made a real coarsening take hours. It is the repair for a vocabulary
@@ -344,17 +350,20 @@ order. It never writes a URL, never invents a hash and never answers the request
   `vocabulary.coarsen.automatic: false` turns it off. The endpoint and the CLI verb remain as "run one
   pass now" for tooling — the same pass with the run's own ceiling instead of the budget. The PWA has
   no vocabulary button: Status shows the numbers and the running pass, and that is the whole report.
-- **`POST /vocabulary/retopic`** re-derives the topic of the claims the SHELF COULD NOT TAKE, one
-  batch of 100 at a time, from the claims' own text — and every answer resolves onto the shelf. It is
-  the second half of the reduction: the coarsening renames a NAME (one answer moves all of its
-  claims), so it can only place names that mean one thing; a name whose claims are several subjects,
-  or one subject the shelf spells differently, is what this pass is for. Its queue is the names
-  outside the shelf that no pass has answered for yet, most used first; when every batch of a name has
-  been attempted the name is recorded in `Relabelled`, so a name that legitimately stays fine is a
-  remainder the report shows, never a question that comes back on every cycle. It does NOT rewrite the
-  vocabulary record — the shelf, the alias table and the judged names are decisions. A vault without a
-  shelf keeps the oldest-first repair (`updated_at, id`), where only a claim whose label moves is
-  re-read whole before the write, because the save is authoritative for its provenance.
+- **`POST /vocabulary/retopic`** re-derives the topic of the claims the SHELF COULD NOT TAKE, from the
+  claims' own text — and every answer resolves onto the shelf. It is the second half of the reduction:
+  the coarsening renames a NAME (one answer moves all of its claims), so it can only place names that
+  mean one thing; a name whose claims are several subjects, or one subject the shelf spells
+  differently, is what this pass is for. The queue is the names outside the shelf that no pass has
+  answered for yet, most used first, and a question takes **a hundred claims drawn from ANY of them**:
+  the question is the claim's text, not the name it was filed under, and asking one name's seven
+  claims at a time spent a call per name (45,000 calls for 341,000 claims on a measured vault, against
+  ~3,400 batch-wise). A name is recorded in `Relabelled` when its LAST claim has been asked, so a name
+  that legitimately stays fine is a remainder the report shows, never a question that comes back on
+  every cycle. It does NOT rewrite the vocabulary record — the shelf, the alias table and the judged
+  names are decisions. A vault without a shelf keeps the oldest-first repair (`updated_at, id`), where
+  only a claim whose label moves is re-read whole before the write, because the save is authoritative
+  for its provenance.
 - Both are **renames**: no claim text is rewritten and no cluster moves.
 - A curation holds the **exclusive** side of the gate for the whole run: it rewrites claim names,
   so no document step may be writing claims beside it. While it waits for the drain it is reported as
