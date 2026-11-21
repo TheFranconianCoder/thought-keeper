@@ -11,6 +11,9 @@
 *.db-wal
 *.db-shm
 
+# Local planning notes: working documents, not repository artifacts
+/docs/topic-evolution-plan*.md
+
 # Release notes drafted by the release skill before publishing
 /.release/
 

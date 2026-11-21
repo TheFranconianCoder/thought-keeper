@@ -995,7 +995,7 @@ func (a *App) Run() error {
 		"vault", a.conf().VaultRoot(),
 		"fts5", a.fts5, "pdf", a.deps().PDFAvailable, "ocr", a.deps().OCRAvailable,
 		"browser", a.deps().BrowserAvailable, "browser_tool", a.deps().BrowserTool,
-		"agent", a.deps().AgentAvailable, "agent_model", a.conf().OpenAI.ModelCompile, "agent_base_url", a.conf().OpenAI.BaseURL,
+		"agent", a.deps().AgentAvailable, "agent_model", a.conf().OpenAI.ModelCompile, "agent_base_url", a.conf().OpenAI.BaseURLCompile,
 		"headless", a.headless,
 	)
 	if !a.deps().AgentAvailable {
@@ -1183,7 +1183,7 @@ func (a *App) Status() payloads.Status {
 		Agent: payloads.AgentInfo{
 			Configured: a.deps().AgentAvailable,
 			Model:      a.conf().OpenAI.ModelCompile,
-			BaseURL:    a.conf().OpenAI.BaseURL,
+			BaseURL:    a.conf().OpenAI.BaseURLCompile,
 		},
 		Memory: a.memoryReport(),
 	}

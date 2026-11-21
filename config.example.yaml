@@ -76,6 +76,13 @@ index:
 openai:
     base_url: '${OPENAI_BASE_URL}'         # OpenAI-compatible endpoint (default: OpenAI)
     api_key: '${OPENAI_API_KEY}'
+    # Each PHASE may use its own endpoint and key: compile (document steps, tagging, vocabulary) and
+    # reason (Ask and the assistant). Empty = the shared base_url/api_key above; the environment
+    # offers OPENAI_BASE_URL_COMPILE / OPENAI_API_KEY_COMPILE and the same pairs with _REASON.
+    # base_url_compile: 'http://localhost:11434/v1'
+    # api_key_compile: '${OPENAI_API_KEY_COMPILE}'
+    # base_url_reason: 'https://api.deepseek.com/v1'
+    # api_key_reason: '${OPENAI_API_KEY_REASON}'
     model_compile: 'gpt-4o-mini'           # trees + claims (cheap; env OPENAI_MODEL overrides)
     model_reason: 'gpt-4o'                 # queries + lint (strong)
     # reasoning_effort_compile: 'minimal'   # grouping and filing is mechanical

@@ -127,6 +127,10 @@ language:
 func TestOpenAIKeyFromEnvWhenConfigOmitsIt(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "from-env")
 	t.Setenv("OPENAI_BASE_URL", "https://example.test/v1")
+	// Each phase inherits the shared settings, so an explicit per-phase value must not leak in from
+	// the machine running the test.
+	t.Setenv("OPENAI_API_KEY_COMPILE", "")
+	t.Setenv("OPENAI_API_KEY_REASON", "")
 
 	p := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(p, []byte("server:\n    addr: '127.0.0.1:0'\n"), 0o600); err != nil {
@@ -141,6 +145,42 @@ func TestOpenAIKeyFromEnvWhenConfigOmitsIt(t *testing.T) {
 	}
 	if cfg.OpenAI.BaseURL != "https://example.test/v1" {
 		t.Errorf("base url = %q, want from-env", cfg.OpenAI.BaseURL)
+	}
+	// The regression this guards: the inheritance used to run BEFORE the environment was read, so it
+	// copied an empty key and the document steps came up with "agent disabled" on a .env-only install.
+	if cfg.OpenAI.APIKeyCompile != "from-env" || cfg.OpenAI.APIKeyReason != "from-env" {
+		t.Errorf("phase keys = %q/%q, want the shared from-env",
+			cfg.OpenAI.APIKeyCompile, cfg.OpenAI.APIKeyReason)
+	}
+	if cfg.OpenAI.BaseURLCompile != "https://example.test/v1" ||
+		cfg.OpenAI.BaseURLReason != "https://example.test/v1" {
+		t.Errorf("phase base urls = %q/%q, want the shared from-env",
+			cfg.OpenAI.BaseURLCompile, cfg.OpenAI.BaseURLReason)
+	}
+}
+
+// TestOpenAIPerPhaseOverridesTheSharedSettings: a phase may talk to its own endpoint with its own key
+// (a cheap local model for the document steps, a strong one for Ask); what a phase leaves out falls
+// back to the shared value.
+func TestOpenAIPerPhaseOverridesTheSharedSettings(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "shared-key")
+	t.Setenv("OPENAI_BASE_URL", "https://shared.test/v1")
+	t.Setenv("OPENAI_API_KEY_COMPILE", "compile-key")
+	t.Setenv("OPENAI_BASE_URL_COMPILE", "https://compile.test/v1")
+	t.Setenv("OPENAI_API_KEY_REASON", "")
+	t.Setenv("OPENAI_BASE_URL_REASON", "")
+
+	cfg, err := Load(filepath.Join(t.TempDir(), "none.yaml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.OpenAI.APIKeyCompile != "compile-key" || cfg.OpenAI.BaseURLCompile != "https://compile.test/v1" {
+		t.Errorf("compile phase = %q/%q, want its own key and endpoint",
+			cfg.OpenAI.APIKeyCompile, cfg.OpenAI.BaseURLCompile)
+	}
+	if cfg.OpenAI.APIKeyReason != "shared-key" || cfg.OpenAI.BaseURLReason != "https://shared.test/v1" {
+		t.Errorf("reason phase = %q/%q, want the shared key and endpoint",
+			cfg.OpenAI.APIKeyReason, cfg.OpenAI.BaseURLReason)
 	}
 }
 
@@ -192,6 +232,25 @@ func TestPatienceKnobsFromEnv(t *testing.T) {
 	// The compile phase keeps its own (mechanical) default.
 	if cfg.OpenAI.ReasoningEffortCompile != "minimal" {
 		t.Errorf("compile effort = %q, want minimal", cfg.OpenAI.ReasoningEffortCompile)
+	}
+
+	// An effort the file leaves EMPTY falls back to the compile effort — and the fallback is applied
+	// after the environment was read, so it sees the env value instead of the pre-env empty one.
+	t.Setenv("OPENAI_REASONING_EFFORT_DISTILL", "")
+	t.Setenv("OPENAI_REASONING_EFFORT_COMPILE", "medium")
+	p := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(p, []byte("openai:\n    reasoning_effort_distill: ''\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(p)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.OpenAI.ReasoningEffortCompile != "medium" {
+		t.Errorf("compile effort = %q, want the env value", cfg.OpenAI.ReasoningEffortCompile)
+	}
+	if cfg.OpenAI.ReasoningEffortDistill != "medium" {
+		t.Errorf("distill effort = %q, want the compile effort from the environment", cfg.OpenAI.ReasoningEffortDistill)
 	}
 }
 

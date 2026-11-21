@@ -90,7 +90,10 @@ type Deps struct {
 	// MatchSourceInterests is the automatism: a new or freshly distilled source is compared with
 	// the reader's rules and a strong match joins the read-later queue.
 	MatchSourceInterests usecases.ReadLater
-	AgentAvailable       bool
+	// AgentAvailable says the COMPILE phase has a gateway: it is what the document steps, the summary,
+	// the tags and the vocabulary calls need. Ask is not covered by it — the reason phase has its own
+	// gateway, and a setup with only that key still answers questions.
+	AgentAvailable bool
 	// PDFAvailable and OCRAvailable are the probes the Status lens shows; the extractor was built with
 	// these tools, so a config apply that changes them must replace the Deps to change the answer.
 	PDFAvailable bool
@@ -207,14 +210,26 @@ func Build(
 	})
 
 	timeout := durationOr(cfg.OpenAI.Timeout, 60*time.Second, log, "openai.timeout")
+	// The loader has already inherited the shared key/base URL into each phase; a Config assembled in
+	// code has not, and skipping it here would silently build a phase with no gateway.
+	cfg.InheritOpenAIPhases()
 	retryBackoff, err := time.ParseDuration(cfg.OpenAI.RetryBackoff)
 	if err != nil || retryBackoff <= 0 {
 		retryBackoff = 2 * time.Second
 	}
 	retryPolicy := interfaces.RetryPolicy{Attempts: cfg.OpenAI.Retries, Base: retryBackoff, Budget: timeout}
-	agent, agentOK := gateways.NewOpenAIAgent(gateways.OpenAIConfig{
-		BaseURL:       cfg.OpenAI.BaseURL,
-		APIKey:        cfg.OpenAI.APIKey,
+	compileAgent, compileOK := gateways.NewOpenAIAgent(gateways.OpenAIConfig{
+		BaseURL:       cfg.OpenAI.BaseURLCompile,
+		APIKey:        cfg.OpenAI.APIKeyCompile,
+		Timeout:       timeout,
+		Headers:       cfg.OpenAI.Headers,
+		Log:           log,
+		Retry:         retryPolicy,
+		MaxConcurrent: cfg.OpenAI.MaxConcurrent,
+	})
+	reasonAgent, reasonOK := gateways.NewOpenAIAgent(gateways.OpenAIConfig{
+		BaseURL:       cfg.OpenAI.BaseURLReason,
+		APIKey:        cfg.OpenAI.APIKeyReason,
 		Timeout:       timeout,
 		Headers:       cfg.OpenAI.Headers,
 		Log:           log,
@@ -224,9 +239,13 @@ func Build(
 	// The gateway is an INTERFACE on purpose: a typed nil (*OpenAIAgent)(nil) in an interface field is
 	// NOT nil, so every "if uc.Gateway != nil" guard would pass and the first call would dereference
 	// nil. Without a key the field stays a nil interface, and the agent-less paths keep working.
-	var gw interfaces.AgentGateway
-	if agentOK {
-		gw = agent
+	var compileGW interfaces.AgentGateway
+	if compileOK {
+		compileGW = compileAgent
+	}
+	var reasonGW interfaces.AgentGateway
+	if reasonOK {
+		reasonGW = reasonAgent
 	}
 
 	// The DERIVATION keeps the configured model windows (openai.blocked_windows): the document steps,
@@ -240,7 +259,7 @@ func Build(
 		log.Warn("model windows: the derivation runs around the clock", "err", winErr)
 		windows = modelwindow.Windows{}
 	}
-	deriveGW := gateways.NewWindowedAgent(gw, windows, clock)
+	deriveGW := gateways.NewWindowedAgent(compileGW, windows, clock)
 
 	sourceLog := sourcelog.New(cfg.SourcesDir())
 	// Every line of a source's log is pushed as it is written: the overlay shows the run live.
@@ -402,17 +421,19 @@ func Build(
 		Store: lintRepo, Atoms: atomRepo, Runs: runRepo, Clock: clock, Log: log,
 	}
 
-	if agentOK {
+	if compileOK {
 		derivation.Gateway = deriveGW
-		// The assistant reads an utterance, it does not write the vault; a wrong key must not take
-		// the deterministic parser with it. It is an interactive read, so it keeps the raw gateway.
-		query.Gateway = gw
-		commands.Gateway = gw
 		// The rebranch pass is the one claim repair that asks the model; it rewrites labels, so it is
 		// derivation and keeps the windows.
 		claims.Gateway = deriveGW
 		claims.Model = cfg.OpenAI.ModelCompile
 		commands.Model = cfg.OpenAI.ModelCompile
+		commands.Gateway = compileGW
+	}
+	if reasonOK {
+		// The assistant reads an utterance, it does not write the vault; a wrong key must not take
+		// the deterministic parser with it. It is an interactive read, so it keeps the raw gateway.
+		query.Gateway = reasonGW
 	}
 	hasAtoms, withoutAtoms, openParts, withoutTree := sources, sources, sources, sources
 
@@ -524,7 +545,7 @@ func Build(
 		ResetSource:            derivation,
 		PruneWikiLinks:         wiki,
 		MatchSourceInterests:   readLater,
-		AgentAvailable:         agentOK,
+		AgentAvailable:         compileOK,
 		PDFAvailable:           pdfAvailable,
 		OCRAvailable:           ocrAvailable,
 		BrowserAvailable:       renderer != nil,

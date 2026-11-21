@@ -17,6 +17,8 @@ func clearOpenAIEnv(t *testing.T) {
 		"OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_MODEL_COMPILE",
 		"OPENAI_MODEL_REASON", "OPENAI_REASONING_EFFORT_COMPILE", "OPENAI_REASONING_EFFORT_DISTILL",
 		"OPENAI_REASONING_EFFORT_REASON", "OPENAI_TIMEOUT", "OPENAI_RETRIES", "OPENAI_RETRY_BACKOFF",
+		"OPENAI_API_KEY_COMPILE", "OPENAI_BASE_URL_COMPILE",
+		"OPENAI_API_KEY_REASON", "OPENAI_BASE_URL_REASON",
 	} {
 		t.Setenv(name, "")
 	}
@@ -170,6 +172,14 @@ func TestDescribeRedactsSecrets(t *testing.T) {
 	}
 	if key.Source != "environment" || key.Env != "OPENAI_API_KEY" {
 		t.Errorf("api_key origin = %q/%q, want environment/OPENAI_API_KEY", key.Source, key.Env)
+	}
+	// Both phases inherit the shared key, so they are secrets under the same rule: the value never
+	// leaves the process, and the origin cannot be the shared variable's name.
+	for _, name := range []string{"openai.api_key_compile", "openai.api_key_reason"} {
+		phase := findField(t, view, name)
+		if !phase.Secret || !phase.Set || phase.Value != nil {
+			t.Errorf("%s field = %#v, want a set secret with no value", name, phase)
+		}
 	}
 	body, err := json.Marshal(view)
 	if err != nil {

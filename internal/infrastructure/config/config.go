@@ -121,9 +121,13 @@ type IndexConfig struct {
 }
 
 type OpenAIConfig struct {
-	BaseURL      string `yaml:"base_url"`
-	APIKey       string `yaml:"api_key"`
-	ModelCompile string `yaml:"model_compile"`
+	BaseURL        string `yaml:"base_url"`
+	BaseURLCompile string `yaml:"base_url_compile"`
+	BaseURLReason  string `yaml:"base_url_reason"`
+	APIKey         string `yaml:"api_key"`
+	APIKeyCompile  string `yaml:"api_key_compile"`
+	APIKeyReason   string `yaml:"api_key_reason"`
+	ModelCompile   string `yaml:"model_compile"`
 	// ReasoningEffortCompile keeps the cheap steps (distill, compile) from thinking for
 	// thousands of tokens: those tokens are the wall-clock time. Empty = endpoint default.
 	ReasoningEffortCompile string `yaml:"reasoning_effort_compile"`
@@ -540,11 +544,11 @@ func applyDefaults(c *Config) map[string]string {
 	if c.Index.Path == "" {
 		c.Index.Path = d.Index.Path
 	}
+	if c.OpenAI.BaseURL == "" {
+		c.OpenAI.BaseURL = d.OpenAI.BaseURL
+	}
 	if c.OpenAI.Timeout == "" {
 		c.OpenAI.Timeout = d.OpenAI.Timeout
-	}
-	if c.OpenAI.ReasoningEffortDistill == "" {
-		c.OpenAI.ReasoningEffortDistill = c.OpenAI.ReasoningEffortCompile
 	}
 	if c.OpenAI.Retries == 0 {
 		c.OpenAI.Retries = d.OpenAI.Retries
@@ -655,9 +659,29 @@ func applyDefaults(c *Config) map[string]string {
 			c.OpenAI.APIKey, env["openai.api_key"] = v, "OPENAI_API_KEY"
 		}
 	}
+	if c.OpenAI.APIKeyCompile == "" {
+		if v := os.Getenv("OPENAI_API_KEY_COMPILE"); v != "" {
+			c.OpenAI.APIKeyCompile, env["openai.api_key_compile"] = v, "OPENAI_API_KEY_COMPILE"
+		}
+	}
+	if c.OpenAI.APIKeyReason == "" {
+		if v := os.Getenv("OPENAI_API_KEY_REASON"); v != "" {
+			c.OpenAI.APIKeyReason, env["openai.api_key_reason"] = v, "OPENAI_API_KEY_REASON"
+		}
+	}
 	if c.OpenAI.BaseURL == "" {
 		if v := os.Getenv("OPENAI_BASE_URL"); v != "" {
 			c.OpenAI.BaseURL, env["openai.base_url"] = v, "OPENAI_BASE_URL"
+		}
+	}
+	if c.OpenAI.BaseURLCompile == "" {
+		if v := os.Getenv("OPENAI_BASE_URL_COMPILE"); v != "" {
+			c.OpenAI.BaseURLCompile, env["openai.base_url_compile"] = v, "OPENAI_BASE_URL_COMPILE"
+		}
+	}
+	if c.OpenAI.BaseURLReason == "" {
+		if v := os.Getenv("OPENAI_BASE_URL_REASON"); v != "" {
+			c.OpenAI.BaseURLReason, env["openai.base_url_reason"] = v, "OPENAI_BASE_URL_REASON"
 		}
 	}
 	// Models resolve env → yaml → default, so a shared endpoint (e.g. opencode Zen,
@@ -698,7 +722,39 @@ func applyDefaults(c *Config) map[string]string {
 	if v := os.Getenv("OPENAI_RETRY_BACKOFF"); v != "" {
 		c.OpenAI.RetryBackoff, env["openai.retry_backoff"] = v, "OPENAI_RETRY_BACKOFF"
 	}
+	// Only now, after the environment has been read: a shared OPENAI_API_KEY fills c.OpenAI.APIKey
+	// above, and a copy made before that read would leave the compile phase without a key.
+	c.InheritOpenAIPhases()
 	return env
+}
+
+// InheritOpenAIPhases fills what a phase leaves empty from the shared OpenAI settings: the compile
+// and the reason phase each take the shared api_key and base_url, and distill takes the compile
+// reasoning effort.
+//
+// It must run AFTER the environment has been read. The shared key may come from OPENAI_API_KEY rather
+// than the file, so inheriting before that read copies an empty string and the phase ends up with no
+// gateway at all — the app then runs with "agent disabled" although the key is set (a .env-only
+// install hit exactly that). An explicit per-phase value, from the file or the environment, wins.
+//
+// Build calls it too, so a Config assembled in code (a test, a caller of the registry) cannot skip a
+// step that only the loader would have taken.
+func (c *Config) InheritOpenAIPhases() {
+	if c.OpenAI.APIKeyCompile == "" {
+		c.OpenAI.APIKeyCompile = c.OpenAI.APIKey
+	}
+	if c.OpenAI.APIKeyReason == "" {
+		c.OpenAI.APIKeyReason = c.OpenAI.APIKey
+	}
+	if c.OpenAI.BaseURLCompile == "" {
+		c.OpenAI.BaseURLCompile = c.OpenAI.BaseURL
+	}
+	if c.OpenAI.BaseURLReason == "" {
+		c.OpenAI.BaseURLReason = c.OpenAI.BaseURL
+	}
+	if c.OpenAI.ReasoningEffortDistill == "" {
+		c.OpenAI.ReasoningEffortDistill = c.OpenAI.ReasoningEffortCompile
+	}
 }
 
 // normalizeLanguage trims and lower-cases one language code, falling back to the default when the

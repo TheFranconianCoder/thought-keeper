@@ -298,19 +298,25 @@ order. It never writes a URL, never invents a hash and never answers the request
   record the **derivation reads**: candidates come from the shelf, and a proposed name that is not on
   it is mapped onto the best fitting shelf name at the write. The tag namespaces get no such build
   (their write path reads `Canonical`); their shelf comes with the coarsening.
-- **`POST /vocabulary/coarsen`** files a namespace's long tail onto its shelf. Deterministic families
-  first (no model), then the model in batches of **150 names** — a measured vault answered six of 600,
-  so the batch is sized for the answer, not for the request. Each answered batch is applied through the
-  same rename the curation uses and recorded in `Absorbed` — the watermark, so a stopped pass continues
-  where it was. The run reports what it **asked** and what it **filed**, and the number left is what
-  the vault still shows outside the shelf (a batch always walks 150 names; it does not always file
-  them). Three batches in a row that file nothing stop the pass: the shelf cannot honestly cover the
-  tail, and asking again would only spend tokens. A rename writes the claim files and records the new
-  topics in **one transaction per batch** — the text and the provenance do not move, and a transaction
-  per claim is what made a real coarsening take hours. It is the repair for a vocabulary that grew
-  before the shelf existed, it holds the exclusive gate for the whole pass, and it is what the
-  **Coarsen** button on Status asks for. A press takes the one-at-a-time latch: a second press while a
-  pass runs is a conflict, and the automatic shelf look and the curation stay out of its way.
+- **`POST /vocabulary/coarsen`** files a namespace's long tail onto its shelf. Three passes, cheapest
+  first. The deterministic **families** (near-duplicates, no model). The **variants**: a tail name that
+  carries a shelf name as a contiguous phrase of at least two words — "sample-size-insensitivity",
+  "go-code-generation", "string-to-floating-point-conversion" — is filed with no model call. The rule
+  is literal on purpose: a shared subject word never qualifies, so "moral-psychology" is not
+  "evolutionary-psychology". Then the model, in batches of **150 names** (a measured vault answered
+  six of 600, so the batch is sized for the answer, not for the request) with **four questions in
+  flight** at once — the APPLY stays in order, because it rewrites claims and the number left counts
+  it; the gateway keeps the process-wide cap (`openai.max_concurrent`). Each answered batch is applied
+  through the same rename the curation uses and recorded in `Absorbed` — the watermark, so a stopped
+  pass continues where it was. The run reports what it **asked** and what it **filed**, and the number
+  left is what the vault still shows outside the shelf (a batch always walks 150 names; it does not
+  always file them). Three batches in a row that file nothing stop the pass: the shelf cannot honestly
+  cover the tail, and asking again would only spend tokens. A rename writes the claim files and records
+  the new topics in **one transaction per batch** — the text and the provenance do not move, and a
+  transaction per claim is what made a real coarsening take hours. It is the repair for a vocabulary
+  that grew before the shelf existed, it holds the exclusive gate for the whole pass, and it is what
+  the **Coarsen** button on Status asks for. A press takes the one-at-a-time latch: a second press
+  while a pass runs is a conflict, and the automatic shelf look and the curation stay out of its way.
 - **`POST /vocabulary/retopic`** re-derives each claim's flat topic from the claim text (bounded per
   run; the next press continues). It maps onto the shelf, never around it. The queue is the clock: it reads the OLDEST claims through the
   index (`updated_at, id`), so a budget of 12k claims reads 12k rows — not the corpus. Only a claim
@@ -337,8 +343,13 @@ order. It never writes a URL, never invents a hash and never answers the request
 
 ## 8. Models, patience and audit
 
-- **Two models.** `model_compile` (cheap) runs the document steps, tagging and vocabulary calls;
-  `model_reason` (strong) answers queries and will run semantic lint. The cluster step uses none.
+- **Two phases, two models.** `model_compile` (cheap) runs the document steps, tagging and
+  vocabulary calls; `model_reason` (strong) answers queries and will run semantic lint, and the
+  assistant reads its command with the compile model. A phase may also have its own `api_key` and
+  `base_url` (`api_key_compile`/`base_url_compile`, `api_key_reason`/`base_url_reason`, or the
+  matching `OPENAI_*_COMPILE`/`OPENAI_*_REASON` variables): a phase that declares none takes the
+  shared pair — and that fallback is applied **after** the environment is read, so a key that lives
+  only in `.env` reaches both phases. The cluster step uses no model.
 - **The derivation keeps window hours.** `openai.blocked_windows` is a list of UTC ranges
   (`HH:MM-HH:MM`, start inclusive and end exclusive; `23:00-02:00` wraps midnight) in which no
   derivation calls the model — outline naming, distill, summary, source and wiki auto tags,
@@ -356,8 +367,9 @@ order. It never writes a URL, never invents a hash and never answers the request
   whose assistant turns lost the key; the gateway restores it on every assistant message.
 - **A transient model failure is retried** (timeout, 429, 5xx) with a doubling backoff; finished
   parts are kept and the source is requeued. A wrong key or a bad request is not retried.
-- **The agent needs a key.** Without it the app runs, distill answers `501` and `/status` reports
-  `agent: off`. The cluster step still works: it is deterministic.
+- **The agent needs a key.** Without one in the compile phase — its own or the shared `api_key` —
+  the app runs, distill answers `501` and `/status` reports `agent: off`. Ask is separate: it needs
+  the reason phase's key only. The cluster step still works: it is deterministic.
 - **Everything is recorded.** Every run writes a `runs` row; every tool call writes a `run_steps`
   row. Both append-only and untouched by `reindex`.
 - **No silent writes.** Agent Markdown is rendered through the same codecs as any other write.

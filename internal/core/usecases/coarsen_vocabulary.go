@@ -27,6 +27,13 @@ const (
 	coarsenShelfHead   = 200
 	// coarsenEmptyBatches is how many batches in a row may file nothing before the pass stops.
 	coarsenEmptyBatches = 3
+	// coarsenParallel is how many questions are in flight at once. An answer takes minutes and the
+	// questions are independent, so this is the one lever that moves the wall clock; the gateway still
+	// keeps the process-wide cap (openai.max_concurrent).
+	coarsenParallel = 4
+	// coarsenVariantChunk bounds one rename of the deterministic variants: one transaction and one
+	// read of the claims per chunk.
+	coarsenVariantChunk = 2000
 )
 
 // CoarsenResult is what one coarsening pass did.
@@ -181,37 +188,161 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 	if len(pending) == 0 {
 		return res, nil
 	}
-	if uc.Gateway == nil || uc.Model == "" || !uc.Apply {
+	if !uc.Apply {
+		return res, nil
+	}
+
+	// Stage 2a: the VARIANTS. A tail name that is a shelf name plus a modifier at either end
+	// ("sample-size-insensitivity", "go-code-generation") is filed here, with no model call and no
+	// guessing about the subject: a token overlap would happily file "moral-psychology" onto
+	// "evolutionary-psychology", and this rule does not.
+	if len(shelfSet) > 0 {
+		mapping := make(map[string]string, len(pending)/4)
+		for _, name := range pending {
+			if to, ok := shelfVariant(name, shelfSet); ok {
+				mapping[name] = to
+			}
+		}
+		if len(mapping) > 0 {
+			names := make([]string, 0, len(mapping))
+			for from := range mapping {
+				names = append(names, from)
+			}
+			// What actually went through: the apply drops a structural target, so the names to take
+			// out of the queue are its answer, not the mapping that was proposed.
+			filed := make(map[string]bool, len(mapping))
+			for start := 0; start < len(names); start += coarsenVariantChunk {
+				end := min(start+coarsenVariantChunk, len(names))
+				chunk := make(map[string]string, end-start)
+				for _, from := range names[start:end] {
+					chunk[from] = mapping[from]
+				}
+				applied, wErr := uc.applyShelf(ctx, chunkAnswer{mapping: chunk}, v.Shelf)
+				if wErr != nil {
+					return res, wErr
+				}
+				for from := range applied.Absorbed {
+					filed[from] = true
+				}
+				res.Applied.Atoms += applied.Atoms
+				res.Applied.Sources += applied.Sources
+				res.Applied.Pages += applied.Pages
+				res.Shelf = applied.Canonical
+			}
+			res.Mapped += len(filed)
+			left := pending[:0]
+			for _, name := range pending {
+				if filed[name] {
+					continue
+				}
+				left = append(left, name)
+			}
+			pending = left
+			res.Remaining = len(pending)
+			if uc.Log != nil {
+				uc.Log.Info("vocabulary: variants filed", "namespace", string(uc.Namespace),
+					"names", len(filed), "left", res.Remaining)
+			}
+		}
+	}
+	if len(pending) == 0 {
+		return res, nil
+	}
+	if uc.Gateway == nil || uc.Model == "" {
 		// The shelf exists, the tail does not have to be filed for the derivation to stop growing:
 		// the write resolves new names onto the shelf from now on.
 		return res, nil
 	}
 
 	head := topObserved(observed, coarsenShelfHead)
-	batches := 0
-	empty := 0
-	for start := 0; start < len(pending) && batches < coarsenMaxBatches; start += coarsenBatchSize {
+
+	// The questions are independent and one answer takes minutes, so several are in flight at once.
+	// The APPLY stays in order, one batch after another: it rewrites claims, and `Remaining` is its
+	// count. The gateway keeps the process-wide cap (openai.max_concurrent), so this is latency, not
+	// an unbounded burst.
+	type shelfJob struct {
+		batch []string
+		shelf []string
+	}
+	jobs := make([]shelfJob, 0, coarsenMaxBatches)
+	for start := 0; start < len(pending) && len(jobs) < coarsenMaxBatches; start += coarsenBatchSize {
 		batch := pending[start:min(start+coarsenBatchSize, len(pending))]
 		shelf := shelfForBatch(batch, head, shelfIndex, coarsenShelfInCall)
 		if len(shelf) == 0 {
 			break
 		}
-		// The number LEFT is what the vault still shows outside the shelf, not a count of the batches
-		// walked: the two differed by everything the model declined to file.
-		uc.phase(fmt.Sprintf("filing %d names onto the shelf (%d left)", len(batch), res.Remaining))
-		answer, aErr := uc.askShelf(ctx, shelf, batch)
-		if aErr != nil {
+		jobs = append(jobs, shelfJob{batch: batch, shelf: shelf})
+	}
+	if len(jobs) == 0 {
+		return res, nil
+	}
+	parallel := uc.Parallel
+	if parallel <= 0 {
+		parallel = coarsenParallel
+	}
+	if parallel > len(jobs) {
+		parallel = len(jobs)
+	}
+
+	askCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	type shelfResult struct {
+		index  int
+		answer chunkAnswer
+		err    error
+	}
+	// A worker can answer after we stopped reading, so the channel holds one slot per job: no worker
+	// ever blocks on the send, and none is left behind.
+	results := make(chan shelfResult, len(jobs))
+	next := 0
+	launch := func() {
+		job, index := jobs[next], next
+		next++
+		uc.phase(fmt.Sprintf("filing %d names onto the shelf (%d left)", len(job.batch), res.Remaining))
+		go func() {
+			answer, err := uc.askShelf(askCtx, job.shelf, job.batch)
+			results <- shelfResult{index: index, answer: answer, err: err}
+		}()
+	}
+	for next < parallel {
+		launch()
+	}
+
+	arrived := make(map[int]shelfResult, parallel)
+	batches := 0
+	empty := 0
+	for index := 0; index < len(jobs); index++ {
+		var got shelfResult
+		if early, ok := arrived[index]; ok {
+			got = early
+			delete(arrived, index)
+		} else {
+			for {
+				from := <-results
+				if from.index == index {
+					got = from
+					break
+				}
+				arrived[from.index] = from
+			}
+		}
+		if next < len(jobs) {
+			launch()
+		}
+		if got.err != nil {
+			cancel()
 			if batches > 0 {
 				// Keep what was applied; the next press continues from the watermark.
 				break
 			}
-			return res, aErr
+			return res, got.err
 		}
-		res.Tokens += answer.tokens
+		res.Tokens += got.answer.tokens
 		filed := 0
-		if len(answer.mapping) > 0 {
-			applied, wErr := uc.applyShelf(ctx, answer, v.Shelf)
+		if len(got.answer.mapping) > 0 {
+			applied, wErr := uc.applyShelf(ctx, got.answer, v.Shelf)
 			if wErr != nil {
+				cancel()
 				return res, wErr
 			}
 			filed = len(applied.Absorbed)
@@ -222,12 +353,15 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 			res.Shelf = applied.Canonical
 		}
 		batches++
+		// The number LEFT is what the vault still shows outside the shelf, not a count of the batches
+		// walked: the two differed by everything the model declined to file.
 		res.Remaining -= filed
 		if uc.Log != nil {
 			// THE measurement of this pass: how many of the names asked were actually filed. A batch
 			// that files nothing is the model saying the shelf cannot honestly cover those names.
 			uc.Log.Info("vocabulary: shelf batch", "namespace", string(uc.Namespace),
-				"asked", len(batch), "filed", filed, "left", res.Remaining, "tokens", answer.tokens)
+				"asked", len(jobs[index].batch), "filed", filed, "left", res.Remaining,
+				"tokens", got.answer.tokens, "parallel", parallel)
 		}
 		if filed == 0 {
 			empty++
@@ -236,6 +370,7 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 					uc.Log.Warn("vocabulary: the shelf cannot file what is left", "namespace", string(uc.Namespace),
 						"left", res.Remaining)
 				}
+				cancel()
 				break
 			}
 			continue
@@ -243,6 +378,29 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 		empty = 0
 	}
 	return res, nil
+}
+
+// shelfVariant reports the shelf name a tail name is a VARIANT of: a contiguous phrase of the name,
+// the same words in the same order, carrying at least two words. It is the cheap half of the
+// coarsening after the near-duplicate families, and it is deliberately literal: "sample-size-
+// insensitivity" is sample-size, "go-code-generation" is code-generation and "string-to-floating-
+// point-conversion" is floating-point, while "moral-psychology" is NOT "evolutionary-psychology" —
+// a shared subject word never qualifies, because the shelf name has to BE a phrase of the name.
+func shelfVariant(name string, shelf map[string]bool) (string, bool) {
+	parts := strings.Split(name, "-")
+	if len(parts) < 3 {
+		return "", false // a one- or two-word name is not a variant of a two-word shelf name
+	}
+	// Longest phrase first: "decimal-floating-point-rounding" is decimal-floating-point before it is
+	// floating-point.
+	for k := len(parts) - 1; k >= 2; k-- {
+		for start := 0; start+k <= len(parts); start++ {
+			if cand := strings.Join(parts[start:start+k], "-"); shelf[cand] {
+				return cand, true
+			}
+		}
+	}
+	return "", false
 }
 
 // applyShelf applies one answered batch: the rename, and — when a shelf is named — the shelf as the

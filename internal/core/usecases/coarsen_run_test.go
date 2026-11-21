@@ -3,7 +3,9 @@ package usecases
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 
@@ -66,6 +68,9 @@ func coarsenFixture(atoms *coarsenAtoms, store *shelfVocab, gateway interfaces.A
 	return Vocabulary{
 		Atoms: atoms, Vocab: store, Clock: shelfClock{}, Gateway: gateway, Model: "test-model",
 		Namespace: entities.VocabularyTopics, Apply: true, Target: target, TopNames: 20,
+		// One at a time: the scripted gateway answers in call order, and parallelism would make which
+		// batch gets which answer a race. TestCoarsenAsksInParallel covers the concurrency itself.
+		Parallel: 1,
 	}
 }
 
@@ -190,5 +195,152 @@ func TestAskShelfFilesOnlyWhatItAsked(t *testing.T) {
 	}
 	if len(answer.mapping) != 1 || answer.mapping["databases"] != "caching" {
 		t.Errorf("mapping = %v, want only the asked name filed onto the shelf", answer.mapping)
+	}
+}
+
+// TestShelfVariantIsLiteral pins the rule that keeps the deterministic pass honest: a variant is the
+// shelf name plus a modifier at either end, never a shared subject word.
+func TestShelfVariantIsLiteral(t *testing.T) {
+	shelf := map[string]bool{
+		"sample-size":             true,
+		"code-generation":         true,
+		"evolutionary-psychology": true,
+		"memory-layout":           true,
+		"floating-point":          true,
+		"ps":                      true,
+		"agent-orchestration":     true,
+		"reverse-engineering":     true,
+		"caching":                 true,
+	}
+	cases := []struct {
+		name string
+		want string
+	}{
+		{"sample-size-insensitivity", "sample-size"},
+		{"go-code-generation", "code-generation"},
+		{"compiler-code-generation", "code-generation"},
+		{"struct-memory-layout", "memory-layout"},
+		{"decimal-floating-point-rounding", "floating-point"},
+		{"multi-agent-orchestration", "agent-orchestration"},
+		{"reverse-engineering-tools", "reverse-engineering"},
+		// Not variants: a different subject that happens to share a word.
+		{"moral-psychology", ""},
+		{"pattern-recognition", ""},
+		{"use-case-relationships", ""},
+		{"caching-strategies", ""}, // the shelf name is one word: too broad to claim
+		{"sample-size", ""},        // the name itself is not a variant
+	}
+	for _, c := range cases {
+		got, ok := shelfVariant(c.name, shelf)
+		if got != c.want || ok != (c.want != "") {
+			t.Errorf("shelfVariant(%q) = %q,%v want %q", c.name, got, ok, c.want)
+		}
+	}
+}
+
+// TestCoarsenFilesVariantsWithoutTheModel: the clear variants are filed in one deterministic pass, so
+// the model only sees what a rule cannot decide.
+func TestCoarsenFilesVariantsWithoutTheModel(t *testing.T) {
+	ctx := context.Background()
+	atoms := newCoarsenAtoms(map[string]int{
+		"sample-size":               50,
+		"code-generation":           40,
+		"caching":                   30,
+		"sample-size-insensitivity": 2,
+		"go-code-generation":        1,
+		"moral-psychology":          1,
+	})
+	store := newShelfVocab()
+	store.v[entities.VocabularyTopics] = entities.Vocabulary{
+		Namespace: entities.VocabularyTopics,
+		Absorbed:  map[string]string{},
+		// The near-duplicate detector is taken out of the picture: the shared words are broad here, so
+		// this test is about the VARIANT rule, not about stage 1.
+		BroadTokens: []string{"sample", "size", "code", "generation", "moral", "psychology"},
+	}
+	gw := &sequenceGateway{answers: []string{`{"mapping":{}}`}}
+
+	res, err := coarsenFixture(atoms, store, gw, 3).Coarsen(ctx, ulid.Make())
+	if err != nil {
+		t.Fatalf("coarsen: %v", err)
+	}
+	if res.Mapped != 2 {
+		t.Errorf("mapped = %d, want the 2 variants", res.Mapped)
+	}
+	got := store.v[entities.VocabularyTopics]
+	if got.Absorbed["sample-size-insensitivity"] != "sample-size" {
+		t.Errorf("variant alias missing: %v", got.Absorbed)
+	}
+	if got.Absorbed["go-code-generation"] != "code-generation" {
+		t.Errorf("prefix variant alias missing: %v", got.Absorbed)
+	}
+	if _, wrote := got.Absorbed["moral-psychology"]; wrote {
+		t.Errorf("a shared subject word was filed as a variant: %v", got.Absorbed)
+	}
+	if res.Remaining != 1 {
+		t.Errorf("remaining = %d, want 1 (moral-psychology for the model)", res.Remaining)
+	}
+	if gw.calls != 1 {
+		t.Errorf("model calls = %d, want 1: only the undecidable name is asked", gw.calls)
+	}
+}
+
+// parallelGateway answers a fixed JSON, tracks how many calls are in flight at once and waits, so a
+// test can see the questions run side by side instead of one after another.
+type parallelGateway struct {
+	mu       sync.Mutex
+	inflight int
+	peak     int
+	calls    int
+	delay    time.Duration
+	answer   string
+}
+
+func (g *parallelGateway) Complete(context.Context, interfaces.AgentRequest) (interfaces.AgentResponse, error) {
+	g.mu.Lock()
+	g.inflight++
+	g.calls++
+	if g.inflight > g.peak {
+		g.peak = g.inflight
+	}
+	g.mu.Unlock()
+	time.Sleep(g.delay)
+	g.mu.Lock()
+	g.inflight--
+	g.mu.Unlock()
+	return interfaces.AgentResponse{Message: interfaces.AgentMessage{Role: "assistant", Content: g.answer}}, nil
+}
+
+// TestCoarsenAsksInParallel: the questions are in flight together; the answers are applied in batch
+// order. An answer takes minutes, so this is what makes a press finish in an afternoon.
+func TestCoarsenAsksInParallel(t *testing.T) {
+	ctx := context.Background()
+	catalog := map[string]int{"shelf-a": 50, "shelf-b": 40, "shelf-c": 30}
+	for i := 1; i <= 400; i++ {
+		catalog[fmt.Sprintf("topic-%03d", i)] = 1
+	}
+	atoms := newCoarsenAtoms(catalog)
+	store := newShelfVocab()
+	store.v[entities.VocabularyTopics] = entities.Vocabulary{
+		Namespace:   entities.VocabularyTopics,
+		Absorbed:    map[string]string{},
+		BroadTokens: []string{"topic", "shelf"},
+	}
+	gw := &parallelGateway{delay: 120 * time.Millisecond, answer: `{"mapping":{}}`}
+
+	uc := coarsenFixture(atoms, store, gw, 3)
+	uc.Parallel = 4
+	res, err := uc.Coarsen(ctx, ulid.Make())
+	if err != nil {
+		t.Fatalf("coarsen: %v", err)
+	}
+	if gw.calls != 3 {
+		t.Errorf("model calls = %d, want 3 batches (150+150+100)", gw.calls)
+	}
+	if gw.peak < 2 {
+		t.Errorf("peak in flight = %d, want the batches asked together", gw.peak)
+	}
+	if res.Remaining != 400 || res.Mapped != 0 {
+		t.Errorf("mapped = %d remaining = %d, want 0/400", res.Mapped, res.Remaining)
 	}
 }

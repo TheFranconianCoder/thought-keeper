@@ -304,7 +304,7 @@ func collectFields(node *yaml.Node, prefix string, out *[]Field) {
 		Scope:    scopeOf(prefix),
 		Options:  optionsKeys[prefix],
 	}
-	if prefix == "openai.api_key" {
+	if prefix == "openai.api_key" || prefix == "openai.api_key_compile" || prefix == "openai.api_key_reason" {
 		field.Value = nil
 		field.Secret = true
 		field.Set = strings.TrimSpace(node.Value) != ""

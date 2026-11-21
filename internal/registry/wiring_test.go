@@ -42,6 +42,17 @@ func TestBuildWiresTheModelDependentUseCases(t *testing.T) {
 	if got := deps.Query.Model; got != cfg.OpenAI.ModelReason {
 		t.Errorf("query model = %q, want %q", got, cfg.OpenAI.ModelReason)
 	}
+	// A Config assembled in code carries only the shared key: Build inherits it into both phases, or
+	// the document steps would come up with no gateway at all (the .env-only regression).
+	if !deps.AgentAvailable {
+		t.Error("agent reported unavailable although the shared key is set")
+	}
+	if deps.DocumentRun.Gateway == nil {
+		t.Error("document run has no gateway: the compile phase did not inherit the shared key")
+	}
+	if deps.Query.Gateway == nil {
+		t.Error("query has no gateway: the reason phase did not inherit the shared key")
+	}
 	if !deps.VocabularyCurate.Apply {
 		t.Error("vocabulary curation would only measure: Apply is false")
 	}

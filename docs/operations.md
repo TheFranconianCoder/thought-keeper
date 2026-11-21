@@ -48,7 +48,7 @@ sync when a knob changes. Sections:
 | `server` | `addr` (loopback, fixed or `:0`) |
 | `vault` | root, sources, inbox, atoms, wiki, clusters, asks, vocabulary, interests, trash, `git.ignore_derived` |
 | `index` | `path` (vault-root-relative), `favicons` |
-| `openai` | base URL, key, `model_compile`, `model_reason`, reasoning efforts, retries, timeout, headers |
+| `openai` | base URL, key, per-phase base URL/key (`base_url_compile`, `api_key_compile`, `base_url_reason`, `api_key_reason`), `model_compile`, `model_reason`, reasoning efforts, retries, timeout, headers |
 | `pipeline` | auto, auto_distill, debounce, run/cluster timeouts, parts per run, parallel parts/runs/queries, auto_continue, reconcile interval/batch |
 | `cluster` | the quality gates of the claim graph (no model) |
 | `assistant` | command `retention` (`168h`), `prune_interval` (`24h`), `max_items` per materialized set, `scan_limit` per resolution |
@@ -124,14 +124,19 @@ clock, not the reader's zone — and the knob is the MACHINE's (the provider's h
 of the vault, so it does not travel in `vault.yaml`).
 
 The rest stays read-only: `vault.*`, `index.*`, `server.addr`, `app.tray`/`autostart`,
-`openai.api_key`/`headers`/`base_url`, `fetch.allow_private`, `capture.dedupe_by_url` (URL identity is
+`openai.api_key`/`headers`/`base_url` (and their per-phase `_compile`/`_reason` pairs),
+`fetch.allow_private`, `capture.dedupe_by_url` (URL identity is
 the hash, so the behaviour is not a switch) and the non-implemented git switches. Secrets stay where
 they are: the API key is reported as *set* or *not set*, never as a value, and `openai.headers`
 reveals only the header names.
 
 Models resolve **env → yaml → default**: `OPENAI_MODEL` sets both, `OPENAI_MODEL_COMPILE` /
-`OPENAI_MODEL_REASON` override one; the same holds for the patience knobs
-(`OPENAI_REASONING_EFFORT_DISTILL`, `OPENAI_TIMEOUT`, `OPENAI_RETRIES`, `OPENAI_RETRY_BACKOFF`).
+`OPENAI_MODEL_REASON` override one. The key and the endpoint follow the same rule: `OPENAI_API_KEY` /
+`OPENAI_BASE_URL` are shared, `OPENAI_API_KEY_COMPILE` / `OPENAI_BASE_URL_COMPILE` and the `_REASON`
+pair override one phase, and a phase that sets neither inherits the shared value — after the
+environment has been read, so a `.env`-only key reaches both phases. The patience knobs
+(`OPENAI_REASONING_EFFORT_DISTILL`, `OPENAI_TIMEOUT`, `OPENAI_RETRIES`, `OPENAI_RETRY_BACKOFF`) are
+environment-reachable too.
 `vault.git.enabled` and `commit_on_write` are **not implemented** — the app never runs git; only
 `ignore_derived` is real.
 
