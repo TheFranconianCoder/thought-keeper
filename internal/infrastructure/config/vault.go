@@ -46,10 +46,27 @@ var vaultKeys = map[string]bool{
 	"vocabulary.topics.max_names":      true,
 	"vocabulary.source_tags.max_names": true,
 	"vocabulary.wiki_tags.max_names":   true,
+	"vocabulary.coarsen.automatic":     true,
+	"vocabulary.coarsen.budget":        true,
+	"vocabulary.retopic.automatic":     true,
+	"vocabulary.retopic.budget":        true,
+	"vocabulary.shelf.refit_interval":  true,
 }
 
 // VaultScoped reports whether a knob belongs in the vault's own config file.
 func VaultScoped(key string) bool { return vaultKeys[key] }
+
+// vaultSection reports whether a key is a PATH that an owned knob lives under ("vocabulary.coarsen"
+// for "vocabulary.coarsen.automatic"). It is a section of the vault's file, not a knob the file
+// cannot carry.
+func vaultSection(key string) bool {
+	for owned := range vaultKeys {
+		if strings.HasPrefix(owned, key+".") {
+			return true
+		}
+	}
+	return false
+}
 
 // vaultPathName is the vault's own config file, next to index.db.
 const vaultPathName = "vault.yaml"
@@ -86,12 +103,19 @@ func mergeVault(cfg *Config, data []byte) (map[string]bool, error) {
 	set := map[string]bool{}
 	for key := range declaredKeys(text) {
 		if !strings.Contains(key, ".") {
-			continue // a section mapping (language, cluster, ...)
+			continue // a top-level section
 		}
-		if !VaultScoped(key) {
-			return nil, fmt.Errorf("%w: %s does not belong in %s", ErrInvalidValue, key, vaultPathName)
+		if VaultScoped(key) {
+			set[key] = true
+			continue
 		}
-		set[key] = true
+		// A path an owned knob lives UNDER is a section, not a knob: the walk reports every
+		// intermediate mapping ("vocabulary.coarsen" for "vocabulary.coarsen.automatic"), and
+		// refusing those made a nested vault key impossible to write at all.
+		if vaultSection(key) {
+			continue
+		}
+		return nil, fmt.Errorf("%w: %s does not belong in %s", ErrInvalidValue, key, vaultPathName)
 	}
 	dec := yaml.NewDecoder(strings.NewReader(text))
 	dec.KnownFields(true)

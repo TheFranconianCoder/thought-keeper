@@ -79,7 +79,11 @@ func newShelfApp(t *testing.T, agentAvailable bool) (*App, *shelfAppVocab, *shel
 		{Topic: "rare-name", Count: 1},
 	}}
 	uc := usecases.Vocabulary{Vocab: store, Atoms: atoms, Clock: shelfAppClock{}}
-	a.depsPtr.Store(&registry.Deps{VocabularyCurate: uc, AgentAvailable: agentAvailable})
+	a.depsPtr.Store(&registry.Deps{
+		VocabularyCurate: uc,
+		AgentAvailable:   agentAvailable,
+		StartRun:         usecases.Runs{Store: &fakeRuns{}, Clock: shelfAppClock{}},
+	})
 	return a, store, atoms
 }
 

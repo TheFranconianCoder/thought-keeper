@@ -513,6 +513,16 @@ carry the reason (`link failed · …`). A light that disagrees with its own num
   pair, `01:00-04:00` and `06:00-10:00`; an explicit empty list turns the rule off.
 - **Automatic continuation is bounded by progress**: a new claim or less work left. Two runs without
   progress stop it and say why.
+- **Housekeeping is not a button.** The consistency walk, the summary and tag backfills, the shelf
+  build and the vocabulary passes ask for themselves on the reconcile tick, each with its own
+  cooldown and latch. The reduction to the shelf is a sequence of passes, and the tick picks the next
+  one in the only order that converges: **coarsen** (a name in bulk) while a name is outside the shelf,
+  then **retopic** (a name's claims, one batch at a time) while claims are still there, then — with
+  nothing left to ask — the **shelf refit**, which re-synthesizes the target from the corpus, and
+  finally the **curation** of drift. Each pass stops asking when its budget
+  (`vocabulary.coarsen.budget`, `vocabulary.retopic.budget`) is spent, applies the questions in flight
+  and hands the exclusive gate back. The buttons on Status remain as "run one now", never as the only
+  way the work happens.
 - **The watchdog never releases a run that is executing.** A claim is stale only when nothing is
   queued, no step is executing and it is older than a whole run budget.
 - **A run row is closed when its claim is released**, so the audit cannot keep a `running` row for

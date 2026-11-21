@@ -19,8 +19,9 @@ import (
 
 // TestRebranchClaimsRelabelsFromTheClaimText is the repair for a collapsed branch vocabulary: the label
 // is re-derived from the CLAIM, because the claim text is the only evidence that survives a merge. No
-// claim is rewritten and no page is touched — only the branch changes — and the branch vocabulary is
-// rebuilt from what the claims now say (the alias table that recorded the collapse goes with it).
+// claim is rewritten and no page is touched — only the branch changes. A vault with no shelf keeps the
+// oldest-first queue, and the repair leaves the vocabulary RECORD alone: a pass that rewrote it would
+// throw the shelf and the alias table away, and the reduction the passes exist for would start over.
 func TestRebranchClaimsRelabelsFromTheClaimText(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
@@ -90,12 +91,13 @@ func TestRebranchClaimsRelabelsFromTheClaimText(t *testing.T) {
 			t.Errorf("the claim was rewritten: %q", a.Claim)
 		}
 	}
-	// The branch vocabulary mirrors what the claims now say, and the alias table of the collapse is gone.
+	// The vocabulary is a RECORD and this pass does not touch it: the shelf, the alias table and the
+	// names the model judged are decisions, and a repair that wiped them would undo the coarsening.
 	v, err := vocabStore.Read(entities.VocabularyTopics)
 	if err != nil {
 		t.Fatalf("read vocabulary: %v", err)
 	}
-	if len(v.Canonical) != 3 || len(v.Absorbed) != 0 {
-		t.Errorf("vocabulary = %+v, want the three names and no absorbed table", v)
+	if len(v.Canonical) != 0 || len(v.Absorbed) != 0 || len(v.Shelf) != 0 {
+		t.Errorf("the repair rewrote the vocabulary: %+v", v)
 	}
 }

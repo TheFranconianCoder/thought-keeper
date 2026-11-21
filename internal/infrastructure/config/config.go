@@ -207,11 +207,67 @@ type VocabularyConfig struct {
 	Topics     VocabularyNamespaceConfig `yaml:"topics"`
 	SourceTags VocabularyNamespaceConfig `yaml:"source_tags"`
 	WikiTags   VocabularyNamespaceConfig `yaml:"wiki_tags"`
+	Coarsen    CoarsenConfig             `yaml:"coarsen"`
+	Shelf      ShelfConfig               `yaml:"shelf"`
+	Retopic    RetopicConfig             `yaml:"retopic"`
+}
+
+// ShelfConfig is the shelf's own maintenance. A shelf that could only be built once would be frozen on
+// the day it was built: the corpus changes, and the vocabulary has to follow it.
+type ShelfConfig struct {
+	// RefitInterval is how often a SETTLED vocabulary re-synthesizes its shelf: a subject that earned
+	// its mass takes a slot, a slot nobody uses gives its up. Empty = never (the shelf stays the record
+	// it was built as). The claims an eviction removes from the shelf are re-derived by the retopic
+	// pass, which is why a refit is safe to run: it moves a record, never a claim.
+	RefitInterval string `yaml:"refit_interval"`
+}
+
+// RetopicConfig is the per-claim repair: the claims whose topic the shelf could not take are asked
+// about one batch at a time and every answer resolves onto the shelf. It is what actually reduces the
+// topics to the shelf size — the coarsening can only file a name that means one thing.
+type RetopicConfig struct {
+	// Automatic is the self-driven pass. On by default: the reduction to the shelf is housekeeping.
+	Automatic bool `yaml:"automatic"`
+	// Budget bounds ONE automatic pass, like the coarsening's: the questions in flight are applied and
+	// the gate goes back to the document steps.
+	Budget string `yaml:"budget"`
+}
+
+// CoarsenConfig is the automatic coarsening: the pass that files a namespace's long tail onto its
+// shelf. It is housekeeping, so it runs by itself — a vault that predates the shelf has tens of
+// thousands of names outside it, and no reader should have to press a button for days.
+type CoarsenConfig struct {
+	// Automatic is the self-driven pass. On by default: the app asks for the next pass when the last
+	// one ended, until the tail is settled or the shelf can no longer file it.
+	Automatic bool `yaml:"automatic"`
+	// Budget bounds ONE pass. The questions already in flight are applied before it returns; the next
+	// pass continues from the watermark. It is what lets the exclusive gate go: a pass that holds it
+	// for the whole run unit starves the document steps. Empty means no budget (the run's own ceiling
+	// is the only bound), which is what a manual press uses.
+	Budget string `yaml:"budget"`
 }
 
 // VocabularyNamespaceConfig is one namespace's ceiling.
 type VocabularyNamespaceConfig struct {
 	MaxNames int `yaml:"max_names"`
+}
+
+// CoarsenDuration is how long one coarsening pass may run before it stops asking. Zero means no
+// budget: the run's own ceiling is the only bound.
+func (c CoarsenConfig) CoarsenDuration() time.Duration { return budgetDuration(c.Budget) }
+
+// RetopicDuration is how long one automatic retopic pass may run. Zero means no budget.
+func (c RetopicConfig) RetopicDuration() time.Duration { return budgetDuration(c.Budget) }
+
+// RefitDuration is how often a settled vocabulary re-synthesizes its shelf. Zero means never.
+func (c ShelfConfig) RefitDuration() time.Duration { return budgetDuration(c.RefitInterval) }
+
+func budgetDuration(raw string) time.Duration {
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return 0
+	}
+	return d
 }
 
 type ClusterConfig struct {
@@ -396,6 +452,12 @@ func Defaults() Config {
 			Topics:     VocabularyNamespaceConfig{MaxNames: 3000},
 			SourceTags: VocabularyNamespaceConfig{MaxNames: 200},
 			WikiTags:   VocabularyNamespaceConfig{MaxNames: 200},
+			// The coarsening runs by itself and hands the gate back every quarter of an hour: the
+			// gate is what the document steps wait on, and a migration of hours must not own it.
+			Coarsen: CoarsenConfig{Automatic: true, Budget: "15m"},
+			// A settled shelf follows the corpus once a day; the repair pass runs like the coarsening.
+			Shelf:   ShelfConfig{RefitInterval: "24h"},
+			Retopic: RetopicConfig{Automatic: true, Budget: "15m"},
 		},
 		Cluster: ClusterConfig{
 			NeighborK: 16, MinClaimScore: 0.05, MergeMinInternal: 0.22, MergeMinGap: 0.04,
@@ -570,6 +632,15 @@ func applyDefaults(c *Config) map[string]string {
 	}
 	if c.Vocabulary.WikiTags.MaxNames <= 0 {
 		c.Vocabulary.WikiTags.MaxNames = d.Vocabulary.WikiTags.MaxNames
+	}
+	if c.Vocabulary.Coarsen.Budget == "" {
+		c.Vocabulary.Coarsen.Budget = d.Vocabulary.Coarsen.Budget
+	}
+	if c.Vocabulary.Retopic.Budget == "" {
+		c.Vocabulary.Retopic.Budget = d.Vocabulary.Retopic.Budget
+	}
+	if c.Vocabulary.Shelf.RefitInterval == "" {
+		c.Vocabulary.Shelf.RefitInterval = d.Vocabulary.Shelf.RefitInterval
 	}
 	if c.Pipeline.PartsPerRun <= 0 {
 		c.Pipeline.PartsPerRun = d.Pipeline.PartsPerRun

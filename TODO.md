@@ -88,10 +88,10 @@ are.
 15. **The tag namespaces have no bounded write path.** `source-tags` carries 969 names against a
     target of 200, and neither the summary run nor the tag backfill reads a shelf:
     `sourceTagVocabulary` hands `Canonical` to the prompt, and `normalizeSourceAutoTags` maps only
-    through `Absorbed`. The coarsening is what bounds them (it rewrites `Canonical`), and it is
-    manual. The follow-up is the topics treatment: prefer the shelf when one exists, and map a
-    proposed tag onto the nearest shelf name — it changes the tag prompt's contract, not just a
-    lookup.
+    through `Absorbed`. The coarsening is what bounds them (it rewrites `Canonical`) and it now runs
+    by itself, but the WRITE still grows the set faster than a periodic pass can file it. The
+    follow-up is the topics treatment: prefer the shelf when one exists, and map a proposed tag onto
+    the nearest shelf name — it changes the tag prompt's contract, not just a lookup.
 
 ## Open design questions
 

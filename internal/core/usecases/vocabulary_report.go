@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 
@@ -39,6 +40,14 @@ type Vocabulary struct {
 	Apply     bool
 	TopNames  int
 	Max       int
+	// Judged are the names this pass put to the model and did not merge: it decided about them, and
+	// the shelf cannot cover them. ApplyMapping records them in Decided in the same write as the
+	// mapping, so a declined name is never a question again.
+	Judged []string
+	// Budget stops a coarsening from LAUNCHING new questions once it is spent; the answers already
+	// in flight are applied, so the pass ends on a batch boundary and the gate is released. Zero
+	// means the run's own ceiling is the only bound.
+	Budget time.Duration
 	// Target is the size the COARSENING builds the shelf for (vocabulary.<namespace>.max_names).
 	Target int
 	// Parallel bounds the model calls one run keeps in flight: the rebranch's claims, and the
@@ -167,12 +176,27 @@ func (uc Vocabulary) health(observed []partialentities.NameUses, vocab entities.
 		return observed[i].Name < observed[j].Name
 	})
 	h.Names = len(observed)
+	// The sets are built once: a linear scan of a 50,000-name catalog per observed name is a report
+	// that takes seconds and times out on the vault it exists for.
+	known := make(map[string]bool, len(vocab.Shelf)+len(vocab.Canonical)+len(vocab.Decided)+len(vocab.Absorbed))
+	for _, name := range vocab.Shelf {
+		known[name] = true
+	}
+	for _, name := range vocab.Canonical {
+		known[name] = true
+	}
+	for _, name := range vocab.Decided {
+		known[name] = true
+	}
+	for name := range vocab.Absorbed {
+		known[name] = true
+	}
 	for _, o := range observed {
 		h.Uses += o.Uses
 		if o.Uses == 1 {
 			h.Singletons++
 		}
-		if !vocab.Known(o.Name) {
+		if !known[o.Name] {
 			h.New = append(h.New, o.Name)
 		}
 	}
@@ -222,16 +246,22 @@ func (uc Vocabulary) health(observed []partialentities.NameUses, vocab entities.
 	if len(broad) == 0 {
 		broad = fallbackBroadTokens(observed)
 	}
+	judged := make(map[string]bool, len(vocab.Decided))
+	for _, name := range vocab.Decided {
+		judged[name] = true
+	}
 	h.Shelf = len(vocab.Shelf)
 	h.Target = vocab.Target
-	h.Remaining = remainingNames(observed, vocab)
+	tail := tailStateOf(observed, vocab)
+	h.Remaining, h.Retopic, h.OffShelf = tail.remaining, tail.retopic, tail.offShelf
+	h.Retopiced = len(vocab.Relabelled)
 	h.BroadTokens = len(broad)
 	h.BroadTokensLearned = len(vocab.BroadTokens) > 0
 	h.NearDuplicates, h.OversizedFamilies, h.OversizedNames = nearDuplicates(observed, broad)
 	h.NearDuplicateCount = len(h.NearDuplicates)
 	for _, group := range h.NearDuplicates {
 		for _, name := range group.Names {
-			if !vocab.Judged(name.Name) {
+			if !judged[name.Name] {
 				h.UnreviewedFamilies++
 				break
 			}
@@ -240,18 +270,45 @@ func (uc Vocabulary) health(observed []partialentities.NameUses, vocab entities.
 	return h
 }
 
-// remainingNames is what the coarsening still has to file: the names in use that are neither on the
-// shelf nor already absorbed. Without a shelf the whole catalog is remaining — the shelf is the
-// target, everything beside it is the tail.
-func remainingNames(observed []partialentities.NameUses, vocab entities.Vocabulary) int {
+// tailState splits the names outside the shelf by the question each one is still in. They are three
+// different numbers and confusing them made the report describe an endless queue:
+//
+//   - remaining: what the COARSENING still asks — outside the shelf, not absorbed, not judged. A name
+//     the model passed over is judged, so it is not asked again in bulk.
+//   - retopic: what the RETOPIC pass still asks — outside the shelf, not absorbed, not yet re-derived
+//     claim by claim. It includes the judged names: "the shelf cannot cover this name" is exactly the
+//     case where the CLAIMS have to be looked at one by one.
+//   - offShelf: the claim MASS still outside the shelf. It is the honest distance to the invariant
+//     ("every claim's topic is on the shelf") and the only number that says whether the corpus moved.
+type tailState struct {
+	remaining int
+	retopic   int
+	offShelf  int
+}
+
+// tailStateOf counts the tail once, from sets built for the whole catalog.
+func tailStateOf(observed []partialentities.NameUses, vocab entities.Vocabulary) tailState {
+	var st tailState
 	if len(observed) == 0 {
-		return 0
+		return st
+	}
+	if len(vocab.Shelf) == 0 {
+		// No target, no tail to reduce: everything is "remaining" in the sense of the coarsening's
+		// queue, but nothing is off a shelf that does not exist and no claim can be re-derived onto it.
+		return tailState{remaining: len(observed)}
 	}
 	onShelf := make(map[string]bool, len(vocab.Shelf))
 	for _, name := range vocab.Shelf {
 		onShelf[name] = true
 	}
-	n := 0
+	judged := make(map[string]bool, len(vocab.Decided))
+	for _, name := range vocab.Decided {
+		judged[name] = true
+	}
+	relabelled := make(map[string]bool, len(vocab.Relabelled))
+	for _, name := range vocab.Relabelled {
+		relabelled[name] = true
+	}
 	for _, o := range observed {
 		if onShelf[o.Name] {
 			continue
@@ -259,9 +316,16 @@ func remainingNames(observed []partialentities.NameUses, vocab entities.Vocabula
 		if _, absorbed := vocab.Absorbed[o.Name]; absorbed {
 			continue
 		}
-		n++
+		st.offShelf += o.Uses
+		if relabelled[o.Name] {
+			continue
+		}
+		st.retopic++
+		if !judged[o.Name] {
+			st.remaining++
+		}
 	}
-	return n
+	return st
 }
 
 // nearDuplicates groups the names whose token sets overlap strongly. It reports GROUPS, not pairs:

@@ -310,18 +310,49 @@ order. It never writes a URL, never invents a hash and never answers the request
   through the same rename the curation uses and recorded in `Absorbed` — the watermark, so a stopped
   pass continues where it was. The run reports what it **asked** and what it **filed**, and the number
   left is what the vault still shows outside the shelf (a batch always walks 150 names; it does not
-  always file them). Three batches in a row that file nothing stop the pass: the shelf cannot honestly
-  cover the tail, and asking again would only spend tokens. A rename writes the claim files and records
+  always file them). Three questions in a row that come back empty or fail stop the pass: the shelf
+  cannot be asked any further right now, and the budget is not worth burning. A rename writes the
+  claim files and records
   the new topics in **one transaction per batch** — the text and the provenance do not move, and a
   transaction per claim is what made a real coarsening take hours. It is the repair for a vocabulary
   that grew before the shelf existed, it holds the exclusive gate for the whole pass, and it is what
   the **Coarsen** button on Status asks for. A press takes the one-at-a-time latch: a second press
   while a pass runs is a conflict, and the automatic shelf look and the curation stay out of its way.
-- **`POST /vocabulary/retopic`** re-derives each claim's flat topic from the claim text (bounded per
-  run; the next press continues). It maps onto the shelf, never around it. The queue is the clock: it reads the OLDEST claims through the
-  index (`updated_at, id`), so a budget of 12k claims reads 12k rows — not the corpus. Only a claim
-  whose label actually moves is re-read whole before the write, because the save is authoritative
-  for its provenance.
+- **The shelf follows the corpus.** The derivation files new claims onto the shelf, so without a
+  refit the shelf could only shrink and a new subject could never appear. When a namespace has
+  nothing left to ask (no name to file, no claim to re-derive) the reconcile tick re-synthesizes its
+  shelf at most once per `vocabulary.shelf.refit_interval` (24h): a name outside the shelf that carries
+  at least `2×` the coldest slot (and never fewer than three claims) takes that slot; with free slots
+  below `max_names` it simply joins. The refit writes a RECORD — no model, no gate, no claim — and the
+  corpus follows: the claims on an evicted name are off the shelf again, which is exactly the queue the
+  retopic pass works through. And so that a genuinely new subject can appear at all, the derivation
+  keeps a proposal that is not on the shelf while the names outside it stay under its **headroom**
+  (a tenth of the shelf): a settled vault has room for new subjects, a vault still filing its tail has
+  none. The refit promotes the ones that earn the mass; the coarsening files the rest in.
+- **The coarsening runs by itself.** It is the one piece of housekeeping a measured vault needed for
+  days, and a button that has to be pressed every forty minutes is not housekeeping. The reconcile
+  tick asks for a pass while any namespace still has names outside the shelf — the SMALLEST tail
+  first, so forty source tags are finished instead of waiting behind forty thousand topics — and asks
+  again after the cooldown when the pass ended. A name the model passes over is **judged and kept**
+  (`Decided`), so the next pass continues further into the tail instead of re-asking the same names;
+  that is what makes the count of what is left converge. An answer that maps nothing is not a
+  judgement, so it settles nothing. The automatic pass is bounded by `vocabulary.coarsen.budget`
+  (15 min): it stops ASKING when the budget is spent, applies the questions already in flight and
+  returns, so the exclusive gate goes back to the document steps between passes. It is bounded by
+  progress like every other loop (`two passes without progress stop it and say why`), and
+  `vocabulary.coarsen.automatic: false` turns it off. The **Coarsen** button on Status stays as "run
+  one now": the same pass with the run's own ceiling instead of the budget.
+- **`POST /vocabulary/retopic`** re-derives the topic of the claims the SHELF COULD NOT TAKE, one
+  batch of 100 at a time, from the claims' own text — and every answer resolves onto the shelf. It is
+  the second half of the reduction: the coarsening renames a NAME (one answer moves all of its
+  claims), so it can only place names that mean one thing; a name whose claims are several subjects,
+  or one subject the shelf spells differently, is what this pass is for. Its queue is the names
+  outside the shelf that no pass has answered for yet, most used first; when every batch of a name has
+  been attempted the name is recorded in `Relabelled`, so a name that legitimately stays fine is a
+  remainder the report shows, never a question that comes back on every cycle. It does NOT rewrite the
+  vocabulary record — the shelf, the alias table and the judged names are decisions. A vault without a
+  shelf keeps the oldest-first repair (`updated_at, id`), where only a claim whose label moves is
+  re-read whole before the write, because the save is authoritative for its provenance.
 - Both are **renames**: no claim text is rewritten and no cluster moves.
 - A curation holds the **exclusive** side of the gate for the whole run: it rewrites claim names,
   so no document step may be writing claims beside it. While it waits for the drain it is reported as

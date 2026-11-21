@@ -20,12 +20,14 @@ import (
 
 // RebranchResult says what one pass did.
 type RebranchResult struct {
-	// Examined is how many claims the pass looked at, Changed how many got a different branch.
+	// Examined is how many claims the pass looked at, Changed how many got a different topic.
 	Examined int
 	Changed  int
 	Batches  int
 	Tokens   int
-	// Remaining estimates what is left for the next press.
+	// Names is how many NAMES the pass answered for (the shelf-aware queue's unit) and Remaining how
+	// many are left for the next pass.
+	Names     int
 	Remaining int
 	// Examples names a few before → after, so the reader can judge the labels.
 	Examples []string
@@ -34,9 +36,14 @@ type RebranchResult struct {
 const (
 	rebranchPerCall  = 100
 	rebranchCallTime = 2 * time.Minute
+	// rebranchPage is how many claims of one name are read at a time, and knownInPrompt how many
+	// shelf names a question carries. The names a claim is likely to be filed under are the most used
+	// ones; handing over the whole catalog was ~2.3 MB per batch.
+	rebranchPage  = 200
+	knownInPrompt = 400
 )
 
-// rebranchAnswer is the model's reply: one branch per claim, addressed by its NUMBER in the question.
+// rebranchAnswer is the model's reply: one topic per claim, addressed by its NUMBER in the question.
 type rebranchAnswer struct {
 	Claims []struct {
 		N     int    `json:"n"`
@@ -52,16 +59,29 @@ type labelledBatch struct {
 	err    error
 }
 
-// Rebranch re-labels the claims against the curated topic vocabulary.
+// Rebranch re-derives the topic of the claims the shelf could not take, from the claims' own text.
+//
+// It is the second half of the reduction to the shelf, and the half that actually OPTIMIZES the
+// topics: the coarsening renames a name in bulk (one answer moves every claim of that name), so it can
+// only place names that mean one thing. A name whose claims are really several subjects — or one
+// subject the shelf names differently — is the unit this pass works in: its claims are asked about one
+// batch at a time and every answer resolves onto the shelf.
+//
+// The queue is what makes it CONVERGE, and it is why it needs no watermark: a name is taken when it is
+// outside the shelf and no pass has answered for it yet, most used first. When every batch of a name
+// has been attempted the name is recorded in `Relabelled`, so a name that legitimately stays fine is a
+// remainder the report shows, never a question that comes back on every cycle.
+//
+// A vault without a shelf keeps the old repair: the OLDEST claims, one bounded pass after another.
 func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchResult, err error) {
 	// The run row is closed here: a pass that never finishes leaves a run stuck in "running", and a
-	// reader who pressed the button would never learn whether it worked.
+	// reader would never learn whether it worked.
 	defer func() {
 		if uc.Runs == nil {
 			return
 		}
-		answer := fmt.Sprintf("rebranch: %d examined, %d re-labelled (%d question(s), %d tokens, %d left for the next pass)",
-			res.Examined, res.Changed, res.Batches, res.Tokens, res.Remaining)
+		answer := fmt.Sprintf("retopic: %d name(s), %d claim(s) examined, %d re-labelled (%d question(s), %d tokens, %d left)",
+			res.Names, res.Examined, res.Changed, res.Batches, res.Tokens, res.Remaining)
 		run := entities.Run{
 			ID: runID, Op: entities.RunVocabulary, Model: uc.Model,
 			Status: entities.RunSucceeded, Answer: answer, EndedAt: uc.Clock.Now(),
@@ -79,154 +99,334 @@ func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchRes
 		_ = uc.Runs.FinishRun(ctx, run) //nolint:errcheck // the run row is an audit trail; the work already ended
 	}()
 	if uc.Atoms == nil || uc.Gateway == nil || uc.Model == "" {
-		return res, fmt.Errorf("rebranch: no model or no atom repository configured")
+		return res, fmt.Errorf("retopic: no model or no atom repository configured")
 	}
-	// OLDEST FIRST, and only what this pass can handle: the index answers the queue order, so a
-	// budget of 12k claims reads 12k rows. The claims this pass CHANGES move to the back of the queue
-	// by their new timestamp, so the next pass continues where this one stopped — the queue is the
-	// clock, not a cursor file. (The old shape read the newest 100k claims, sorted them in memory and
-	// cut the oldest budget off the front — in a vault past 100k claims, that list could never even
-	// SEE the oldest claims.)
+	settled := make([]string, 0, relabelFlush)
+	defer func() { uc.settleRecords(settled) }()
+	settle := func(name string) {
+		settled = append(settled, name)
+		if len(settled) >= relabelFlush {
+			uc.settleRecords(settled)
+			settled = settled[:0]
+		}
+	}
+	observed, err := uc.Atoms.ListClaimTopics(ctx)
+	if err != nil {
+		return res, fmt.Errorf("retopic: read the topics: %w", err)
+	}
+	v, vErr := uc.Vocab.Read(entities.VocabularyTopics) //nolint:errcheck // a missing record is an empty vocabulary
+	if vErr != nil {
+		v = entities.Vocabulary{Namespace: entities.VocabularyTopics, Absorbed: map[string]string{}}
+	}
+	aliases := vocabularyAliases(uc.Vocab, entities.VocabularyTopics)
+	catalog := shelfCatalogOf(v.Shelf, observed)
+	started := uc.Clock.Now()
+	spent := func() bool {
+		return uc.Budget > 0 && uc.Clock.Now().Sub(started) >= uc.Budget
+	}
+	claimBudget := uc.MaxClaims
+	if claimBudget <= 0 {
+		claimBudget = 100000
+	}
+
+	if len(v.Shelf) == 0 {
+		return uc.rebranchOldest(ctx, observed, catalog, aliases, &res)
+	}
+
+	queue := retopicQueue(observed, v)
+	res.Remaining = len(queue)
+	if len(queue) == 0 {
+		return res, nil
+	}
+	known := nameLines(shelfUses(v.Shelf, observed), knownInPrompt)
+
+	for _, name := range queue {
+		if spent() || res.Examined >= claimBudget {
+			break
+		}
+		uc.phase(fmt.Sprintf("re-deriving %q (%d left)", name, res.Remaining))
+		complete := true
+		offset := 0
+		for {
+			atoms, lErr := uc.Atoms.ListAtoms(ctx, name, rebranchPage, offset)
+			if lErr != nil {
+				return res, fmt.Errorf("retopic: read the claims of %q: %w", name, lErr)
+			}
+			if len(atoms) == 0 {
+				break
+			}
+			offset += len(atoms)
+			if room := claimBudget - res.Examined; len(atoms) > room {
+				atoms = atoms[:room]
+				complete = false
+			}
+			if !uc.askAndApply(ctx, atoms, known, catalog, aliases, spent, &res) {
+				complete = false
+				break
+			}
+			if len(atoms) < rebranchPage || res.Examined >= claimBudget {
+				if res.Examined >= claimBudget {
+					complete = false
+				}
+				break
+			}
+		}
+		// A name is the unit of memory: it is answered for only when every batch was attempted, so a
+		// pass that ran out of budget hands it back instead of pretending it was done.
+		if complete {
+			settle(name)
+			res.Names++
+			res.Remaining--
+		}
+	}
+	return res, nil
+}
+
+// askAndApply asks one page of claims in batches (several in flight) and applies the answers IN ORDER:
+// a question writes nothing, and the labels must land in the order the budget was accounted for.
+func (uc Claims) askAndApply(ctx context.Context, atoms []entities.Atom, known []string, catalog *topicCatalog, aliases map[string]string, spent func() bool, res *RebranchResult) bool {
+	batches := make([][]entities.Atom, 0, (len(atoms)+rebranchPerCall-1)/rebranchPerCall)
+	for from := 0; from < len(atoms); from += rebranchPerCall {
+		batches = append(batches, atoms[from:min(from+rebranchPerCall, len(atoms))])
+	}
+	answers := make([]labelledBatch, len(batches))
+	width := uc.Parallel
+	if width <= 0 {
+		width = 4
+	}
+	if width > len(batches) {
+		width = len(batches)
+	}
+	slots := make(chan struct{}, width)
+	var wg sync.WaitGroup
+	for i := range batches {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			slots <- struct{}{}
+			answers[i] = uc.ask(ctx, batches[i], known)
+			<-slots
+		}(i)
+	}
+	wg.Wait()
+	for i := range answers {
+		res.Batches++
+		res.Tokens += answers[i].tokens
+		if answers[i].err != nil {
+			if uc.Log != nil {
+				uc.Log.Warn("retopic: a question failed", "err", answers[i].err)
+			}
+			continue
+		}
+		if spent() {
+			// Stop between batches, never inside one: what was asked is applied, what was not waits.
+			return false
+		}
+		res.Examined += len(answers[i].atoms)
+		uc.label(ctx, answers[i], catalog, aliases, res)
+	}
+	return true
+}
+
+// settleRecords records that names' claims have been re-derived, so they are not questions again.
+// It is called every few names, not once per name: the vocabulary file is megabytes on a grown vault,
+// and rewriting it for each of thousands of tail names is gigabytes of I/O for a watermark. A pass that
+// dies before the next flush re-asks at most that many names — a cheap loss, and a bounded one.
+func (uc Claims) settleRecords(names []string) {
+	if uc.Vocab == nil || len(names) == 0 {
+		return
+	}
+	v, err := uc.Vocab.Read(entities.VocabularyTopics)
+	if err != nil {
+		return
+	}
+	done := make(map[string]bool, len(v.Relabelled)+len(names))
+	for _, name := range v.Relabelled {
+		done[name] = true
+	}
+	added := 0
+	for _, name := range names {
+		if done[name] {
+			continue
+		}
+		done[name] = true
+		v.Relabelled = append(v.Relabelled, name)
+		added++
+	}
+	if added == 0 {
+		return
+	}
+	if uc.Clock != nil {
+		v.Updated = uc.Clock.Now()
+	}
+	if wErr := uc.Vocab.Write(v); wErr != nil && uc.Log != nil {
+		uc.Log.Warn("retopic: the relabelled names were not recorded", "names", added, "err", wErr)
+	}
+}
+
+// relabelFlush is how many settled names are held before the watermark is written.
+const relabelFlush = 32
+
+// retopicQueue is the pass's work: the names outside the shelf that no pass has answered for yet, most
+// used first. Absorbed names are another name already, and Relabelled names were asked claim by claim —
+// asking them again is what would make the loop endless.
+func retopicQueue(observed []entities.TopicUse, v entities.Vocabulary) []string {
+	onShelf := make(map[string]bool, len(v.Shelf))
+	for _, name := range v.Shelf {
+		onShelf[name] = true
+	}
+	done := make(map[string]bool, len(v.Relabelled))
+	for _, name := range v.Relabelled {
+		done[name] = true
+	}
+	out := make([]entities.TopicUse, 0, len(observed))
+	for _, o := range observed {
+		if onShelf[o.Topic] || done[o.Topic] {
+			continue
+		}
+		if _, absorbed := v.Absorbed[o.Topic]; absorbed {
+			continue
+		}
+		out = append(out, o)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Topic < out[j].Topic
+	})
+	names := make([]string, 0, len(out))
+	for _, o := range out {
+		names = append(names, o.Topic)
+	}
+	return names
+}
+
+// shelfCatalogOf is the catalog a repair resolves onto: the shelf itself, with no room to grow — the
+// point of the pass is to move claims ONTO it. A vault without a shelf gets the observed head, which
+// is the behaviour of a vault that never built one.
+func shelfCatalogOf(shelf []string, observed []entities.TopicUse) *topicCatalog {
+	if len(shelf) == 0 {
+		return newTopicCatalog(observed)
+	}
+	uses := shelfUses(shelf, observed)
+	c := newTopicCatalog(uses)
+	c.budget = len(shelf) // no room: an unknown proposal maps onto the best candidate, or is kept
+	return c
+}
+
+// shelfUses is the shelf in use order, for the catalog and the prompt.
+func shelfUses(shelf []string, observed []entities.TopicUse) []entities.TopicUse {
+	counts := make(map[string]int, len(observed))
+	for _, o := range observed {
+		counts[o.Topic] = o.Count
+	}
+	uses := make([]entities.TopicUse, 0, len(shelf))
+	for _, name := range shelf {
+		uses = append(uses, entities.TopicUse{Topic: name, Count: counts[name]})
+	}
+	sort.SliceStable(uses, func(i, j int) bool {
+		if uses[i].Count != uses[j].Count {
+			return uses[i].Count > uses[j].Count
+		}
+		return uses[i].Topic < uses[j].Topic
+	})
+	return uses
+}
+
+// nameLines renders the names a question offers to the model, with their weight.
+func nameLines(uses []entities.TopicUse, limit int) []string {
+	out := make([]string, 0, min(len(uses), limit))
+	for _, u := range uses {
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+		out = append(out, fmt.Sprintf("%s (%d claims)", u.Topic, u.Count))
+	}
+	return out
+}
+
+// rebranchOldest is the repair for a vault with no shelf: the OLDEST claims, bounded per pass, the
+// claims it changed moving to the back of the queue by their new timestamp.
+func (uc Claims) rebranchOldest(ctx context.Context, observed []entities.TopicUse, catalog *topicCatalog, aliases map[string]string, res *RebranchResult) (RebranchResult, error) {
 	limit := uc.MaxClaims
 	if limit <= 0 {
 		limit = 100000
 	}
 	all, err := uc.Atoms.ListOldestAtoms(ctx, limit)
 	if err != nil {
-		return res, fmt.Errorf("rebranch: read the claims: %w", err)
+		return *res, fmt.Errorf("retopic: read the claims: %w", err)
 	}
 	if len(all) == 0 {
-		return res, nil
+		return *res, nil
 	}
-	res.Examined = len(all)
-
-	branches, err := uc.Atoms.ListClaimTopics(ctx)
-	if err != nil {
-		return res, fmt.Errorf("rebranch: read the branches: %w", err)
-	}
-	// The catalog's counts are the corpus: what is left for the next pass is the honest number the
-	// bounded read could not know by itself.
 	total := 0
-	for _, b := range branches {
+	for _, b := range observed {
 		total += b.Count
 	}
 	if total > len(all) {
 		res.Remaining = total - len(all)
 	}
-	// The prompt carries the SHELF's head, not the whole catalog: the names a claim is likely to be
-	// filed under are the most used ones. Handing over all 57,181 names was ~2.3 MB per batch — more
-	// than the question itself, and still not readable.
-	const knownInPrompt = 400
-	if len(branches) > knownInPrompt {
-		branches = branches[:knownInPrompt]
-	}
-	known := make([]string, 0, len(branches))
-	for _, b := range branches {
-		known = append(known, fmt.Sprintf("- %s (%d claims)", b.Topic, b.Count))
-	}
-	// The catalog resolves a proposed label onto the shelf: a repair must not invent a name the write
-	// path would then map away from, and it must not grow the vocabulary it is repairing.
-	catalog := newTopicCatalog(branches)
-	catalog.budget = uc.TopicBudget
-	aliases := vocabularyAliases(uc.Vocab, entities.VocabularyTopics)
+	known := nameLines(observed, knownInPrompt)
+	uc.phase(fmt.Sprintf("labelling %d claim(s) from the oldest", len(all)))
+	spent := func() bool { return false }
+	_ = uc.askAndApply(ctx, all, known, catalog, aliases, spent, res)
+	return *res, nil
+}
 
-	batches := make([][]entities.Atom, 0, (len(all)+rebranchPerCall-1)/rebranchPerCall)
-	for from := 0; from < len(all); from += rebranchPerCall {
-		to := min(from+rebranchPerCall, len(all))
-		batches = append(batches, all[from:to])
-	}
-	res.Batches = len(batches)
-	uc.phase(fmt.Sprintf("labelling %d claim(s) in %d question(s)", len(all), len(batches)))
-
-	// ASK first (bounded in flight), then apply in order: a question writes nothing.
-	answers := make([]labelledBatch, len(batches))
-	width := uc.Parallel
-	if width <= 0 {
-		width = 4
-	}
-	slots := make(chan struct{}, width)
-	var wg sync.WaitGroup
-	var done counter
-	for i := range batches {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			slots <- struct{}{}
-			defer func() { <-slots }()
-			answers[i] = uc.ask(ctx, batches[i], known)
-			uc.phase(fmt.Sprintf("labelling (%d/%d answered)", done.add(1), len(batches)))
-		}(i)
-	}
-	wg.Wait()
-
-	for i := range answers {
-		res.Tokens += answers[i].tokens
-		if answers[i].err != nil {
+// label applies one answered batch: a topic that differs, resolves onto the catalog and passes the
+// standalone check is written (file first, then the row).
+func (uc Claims) label(ctx context.Context, got labelledBatch, catalog *topicCatalog, aliases map[string]string, res *RebranchResult) {
+	for num, name := range got.labels {
+		if num < 1 || num > len(got.atoms) {
+			continue
+		}
+		before := got.atoms[num-1]
+		next := coremarkdown.NormalizeTopic(name)
+		if next == "" {
+			continue
+		}
+		next = catalog.resolve(aliases, next, before.Claim+" "+before.Body).Name
+		if next == "" || next == before.Topic {
+			continue
+		}
+		if issues := claims.Issues(next, before.Claim, before.Body); len(issues) > 0 {
 			if uc.Log != nil {
-				uc.Log.Warn("rebranch: a question failed", "batch", i+1, "of", len(batches), "err", answers[i].err)
+				uc.Log.Warn("retopic: topic rejected — the claim is not standalone",
+					"atom", before.ID.String(), "topic", next, "reasons", strings.Join(issues, "; "))
 			}
 			continue
 		}
-		for num, name := range answers[i].labels {
-			if num < 1 || num > len(answers[i].atoms) {
-				continue
-			}
-			before := answers[i].atoms[num-1]
-			next := coremarkdown.NormalizeTopic(name)
-			if next == "" {
-				continue
-			}
-			next = catalog.resolve(aliases, next, before.Claim+" "+before.Body).Name
-			if next == "" || next == before.Topic {
-				continue
-			}
-			if issues := claims.Issues(next, before.Claim, before.Body); len(issues) > 0 {
-				if uc.Log != nil {
-					uc.Log.Warn("rebranch: topic rejected — the claim is not standalone",
-						"atom", before.ID.String(), "topic", next, "reasons", strings.Join(issues, "; "))
-				}
-				continue
-			}
-			if !uc.Apply {
-				res.Changed++
-				continue
-			}
-			// The queue read carried the TEXT only. A SaveAtom is authoritative for provenance, so
-			// the claim is re-read whole before its label moves — writing back the queue row would
-			// silently delete what the queue row never held.
-			full, err := uc.Atoms.GetAtom(ctx, before.ID)
-			if err != nil {
-				if uc.Log != nil {
-					uc.Log.Warn("rebranch: the claim could not be re-read — left as it is",
-						"atom", before.ID.String(), "err", err)
-				}
-				continue
-			}
-			a := full
-			a.Topic = next
-			a.UpdatedAt = uc.Clock.Now()
-			if err := uc.write(ctx, a); err != nil {
-				if uc.Log != nil {
-					uc.Log.Warn("rebranch: a claim was not re-labelled", "atom", a.ID.String(), "err", err)
-				}
-				continue
-			}
+		if !uc.Apply {
 			res.Changed++
-			if len(res.Examples) < 12 {
-				res.Examples = append(res.Examples,
-					fmt.Sprintf("%q: %s → %s", oneLine(a.Claim, 70), before.Topic, next))
+			continue
+		}
+		// The queue read carried the TEXT only. A SaveAtom is authoritative for provenance, so the
+		// claim is re-read whole before its label moves — writing back the queue row would silently
+		// delete what the queue row never held.
+		full, err := uc.Atoms.GetAtom(ctx, before.ID)
+		if err != nil {
+			if uc.Log != nil {
+				uc.Log.Warn("retopic: the claim could not be re-read — left as it is",
+					"atom", before.ID.String(), "err", err)
 			}
+			continue
+		}
+		a := full
+		a.Topic = next
+		a.UpdatedAt = uc.Clock.Now()
+		if err := uc.write(ctx, a); err != nil {
+			if uc.Log != nil {
+				uc.Log.Warn("retopic: a claim was not re-labelled", "atom", a.ID.String(), "err", err)
+			}
+			continue
+		}
+		res.Changed++
+		if len(res.Examples) < 12 {
+			res.Examples = append(res.Examples,
+				fmt.Sprintf("%q: %s → %s", oneLine(a.Claim, 70), before.Topic, next))
 		}
 	}
-	if uc.Apply && res.Changed > 0 {
-		uc.rebuildVocabulary(ctx)
-	}
-	if uc.Log != nil {
-		uc.Log.Info("rebranch: claims re-labelled", "run", runID.String(),
-			"examined", res.Examined, "changed", res.Changed, "batches", res.Batches,
-			"tokens", res.Tokens, "remaining", res.Remaining, "dry_run", !uc.Apply)
-	}
-	return res, nil
 }
 
 // ask labels ONE batch: the claims by number, the topics in use as the names to reuse.
@@ -288,43 +488,8 @@ func (uc Claims) write(ctx context.Context, a entities.Atom) error {
 	return uc.Atoms.SaveAtom(ctx, a)
 }
 
-// rebuildVocabulary writes the branch vocabulary from what the claims NOW say, and drops the alias
-// table: the merges it records are the collapse this pass is repairing — a name that came back must not
-// be mapped away again, and a true synonym is re-decided by the next curation (which no longer aims for
-// a shorter list).
-func (uc Claims) rebuildVocabulary(ctx context.Context) {
-	if uc.Vocab == nil {
-		return
-	}
-	branches, err := uc.Atoms.ListClaimTopics(ctx)
-	if err != nil {
-		return
-	}
-	names := make([]string, 0, len(branches))
-	for _, b := range branches {
-		names = append(names, b.Topic)
-	}
-	sort.Strings(names)
-	existing, _ := uc.Vocab.Read(entities.VocabularyTopics) //nolint:errcheck // the index and the step records are a light; the vault is the truth
-	v := entities.Vocabulary{Namespace: entities.VocabularyTopics, Canonical: names, BroadTokens: existing.BroadTokens}
-	if uc.Clock != nil {
-		v.Updated = uc.Clock.Now()
-	}
-	if err := uc.Vocab.Write(v); err != nil && uc.Log != nil {
-		uc.Log.Warn("rebranch: the branch vocabulary was not rebuilt", "err", err)
-	}
-}
-
 func (uc Claims) phase(name string) {
 	if uc.OnPhase != nil {
 		uc.OnPhase(name)
 	}
 }
-
-// counter is a small thread-safe counter the parallel questions share.
-type counter struct {
-	mu sync.Mutex
-	n  int
-}
-
-func (c *counter) add(d int) int { c.mu.Lock(); defer c.mu.Unlock(); c.n += d; return c.n }

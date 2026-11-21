@@ -57,6 +57,14 @@ var writableKeys = map[string]string{
 	"ocr.languages":                   TierBasic,
 	"app.memory_limit_mb":             TierBasic,
 
+	// Vocabulary: the automatic coarsening. "On" is housekeeping, the budget is how long one pass
+	// may hold the gate before it hands it back.
+	"vocabulary.coarsen.automatic":    TierBasic,
+	"vocabulary.retopic.automatic":    TierBasic,
+	"vocabulary.coarsen.budget":       TierAdvanced,
+	"vocabulary.retopic.budget":       TierAdvanced,
+	"vocabulary.shelf.refit_interval": TierAdvanced,
+
 	// Agent: patience with one endpoint, not a different endpoint.
 	"openai.timeout":        TierAdvanced,
 	"openai.retries":        TierAdvanced,
@@ -204,21 +212,24 @@ var durationRules = map[string]struct {
 	allowEmpty bool
 	positive   bool
 }{
-	"pipeline.debounce":             {allowEmpty: true},
-	"capture.refresh_interval":      {allowEmpty: true},
-	"capture.feed_refresh_interval": {allowEmpty: true},
-	"capture.refresh_min_gap":       {allowEmpty: true},
-	"pipeline.reconcile_interval":   {allowEmpty: true},
-	"assistant.prune_interval":      {allowEmpty: true},
-	"ocr.timeout":                   {allowEmpty: true},
-	"pipeline.run_timeout":          {},
-	"pipeline.cluster_timeout":      {},
-	"openai.retry_backoff":          {},
-	"openai.timeout":                {positive: true},
-	"assistant.retention":           {positive: true},
-	"browser.timeout":               {positive: true},
-	"browser.wait":                  {positive: true},
-	"fetch.timeout":                 {positive: true},
+	"pipeline.debounce":               {allowEmpty: true},
+	"capture.refresh_interval":        {allowEmpty: true},
+	"capture.feed_refresh_interval":   {allowEmpty: true},
+	"capture.refresh_min_gap":         {allowEmpty: true},
+	"pipeline.reconcile_interval":     {allowEmpty: true},
+	"assistant.prune_interval":        {allowEmpty: true},
+	"ocr.timeout":                     {allowEmpty: true},
+	"vocabulary.coarsen.budget":       {allowEmpty: true},
+	"vocabulary.retopic.budget":       {allowEmpty: true},
+	"vocabulary.shelf.refit_interval": {allowEmpty: true},
+	"pipeline.run_timeout":            {},
+	"pipeline.cluster_timeout":        {},
+	"openai.retry_backoff":            {},
+	"openai.timeout":                  {positive: true},
+	"assistant.retention":             {positive: true},
+	"browser.timeout":                 {positive: true},
+	"browser.wait":                    {positive: true},
+	"fetch.timeout":                   {positive: true},
 }
 
 // intRules is the smallest acceptable value of an integer knob. A minimum of 1 is used wherever the

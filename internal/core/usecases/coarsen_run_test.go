@@ -2,7 +2,9 @@ package usecases
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -143,17 +145,23 @@ func TestCoarsenReportsWhatItFiled(t *testing.T) {
 	if res.Mapped != 2 {
 		t.Errorf("mapped = %d, want 2", res.Mapped)
 	}
-	if want := 507 - 2; res.Remaining != want {
-		t.Errorf("remaining = %d, want %d (the batches are not progress)", res.Remaining, want)
+	// The number left is the names nobody has judged: the batch asked 150, filed 2 and settled the
+	// other 148. It is NOT 505 — a batch is not a count of the batches walked, but it is a count of
+	// the names it took out of the tail.
+	if res.Judged != 148 {
+		t.Errorf("judged = %d, want 148", res.Judged)
 	}
-	// Three batches in a row that file nothing stop the pass: a fourth ask would be pointless.
+	if want := 507 - 150; res.Remaining != want {
+		t.Errorf("remaining = %d, want %d", res.Remaining, want)
+	}
+	// Three questions in a row that map nothing end the pass: a fourth ask would be pointless.
 	if gw.calls != 4 {
 		t.Errorf("model calls = %d, want 4 (one filing, then the stop)", gw.calls)
 	}
 }
 
 // TestCoarsenStopsWhenNothingCanBeFiled: a tail the shelf cannot honestly cover must not keep a model
-// busy for the whole batch budget.
+// busy for the whole batch budget — three answers that map nothing end the pass.
 func TestCoarsenStopsWhenNothingCanBeFiled(t *testing.T) {
 	ctx := context.Background()
 	catalog := map[string]int{"shelf-a": 50, "shelf-b": 40, "shelf-c": 30}
@@ -173,11 +181,169 @@ func TestCoarsenStopsWhenNothingCanBeFiled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("coarsen: %v", err)
 	}
-	if gw.calls != coarsenEmptyBatches {
-		t.Errorf("model calls = %d, want %d", gw.calls, coarsenEmptyBatches)
+	if gw.calls != coarsenFailedAsks {
+		t.Errorf("model calls = %d, want %d", gw.calls, coarsenFailedAsks)
 	}
 	if res.Mapped != 0 || res.Remaining != 400 {
 		t.Errorf("mapped = %d remaining = %d, want 0/400", res.Mapped, res.Remaining)
+	}
+	// An answer that maps nothing is NOT a decision: it must not settle names the model never judged,
+	// or one broken completion would poison the whole tail.
+	if res.Judged != 0 || len(store.v[entities.VocabularyTopics].Decided) != 0 {
+		t.Errorf("an empty answer settled names: judged = %d decided = %v",
+			res.Judged, store.v[entities.VocabularyTopics].Decided)
+	}
+}
+
+// TestCoarsenSettlesADeclinedNameOnce: a name the model passed over is judged and kept, so the NEXT
+// pass asks about the rest of the tail instead of the same names again. That is what makes the
+// automatic pass converge: without it every pass re-asked its whole tail.
+func TestCoarsenSettlesADeclinedNameOnce(t *testing.T) {
+	ctx := context.Background()
+	catalog := map[string]int{"shelf-a": 50, "shelf-b": 40, "shelf-c": 30}
+	for i := 1; i <= 200; i++ {
+		catalog[fmt.Sprintf("tail-%03d", i)] = 1
+	}
+	atoms := newCoarsenAtoms(catalog)
+	store := newShelfVocab()
+	store.v[entities.VocabularyTopics] = entities.Vocabulary{
+		Namespace:   entities.VocabularyTopics,
+		Absorbed:    map[string]string{},
+		BroadTokens: []string{"tail", "shelf"},
+	}
+	gw := &sequenceGateway{answers: []string{
+		`{"mapping":{"tail-001":"shelf-a"}}`, // 1 filed, 149 settled
+		`{"mapping":{}}`,                     // the second batch of the pass maps nothing and is not a decision
+		`{"mapping":{"tail-151":"shelf-a"}}`, // the next pass asks only what is left
+	}}
+	uc := coarsenFixture(atoms, store, gw, 3)
+
+	first, err := uc.Coarsen(ctx, ulid.Make())
+	if err != nil {
+		t.Fatalf("first pass: %v", err)
+	}
+	if first.Judged != 149 {
+		t.Fatalf("judged = %d, want 149", first.Judged)
+	}
+	if want := 200 - 150; first.Remaining != want {
+		t.Errorf("remaining = %d, want %d", first.Remaining, want)
+	}
+	decided := store.v[entities.VocabularyTopics].Decided
+	if !slices.Contains(decided, "tail-002") {
+		t.Errorf("a declined name was not recorded as judged: %v", decided)
+	}
+
+	second, err := uc.Coarsen(ctx, ulid.Make())
+	if err != nil {
+		t.Fatalf("second pass: %v", err)
+	}
+	if second.Asked != 50 {
+		t.Errorf("the next pass asked %d names, want the 50 that were left", second.Asked)
+	}
+	if second.Mapped != 1 {
+		t.Errorf("mapped = %d, want 1 (tail-151 filed)", second.Mapped)
+	}
+}
+
+// flakyGateway fails a fixed number of calls before it answers, which is what a call at the timeout
+// edge looks like from inside the pass.
+type flakyGateway struct {
+	failures int
+	calls    int
+	answer   string
+}
+
+func (g *flakyGateway) Complete(context.Context, interfaces.AgentRequest) (interfaces.AgentResponse, error) {
+	g.calls++
+	if g.calls <= g.failures {
+		return interfaces.AgentResponse{}, errors.New("context deadline exceeded")
+	}
+	return interfaces.AgentResponse{Message: interfaces.AgentMessage{Role: "assistant", Content: g.answer}}, nil
+}
+
+// TestCoarsenSurvivesAFailedQuestion: one call at the timeout edge must not throw away the pass. The
+// batch stays open (its names are not judged) and the next question is asked.
+func TestCoarsenSurvivesAFailedQuestion(t *testing.T) {
+	ctx := context.Background()
+	catalog := map[string]int{"shelf-a": 50, "shelf-b": 40, "shelf-c": 30}
+	for i := 1; i <= 300; i++ {
+		catalog[fmt.Sprintf("tail-%03d", i)] = 1
+	}
+	atoms := newCoarsenAtoms(catalog)
+	store := newShelfVocab()
+	store.v[entities.VocabularyTopics] = entities.Vocabulary{
+		Namespace:   entities.VocabularyTopics,
+		Absorbed:    map[string]string{},
+		BroadTokens: []string{"tail", "shelf"},
+	}
+	gw := &flakyGateway{failures: 1, answer: `{"mapping":{"tail-151":"shelf-a"}}`}
+
+	res, err := coarsenFixture(atoms, store, gw, 3).Coarsen(ctx, ulid.Make())
+	if err != nil {
+		t.Fatalf("a failed question ended the pass: %v", err)
+	}
+	if gw.calls != 2 {
+		t.Errorf("calls = %d, want 2 (the failed one, then the next batch)", gw.calls)
+	}
+	if res.Mapped != 1 {
+		t.Errorf("mapped = %d, want 1", res.Mapped)
+	}
+	if res.Judged != 149 {
+		t.Errorf("judged = %d, want only the answered batch (149)", res.Judged)
+	}
+}
+
+// advancingClock moves forward on every read, so a budget can be exercised without waiting.
+type advancingClock struct {
+	mu   sync.Mutex
+	now  time.Time
+	step time.Duration
+}
+
+func (c *advancingClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(c.step)
+	return c.now
+}
+
+// TestCoarsenYieldsWhenTheBudgetIsSpent: the pass stops ASKING and applies what is in flight, so the
+// exclusive gate goes back to the document steps and the app can queue the next pass.
+func TestCoarsenYieldsWhenTheBudgetIsSpent(t *testing.T) {
+	ctx := context.Background()
+	catalog := map[string]int{"shelf-a": 50, "shelf-b": 40, "shelf-c": 30}
+	for i := 1; i <= 600; i++ {
+		catalog[fmt.Sprintf("tail-%03d", i)] = 1
+	}
+	atoms := newCoarsenAtoms(catalog)
+	store := newShelfVocab()
+	store.v[entities.VocabularyTopics] = entities.Vocabulary{
+		Namespace:   entities.VocabularyTopics,
+		Absorbed:    map[string]string{},
+		BroadTokens: []string{"tail", "shelf"},
+	}
+	// Every answer files one name, so no batch counts as a failure and only the budget can stop it.
+	gw := &sequenceGateway{answers: []string{
+		`{"mapping":{"tail-001":"shelf-a"}}`, `{"mapping":{"tail-151":"shelf-a"}}`,
+		`{"mapping":{"tail-301":"shelf-a"}}`, `{"mapping":{"tail-451":"shelf-a"}}`,
+	}}
+	uc := coarsenFixture(atoms, store, gw, 3)
+	uc.Clock = &advancingClock{now: time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC), step: time.Minute}
+	uc.Budget = 2 * time.Minute
+	uc.Parallel = 1
+
+	res, err := uc.Coarsen(ctx, ulid.Make())
+	if err != nil {
+		t.Fatalf("coarsen: %v", err)
+	}
+	if gw.calls != 2 {
+		t.Errorf("calls = %d, want 2: the budget stops the pass after the questions in flight", gw.calls)
+	}
+	if res.Asked != 300 {
+		t.Errorf("asked = %d, want 300 (the two batches it launched)", res.Asked)
+	}
+	if res.Remaining >= 600 {
+		t.Errorf("remaining = %d: the applied batches must be gone from the tail", res.Remaining)
 	}
 }
 

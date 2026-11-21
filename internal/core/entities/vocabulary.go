@@ -59,11 +59,17 @@ type Vocabulary struct {
 	// Target is the size the shelf was built for (vocabulary.<namespace>.max_names at the time). It
 	// is a RECORD of the decision, so a later pass knows what the shelf was aiming at.
 	Target int
-	// Decided are the names the model has already judged — merged or deliberately kept. Without it a
-	// curation asks the same head of the catalog forever: the baseline makes every observed name
-	// "canonical", so nothing reads as new, and a catalog of thousands never moves past its top.
+	// Decided are the names the model has already judged — merged, deliberately kept, or passed over
+	// by a coarsening that could not file them onto the shelf. Without it a curation asks the same
+	// head of the catalog forever: the baseline makes every observed name "canonical", so nothing
+	// reads as new, and a catalog of thousands never moves past its top. For the coarsening it is the
+	// same memory: a tail name is a QUESTION once, and the answer is a decision either way.
 	Decided []string
-	Updated time.Time
+	// Relabelled are the names whose CLAIMS were re-derived one by one against the shelf (the
+	// retopic pass). A name that keeps its claims after that is the subject itself, not an unplaced
+	// tail: it is a remainder the report shows, never a question that comes back.
+	Relabelled []string
+	Updated    time.Time
 	// Run is the run that last wrote this vocabulary (zero for a file written before the runs existed).
 	Run ulid.ULID
 }
@@ -82,14 +88,18 @@ func (v Vocabulary) Judged(name string) bool {
 	return slices.Contains(v.Decided, name)
 }
 
-// Known reports whether a name is one this vocabulary has an opinion about: canonical, or absorbed into
-// one. A name that is neither is NEW — it arrived after the last curation, and it is what the next
-// pass looks at.
+// Known reports whether a name is one this vocabulary has an opinion about: on the shelf, canonical,
+// absorbed into one, or judged and kept as it is — a name a coarsening asked about and the shelf could
+// not cover is a decision too. A name that is none of those is NEW: it arrived after the last pass, and
+// it is what the next one looks at.
 func (v Vocabulary) Known(name string) bool {
 	if _, ok := v.Absorbed[name]; ok {
 		return true
 	}
-	return slices.Contains(v.Canonical, name)
+	if slices.Contains(v.Shelf, name) || slices.Contains(v.Canonical, name) {
+		return true
+	}
+	return slices.Contains(v.Decided, name)
 }
 
 // Resolve maps a name onto its canonical form: an absorbed name becomes the one that absorbed it,

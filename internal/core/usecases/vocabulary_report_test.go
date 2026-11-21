@@ -182,3 +182,46 @@ func TestLearnBroadTokensUsesTheModelFromVaultCandidates(t *testing.T) {
 		t.Fatalf("the model did not receive the vault's candidate tokens: %+v", gw.reqs)
 	}
 }
+
+// TestRemainingSkipsJudgedNames: the number a reader sees is the WORK, not a sentence served forever.
+// A name the coarsening asked about and the shelf could not cover is judged, so it is no longer
+// remaining — otherwise the automatic pass would be re-armed by its own refusals.
+func TestRemainingSkipsJudgedNames(t *testing.T) {
+	observed := []partialentities.NameUses{
+		{Name: "caching", Uses: 40},
+		{Name: "cache-invalidation", Uses: 3}, // absorbed
+		{Name: "tp-link-router", Uses: 2},     // judged and kept by the bulk pass
+		{Name: "moral-psychology", Uses: 1},   // still a question
+	}
+	vocab := entities.Vocabulary{
+		Namespace: entities.VocabularyTopics,
+		Shelf:     []string{"caching"},
+		Absorbed:  map[string]string{"cache-invalidation": "caching"},
+		Decided:   []string{"tp-link-router"},
+	}
+	uc := Vocabulary{}
+	got := uc.health(observed, vocab, entities.VocabularyTopics)
+	if got.Remaining != 1 {
+		t.Errorf("remaining = %d, want 1 (only the name nobody has judged)", got.Remaining)
+	}
+	// A judged-and-kept name is not NEW either: an automatic curation must not be woken by names the
+	// coarsening already answered for.
+	if len(got.New) != 1 || got.New[0] != "moral-psychology" {
+		t.Errorf("new = %v, want only the undecided name", got.New)
+	}
+	// The retopic queue is the CLAIMS' half of the same tail: both fine names, judged or not, because
+	// "the shelf cannot take this name" is exactly when the claims have to be looked at one by one.
+	if got.Retopic != 2 {
+		t.Errorf("retopic = %d, want the 2 names outside the shelf", got.Retopic)
+	}
+	if got.OffShelf != 3 {
+		t.Errorf("off_shelf = %d, want the 3 claims still carrying a fine name", got.OffShelf)
+	}
+	// A re-derived name leaves the retopic queue but stays in the off-shelf mass until its claims move:
+	// the two numbers measure different things and only one of them can reach zero by asking.
+	vocab.Relabelled = []string{"moral-psychology"}
+	got = uc.health(observed, vocab, entities.VocabularyTopics)
+	if got.Retopic != 1 || got.OffShelf != 3 {
+		t.Errorf("retopic/off_shelf = %d/%d, want 1/3 after the pass", got.Retopic, got.OffShelf)
+	}
+}

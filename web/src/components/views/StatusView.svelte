@@ -348,6 +348,9 @@
       <p class="muted small section-note">
         <b>{t('status.coarsen')}</b> {t('status.coarsenNote')}
       </p>
+      <p class="muted small section-note">
+        <b>{t('status.retopic')}</b> {t('status.retopicNote')}
+      </p>
       {#if system.vocabulary && system.vocabulary.length > 0}
         <div class="vocab-list">
           {#each system.vocabulary as vocab (vocab.namespace)}
@@ -380,6 +383,8 @@
                 ({n(Math.round(vocab.singleton_share * 100))}%) · {t('status.vocabTop', { pct: Math.round(vocab.coverage * 100) })}
                 {#if vocab.target}· {t('status.vocabShelf', { shelf: vocab.shelf, target: vocab.target })}{/if}
                 {#if vocab.shelf && vocab.remaining}· {t('status.vocabRemaining', { count: n(vocab.remaining) })}{/if}
+                {#if vocab.shelf && vocab.retopic}· {t('status.vocabRetopic', { count: n(vocab.retopic) })}{/if}
+                {#if vocab.shelf && vocab.off_shelf}· {t('status.vocabOffShelf', { count: n(vocab.off_shelf) })}{/if}
                 {#if vocab.canonical || vocab.absorbed}· {t('status.vocabCanonical', { canonical: vocab.canonical, absorbed: vocab.absorbed })}{/if}
                 {#if vocab.new?.length}· <b>{t('status.vocabNew', { count: vocab.new.length })}</b>{/if}
               </div>

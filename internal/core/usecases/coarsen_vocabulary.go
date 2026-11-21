@@ -18,17 +18,23 @@ import (
 // names until a measured vault showed the model answering six of them; 150 fits the answer well
 // inside one completion. Several questions are in flight at once (coarsenParallel), but every
 // answered batch is APPLIED in order, one after another: the apply rewrites claims and the count of
-// what is left is read from it. A press is bounded by names (max batches) and by what the model
-// actually files: three batches in a row that file nothing mean the shelf cannot honestly cover the
-// tail, and the pass stops instead of asking for hours. It is resumable, because what was absorbed is
-// on disk before the next apply runs.
+// what is left is read from it.
+//
+// A pass is bounded three ways, and all three are the point of the automatic flow: by names (max
+// batches), by a BUDGET (the gate is handed back on purpose instead of being held to the run's
+// ceiling), and by what the model actually answers — three questions in a row that come back empty
+// or fail mean the shelf cannot be asked any further right now, and the pass stops instead of
+// burning the budget. It is resumable, because what was absorbed, filed and judged is on disk before
+// the next batch runs.
 const (
 	coarsenBatchSize   = 150
 	coarsenMaxBatches  = 320
 	coarsenShelfInCall = 700
 	coarsenShelfHead   = 200
-	// coarsenEmptyBatches is how many batches in a row may file nothing before the pass stops.
-	coarsenEmptyBatches = 3
+	// coarsenFailedAsks is how many questions in a row may fail (an error, or an answer that maps
+	// nothing) before the pass stops. An empty answer is NOT a decision: the model said nothing, so
+	// the names stay open — settling them would let one bad completion poison the whole tail.
+	coarsenFailedAsks = 3
 	// coarsenParallel is how many questions are in flight at once. An answer takes minutes and the
 	// questions are independent, so this is the one lever that moves the wall clock; the gateway still
 	// keeps the process-wide cap (openai.max_concurrent).
@@ -46,8 +52,11 @@ type CoarsenResult struct {
 	// Families are the deterministic merges (no model), and Mapped the names the model filed.
 	Families int
 	Mapped   int
-	// Remaining are the names still outside the shelf when the pass stopped (the next press
-	// continues them).
+	// Asked is how many names the pass put to the model; Judged what it decided about (filed plus
+	// settled), and Remaining how many names the vault still shows outside the shelf, unjudged — the
+	// work the next pass continues.
+	Asked     int
+	Judged    int
 	Remaining int
 	Tokens    int
 	Applied   ApplyVocabularyResult
@@ -58,9 +67,14 @@ type CoarsenResult struct {
 //  1. DETERMINISTIC families — names whose words are the same after the learned broad tokens are
 //     removed (the near-duplicate detector already computes them) are merged onto their most used
 //     member. No model, no tokens, and it is exactly the part a model cannot do better.
-//  2. The MODEL files the rest onto the shelf, in batches, applying each answer before the next
-//     question. The shelf is built once from the most used names and then is the fixed target: the
-//     vocabulary can no longer grow past it, because the derivation resolves every new name onto it.
+//  2. The MODEL files the rest onto the shelf, in batches. The shelf is built once from the most
+//     used names and then is the fixed target: the vocabulary can no longer grow past it, because
+//     the derivation resolves every new name onto it.
+//
+// The pass is meant to be REPEATED: the app asks for the next one when this one ends (the tail is
+// resumable from Absorbed and Decided), a budget hands the gate back, and a name the model passed
+// over is a decision recorded in Decided — so the tail is asked about once and the count of what is
+// left converges instead of describing the same forty thousand names every hour.
 func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenResult, err error) {
 	res = CoarsenResult{Namespace: string(uc.Namespace)}
 	finished := false
@@ -174,14 +188,23 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 		}
 	}
 
-	// What is left to file: everything the vault still uses that is neither on the shelf nor already
-	// absorbed. Absorbed is the watermark — it is written after each applied batch.
+	// What is left to file: everything the vault still uses that is neither on the shelf, nor already
+	// absorbed, nor already judged. Absorbed and Decided are the watermark — both are written after
+	// each applied batch, and a name the model passed over counts as judged (the shelf cannot honestly
+	// cover it), so a pass over the tail is finite and the next one continues further in.
+	judgedSet := make(map[string]bool, len(v.Decided))
+	for _, name := range v.Decided {
+		judgedSet[name] = true
+	}
 	pending := make([]string, 0, len(observed))
 	for _, o := range observed {
 		if shelfSet[o.Name] {
 			continue
 		}
 		if _, absorbed := v.Absorbed[o.Name]; absorbed {
+			continue
+		}
+		if judgedSet[o.Name] {
 			continue
 		}
 		pending = append(pending, o.Name)
@@ -219,7 +242,7 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 				for _, from := range names[start:end] {
 					chunk[from] = mapping[from]
 				}
-				applied, wErr := uc.applyShelf(ctx, chunkAnswer{mapping: chunk}, v.Shelf)
+				applied, wErr := uc.applyShelf(ctx, chunkAnswer{mapping: chunk}, v.Shelf, nil)
 				if wErr != nil {
 					return res, wErr
 				}
@@ -286,6 +309,16 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 		parallel = len(jobs)
 	}
 
+	// The BUDGET is how a pass hands the gate back on purpose. An automatic pass is followed by
+	// another one, so it does not have to run to the run's ceiling: it stops LAUNCHING once the budget
+	// is spent, applies the answers already in flight and returns, and the next pass continues from
+	// the watermark. Without it the ceiling ends the pass in the middle of a question and throws those
+	// answers away.
+	started := uc.Clock.Now()
+	budgetSpent := func() bool {
+		return uc.Budget > 0 && uc.Clock.Now().Sub(started) >= uc.Budget
+	}
+
 	askCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	type shelfResult struct {
@@ -311,9 +344,11 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 	}
 
 	arrived := make(map[int]shelfResult, parallel)
-	batches := 0
-	empty := 0
-	for index := 0; index < len(jobs); index++ {
+	batches, failed := 0, 0
+	// stopAt is how far this pass applies: when the budget is spent it moves down to the questions
+	// already in flight, so nothing launched is thrown away.
+	stopAt := len(jobs)
+	for index := 0; index < stopAt; index++ {
 		var got shelfResult
 		if early, ok := arrived[index]; ok {
 			got = early
@@ -329,57 +364,92 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 			}
 		}
 		if next < len(jobs) {
-			launch()
+			if budgetSpent() {
+				stopAt = next
+			} else {
+				launch()
+			}
 		}
 		if got.err != nil {
-			cancel()
-			if batches > 0 {
-				// Keep what was applied; the next press continues from the watermark.
-				break
-			}
-			return res, got.err
-		}
-		res.Tokens += got.answer.tokens
-		filed := 0
-		if len(got.answer.mapping) > 0 {
-			applied, wErr := uc.applyShelf(ctx, got.answer, v.Shelf)
-			if wErr != nil {
+			if deferred, _ := windowDeferral(got.err); deferred {
 				cancel()
-				return res, wErr
-			}
-			filed = len(applied.Absorbed)
-			res.Mapped += filed
-			res.Applied.Atoms += applied.Atoms
-			res.Applied.Sources += applied.Sources
-			res.Applied.Pages += applied.Pages
-			res.Shelf = applied.Canonical
-		}
-		batches++
-		// The number LEFT is what the vault still shows outside the shelf, not a count of the batches
-		// walked: the two differed by everything the model declined to file.
-		res.Remaining -= filed
-		if uc.Log != nil {
-			// THE measurement of this pass: how many of the names asked were actually filed. A batch
-			// that files nothing is the model saying the shelf cannot honestly cover those names.
-			uc.Log.Info("vocabulary: shelf batch", "namespace", string(uc.Namespace),
-				"asked", len(jobs[index].batch), "filed", filed, "left", res.Remaining,
-				"tokens", got.answer.tokens, "parallel", parallel)
-		}
-		if filed == 0 {
-			empty++
-			if empty >= coarsenEmptyBatches {
-				if uc.Log != nil {
-					uc.Log.Warn("vocabulary: the shelf cannot file what is left", "namespace", string(uc.Namespace),
-						"left", res.Remaining)
+				if batches > 0 {
+					// Keep what was applied; the window's wake asks for the next pass.
+					break
 				}
+				return res, got.err
+			}
+			failed++
+			if uc.Log != nil {
+				uc.Log.Warn("vocabulary: a shelf question failed — its names stay open",
+					"namespace", string(uc.Namespace), "asked", len(jobs[index].batch),
+					"failures", failed, "err", got.err)
+			}
+			if failed >= coarsenFailedAsks {
 				cancel()
 				break
 			}
 			continue
 		}
-		empty = 0
+		res.Asked += len(jobs[index].batch)
+		res.Tokens += got.answer.tokens
+		// An answer that maps nothing is not a judgement: the model said nothing, so its names stay
+		// open for the next pass instead of being settled by a completion nobody can trust.
+		if len(got.answer.mapping) == 0 {
+			failed++
+			if uc.Log != nil {
+				uc.Log.Warn("vocabulary: the shelf answer mapped nothing",
+					"namespace", string(uc.Namespace), "asked", len(jobs[index].batch),
+					"failures", failed, "tokens", got.answer.tokens)
+			}
+			if failed >= coarsenFailedAsks {
+				cancel()
+				break
+			}
+			continue
+		}
+		failed = 0
+		// Every asked name the model did NOT file is judged and kept: the shelf cannot honestly cover
+		// it. That decision is what makes a pass over the tail finite — the next pass does not ask
+		// about it again.
+		judged := unfiledNames(jobs[index].batch, got.answer.mapping)
+		applied, wErr := uc.applyShelf(ctx, got.answer, v.Shelf, judged)
+		if wErr != nil {
+			cancel()
+			return res, wErr
+		}
+		filed := len(applied.Absorbed)
+		res.Mapped += filed
+		res.Judged += len(judged)
+		res.Applied.Atoms += applied.Atoms
+		res.Applied.Sources += applied.Sources
+		res.Applied.Pages += applied.Pages
+		res.Shelf = applied.Canonical
+		batches++
+		// The number LEFT is what the vault still shows outside the shelf, not a count of the batches
+		// walked: the two differed by everything the model declined to file.
+		res.Remaining -= filed + len(judged)
+		if uc.Log != nil {
+			// THE measurement of this pass: how many of the names asked were filed and how many were
+			// settled. A batch that files nothing but settles its names has still moved the tail.
+			uc.Log.Info("vocabulary: shelf batch", "namespace", string(uc.Namespace),
+				"asked", len(jobs[index].batch), "filed", filed, "judged", len(judged),
+				"left", res.Remaining, "tokens", got.answer.tokens, "parallel", parallel)
+		}
 	}
 	return res, nil
+}
+
+// unfiledNames is what one answer did not file: the names it judged and left outside the shelf.
+func unfiledNames(batch []string, mapping map[string]string) []string {
+	out := make([]string, 0, len(batch))
+	for _, name := range batch {
+		if _, filed := mapping[name]; filed {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
 }
 
 // shelfVariant reports the shelf name a tail name is a VARIANT of: a contiguous phrase of the name,
@@ -405,14 +475,16 @@ func shelfVariant(name string, shelf map[string]bool) (string, bool) {
 	return "", false
 }
 
-// applyShelf applies one answered batch: the rename, and — when a shelf is named — the shelf as the
-// canonical set. It is the same write the curation uses, so a coarsened name is an ordinary alias
-// from then on. The shelf passed here is the FULL one: the batch's filtered list exists only to keep
-// the prompt small, and writing it back would shrink the vocabulary to those names.
-func (uc Vocabulary) applyShelf(ctx context.Context, answer chunkAnswer, shelf []string) (ApplyVocabularyResult, error) {
+// applyShelf applies one answered batch: the rename, the shelf as the canonical set (when a shelf is
+// named), and the names the answer did not file as judged. It is the same write the curation uses, so
+// a coarsened name is an ordinary alias from then on. The shelf passed here is the FULL one: the
+// batch's filtered list exists only to keep the prompt small, and writing it back would shrink the
+// vocabulary to those names.
+func (uc Vocabulary) applyShelf(ctx context.Context, answer chunkAnswer, shelf []string, judged []string) (ApplyVocabularyResult, error) {
 	rename := uc
 	rename.Mapping = answer.mapping
 	rename.Canonical = shelf
+	rename.Judged = judged
 	apply := func(ctx context.Context) (ApplyVocabularyResult, error) {
 		return rename.ApplyMapping(ctx)
 	}
@@ -488,7 +560,7 @@ func (uc Vocabulary) mergeFamilies(ctx context.Context, groups []partialentities
 	if len(mapping) == 0 {
 		return 0, nil
 	}
-	applied, err := uc.applyShelf(ctx, chunkAnswer{mapping: mapping}, nil)
+	applied, err := uc.applyShelf(ctx, chunkAnswer{mapping: mapping}, nil, nil)
 	if err != nil {
 		return 0, err
 	}

@@ -36,6 +36,12 @@ type topicCatalog struct {
 	// budget is the configured ceiling of the topic vocabulary. Zero means "no ceiling": a vault
 	// without a shelf keeps accepting new names, which is what an unconfigured vault does today.
 	budget int
+	// headroom is how many names OUTSIDE the shelf a run may keep instead of mapping them onto the
+	// best fitting shelf name. It is what lets the shelf follow new content: a genuinely new subject
+	// survives as a fine name, the vocabulary report shows it, and the shelf refit either promotes it
+	// (it earned the mass) or the coarsening files it in. It is a bounded allowance (a tenth of the
+	// shelf), never an open door, and a vault that is still filing its tail has none.
+	headroom int
 }
 
 // newTopicCatalog builds the catalog from the names in use. A catalog with a single name yields no
@@ -184,7 +190,7 @@ func (c *topicCatalog) resolve(aliases map[string]string, proposed, text string)
 		return c.remember(name, topicResolution{Name: best, Mapped: true, Why: "near-duplicate"})
 	}
 	c.mu.Lock()
-	over := c.budget > 0 && len(c.names)+c.added >= c.budget
+	over := c.budget > 0 && len(c.names)+c.added >= c.budget && c.added >= c.headroom
 	c.mu.Unlock()
 	if over {
 		if best := c.candidates(text, 1); len(best) > 0 {

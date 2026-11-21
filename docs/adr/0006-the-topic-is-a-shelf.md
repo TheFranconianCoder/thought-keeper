@@ -87,3 +87,64 @@ The decision above described two passes and one question at a time. Two amendmen
 
 The deterministic passes (families and variants) need no key: the model guard sits after them, so a
 vault without one still files what a rule can decide.
+
+## Addendum (2026-11-21): the coarsening is housekeeping, not a button
+
+A measured vault (48,153 topic names, shelf 3,000, 407k claims) filed 2,397 names in one press and
+stopped there: `vocabularyGateWait + vocabularyUnitTimeout` caps a vocabulary run at forty minutes,
+and the tail needs hours of model time at ~110 names a minute. Nothing asked for the next pass, so
+the only way to finish was to press a button nineteen times. Two things followed from that measurement
+and amend the decision above:
+
+- **The pass repeats itself.** The reconcile tick asks for a coarsening while a namespace still has
+  names outside the shelf — the smallest tail first — and asks again after the cooldown, until the
+  tail is settled. A pass is bounded by `vocabulary.coarsen.budget` (15 min): it stops ASKING when
+  the budget is spent, applies the questions already in flight and returns, so the exclusive gate
+  goes back to the document steps between passes. The run's own ceiling stays as the outer bound.
+- **A declined name is a decision.** The names a batch asked about and the model did not file are
+  recorded in `Decided` — the vocabulary's existing memory of judged names — in the same write as
+  the mapping. Without it every pass re-asked the same tail forever, and `remaining` described names
+  nobody would ever ask about twice. With it the count converges, the statistic means work left, and
+  the pass ends by itself. An answer that maps **nothing** is not a decision: it settles nothing and
+  counts as a failed question, so one broken completion cannot poison the tail. Three such questions
+  in a row stop the pass, replacing the empty-batch counter that assumed a declined name would be
+  asked again.
+- A single failed question **no longer ends the pass**: its batch stays open and the next question is
+  asked. At 300 s of `openai.timeout` against answers that average ~3.5 minutes, one timeout per two
+  thousand names must not throw away the other twenty-nine minutes of a pass.
+
+The manual press stays as "run one now" — the same pass with the run's ceiling instead of the budget,
+and it resets the progress bound so a stalled tail can be retried by hand.
+
+## Addendum (2026-11-21): the shelf follows the corpus
+
+The decision above made the shelf a RECORD: built once, trimmed when the knob moves down, filed onto
+by the coarsening. A measured vault showed what that means at the end of the migration: 2,397 names
+filed, 45,310 settled as "the shelf cannot honestly cover this" — and 45,310 claim labels stayed
+fine forever. The vocabulary had not been reduced to the shelf; the tail had only stopped being asked
+about. And the shelf itself could not change: the derivation maps every proposal onto it, so a subject
+that arrives after the build can never appear.
+
+Three amendments, and they are one mechanism:
+
+- **The reduction has two stages.** The coarsening renames a NAME (one mapping moves all its claims),
+  so it can only place names that mean one thing. The claims of a name it declines are re-derived one
+  batch at a time by `POST /vocabulary/retopic`, resolving onto the shelf. Its queue is the names
+  outside the shelf that no pass has answered for yet, most used first; a name is recorded in
+  `Relabelled` once every batch of its claims has been attempted, so a name that IS the subject is a
+  remainder the report shows, never a question that comes back. `off_shelf` (the claim mass outside)
+  is the honest distance to the invariant; `remaining` (names) is the bulk queue.
+- **The shelf is re-synthesized from the corpus.** When a namespace has nothing left to ask, the
+  reconcile tick re-fits its shelf at most once per `vocabulary.shelf.refit_interval`: a name outside
+  it that carries twice the coldest slot (never fewer than three claims) takes that slot. The refit is
+  deterministic and writes a record; the claims on an evicted name go off the shelf and the retopic
+  pass repairs them. The shelf therefore moves FIRST and the corpus follows — the other order never
+  moves at all.
+- **A new subject may name itself.** The derivation keeps a proposal that is not on the shelf while the
+  names outside it stay under the shelf's **headroom** (a tenth of it). A settled vault has room for
+  new subjects, which is what the refit needs in order to promote them; a vault still filing its tail
+  has none, so nothing competes with the reduction it is doing.
+
+A repair pass never rewrites the vocabulary record: the shelf, the alias table (`Absorbed`), the judged
+names (`Decided`) and the re-derived ones (`Relabelled`) are decisions, and the old retopic pass threw
+all of them away by writing a fresh `Canonical` from what the claims said.

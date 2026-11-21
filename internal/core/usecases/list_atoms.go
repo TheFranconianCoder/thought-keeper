@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 
@@ -30,6 +31,10 @@ type Claims struct {
 	// TopicBudget is the ceiling of the topic shelf (vocabulary.topics.max_names): a re-labelled claim
 	// is filed onto it instead of inventing a name.
 	TopicBudget int
+	// Budget bounds one automatic retopic pass: it stops asking when it is spent, applies the answers
+	// in flight and returns, so the exclusive gate goes back to the document steps. Zero means the
+	// run's own ceiling (a manual press).
+	Budget time.Duration
 }
 
 // AtomLister lists the claims of one topic. A handler holds this value; nil means the feature is not

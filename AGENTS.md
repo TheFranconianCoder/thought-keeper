@@ -73,7 +73,10 @@ never the newest-claims wall. A **wiki
 page** is user-authored Markdown with tags; saving it writes a source representation and runs the
 document pipeline from capture. The app also tags a page and a source
 (auto tags, kept apart from the human's tags) and curates the three name vocabularies (`topics`,
-`wiki-tags`, `source-tags`). Search is language-aware, and the interface and the content it writes
+`wiki-tags`, `source-tags`) — and it reduces the corpus to that shelf by itself: the long tail is
+filed in bulk, the claims the shelf could not take are re-derived one batch at a time, and a settled
+shelf is re-synthesized from the corpus so a subject that earns its mass gets a slot. No button.
+Search is language-aware, and the interface and the content it writes
 have their own languages (`language.ui`, `language.claims`, `language.summary`; every one defaults
 to English).
 **Ask** puts a question in flight directly in the saved-query list, with its status, and runs

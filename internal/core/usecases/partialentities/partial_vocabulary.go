@@ -51,10 +51,20 @@ type VocabularyHealth struct {
 	// report whose Names run far past the Target is a namespace the coarsening still has to file.
 	Shelf  int
 	Target int
-	// Remaining is what the coarsening would file: the names in use that are neither on the shelf
-	// nor already absorbed. A namespace without a shelf has its whole catalog remaining, which is
-	// what it is — the shelf is the target, the rest is the tail.
+	// Remaining is what the coarsening would file: the names in use that are neither on the shelf,
+	// nor already absorbed, nor already judged. A namespace without a shelf has its whole catalog
+	// remaining, which is what it is — the shelf is the target, the rest is the tail.
 	Remaining int
+	// Retopic are the names whose CLAIMS the retopic pass still has to re-derive: outside the shelf,
+	// not absorbed, and not asked about claim by claim yet. Retopiced is how many names that pass has
+	// already answered for.
+	Retopic   int
+	Retopiced int
+	// OffShelf is the claim MASS still outside the shelf (the uses of every name that is not on it).
+	// It is the honest measure of how far the corpus is from the invariant, which `Remaining` alone
+	// cannot say: a hundred names carrying one claim each and a hundred names carrying a hundred
+	// claims each are very different work.
+	OffShelf int
 	// New are the observed names the vocabulary has no opinion about yet.
 	New []string
 	// Top is the biggest names, for the reader and for a curation prompt.

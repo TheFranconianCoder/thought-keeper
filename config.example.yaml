@@ -135,6 +135,24 @@ vocabulary:                                # the TARGETS of the name vocabularie
     max_names: 200                         # the shelf a source is filed under in the Sources list
   wiki_tags:
     max_names: 200                         # the same for wiki pages
+  coarsen:                                 # the pass that files the existing long tail onto the
+                                           # shelf. It is housekeeping: the app asks for it by
+                                           # itself, pass after pass, until nothing is left to ask.
+    automatic: true                        # false = only the Coarsen button on Status starts a pass
+    budget: 15m                            # how long ONE automatic pass may hold the exclusive gate
+                                           # before it hands it back (the questions in flight are
+                                           # applied first). Empty = no budget, i.e. the run's own
+                                           # ceiling, which is what a manual press uses.
+  retopic:                                 # the second half of the reduction: the claims the shelf
+                                           # could not take are re-derived from their own text, one
+                                           # batch of 100 at a time, and every answer lands on the shelf.
+    automatic: true                        # false = only the Re-topic button on Status starts a pass
+    budget: 15m                            # the same budget as the coarsening, for the same reason
+  shelf:
+    refit_interval: 24h                    # a SETTLED vocabulary re-synthesizes its shelf: a subject
+                                           # that earned its mass takes a slot, a slot nobody uses
+                                           # gives its up (2x margin, at least 3 claims). Empty = the
+                                           # shelf stays the record it was built as.
 
 cluster:                                   # the claim graph behind the associations. These are QUALITY gates,
                                            # not target sizes: a broad group is split, a tight group stays.

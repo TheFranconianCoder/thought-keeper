@@ -200,6 +200,16 @@ type App struct {
 	vocabMu     sync.Mutex
 	vocabActive bool
 	vocabLast   time.Time
+	// The automatic COARSENING is bounded by progress like every other loop in the app: coarsenLeft
+	// is the tail the last look saw, coarsenStalled how many looks in a row did not move it. Setting
+	// coarsenLeft back to 0 (a manual press, or a tail that reached zero) earns the budget again.
+	coarsenLeft    int
+	coarsenStalled int
+	// The RETOPIC stage has its own progress bound (names left to re-derive) and the shelf REFIT its
+	// own clock: a settled vocabulary re-synthesizes its shelf, a drift of it does not.
+	retopicLeft    int
+	retopicStalled int
+	shelfRefitLast time.Time
 	// shelfLast is the same clock for the SHELF build: a migration with no model and no gate, so it
 	// does not wait for a fresh name the way a curation does — only for the cooldown, so a broken
 	// vocabulary file is not reopened on every tick.
@@ -1638,8 +1648,10 @@ type runJob struct {
 	// rebranch says the run re-derives the TOPIC labels of the claims instead of curating a vocabulary.
 	rebranch bool
 	// coarsen says the run files the vocabulary's long tail onto its SHELF instead of merging
-	// synonyms: the same run, the opposite direction.
+	// synonyms: the same run, the opposite direction. budget is how long the pass may hold the gate
+	// before it hands it back; zero means the run's own ceiling is the only bound.
 	coarsen bool
+	budget  time.Duration
 	// reset replaces the derivation instead of continuing it. Continuing is the default: a
 	// book needs several runs, and each one must keep the progress of the previous ones.
 	reset bool
@@ -2504,18 +2516,27 @@ const vocabularyCooldown = 20 * time.Minute
 // the model.
 const vocabularyReportTimeout = 30 * time.Second
 
-// requestVocabularyIfDue runs the name maintenance on its own. Two jobs, in cost order:
+// requestVocabularyIfDue runs the name maintenance on its own. Three jobs, in this order:
 //
 //  1. The SHELF. A vault that predates the shelf has a catalog of tens of thousands of names and no
 //     bounded target vocabulary, and nothing else in the app would ever build one: the curation
 //     merges synonyms, it cannot fix granularity. It is a migration, not a model call — no agent, no
 //     gate, no claim write — so it runs before both guards and a vault without an API key still gets
 //     its shelf.
-//  2. The CURATION. Names drift on every write — the compile invents a topic beside the one the
+//  2. The COARSENING. A name outside the shelf is work the derivation cannot fix (it files only what
+//     is NEW), it costs minutes of model time per batch, and a measured vault needed days of it. That
+//     is housekeeping, not a button: the app asks for a pass, and for the next one after the
+//     cooldown, until the tail is settled. Each pass is bounded by its own budget, so the exclusive
+//     gate goes back to the document steps between passes.
+//  3. The CURATION. Names drift on every write — the compile invents a topic beside the one the
 //     vocabulary already settled — and a pass that only ever runs when a reader presses a button
 //     fixes the drift only when a reader happens to look. It is bounded twice: one at a time, and at
 //     most once per cooldown; and it is skipped entirely when the report says the vocabulary has
 //     nothing undecided.
+//
+// The coarsening comes first because a tail outside the shelf is the older, bigger debt: until it is
+// settled the reader's own report keeps counting the same names. A vault with no tail is curated
+// exactly as before.
 func (a *App) requestVocabularyIfDue(reason string) {
 	a.ensureShelfIfDue(reason)
 
@@ -2545,6 +2566,41 @@ func (a *App) requestVocabularyIfDue(reason string) {
 	a.vocabMu.Lock()
 	a.vocabLast = time.Now()
 	a.vocabMu.Unlock()
+
+	// The tail: the namespace with the FEWEST names outside the shelf goes first, so a tag namespace
+	// with forty names is finished instead of waiting behind forty thousand topics.
+	tailNS, tail := tailDue(report)
+	if a.conf().Vocabulary.Coarsen.Automatic && a.coarsenDue(tail) {
+		runID, qErr := a.scheduleVocabularyCoarsen(tailNS, a.conf().Vocabulary.Coarsen.CoarsenDuration())
+		if qErr != nil {
+			a.log.Warn("vocabulary: the automatic coarsening was not queued", "err", qErr)
+			return
+		}
+		a.log.Info("vocabulary: automatic coarsening queued", "reason", reason,
+			"namespace", string(tailNS), "remaining", tail, "run", runID)
+		return
+	}
+	// The RETOPIC pass is the second half of the reduction, and the half that optimizes the topics: the
+	// claims the shelf could not take are re-derived from their own text. It runs when the bulk pass has
+	// nothing left to ask, and it takes the rest of the way to the shelf.
+	retopic := retopicDueWork(report)
+	if a.conf().Vocabulary.Retopic.Automatic && a.retopicDue(retopic) {
+		runID, qErr := a.scheduleVocabularyRebranch(a.conf().Vocabulary.Retopic.RetopicDuration())
+		if qErr != nil {
+			a.log.Warn("vocabulary: the automatic retopic was not queued", "err", qErr)
+			return
+		}
+		a.log.Info("vocabulary: automatic retopic queued", "reason", reason,
+			"names", retopic, "run", runID)
+		return
+	}
+	// A SETTLED vocabulary re-synthesizes its shelf: a subject that earned its mass takes a slot, a slot
+	// nobody uses gives its up. It never runs while a tail is being filed — moving the target while the
+	// passes chase it is how a vocabulary churns. What an eviction takes off the shelf is work again,
+	// which is why the two progress bounds are reset when the shelf really moved.
+	if tail == 0 && retopic == 0 {
+		a.refitShelves(report, reason)
+	}
 
 	fresh := 0
 	for _, h := range report {
@@ -2579,6 +2635,157 @@ func (a *App) requestVocabularyIfDue(reason string) {
 	a.log.Info("vocabulary: automatic pass queued", "reason", reason, "new_names", fresh)
 }
 
+// maxCoarsenNoProgress is how many automatic passes in a row may leave the tail where they found it
+// before the app stops asking. Two is the same rule the cluster step follows.
+const maxCoarsenNoProgress = 2
+
+// tailDue picks the namespace a pass should work on: the one with the FEWEST names outside the shelf,
+// so the small trees are finished instead of waiting behind the largest. Zero means no namespace has
+// a tail.
+func tailDue(report []partialentities.VocabularyHealth) (entities.VocabularyNamespace, int) {
+	var ns entities.VocabularyNamespace
+	least := 0
+	for _, h := range report {
+		if h.Remaining <= 0 {
+			continue
+		}
+		if least == 0 || h.Remaining < least {
+			ns, least = entities.VocabularyNamespace(h.Namespace), h.Remaining
+		}
+	}
+	return ns, least
+}
+
+// retopicDueWork is how many names the retopic pass still has to answer for: outside the shelf, not
+// absorbed, and not re-derived claim by claim yet.
+func retopicDueWork(report []partialentities.VocabularyHealth) int {
+	// The topics namespace only: the retopic pass resolves claim labels, and the tag namespaces have no
+	// claim to re-derive (their write path still reads Canonical — see TODO.md).
+	for _, h := range report {
+		if h.Namespace == string(entities.VocabularyTopics) {
+			return h.Retopic
+		}
+	}
+	return 0
+}
+
+// retopicDue is the progress bound of the automatic retopic stage, and its queue check: a pass may be
+// asked for while names are left, and two looks that did not move that count stop it with a log line.
+// The queue shrinks because a name is recorded as relabelled whether or not the model placed its
+// claims — a name that legitimately stays fine is a remainder, not a question that comes back.
+func (a *App) retopicDue(names int) bool {
+	a.vocabMu.Lock()
+	defer a.vocabMu.Unlock()
+	if names <= 0 {
+		a.retopicLeft, a.retopicStalled = 0, 0
+		return false
+	}
+	if a.retopicLeft <= 0 || names < a.retopicLeft {
+		a.retopicLeft, a.retopicStalled = names, 0
+		return true
+	}
+	a.retopicLeft = names
+	a.retopicStalled++
+	if a.retopicStalled < maxCoarsenNoProgress {
+		return true
+	}
+	if a.retopicStalled == maxCoarsenNoProgress {
+		a.log.Warn("vocabulary: the automatic retopic stopped — two passes did not move the queue",
+			"names", names)
+	}
+	return false
+}
+
+// resetRetopicProgress forgets the progress bound: a manual press asks for a pass whatever the last
+// two looks saw.
+func (a *App) resetRetopicProgress() {
+	a.vocabMu.Lock()
+	a.retopicLeft, a.retopicStalled = 0, 0
+	a.vocabMu.Unlock()
+}
+
+// refitShelves re-synthesizes the shelf of every namespace from the observation this look already made,
+// at most once per vocabulary.shelf.refit_interval. It writes vocabulary records only (no claim, no
+// gate, no model), so it can run inside the tick; a shelf that moved resets the progress bounds because
+// the claims on an evicted name are work again.
+func (a *App) refitShelves(report []partialentities.VocabularyHealth, reason string) {
+	interval := a.conf().Vocabulary.Shelf.RefitDuration()
+	if interval <= 0 {
+		return
+	}
+	a.vocabMu.Lock()
+	due := a.shelfRefitLast.IsZero() || time.Since(a.shelfRefitLast) >= interval
+	if due {
+		a.shelfRefitLast = time.Now()
+	}
+	a.vocabMu.Unlock()
+	if !due {
+		return
+	}
+	moved := make([]string, 0, len(report))
+	for _, h := range report {
+		if h.Namespace != string(entities.VocabularyTopics) {
+			// A shelf is only re-fitted where a write path READS it. A tag namespace's write path reads
+			// Canonical, so a shelf written for it would be a record nothing follows (TODO.md).
+			continue
+		}
+		ns := entities.VocabularyNamespace(h.Namespace)
+		res, err := a.deps().VocabularyCurate.RefitShelf(h, a.vocabularyTarget(ns))
+		if err != nil {
+			a.log.Warn("vocabulary: the shelf could not be refitted", "namespace", h.Namespace, "err", err)
+			continue
+		}
+		if len(res.Promoted) == 0 && len(res.Evicted) == 0 {
+			continue
+		}
+		moved = append(moved, res.Namespace)
+		a.log.Info("vocabulary: shelf refitted", "reason", reason, "namespace", res.Namespace,
+			"before", res.Before, "after", res.After,
+			"promoted", strings.Join(res.Promoted, ","), "evicted", strings.Join(res.Evicted, ","))
+	}
+	if len(moved) == 0 {
+		return
+	}
+	a.resetCoarsenProgress()
+	a.resetRetopicProgress()
+	a.publish("vocabulary", map[string]any{"shelves": moved})
+}
+
+// coarsenDue is the progress bound of the automatic coarsening. It answers whether the pass may be
+// asked for again, and records what this look saw: a tail that moved earns the next pass, a tail
+// that stood still for two looks stops it — with a log line, because a loop that stops must say so.
+// A tail of zero clears the state, so a vault that finishes is not held to an old decision.
+func (a *App) coarsenDue(remaining int) bool {
+	a.vocabMu.Lock()
+	defer a.vocabMu.Unlock()
+	if remaining <= 0 {
+		a.coarsenLeft, a.coarsenStalled = 0, 0
+		return false
+	}
+	if a.coarsenLeft <= 0 || remaining < a.coarsenLeft {
+		a.coarsenLeft, a.coarsenStalled = remaining, 0
+		return true
+	}
+	a.coarsenLeft = remaining
+	a.coarsenStalled++
+	if a.coarsenStalled < maxCoarsenNoProgress {
+		return true
+	}
+	if a.coarsenStalled == maxCoarsenNoProgress {
+		a.log.Warn("vocabulary: the automatic coarsening stopped — two passes did not move the tail",
+			"remaining", remaining)
+	}
+	return false
+}
+
+// resetCoarsenProgress forgets the progress bound: a manual press asks for a pass whatever the last
+// two looks saw.
+func (a *App) resetCoarsenProgress() {
+	a.vocabMu.Lock()
+	a.coarsenLeft, a.coarsenStalled = 0, 0
+	a.vocabMu.Unlock()
+}
+
 // ensureShelfIfDue writes the bounded target vocabulary a vault that predates the shelf does not have
 // yet. It is the one-time migration: deterministic, no model, no gate, and it rewrites no claim. It
 // runs at most once per cooldown, so a vocabulary file that cannot be written is not reopened on
@@ -2608,9 +2815,18 @@ func (a *App) ensureShelfIfDue(reason string) {
 	a.publish("vocabulary", map[string]any{"shelves": res.Built, "trimmed": res.Trimmed})
 }
 
-// ScheduleVocabularyRebranch queues the topic-label repair: the claims are re-labelled from their own text, in
-// a bounded batch, and the rest follows on the next press (oldest first).
+// ScheduleVocabularyRebranch queues a MANUAL retopic pass: the claims the shelf could not take are
+// re-derived from their own text, most used name first, until the run's own ceiling. The automatic flow
+// uses scheduleVocabularyRebranch with a budget instead; both are the same work.
 func (a *App) ScheduleVocabularyRebranch() (string, error) {
+	a.resetRetopicProgress()
+	return a.scheduleVocabularyRebranch(0)
+}
+
+// scheduleVocabularyRebranch queues one retopic pass. budget bounds how long it may hold the exclusive
+// gate; zero is the manual press, which runs to the ceiling. It takes the vocabulary latch: the
+// coarsening and the shelf refit must not touch the vocabulary while it rewrites claims.
+func (a *App) scheduleVocabularyRebranch(budget time.Duration) (string, error) {
 	if !a.deps().AgentAvailable {
 		return "", agentNotConfigured()
 	}
@@ -2624,15 +2840,29 @@ func (a *App) ScheduleVocabularyRebranch() (string, error) {
 	if a.deps().RebranchClaims.Gateway == nil || a.deps().RebranchClaims.Atoms == nil {
 		return "", types.New("not_implemented", "re-topic is not configured", types.ErrNotImplemented)
 	}
+	a.vocabMu.Lock()
+	if a.vocabActive {
+		a.vocabMu.Unlock()
+		return "", types.New("conflict", "a vocabulary pass is already running", types.ErrConflict)
+	}
+	a.vocabActive = true
+	a.vocabMu.Unlock()
+	release := func() {
+		a.vocabMu.Lock()
+		a.vocabActive = false
+		a.vocabMu.Unlock()
+	}
 	runID, err := a.deps().StartRun.Start(context.Background(), entities.RunVocabulary,
 		a.conf().OpenAI.ModelCompile, entities.Step(""), "retopic")
 	if err != nil {
+		release()
 		return "", err
 	}
 	select {
-	case a.vocabularyQueue <- runJob{runID: runID, op: entities.RunVocabulary, rebranch: true}:
+	case a.vocabularyQueue <- runJob{runID: runID, op: entities.RunVocabulary, rebranch: true, budget: budget}:
 		a.markQueuedRun(runID, "retopic claims")
 	default:
+		release()
 		return "", types.New("conflict", "run queue is full", types.ErrConflict)
 	}
 	return runID.String(), nil
@@ -2682,7 +2912,17 @@ func (a *App) ScheduleVocabularyCurate(ns entities.VocabularyNamespace) (string,
 // takes the exclusive side of the gate like a curation, and it claims the one-at-a-time latch: the
 // automatic shelf look and the curation must not run beside it (a manual press used to leave the latch
 // free, so the reconcile tick could start a pass on the same file).
+// ScheduleVocabularyCoarsen queues a MANUAL coarsening: a pass that runs until the run's own ceiling.
+// The automatic flow uses scheduleVocabularyCoarsen with a budget instead; both are the same work.
 func (a *App) ScheduleVocabularyCoarsen(ns entities.VocabularyNamespace) (string, error) {
+	a.resetCoarsenProgress()
+	return a.scheduleVocabularyCoarsen(ns, 0)
+}
+
+// scheduleVocabularyCoarsen queues one pass of the coarsening. budget bounds how long it may hold the
+// exclusive gate: an automatic pass hands it back so the document steps can move, a manual press (zero)
+// runs to the ceiling.
+func (a *App) scheduleVocabularyCoarsen(ns entities.VocabularyNamespace, budget time.Duration) (string, error) {
 	if !a.deps().AgentAvailable {
 		return "", agentNotConfigured()
 	}
@@ -2713,7 +2953,7 @@ func (a *App) ScheduleVocabularyCoarsen(ns entities.VocabularyNamespace) (string
 		return "", err
 	}
 	select {
-	case a.vocabularyQueue <- runJob{runID: runID, op: entities.RunVocabulary, namespace: ns, coarsen: true}:
+	case a.vocabularyQueue <- runJob{runID: runID, op: entities.RunVocabulary, namespace: ns, coarsen: true, budget: budget}:
 		a.markQueuedRun(runID, "vocabulary shelf")
 	default:
 		release()
@@ -3465,19 +3705,30 @@ func (a *App) runOne(job runJob) {
 		a.publish("wiki", map[string]any{"page": job.page.String()})
 	case entities.RunVocabulary:
 		if job.rebranch {
-			// Re-deriving the TOPIC labels is a repair of the claim-topic vocabulary, not a curation: it
-			// reads the claims, asks the model for each claim's subject, and rewrites only the label.
+			// Re-deriving the TOPIC labels is the repair of the claim-topic vocabulary, not a curation:
+			// it reads the claims, asks the model for each claim's subject, and rewrites only the label.
 			// It writes claim files, so it takes the exclusive side: no document step may be writing
-			// claims while their labels move.
+			// claims while their labels move. It is a vocabulary pass, so it takes the vocabulary latch
+			// too — the automatic coarsening and the refit stay out of its way, and the cooldown runs
+			// from the END of it (measured from the look, the latch would be free while the gate was not).
+			defer func() {
+				a.vocabMu.Lock()
+				a.vocabActive = false
+				a.vocabLast = time.Now()
+				a.vocabMu.Unlock()
+			}()
 			a.markMaintWaiting(job.runID, a.gateHolderReason("the topic repair rewrites claim labels"))
 			a.log.Info("retopic: waiting for the gate", "run", run)
 			a.gate.Lock()
 			a.markRunRunning(job.runID)
 			a.log.Info("retopic: gate acquired", "run", run)
-			a.setMaintDetail(job.runID, "labelling the claims")
-			runCtx, runCancel := a.runContext()
+			a.setMaintDetail(job.runID, "re-deriving the claims")
+			runCtx, runCancel := a.runContextFor(entities.RunVocabulary)
+			uc := a.deps().RebranchClaims
+			uc.Budget = job.budget
+			uc.OnPhase = func(phase string) { a.setMaintDetail(job.runID, phase) }
 			a.publish("run", map[string]any{"run_id": run, "op": string(job.op), "step": string(job.step), "status": "running"})
-			res, err := a.deps().RebranchClaims.Rebranch(runCtx, job.runID)
+			res, err := uc.Rebranch(runCtx, job.runID)
 			runCancel()
 			a.gate.Unlock()
 			if err != nil {
@@ -3494,8 +3745,8 @@ func (a *App) runOne(job runJob) {
 				a.log.Warn("rebranch failed", "run", run, "err", err)
 				return
 			}
-			summary := fmt.Sprintf("%d claim(s) examined, %d re-labelled, %d left",
-				res.Examined, res.Changed, res.Remaining)
+			summary := fmt.Sprintf("%d name(s), %d claim(s) examined, %d re-labelled, %d left",
+				res.Names, res.Examined, res.Changed, res.Remaining)
 			a.log.Info("claims re-labelled", "run", run, "summary", summary)
 			a.publish("clusters", map[string]any{"vocabulary": "topics"})
 			a.publish("vocabulary", map[string]any{"namespaces": []string{"topics: " + summary}})
@@ -3505,6 +3756,10 @@ func (a *App) runOne(job runJob) {
 			defer func() {
 				a.vocabMu.Lock()
 				a.vocabActive = false
+				// The cooldown runs from the END of a pass, not from the look that queued it: measured
+				// from the look, a 15-minute pass inside a 20-minute cooldown left the exclusive gate
+				// free for five minutes at a time, and the document steps would crawl.
+				a.vocabLast = time.Now()
 				a.vocabMu.Unlock()
 			}()
 			namespaces := entities.VocabularyNamespaces()
@@ -3523,13 +3778,17 @@ func (a *App) runOne(job runJob) {
 				uc := a.deps().VocabularyCurate
 				uc.Namespace = ns
 				uc.Target = a.vocabularyTarget(ns)
+				// The budget is what makes the pass a unit of background work instead of a gate
+				// owner for the whole run ceiling: it stops asking when it is spent, applies what is
+				// already in flight and returns, and the next automatic pass continues.
+				uc.Budget = job.budget
 				uc.ApplyGate = func(ctx context.Context, fn func(context.Context) error) error {
 					return fn(ctx)
 				}
 				uc.OnPhase = func(phase string) { a.setMaintDetail(job.runID, string(ns)+" · "+phase) }
 				r, cErr := uc.Coarsen(ctx, job.runID)
-				lines = append(lines, fmt.Sprintf("%s: shelf %d, %d families merged, %d names filed, %d left",
-					r.Namespace, r.Shelf, r.Families, r.Mapped, r.Remaining))
+				lines = append(lines, fmt.Sprintf("%s: shelf %d, %d families merged, %d asked, %d filed, %d judged, %d left",
+					r.Namespace, r.Shelf, r.Families, r.Asked, r.Mapped, r.Judged, r.Remaining))
 				if cErr != nil {
 					if reopen, deferred := windowDeferralOf(cErr); deferred {
 						status, failure = "aborted", "deferred: "+modelWindowReason(reopen)

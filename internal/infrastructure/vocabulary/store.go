@@ -120,6 +120,10 @@ func render(v entities.Vocabulary) string {
 	for _, name := range sortedStrings(v.Decided) {
 		fmt.Fprintf(&b, "- %s\n", name)
 	}
+	b.WriteString("\n# Relabelled\n\n")
+	for _, name := range sortedStrings(v.Relabelled) {
+		fmt.Fprintf(&b, "- %s\n", name)
+	}
 	b.WriteString("\n# Absorbed\n\n")
 	for _, from := range sortedKeys(v.Absorbed) {
 		fmt.Fprintf(&b, "- %s: %s\n", from, v.Absorbed[from])
@@ -192,6 +196,10 @@ func parse(ns entities.VocabularyNamespace, text string) entities.Vocabulary {
 			// next pass: every chunk would write its own names as the only decided ones, and a
 			// thousands-name catalogue would be re-asked every cooldown, forever.
 			v.Decided = append(v.Decided, item)
+		case "relabelled":
+			// The names whose claims were re-derived one by one. Losing them means the retopic pass
+			// asks about the same fine names again on every cycle.
+			v.Relabelled = append(v.Relabelled, item)
 		}
 	}
 	return v

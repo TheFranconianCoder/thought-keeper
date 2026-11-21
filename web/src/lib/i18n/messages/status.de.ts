@@ -75,8 +75,10 @@ export const statusDe: Record<string, string> = {
   'status.curate': 'Kuratieren',
   'status.coarsen': 'Einsortieren',
   'status.retopic': 'Themen neu ableiten',
+  'status.retopicNote':
+    'leitet die Themen der Aussagen neu ab, die der Shelf nicht aufnehmen konnte — aus ihrem eigenen Text, 100 Aussagen pro Frage, und jede Antwort landet auf dem Shelf. Es ist die zweite Hälfte der Reduktion, läuft von selbst, und ein Thema, das der Shelf nicht benennen kann, wird vom Refit auf den Shelf gehoben statt endlos verfolgt.',
   'status.coarsenNote':
-    'sortiert die Namen außerhalb des Shelves darauf ein: zuerst die deterministischen Familien, dann das Modell in Stapeln von 600. Es schreibt Claim-Labels um, deshalb wartet die Pipeline, solange es läuft; ein gestoppter Lauf setzt beim nächsten Druck fort. Ein Vault, der älter ist als der Shelf, bekommt ihn von selbst — hier geht es um den bereits benutzten langen Rest.',
+    'sortiert die Namen außerhalb des Shelves darauf ein: zuerst die deterministischen Familien und Varianten, dann das Modell in Stapeln von 150. Es läuft von selbst — der nächste Durchgang folgt dem letzten, bis nichts mehr zu fragen ist. Es schreibt Claim-Labels um, deshalb wartet die Pipeline, solange ein Durchgang läuft; das Budget gibt das Gate dazwischen zurück. Dieser Knopf startet nur jetzt einen Durchgang.',
   'status.vocabNote':
     'fragt das Modell, was aus den Namen werden soll — Aussagenthemen, Wiki-Schlagwörter und Quellenschlagwörter — und wendet die Antwort als Umbenennung an. Eine Aussage behält Text, Knoten und Verknüpfungen; eine Seite und eine Quelle behalten ihre Prosa. Nur die Bezeichnung ändert sich. Themen sind flach.',
   'status.vocabNames.one': '{count} Name',
@@ -87,6 +89,8 @@ export const statusDe: Record<string, string> = {
   'status.vocabTop': 'Top {pct}%',
   'status.vocabShelf': 'Shelf {shelf}/{target}',
   'status.vocabRemaining': '{count} offen',
+  'status.vocabRetopic': '{count} neu abzuleiten',
+  'status.vocabOffShelf': '{count} Aussagen außerhalb des Shelves',
   'status.vocabCanonical': '{canonical} kanonisch, {absorbed} übernommen',
   'status.vocabNew': '{count} neu',
   'status.collisionsTitle': 'Zwei Schreibweisen eines Namens — immer ein Fehler',

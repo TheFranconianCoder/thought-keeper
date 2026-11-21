@@ -37,7 +37,17 @@ func (uc Vocabulary) ApplyMapping(ctx context.Context) (ApplyVocabularyResult, e
 	}
 	mapping := resolveMapping(uc.Mapping)
 	res.Absorbed = mapping
-	if len(mapping) == 0 && len(uc.Canonical) == 0 {
+	// The names this question ASKED about and did not merge are a decision too: the shelf cannot
+	// honestly cover them. They go into Decided in the same write as the mapping, so the next pass
+	// does not ask them again — and a batch that files nothing still moves the tail forward.
+	judged := make([]string, 0, len(uc.Judged))
+	for _, name := range uc.Judged {
+		if _, filed := mapping[name]; filed {
+			continue
+		}
+		judged = append(judged, name)
+	}
+	if len(mapping) == 0 && len(uc.Canonical) == 0 && len(judged) == 0 {
 		return res, nil
 	}
 
@@ -67,9 +77,12 @@ func (uc Vocabulary) ApplyMapping(ctx context.Context) (ApplyVocabularyResult, e
 		v.Absorbed = map[string]string{}
 	}
 	maps.Copy(v.Absorbed, mapping)
+	if len(judged) > 0 {
+		v.Decided = appendDecided(v.Decided, judged)
+	}
 	if len(uc.Canonical) > 0 {
 		v.Canonical = uc.Canonical
-	} else {
+	} else if len(mapping) > 0 {
 		v.Canonical = mergeCanonical(v.Canonical, mapping)
 	}
 	if uc.Clock != nil {
@@ -82,9 +95,27 @@ func (uc Vocabulary) ApplyMapping(ctx context.Context) (ApplyVocabularyResult, e
 	res.Canonical = len(v.Canonical)
 	if uc.Log != nil {
 		uc.Log.Info("vocabulary merged", "namespace", res.Namespace, "names", res.Merged,
-			"atoms", res.Atoms, "canonical", res.Canonical)
+			"judged", len(judged), "atoms", res.Atoms, "canonical", res.Canonical)
 	}
 	return res, nil
+}
+
+// appendDecided adds names to the vocabulary's memory of judged names, once each: a name the model
+// has answered for is never a question again.
+func appendDecided(decided, names []string) []string {
+	seen := make(map[string]bool, len(decided)+len(names))
+	out := decided
+	for _, name := range decided {
+		seen[name] = true
+	}
+	for _, name := range names {
+		if strings.TrimSpace(name) == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	return out
 }
 
 // renameClaimTopics rewrites the claims' flat topic. The claim keeps everything else: a subject was

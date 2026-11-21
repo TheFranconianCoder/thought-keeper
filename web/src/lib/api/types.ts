@@ -592,6 +592,11 @@ export interface VocabularyHealth {
   target: number;
   /** The names in use that are neither on the shelf nor absorbed: what a coarsening would file. */
   remaining: number;
+  /** The names whose claims the per-claim pass still has to re-derive, and how many it has answered. */
+  retopic: number;
+  retopiced: number;
+  /** The CLAIMS still carrying a name outside the shelf: the distance to the invariant. */
+  off_shelf: number;
   canonical: number;
   absorbed: number;
   new?: string[];

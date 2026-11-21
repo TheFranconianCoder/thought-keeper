@@ -76,8 +76,10 @@ export const statusEn: Record<string, string> = {
   'status.curate': 'Curate',
   'status.coarsen': 'Coarsen',
   'status.retopic': 'Re-topic claims',
+  'status.retopicNote':
+    're-derives the claims the shelf could not take, from their own text, one batch of 100 at a time — and every answer lands on the shelf. It is the second half of the reduction, it runs by itself, and a subject the shelf cannot name is promoted onto the shelf by the refit instead of being chased forever.',
   'status.coarsenNote':
-    'files the names outside the shelf onto it: the deterministic families first, then the model in batches of 600. It rewrites claim labels, so the pipeline waits while it runs; a stopped pass continues on the next press. A vault that predates the shelf gets one on its own — this is the long tail that is already in use.',
+    'files the names outside the shelf onto it: the deterministic families and variants first, then the model in batches of 150. It runs by itself — the next pass follows the last one until nothing is left to ask — and it rewrites claim labels, so the pipeline waits while a pass runs; the budget hands the gate back in between. This button only starts a pass now.',
   'status.vocabNote':
     'asks the model what the names should become — claim topics, wiki tags and source tags — and applies the answer as a rename. A claim keeps its text, its node and its associations; a page and a source keep their prose. Only the label changes. Topics are flat.',
   'status.vocabNames.one': '{count} name',
@@ -88,6 +90,8 @@ export const statusEn: Record<string, string> = {
   'status.vocabTop': 'top {pct}%',
   'status.vocabShelf': 'shelf {shelf}/{target}',
   'status.vocabRemaining': '{count} to file',
+  'status.vocabRetopic': '{count} to re-derive',
+  'status.vocabOffShelf': '{count} claims off the shelf',
   'status.vocabCanonical': '{canonical} canonical, {absorbed} absorbed',
   'status.vocabNew': '{count} new',
   'status.collisionsTitle': 'Two spellings of one name — always a bug',

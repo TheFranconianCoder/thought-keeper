@@ -504,12 +504,25 @@ onto the shelf, `POST /api/v1/vocabulary/retopic` re-derives claim topics, and a
 — no claim text is rewritten and no cluster moves. The file carries `target:` (the size the shelf was
 built for) and a `# Shelf` section next to `# Canonical`, `# Decided` and `# Absorbed`.
 
+`# Decided` is the memory of every name the model has a verdict about: merged, deliberately kept, or
+passed over by a coarsening that could not file it onto the shelf. A judged name is never a question
+again in BULK — which is what makes the tail finite, and what makes `remaining` in the report a count of
+WORK instead of a count of names nobody will ever ask about twice. `# Relabelled` is the same memory one
+level down: the names whose CLAIMS were re-derived against the shelf one batch at a time. A name that
+keeps its claims after that is the subject itself — a remainder the report shows, never a queue.
+
 The **shelf of the topics namespace is written by the app itself** when a vault predates it: the
 reconcile tick reads the report, and a catalog that runs past the target gets a shelf of its most used
 names — no model, no gate, and not one claim rewritten. That is the record the derivation reads, so
 new claims are filed onto the bounded vocabulary from then on. The tag namespaces have no such build:
 their write path reads `Canonical`, so their shelf is written by the coarsening, which rewrites
 `Canonical` with it.
+
+The **coarsening continues by itself**: the same reconcile tick asks for the next pass while a
+namespace still has names outside the shelf, so the file is written batch after batch across many
+passes instead of in one press a reader has to make again and again. When nothing is left to ask, the
+tick **re-fits** the shelf from the corpus — a name that earned its mass takes a slot, a slot nobody
+uses gives its up — so `# Shelf` follows the content instead of freezing on the day it was built.
 
 ## 9. Ask records
 
