@@ -68,3 +68,22 @@ Two amendments:
 The long tail is still the repair: filing 57k names onto 3,000 rewrites claims, holds the exclusive
 gate and costs a model pass, so it stays a press (the Coarsen button on Status) — and the tag
 namespaces keep their coarsening-only shelf, because their write path reads `Canonical`.
+
+## Addendum (2026-11-21): literal variants and parallel questions
+
+The decision above described two passes and one question at a time. Two amendments:
+
+- A tail name that carries a shelf name as a **contiguous phrase of at least two words** is filed
+  with no model call: `sample-size-insensitivity` onto `sample-size`, `go-code-generation` onto
+  `code-generation`. The rule is literal on purpose: a shared subject word never qualifies, so
+  `moral-psychology` is not `evolutionary-psychology` — a token overlap would have filed it. The
+  pass sits between the near-duplicate families and the model, and it chunks its rename (one
+  transaction per 2,000 names), because a rename rewrites claim files.
+- The model's questions are independent and one answer takes minutes, so **four are in flight at
+  once**. Only the **apply** stays in order: it rewrites claims and the remaining count is read from
+  it. The gateway keeps the process-wide cap (`openai.max_concurrent`), so this is latency, not an
+  unbounded burst. A failed or cancelled pass stops the outstanding questions, and the empty-batch
+  counter still ends a shelf that cannot cover its tail.
+
+The deterministic passes (families and variants) need no key: the model guard sits after them, so a
+vault without one still files what a rule can decide.

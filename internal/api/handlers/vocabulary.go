@@ -67,9 +67,10 @@ func (h VocabularyHandler) Curate(w http.ResponseWriter, r *http.Request) {
 }
 
 // Coarsen serves POST /api/v1/vocabulary/coarsen: the long tail of a name vocabulary is filed onto
-// its shelf, deterministic families first and then in model batches. It is the repair for a
-// vocabulary that grew into tens of thousands of names, and it is idempotent: an absorbed name is a
-// watermark, so a stopped pass continues where it was.
+// its shelf, cheapest pass first — deterministic families, then literal variants, then model batches
+// with several questions in flight. It is the repair for a vocabulary that grew into tens of
+// thousands of names, and it is idempotent: an absorbed name is a watermark, so a stopped pass
+// continues where it was.
 func (h VocabularyHandler) Coarsen(w http.ResponseWriter, r *http.Request) {
 	if h.Consume == nil {
 		payloads.WriteError(w, types.New("not_implemented", "vocabulary coarsening is not configured", types.ErrNotImplemented))

@@ -14,12 +14,14 @@ import (
 	"github.com/TheFranconianCoder/thought-keeper/internal/core/usecases/partialentities"
 )
 
-// The coarsening works in small batches: the shelf plus the batch is one request, and each answered
-// batch is applied before the next one is asked. The batch was 600 names until a measured vault
-// showed the model answering six of them; 150 fits the answer well inside one completion. A press is
-// bounded by names (max batches) and by what the model actually files: three batches in a row that
-// file nothing mean the shelf cannot honestly cover the tail, and the pass stops instead of asking
-// for hours. It is resumable, because what was absorbed is on disk before the next question starts.
+// The coarsening works in small batches: the shelf plus the batch is one request. The batch was 600
+// names until a measured vault showed the model answering six of them; 150 fits the answer well
+// inside one completion. Several questions are in flight at once (coarsenParallel), but every
+// answered batch is APPLIED in order, one after another: the apply rewrites claims and the count of
+// what is left is read from it. A press is bounded by names (max batches) and by what the model
+// actually files: three batches in a row that file nothing mean the shelf cannot honestly cover the
+// tail, and the pass stops instead of asking for hours. It is resumable, because what was absorbed is
+// on disk before the next apply runs.
 const (
 	coarsenBatchSize   = 150
 	coarsenMaxBatches  = 320

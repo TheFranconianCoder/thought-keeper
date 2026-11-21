@@ -74,7 +74,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `POST` | `/api/v1/atoms/collapse` | Keep one copy of each duplicate |
 | `GET` | `/api/v1/vocabulary` | The health of the name vocabularies (`topics`, `wiki-tags`, `source-tags`), each with its `shelf` (the bounded target vocabulary), `target` (the size it was built for) and `remaining` (the names in use that are neither on the shelf nor absorbed — what a coarsening would file) |
 | `POST` | `/api/v1/vocabulary/curate` | Curate the vocabularies (observes, asks the model, renames) |
-| `POST` | `/api/v1/vocabulary/coarsen` | File a namespace's long tail onto its **shelf**: deterministic families first, then the model in batches, each applied and recorded in `Absorbed` (the watermark, so a stopped pass continues). Body `{namespace}` is optional; no body means every namespace. `202 {run_id}` |
+| `POST` | `/api/v1/vocabulary/coarsen` | File a namespace's long tail onto its **shelf**, cheapest pass first: deterministic families, then **variants** (a tail name that carries a shelf name as a contiguous phrase of at least two words, no model call), then the model in batches of 150 with four questions in flight — the applies stay in order. Every applied batch is recorded in `Absorbed` (the watermark, so a stopped pass continues). Body `{namespace}` is optional; no body means every namespace. `202 {run_id}` |
 | `POST` | `/api/v1/vocabulary/retopic` | Re-derive claim topics from the claims themselves |
 | `POST` | `/api/v1/vocabulary/rebranch` | Alias of `retopic` (legacy name) |
 | `GET` | `/api/v1/search` | Lexical search: `q, layer=atoms\|sources, limit` (claims use FTS5; sources match the list's title/URL/tag fields) |

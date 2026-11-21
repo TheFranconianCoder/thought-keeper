@@ -40,7 +40,10 @@ type Vocabulary struct {
 	TopNames  int
 	Max       int
 	// Target is the size the COARSENING builds the shelf for (vocabulary.<namespace>.max_names).
-	Target    int
+	Target int
+	// Parallel bounds the model calls one run keeps in flight: the rebranch's claims, and the
+	// coarsening's shelf questions (whose APPLY stays in order regardless). 0 = the use case's own
+	// default.
 	Parallel  int
 	OnPhase   func(phase string)
 	ApplyGate func(ctx context.Context, fn func(ctx context.Context) error) error
