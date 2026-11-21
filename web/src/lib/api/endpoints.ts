@@ -239,12 +239,6 @@ export const api = {
   cluster: () => request<ClusterResult>('/cluster', { method: 'POST' }),
 
   vocabulary: () => request<{ namespaces: VocabularyHealth[] }>('/vocabulary'),
-  curateVocabulary: () =>
-    request<{ run_id: string; status: string }>('/vocabulary/curate', { method: 'POST' }),
-  coarsenVocabulary: () =>
-    request<{ run_id: string; status: string }>('/vocabulary/coarsen', { method: 'POST' }),
-  retopicClaims: () =>
-    request<{ run_id: string; status: string }>('/vocabulary/retopic', { method: 'POST' }),
 
   atomDuplicates: () => request<AtomDuplicates>('/atoms/duplicates'),
   collapseAtoms: () => request<AtomDuplicates>('/atoms/collapse', { method: 'POST' }),

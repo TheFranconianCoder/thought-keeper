@@ -92,35 +92,6 @@ export async function rebuildAllTrees(): Promise<void> {
   }
 }
 
-export async function curateVocabulary(): Promise<void> {
-  try {
-    await api.curateVocabulary();
-    toast(t('status.curateStarted'), 'info');
-  } catch (error) {
-    toast(t('status.curateFailed', { error: firstLine(humanError(error)) }), 'error');
-  }
-}
-
-/** Coarsen files the names outside the shelf onto it. It rewrites claim labels under the exclusive
- *  gate, so the run reports itself as waiting; the reader may keep reading, but the pipeline waits. */
-export async function coarsenVocabulary(): Promise<void> {
-  try {
-    await api.coarsenVocabulary();
-    toast(t('status.coarsenStarted'), 'info');
-  } catch (error) {
-    toast(t('status.coarsenFailed', { error: firstLine(humanError(error)) }), 'error');
-  }
-}
-
-export async function retopicClaims(): Promise<void> {
-  try {
-    await api.retopicClaims();
-    toast(t('status.retopicStarted'), 'info');
-  } catch (error) {
-    toast(t('status.retopicFailed', { error: firstLine(humanError(error)) }), 'error');
-  }
-}
-
 export async function collapseDuplicateClaims(): Promise<void> {
   const duplicates = system.duplicates;
   if (duplicates && duplicates.groups > 0) {

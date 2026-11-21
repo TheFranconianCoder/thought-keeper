@@ -72,15 +72,6 @@ export const statusDe: Record<string, string> = {
 
   // Vokabular.
   'status.vocabulary': 'Vokabular',
-  'status.curate': 'Kuratieren',
-  'status.coarsen': 'Einsortieren',
-  'status.retopic': 'Themen neu ableiten',
-  'status.retopicNote':
-    'leitet die Themen der Aussagen neu ab, die der Shelf nicht aufnehmen konnte — aus ihrem eigenen Text, 100 Aussagen pro Frage, und jede Antwort landet auf dem Shelf. Es ist die zweite Hälfte der Reduktion, läuft von selbst, und ein Thema, das der Shelf nicht benennen kann, wird vom Refit auf den Shelf gehoben statt endlos verfolgt.',
-  'status.coarsenNote':
-    'sortiert die Namen außerhalb des Shelves darauf ein: zuerst die deterministischen Familien und Varianten, dann das Modell in Stapeln von 150. Es läuft von selbst — der nächste Durchgang folgt dem letzten, bis nichts mehr zu fragen ist. Es schreibt Claim-Labels um, deshalb wartet die Pipeline, solange ein Durchgang läuft; das Budget gibt das Gate dazwischen zurück. Dieser Knopf startet nur jetzt einen Durchgang.',
-  'status.vocabNote':
-    'fragt das Modell, was aus den Namen werden soll — Aussagenthemen, Wiki-Schlagwörter und Quellenschlagwörter — und wendet die Antwort als Umbenennung an. Eine Aussage behält Text, Knoten und Verknüpfungen; eine Seite und eine Quelle behalten ihre Prosa. Nur die Bezeichnung ändert sich. Themen sind flach.',
   'status.vocabNames.one': '{count} Name',
   'status.vocabNames.many': '{count} Namen',
   'status.vocabUses.one': '{count} Verwendung',
@@ -181,12 +172,6 @@ export const statusDe: Record<string, string> = {
   'status.outlinesRebuilt': 'Gliederungen neu gebaut: {built}/{sources}{failed}.',
   'status.failedCount': ' · {count} fehlgeschlagen',
   'status.outlinesFailed': 'Gliederungen konnten nicht neu gebaut werden: {error}',
-  'status.curateStarted': 'Das Aussagenthemen-Vokabular wird kuratiert…',
-  'status.curateFailed': 'Vokabular-Kuratierung fehlgeschlagen: {error}',
-  'status.coarsenStarted': 'Der lange Rest wird auf den Shelf einsortiert…',
-  'status.coarsenFailed': 'Einsortieren fehlgeschlagen: {error}',
-  'status.retopicStarted': 'Die Aussagenthemen werden aus den Aussagentexten neu abgeleitet…',
-  'status.retopicFailed': 'Themen-Ableitung fehlgeschlagen: {error}',
   'status.collapseNothing': 'Nichts zusammenzufassen — jede Aussage existiert einmal.',
   'status.collapseTitle.one': '{count} doppelte Gruppe zusammenfassen?',
   'status.collapseTitle.many': '{count} doppelte Gruppen zusammenfassen?',

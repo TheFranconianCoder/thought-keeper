@@ -1,15 +1,12 @@
 <script lang="ts">
   import {
     clusterClaims,
-    coarsenVocabulary,
-    collapseDuplicateClaims,
-    curateVocabulary,
-    rebuildAllTrees,
+      collapseDuplicateClaims,
+      rebuildAllTrees,
     reconcileVault,
     refreshURLs,
     reindexVault,
-    retopicClaims,
-  } from '../../lib/actions';
+    } from '../../lib/actions';
   import { elapsed, relTime } from '../../lib/format';
   import { i18n, n, t, tn } from '../../lib/i18n/index.svelte';
   import { openConfig } from '../../lib/overlays';
@@ -331,26 +328,7 @@
     <section class="section">
       <div class="section-head">
         <h2>{t('status.vocabulary')}</h2>
-        <span class="grow"></span>
-        <button class="btn btn--primary btn--sm" disabled={busy('vocabulary') || repairing} onclick={() => void curateVocabulary()}>
-          <Icon name="spark" size={13} /> <span class="btn-text">{t('status.curate')}</span>
-        </button>
-        <button class="btn btn--secondary btn--sm" disabled={busy('vocabulary') || repairing} onclick={() => void coarsenVocabulary()}>
-          <Icon name="tree" size={13} /> <span class="btn-text">{t('status.coarsen')}</span>
-        </button>
-        <button class="btn btn--secondary btn--sm" disabled={busy('vocabulary') || repairing} onclick={() => void retopicClaims()}>
-          <Icon name="distill" size={13} /> <span class="btn-text">{t('status.retopic')}</span>
-        </button>
       </div>
-      <p class="muted small section-note">
-        <b>{t('status.curate')}</b> {t('status.vocabNote')}
-      </p>
-      <p class="muted small section-note">
-        <b>{t('status.coarsen')}</b> {t('status.coarsenNote')}
-      </p>
-      <p class="muted small section-note">
-        <b>{t('status.retopic')}</b> {t('status.retopicNote')}
-      </p>
       {#if system.vocabulary && system.vocabulary.length > 0}
         <div class="vocab-list">
           {#each system.vocabulary as vocab (vocab.namespace)}

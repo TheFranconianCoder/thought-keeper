@@ -73,15 +73,6 @@ export const statusEn: Record<string, string> = {
 
   // Vocabulary.
   'status.vocabulary': 'Vocabulary',
-  'status.curate': 'Curate',
-  'status.coarsen': 'Coarsen',
-  'status.retopic': 'Re-topic claims',
-  'status.retopicNote':
-    're-derives the claims the shelf could not take, from their own text, one batch of 100 at a time — and every answer lands on the shelf. It is the second half of the reduction, it runs by itself, and a subject the shelf cannot name is promoted onto the shelf by the refit instead of being chased forever.',
-  'status.coarsenNote':
-    'files the names outside the shelf onto it: the deterministic families and variants first, then the model in batches of 150. It runs by itself — the next pass follows the last one until nothing is left to ask — and it rewrites claim labels, so the pipeline waits while a pass runs; the budget hands the gate back in between. This button only starts a pass now.',
-  'status.vocabNote':
-    'asks the model what the names should become — claim topics, wiki tags and source tags — and applies the answer as a rename. A claim keeps its text, its node and its associations; a page and a source keep their prose. Only the label changes. Topics are flat.',
   'status.vocabNames.one': '{count} name',
   'status.vocabNames.many': '{count} names',
   'status.vocabUses.one': '{count} use',
@@ -182,12 +173,6 @@ export const statusEn: Record<string, string> = {
   'status.outlinesRebuilt': 'Outlines rebuilt: {built}/{sources}{failed}.',
   'status.failedCount': ' · {count} failed',
   'status.outlinesFailed': 'Outline rebuild failed: {error}',
-  'status.curateStarted': 'Curating the claim-topic vocabulary…',
-  'status.curateFailed': 'Vocabulary curation failed: {error}',
-  'status.coarsenStarted': 'Filing the long tail onto the shelf…',
-  'status.coarsenFailed': 'Coarsening failed: {error}',
-  'status.retopicStarted': 'Re-deriving claim topics from the claim texts…',
-  'status.retopicFailed': 'Topic re-derivation failed: {error}',
   'status.collapseNothing': 'Nothing to collapse — every claim exists once.',
   'status.collapseTitle.one': 'Collapse {count} duplicate group?',
   'status.collapseTitle.many': 'Collapse {count} duplicate groups?',

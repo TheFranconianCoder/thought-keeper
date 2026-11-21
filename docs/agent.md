@@ -315,9 +315,10 @@ order. It never writes a URL, never invents a hash and never answers the request
   claim files and records
   the new topics in **one transaction per batch** — the text and the provenance do not move, and a
   transaction per claim is what made a real coarsening take hours. It is the repair for a vocabulary
-  that grew before the shelf existed, it holds the exclusive gate for the whole pass, and it is what
-  the **Coarsen** button on Status asks for. A press takes the one-at-a-time latch: a second press
-  while a pass runs is a conflict, and the automatic shelf look and the curation stay out of its way.
+  that grew before the shelf existed and it holds the exclusive gate for the whole pass. Nothing in
+  the PWA starts it: the reconcile tick asks for the pass, and `POST /vocabulary/coarsen` (CLI
+  `thought-keeper coarsen`) exists for tooling. A pass takes the one-at-a-time latch: a second one
+  while it runs is a conflict, and the automatic shelf look and the curation stay out of its way.
 - **The shelf follows the corpus.** The derivation files new claims onto the shelf, so without a
   refit the shelf could only shrink and a new subject could never appear. When a namespace has
   nothing left to ask (no name to file, no claim to re-derive) the reconcile tick re-synthesizes its
@@ -340,8 +341,9 @@ order. It never writes a URL, never invents a hash and never answers the request
   (15 min): it stops ASKING when the budget is spent, applies the questions already in flight and
   returns, so the exclusive gate goes back to the document steps between passes. It is bounded by
   progress like every other loop (`two passes without progress stop it and say why`), and
-  `vocabulary.coarsen.automatic: false` turns it off. The **Coarsen** button on Status stays as "run
-  one now": the same pass with the run's own ceiling instead of the budget.
+  `vocabulary.coarsen.automatic: false` turns it off. The endpoint and the CLI verb remain as "run one
+  pass now" for tooling — the same pass with the run's own ceiling instead of the budget. The PWA has
+  no vocabulary button: Status shows the numbers and the running pass, and that is the whole report.
 - **`POST /vocabulary/retopic`** re-derives the topic of the claims the SHELF COULD NOT TAKE, one
   batch of 100 at a time, from the claims' own text — and every answer resolves onto the shelf. It is
   the second half of the reduction: the coarsening renames a NAME (one answer moves all of its
