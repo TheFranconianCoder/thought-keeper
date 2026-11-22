@@ -595,6 +595,8 @@ export interface VocabularyHealth {
   /** The names whose claims the per-claim pass still has to re-derive, and how many it has answered. */
   retopic: number;
   retopiced: number;
+  /** The retopic queue in CLAIMS: the number the automatic pass measures its progress by. */
+  retopic_claims: number;
   /** The CLAIMS still carrying a name outside the shelf: the distance to the invariant. */
   off_shelf: number;
   /** Topics above the catch-all share of the claims, and below the thin share, with the claim mass each carries. */

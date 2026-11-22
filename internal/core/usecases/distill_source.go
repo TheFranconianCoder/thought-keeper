@@ -125,8 +125,14 @@ func (uc Derivation) distill(ctx context.Context, hash string, rec *StepRecorder
 	}
 
 	// The name vocabulary is a DECISION: an absorbed topic name is mapped onto its canonical one here,
-	// at the write, so the drift the curation repaired does not reappear on the next run.
+	// at the write, so the drift the curation repaired does not reappear on the next run. With a shelf,
+	// the alias may only land ON the shelf: one that points at a fine name would defeat the bound.
 	topicAliases := vocabularyAliases(uc.Vocab, entities.VocabularyTopics)
+	if uc.Vocab != nil {
+		if v, vErr := uc.Vocab.Read(entities.VocabularyTopics); vErr == nil && len(v.Shelf) > 0 {
+			topicAliases = aliasesOntoShelf(topicAliases, v.Shelf)
+		}
+	}
 	// ONE read of the topic catalog per run, shared by every part: the candidates a part is offered
 	// and the name the write resolves are both answered from it. Calling list_topics per part read
 	// the same 57k rows again for every request and answered with a truncated 2.3 MB list.

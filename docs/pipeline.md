@@ -513,14 +513,16 @@ carry the reason (`link failed · …`). A light that disagrees with its own num
   step (no model), a query or the assistant: those are interactive reads. The default is DeepSeek's
   pair, `01:00-04:00` and `06:00-10:00`; an explicit empty list turns the rule off.
 - **Automatic continuation is bounded by progress**: a new claim or less work left. Two runs without
-  progress stop it and say why.
+  progress stop it and say why. The retopic stage counts CLAIMS, not names: one large name can take
+  several passes, and a guard on the name count stopped a queue whose claims were moving.
 - **Housekeeping is not a button.** The consistency walk, the summary and tag backfills, the shelf
   build and the vocabulary passes ask for themselves on the reconcile tick, each with its own
   cooldown and latch. The reduction to the shelf is a sequence of passes, and the tick picks the next
-  one in the only order that converges: **coarsen** (a name in bulk) while a name is outside the shelf,
-  then **retopic** (a name's claims, one batch at a time) while claims are still there, then — with
-  nothing left to ask — the **shelf refit**, which re-synthesizes the target from the corpus, and
-  finally the **curation** of drift. Each pass stops asking when its budget
+  one in the only order that converges: **refit** (when its interval is due — the shelf moves first,
+  and it may run while a tail exists, because a wrong shelf leaves a tail that can never settle),
+  then **coarsen** (a name in bulk) while a name is outside the shelf, then **retopic** (a name's
+  claims, one batch at a time) while claims are still there, and finally the **curation** of drift.
+  Each pass stops asking when its budget
   (`vocabulary.coarsen.budget`, `vocabulary.retopic.budget`) is spent, applies the questions in flight
   and hands the exclusive gate back. The buttons on Status remain as "run one now", never as the only
   way the work happens.

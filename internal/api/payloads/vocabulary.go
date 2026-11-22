@@ -51,7 +51,10 @@ type VocabularyHealth struct {
 	Remaining int `json:"remaining"`
 	Retopic   int `json:"retopic"`
 	Retopiced int `json:"retopiced"`
-	OffShelf  int `json:"off_shelf"`
+	// RetopicClaims is the retopic queue in CLAIMS — the number the automatic pass measures its
+	// progress by, because one large name can take several passes without settling.
+	RetopicClaims int `json:"retopic_claims"`
+	OffShelf      int `json:"off_shelf"`
 	// CatchAll are the topics above the catch-all share of the claims, Thin the topics below the thin
 	// share; the *Uses fields are the claim mass each carries.
 	CatchAll     int `json:"catch_all"`
@@ -89,7 +92,7 @@ func VocabularyFromPartials(in []partialentities.VocabularyHealth) VocabularyRep
 			UnreviewedFamilies: h.UnreviewedFamilies,
 			Canonical:          h.Canonical, Absorbed: h.Absorbed, New: h.New, Top: namesFromPartials(h.Top),
 			Shelf: h.Shelf, Target: h.Target, Remaining: h.Remaining,
-			Retopic: h.Retopic, Retopiced: h.Retopiced, OffShelf: h.OffShelf,
+			Retopic: h.Retopic, Retopiced: h.Retopiced, RetopicClaims: h.RetopicClaims, OffShelf: h.OffShelf,
 			CatchAll: h.CatchAll, CatchAllUses: h.CatchAllUses, Thin: h.Thin, ThinUses: h.ThinUses,
 		})
 	}

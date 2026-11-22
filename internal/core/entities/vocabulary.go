@@ -57,8 +57,15 @@ type Vocabulary struct {
 	// shelf has been built yet (a vault whose names were never bounded).
 	Shelf []string
 	// Target is the size the shelf was built for (vocabulary.<namespace>.max_names at the time). It
-	// is a RECORD of the decision, so a later pass knows what the shelf was aiming at.
+	// is a RECORD of the decision, so a later pass knows what the shelf was aiming at. It is a
+	// CEILING, not a quota: the share band (ADR 0009) decides how many names are really usable.
 	Target int
+	// ShelfBuilt is the version of the RULE the shelf was built under, the sibling of Settle. Version
+	// 0 — a file that does not carry one — was built from the catalog in ALPHABETICAL order, so its
+	// names were the alphabetically first ones instead of the most used. Such a shelf is rebuilt once:
+	// the record cannot be repaired by a refit alone because the names it carries were never a real
+	// target. A rebuild also re-opens Decided and Relabelled, which were judged against the old shelf.
+	ShelfBuilt int
 	// Decided are the names the model has already judged — merged, deliberately kept, or passed over
 	// by a coarsening that could not file them onto the shelf. Without it a curation asks the same
 	// head of the catalog forever: the baseline makes every observed name "canonical", so nothing

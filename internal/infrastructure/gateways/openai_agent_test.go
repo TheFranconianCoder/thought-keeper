@@ -118,3 +118,46 @@ func TestEmptyReasoningContentIsStillSent(t *testing.T) {
 		}
 	}
 }
+
+// TestToolAnswerSendsNoName: an Anthropic-Messages endpoint rejects a `name` on a message. The
+// tool answer keeps its tool_call_id on the wire and carries no name, even though the core sets one.
+func TestToolAnswerSendsNoName(t *testing.T) {
+	var sent []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages []map[string]any `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		sent = append(sent, body.Messages...)
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"1","object":"chat.completion","model":"m","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	gw, ok := NewOpenAIAgent(OpenAIConfig{APIKey: "k", BaseURL: srv.URL + "/v1"})
+	if !ok {
+		t.Fatal("gateway not configured")
+	}
+	_, err := gw.Complete(context.Background(), interfaces.AgentRequest{
+		Model: "m",
+		Messages: []interfaces.AgentMessage{
+			{Role: "user", Content: "hi"},
+			{
+				Role: "assistant", Content: "(tool call)",
+				ToolCalls: []interfaces.AgentToolCall{{ID: "c1", Name: "t", Arguments: "{}"}},
+			},
+			{Role: "tool", ToolCallID: "c1", Name: "t", Content: "ok"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	for _, m := range sent {
+		if _, present := m["name"]; present {
+			t.Errorf("message carries a name on the wire: %+v", m)
+		}
+		if m["role"] == "tool" && m["tool_call_id"] != "c1" {
+			t.Errorf("tool answer lost its tool_call_id: %+v", m)
+		}
+	}
+}

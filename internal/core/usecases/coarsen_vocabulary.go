@@ -170,14 +170,29 @@ func (uc Vocabulary) Coarsen(ctx context.Context, runID ulid.ULID) (res CoarsenR
 
 	// The shelf: the most used names of the current catalog, once. It is a RECORD, so a later pass
 	// files onto the same names instead of inventing a new target every time. A shelf that fits is
-	// left alone, and an unchanged record is not written again.
+	// left alone, and an unchanged record is not written again. A shelf from an older build rule is
+	// rewritten once, and the verdicts that were made against it are dropped with it.
 	target := uc.Target
 	if target <= 0 {
 		target = len(observed)
 	}
-	if len(v.Shelf) == 0 || len(v.Shelf) > target {
+	switch {
+	case v.ShelfBuilt < shelfBuildVersion:
+		v.Shelf = buildShelf(observed, target, uc.Shelf)
+		v.Decided = nil
+		v.Relabelled = nil
+		v.Target = target
+		v.ShelfBuilt = shelfBuildVersion
+		if uc.Clock != nil {
+			v.Updated = uc.Clock.Now()
+		}
+		if wErr := uc.Vocab.Write(v); wErr != nil {
+			return res, wErr
+		}
+	case len(v.Shelf) == 0 || len(v.Shelf) > target:
 		v.Shelf = shelfSizing(v.Shelf, observed, target)
 		v.Target = target
+		v.ShelfBuilt = shelfBuildVersion
 		if uc.Clock != nil {
 			v.Updated = uc.Clock.Now()
 		}
@@ -544,7 +559,7 @@ func (uc Vocabulary) askShelf(ctx context.Context, shelf, names []string) (chunk
 	callCtx, cancel := context.WithTimeout(ctx, vocabularyCallTimeout)
 	defer cancel()
 	resp, err := uc.Gateway.Complete(callCtx, interfaces.AgentRequest{
-		Model: uc.Model, ReasoningEffort: "minimal",
+		Model: uc.Model, ReasoningEffort: "none",
 		Messages: []interfaces.AgentMessage{
 			{Role: "system", Content: agents.ShelfSystem},
 			{Role: "user", Content: agents.ShelfUser(shelf, names)},

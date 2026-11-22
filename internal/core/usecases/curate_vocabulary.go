@@ -251,7 +251,7 @@ func (uc Vocabulary) askChunk(ctx context.Context, chunk []nameCount) chunkAnswe
 			messages = append(messages, interfaces.AgentMessage{Role: "user", Content: extra})
 		}
 		return uc.Gateway.Complete(callCtx, interfaces.AgentRequest{
-			Model: uc.Model, ReasoningEffort: "minimal", Messages: messages,
+			Model: uc.Model, ReasoningEffort: "none", Messages: messages,
 		})
 	}
 	resp, err := ask("")
@@ -484,7 +484,7 @@ func (uc Vocabulary) learnBroadTokens(ctx context.Context, observed []partialent
 		defer cancel()
 		resp, err := uc.Gateway.Complete(callCtx, interfaces.AgentRequest{
 			Model:           uc.Model,
-			ReasoningEffort: "minimal",
+			ReasoningEffort: "none",
 			Messages: []interfaces.AgentMessage{
 				{Role: "system", Content: agents.BroadTokensSystem},
 				{Role: "user", Content: agents.BroadTokensUser(listing.String())},

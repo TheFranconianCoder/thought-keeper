@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"slices"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -37,6 +38,7 @@ func coarsenTickApp(t *testing.T) (*App, *shelfAppVocab) {
 		Canonical:   []string{"caching", "compilers", "databases"},
 		Shelf:       []string{"caching", "compilers", "databases"},
 		Target:      3,
+		ShelfBuilt:  2, // the fixture is about filing, not about rebuilding an old shelf
 		Absorbed:    map[string]string{},
 		BroadTokens: []string{"generic"},
 	}
@@ -211,6 +213,33 @@ func TestVocabularyTickRetopicsWhenTheBulkPassIsDone(t *testing.T) {
 	}
 	if !a.vocabActive {
 		t.Error("the pass did not take the one-at-a-time latch")
+	}
+}
+
+// TestVocabularyTickRefitsBeforeTheTailIsSettled: ADR 0009 says the shelf moves first. The refit used
+// to wait for `tail == 0 && retopic == 0`, which was unreachable on the vault it exists for: a shelf
+// built under the wrong rule leaves a tail that can never settle. A due refit must therefore run even
+// while the retopic queue is open, and the pass it displaces is asked again on the next tick.
+func TestVocabularyTickRefitsBeforeTheTailIsSettled(t *testing.T) {
+	a, store := settledTickApp(t)
+	// A band that makes the biggest shelf name a catch-all: the refit has real work to do.
+	a.depsPtr.Load().VocabularyCurate.Shelf = usecases.ShelfLimits{MaxShare: 0.5}
+	a.requestVocabularyIfDue("test")
+
+	select {
+	case job := <-a.vocabularyQueue:
+		t.Fatalf("the tick queued %+v instead of refitting first", job)
+	default:
+	}
+	shelf := store.v[entities.VocabularyTopics].Shelf
+	if slices.Contains(shelf, "caching") {
+		t.Errorf("the catch-all survived the refit: %v", shelf)
+	}
+	if a.shelfRefitLast.IsZero() {
+		t.Error("the refit did not run")
+	}
+	if !a.vocabLast.IsZero() {
+		t.Error("the cooldown was not cleared, so the next tick cannot queue the pass the refit displaced")
 	}
 }
 

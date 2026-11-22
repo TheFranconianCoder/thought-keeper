@@ -74,8 +74,9 @@ page** is user-authored Markdown with tags; saving it writes a source representa
 document pipeline from capture. The app also tags a page and a source
 (auto tags, kept apart from the human's tags) and curates the three name vocabularies (`topics`,
 `wiki-tags`, `source-tags`) — and it reduces the corpus to that shelf by itself: the long tail is
-filed in bulk, the claims the shelf could not take are re-derived one batch at a time, and a settled
-shelf is re-synthesized from the corpus so a subject that earns its mass gets a slot. No button.
+filed in bulk, the claims the shelf could not take are re-derived one batch at a time, and the shelf
+is re-synthesized from the corpus on its own interval, so a subject that earns its mass gets a slot —
+the target is a ceiling, not a quota. No button.
 Search is language-aware, and the interface and the content it writes
 have their own languages (`language.ui`, `language.claims`, `language.summary`; every one defaults
 to English).

@@ -85,7 +85,7 @@ func (uc Sources) Summary(ctx context.Context, runID ulid.ULID, hash string) (So
 		defer cancel()
 		resp, cErr := uc.Gateway.Complete(callCtx, interfaces.AgentRequest{
 			Model:           uc.Model,
-			ReasoningEffort: "minimal",
+			ReasoningEffort: "none",
 			Messages: []interfaces.AgentMessage{
 				{Role: "system", Content: agents.SummarySystemFor(uc.Language)},
 				{Role: "user", Content: agents.SourceSummaryUser(

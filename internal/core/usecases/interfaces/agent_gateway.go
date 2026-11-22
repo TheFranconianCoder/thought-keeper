@@ -63,7 +63,7 @@ type AgentMessage struct {
 	Content    string
 	ToolCalls  []AgentToolCall // assistant
 	ToolCallID string          // tool
-	Name       string          // tool
+	Name       string          // tool; core-only, never sent to the model
 	// ReasoningContent is a thinking model's reasoning for this turn. It must be passed back
 	// with the message it belongs to on the next request — the API rejects a thinking-model
 	// conversation whose assistant turns lost it.

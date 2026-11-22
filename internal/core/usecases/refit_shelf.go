@@ -124,6 +124,7 @@ func (uc Vocabulary) RefitShelf(h partialentities.VocabularyHealth, target int) 
 	}
 	v.Shelf = shelf
 	v.Target = target
+	v.ShelfBuilt = shelfBuildVersion
 	v.Updated = uc.Clock.Now()
 	if wErr := uc.Vocab.Write(v); wErr != nil {
 		return RefitShelfResult{}, fmt.Errorf("write the %s shelf: %w", ns, wErr)

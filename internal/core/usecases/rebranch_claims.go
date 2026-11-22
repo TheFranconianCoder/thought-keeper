@@ -119,6 +119,12 @@ func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchRes
 		v = entities.Vocabulary{Namespace: entities.VocabularyTopics, Absorbed: map[string]string{}}
 	}
 	aliases := vocabularyAliases(uc.Vocab, entities.VocabularyTopics)
+	if len(v.Shelf) > 0 {
+		// An alias is only a shortcut onto the target vocabulary. One that points OUTSIDE the shelf
+		// would re-file a claim under a fine name and undo the pass that just placed it, so it is
+		// chained to its shelf name or dropped (and the catalog's budget path decides).
+		aliases = aliasesOntoShelf(aliases, v.Shelf)
+	}
 	catalog := shelfCatalogOf(v.Shelf, observed, uc.TopicShelf)
 	started := uc.Clock.Now()
 	spent := func() bool {
@@ -145,8 +151,17 @@ func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchRes
 	// spent a model call per name: 45,000 calls for 341,000 claims. A hundred claims across the queue
 	// are the same question with a tenth of the calls. `open` is how many claims of each name have not
 	// been asked yet, and a name is settled when its last one has.
+	//
+	// The buffer holds PARALLEL chunks: `askAndApply` splits it into one question per chunk and keeps
+	// them in flight together. Filling it to a single chunk was the measured bottleneck — the
+	// configured parallelism never applied because every flush produced exactly one question.
+	parallel := uc.Parallel
+	if parallel <= 0 {
+		parallel = 4
+	}
+	flushAt := rebranchPerCall * parallel
 	open := make(map[string]int, len(queue))
-	buffer := make([]rebranchClaim, 0, rebranchPerCall)
+	buffer := make([]rebranchClaim, 0, flushAt)
 	stop := false
 	flush := func() {
 		if len(buffer) == 0 {
@@ -172,7 +187,8 @@ func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchRes
 		if stop || spent() || res.Examined+len(buffer) >= claimBudget {
 			break
 		}
-		uc.phase(fmt.Sprintf("re-deriving %q (%d left)", name, res.Remaining))
+		uc.phase(fmt.Sprintf("re-deriving %q (%d claims re-labelled, %d names left)",
+			name, res.Changed, res.Remaining))
 		offset := 0
 		for {
 			atoms, lErr := uc.Atoms.ListAtoms(ctx, name, rebranchPage, offset)
@@ -190,7 +206,7 @@ func (uc Claims) Rebranch(ctx context.Context, runID ulid.ULID) (res RebranchRes
 				}
 				open[name]++
 				buffer = append(buffer, rebranchClaim{atom: atom, name: name})
-				if len(buffer) >= rebranchPerCall {
+				if len(buffer) >= flushAt {
 					flush()
 				}
 				if stop {
@@ -482,7 +498,7 @@ func (uc Claims) ask(ctx context.Context, atoms []entities.Atom, known []string)
 	defer cancel()
 	resp, err := uc.Gateway.Complete(callCtx, interfaces.AgentRequest{
 		Model:           uc.Model,
-		ReasoningEffort: "minimal",
+		ReasoningEffort: "none",
 		Messages: []interfaces.AgentMessage{
 			{Role: "system", Content: agents.RebranchSystem},
 			{Role: "user", Content: agents.RebranchUser(known, atomLines(atoms))},

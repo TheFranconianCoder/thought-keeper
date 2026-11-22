@@ -39,3 +39,37 @@ func resolveVocabulary(aliases map[string]string, name string) string {
 	}
 	return name
 }
+
+// aliasesOntoShelf keeps only the aliases whose target is on the shelf, following a chain when the
+// alias points at another absorbed name. When a shelf exists, an alias must not be a back door to a
+// fine name: a claim is filed onto the bounded vocabulary, and an alias that lands outside it would
+// undo the pass that just placed the claim. An alias that cannot be chained onto the shelf is dropped,
+// so the catalog's budget path decides what to do with the proposal.
+func aliasesOntoShelf(aliases map[string]string, shelf []string) map[string]string {
+	if len(aliases) == 0 || len(shelf) == 0 {
+		return aliases
+	}
+	onShelf := make(map[string]bool, len(shelf))
+	for _, name := range shelf {
+		onShelf[name] = true
+	}
+	const maxHops = 8
+	out := make(map[string]string, len(aliases))
+	for from, to := range aliases {
+		current := to
+		seen := make(map[string]bool, maxHops)
+		for hop := 0; hop < maxHops && current != "" && !seen[current]; hop++ {
+			if onShelf[current] {
+				out[from] = current
+				break
+			}
+			seen[current] = true
+			next, ok := aliases[current]
+			if !ok {
+				break
+			}
+			current = next
+		}
+	}
+	return out
+}

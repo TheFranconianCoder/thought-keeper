@@ -39,7 +39,8 @@ cluster step has no model at all.
   pipeline pass, tops the summary and tag backfills up, asks the vocabulary for its next check, and
   re-queues the wiki pages whose tagging was held (a wiki page has no backfill to walk).
 - **What waits is reported.** `/pipeline` carries `model_window` while one is open; the Status lens
-  says the derivation waits and names the opening in UTC.
+  says the derivation waits and names the opening in the reader's local time, while the window
+  ranges themselves stay UTC.
 - **The interactive paths keep the raw gateway.** A query and the assistant are not derivation, and
   the job a reader waits for is not a batch.
 

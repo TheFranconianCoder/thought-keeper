@@ -138,11 +138,12 @@ func (a *OpenAIAgent) Complete(ctx context.Context, req interfaces.AgentRequest)
 				content = "(empty)"
 			}
 		}
+		// The name of a tool answer stays in the core (it words the elided note); on the wire the
+		// tool_call_id alone ties the answer to its call, and Anthropic-Messages endpoints reject name.
 		om := openai.ChatCompletionMessage{
 			Role:             m.Role,
 			Content:          content,
 			ToolCallID:       m.ToolCallID,
-			Name:             m.Name,
 			ReasoningContent: m.ReasoningContent,
 		}
 		for _, tc := range m.ToolCalls {

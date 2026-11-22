@@ -57,13 +57,18 @@ type VocabularyHealth struct {
 	Remaining int
 	// Retopic are the names whose CLAIMS the retopic pass still has to re-derive: outside the shelf,
 	// not absorbed, and not asked about claim by claim yet. Retopiced is how many names that pass has
-	// already answered for.
-	Retopic   int
-	Retopiced int
+	// already answered for. RetopicClaims is the same queue in CLAIMS, and it is the number the
+	// automatic pass measures its progress by: a pass that spends its budget inside one large name
+	// moves claims without settling a name, and a guard that watched the name count stopped a queue
+	// that was visibly shrinking.
+	Retopic       int
+	Retopiced     int
+	RetopicClaims int
 	// OffShelf is the claim MASS still outside the shelf (the uses of every name that is not on it).
 	// It is the honest measure of how far the corpus is from the invariant, which `Remaining` alone
 	// cannot say: a hundred names carrying one claim each and a hundred names carrying a hundred
-	// claims each are very different work.
+	// claims each are very different work. Retopic, RetopicClaims, Retopiced and OffShelf are
+	// TOPICS-only: the tag namespaces report 0, because a tag is not re-derived from a claim.
 	OffShelf int
 	// CatchAll are the topics whose share of ALL claims is above the catch-all limit, and CatchAllUses
 	// the claim mass they carry. Thin are the topics below the thin limit (a singleton is thin in a

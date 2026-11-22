@@ -160,6 +160,13 @@ func (uc Vocabulary) observedSourceTags(ctx context.Context) ([]partialentities.
 }
 
 // observed reads the catalog the index knows: the names that exist right now, with their counts.
+//
+// The ORDER is part of the contract: most used first, name as the tiebreak. The index answers in
+// alphabetical order (ListClaimTopics is ORDER BY topic), and every caller that takes a HEAD of this
+// list — the shelf build above all — would otherwise take the alphabetically first names. That is
+// exactly how a measured vault got a shelf of "10000-hour-rule … animal-feed-composition" instead of
+// its most used names: the build sliced an unsorted catalog, and `health` hid it by sorting its own
+// copy afterwards.
 func (uc Vocabulary) observed(ctx context.Context) ([]partialentities.NameUses, error) {
 	topics, err := uc.Atoms.ListClaimTopics(ctx)
 	if err != nil {
@@ -169,6 +176,12 @@ func (uc Vocabulary) observed(ctx context.Context) ([]partialentities.NameUses, 
 	for _, t := range topics {
 		out = append(out, partialentities.NameUses{Name: t.Topic, Uses: t.Count})
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Uses != out[j].Uses {
+			return out[i].Uses > out[j].Uses
+		}
+		return out[i].Name < out[j].Name
+	})
 	return out, nil
 }
 
@@ -286,7 +299,14 @@ func (uc Vocabulary) health(observed []partialentities.NameUses, vocab entities.
 	h.Target = vocab.Target
 	tail := tailStateOf(observed, vocab)
 	h.Remaining, h.Retopic, h.OffShelf = tail.remaining, tail.retopic, tail.offShelf
+	h.RetopicClaims = tail.retopicClaims
 	h.Retopiced = len(vocab.Relabelled)
+	if ns != entities.VocabularyTopics {
+		// The claim-level queue is a TOPICS concept: a tag is not re-derived from a claim, and "claims
+		// off the shelf" would be a count of SOURCE or PAGE tag uses wearing the wrong unit. The names
+		// a coarsening still has to file (`Remaining`) stay — that is real work for a tag namespace.
+		h.Retopic, h.RetopicClaims, h.Retopiced, h.OffShelf = 0, 0, 0, 0
+	}
 	h.BroadTokens = len(broad)
 	h.BroadTokensLearned = len(vocab.BroadTokens) > 0
 	h.NearDuplicates, h.OversizedFamilies, h.OversizedNames = nearDuplicates(observed, broad)
@@ -309,13 +329,15 @@ func (uc Vocabulary) health(observed []partialentities.NameUses, vocab entities.
 //     the model passed over is judged, so it is not asked again in bulk.
 //   - retopic: what the RETOPIC pass still asks — outside the shelf, not absorbed, not yet re-derived
 //     claim by claim. It includes the judged names: "the shelf cannot cover this name" is exactly the
-//     case where the CLAIMS have to be looked at one by one.
+//     case where the CLAIMS have to be looked at one by one. retopicClaims is the same queue in CLAIMS:
+//     the progress measure of an automatic pass, which can spend a whole budget inside one name.
 //   - offShelf: the claim MASS still outside the shelf. It is the honest distance to the invariant
 //     ("every claim's topic is on the shelf") and the only number that says whether the corpus moved.
 type tailState struct {
-	remaining int
-	retopic   int
-	offShelf  int
+	remaining     int
+	retopic       int
+	retopicClaims int
+	offShelf      int
 }
 
 // tailStateOf counts the tail once, from sets built for the whole catalog.
@@ -353,6 +375,7 @@ func tailStateOf(observed []partialentities.NameUses, vocab entities.Vocabulary)
 			continue
 		}
 		st.retopic++
+		st.retopicClaims += o.Uses
 		if !judged[o.Name] {
 			st.remaining++
 		}

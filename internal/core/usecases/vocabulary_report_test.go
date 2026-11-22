@@ -215,6 +215,9 @@ func TestRemainingSkipsJudgedNames(t *testing.T) {
 	if got.Retopic != 2 {
 		t.Errorf("retopic = %d, want the 2 names outside the shelf", got.Retopic)
 	}
+	if got.RetopicClaims != 3 {
+		t.Errorf("retopic_claims = %d, want the 3 claims those names carry", got.RetopicClaims)
+	}
 	if got.OffShelf != 3 {
 		t.Errorf("off_shelf = %d, want the 3 claims still carrying a fine name", got.OffShelf)
 	}
@@ -222,8 +225,9 @@ func TestRemainingSkipsJudgedNames(t *testing.T) {
 	// the two numbers measure different things and only one of them can reach zero by asking.
 	vocab.Relabelled = []string{"moral-psychology"}
 	got = uc.health(observed, vocab, entities.VocabularyTopics)
-	if got.Retopic != 1 || got.OffShelf != 3 {
-		t.Errorf("retopic/off_shelf = %d/%d, want 1/3 after the pass", got.Retopic, got.OffShelf)
+	if got.Retopic != 1 || got.RetopicClaims != 2 || got.OffShelf != 3 {
+		t.Errorf("retopic/retopic_claims/off_shelf = %d/%d/%d, want 1/2/3 after the pass",
+			got.Retopic, got.RetopicClaims, got.OffShelf)
 	}
 }
 
@@ -250,8 +254,21 @@ func TestHealthJudgesTopicsByShare(t *testing.T) {
 		t.Errorf("thin = %d/%d, want the singleton alone", got.Thin, got.ThinUses)
 	}
 
-	wiki := uc.health(observed, entities.Vocabulary{Namespace: entities.VocabularyWikiTags}, entities.VocabularyWikiTags)
+	// The claim-level queue is a TOPICS concept. A tag namespace with names outside its shelf reports
+	// the names it still has to file, but no "claims to re-derive" and no "claims off the shelf": a
+	// tag's uses are not claims, and nothing re-derives a tag from a claim.
+	wiki := uc.health(observed, entities.Vocabulary{
+		Namespace: entities.VocabularyWikiTags,
+		Shelf:     []string{"caching"},
+	}, entities.VocabularyWikiTags)
 	if wiki.CatchAll != 0 || wiki.Thin != 0 {
 		t.Errorf("tag namespaces are not judged by share: catch-all %d thin %d", wiki.CatchAll, wiki.Thin)
+	}
+	if wiki.Remaining == 0 {
+		t.Error("a tag name outside the shelf is still coarsening work")
+	}
+	if wiki.Retopic != 0 || wiki.RetopicClaims != 0 || wiki.Retopiced != 0 || wiki.OffShelf != 0 {
+		t.Errorf("the claim queue leaked into a tag namespace: retopic %d/%d relabelled %d off-shelf %d",
+			wiki.Retopic, wiki.RetopicClaims, wiki.Retopiced, wiki.OffShelf)
 	}
 }

@@ -85,7 +85,7 @@ runs (an edit over SSH), it says so.
 Two sets are writable. The **curated set** is shown unasked: language, the models and reasoning
 efforts, `openai.blocked_windows` (the derivation's UTC windows), the inbox / auto-distill / debounce
 knobs, parallel runs/queries/parts, the capture cadences, `browser.path`, OCR enable/languages, the
-vocabulary targets (`vocabulary.topics.max_names` 3,000, `.source_tags`/`.wiki_tags` 200) and the
+vocabulary shelf ceilings (`vocabulary.topics.max_names` 3,000, `.source_tags`/`.wiki_tags` 200) and the
 heap ceiling. The **Advanced** set is behind
 a reveal in the toolbar: the request and fetch timeouts, `openai.retries`/`retry_backoff`/
 `max_iterations`/`max_concurrent` (the calls in flight at once), `pipeline.audit_every` (one part in
@@ -120,9 +120,11 @@ DeepSeek's pair, `01:00-04:00` and `06:00-10:00`; write `[]` to derive around th
 process reads the list on every decision, and a call that is in flight when a window opens is cut at
 the boundary: its run says `aborted` (deferred, not failed), the work already derived is kept, and
 the opening resumes it. While a window is closed the Status lens says so and names the opening, and
-a pressed derivation answers `409` with that instant. The instants are always UTC — the provider's
+a pressed derivation answers `409` with that instant. The windows are always UTC — the provider's
 clock, not the reader's zone — and the knob is the MACHINE's (the provider's hours are not a property
-of the vault, so it does not travel in `vault.yaml`).
+of the vault, so it does not travel in `vault.yaml`). The Status note shows that instant in the
+reader's local zone (the browser's): the server keeps the instant in UTC and the PWA formats it. The
+refusal text keeps UTC because it travels to logs and API clients, not to the lens.
 
 The rest stays read-only: `vault.*`, `index.*`, `server.addr`, `app.tray`/`autostart`,
 `openai.api_key`/`headers`/`base_url` (and their per-phase `_compile`/`_reason` pairs),

@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -88,6 +89,75 @@ func TestEnsureShelfBuildsTheMostUsedNames(t *testing.T) {
 	}
 }
 
+// TestEnsureShelfSortsTheCatalogByUses is the regression for the measured vault: the index answers in
+// alphabetical order, and a build that sliced that order produced a shelf of the alphabetically first
+// names — names that covered 38 % of the claims while the most used ones covered 82 %. The shelf must
+// be the most USED names, whatever order the catalog arrives in.
+func TestEnsureShelfSortsTheCatalogByUses(t *testing.T) {
+	store := newShelfVocab()
+	atoms := &shelfTopics{topics: []entities.TopicUse{
+		{Topic: "aardvark", Count: 1},
+		{Topic: "xenon", Count: 20},
+		{Topic: "yak", Count: 50},
+		{Topic: "zebra", Count: 90},
+	}}
+	uc := Vocabulary{Vocab: store, Atoms: atoms, Clock: shelfClock{}}
+
+	if _, err := uc.EnsureShelf(context.Background(), topicsTarget); err != nil {
+		t.Fatalf("ensure shelf: %v", err)
+	}
+	got := store.v[entities.VocabularyTopics].Shelf
+	want := []string{"zebra", "yak", "xenon"}
+	if !slices.Equal(got, want) {
+		t.Errorf("shelf = %v, want the most used names %v", got, want)
+	}
+}
+
+// TestEnsureShelfRebuildsAShelfFromTheOldRule: a shelf without `shelf_built:` was built from an
+// unsorted catalog. It cannot be repaired by a refit — it never held a real target — so it is rebuilt
+// once from the catalog as it is now. The verdicts made against the old names are dropped with it, or
+// the tail they closed would stay closed against a shelf it was never asked about.
+func TestEnsureShelfRebuildsAShelfFromTheOldRule(t *testing.T) {
+	store := newShelfVocab()
+	store.v[entities.VocabularyTopics] = entities.Vocabulary{
+		Namespace:  entities.VocabularyTopics,
+		Shelf:      []string{"aardvark", "abacus"},
+		Target:     2,
+		ShelfBuilt: 0,
+		Decided:    []string{"tail-001"},
+		Relabelled: []string{"tail-002"},
+		Absorbed:   map[string]string{"cache-strategies": "caching"},
+	}
+	atoms := &shelfTopics{topics: []entities.TopicUse{
+		{Topic: "aardvark", Count: 1},
+		{Topic: "xenon", Count: 20},
+		{Topic: "yak", Count: 50},
+		{Topic: "zebra", Count: 90},
+	}}
+	uc := Vocabulary{Vocab: store, Atoms: atoms, Clock: shelfClock{}}
+
+	res, err := uc.EnsureShelf(context.Background(), topicsTarget)
+	if err != nil {
+		t.Fatalf("ensure shelf: %v", err)
+	}
+	if !slices.Equal(res.Rebuilt, []string{string(entities.VocabularyTopics)}) {
+		t.Fatalf("rebuilt = %v, want topics", res.Rebuilt)
+	}
+	got := store.v[entities.VocabularyTopics]
+	if !slices.Equal(got.Shelf, []string{"zebra", "yak", "xenon"}) {
+		t.Errorf("shelf = %v, want the most used names", got.Shelf)
+	}
+	if got.ShelfBuilt != shelfBuildVersion {
+		t.Errorf("shelf_built = %d, want %d", got.ShelfBuilt, shelfBuildVersion)
+	}
+	if len(got.Decided) != 0 || len(got.Relabelled) != 0 {
+		t.Errorf("the old verdicts survived the rebuild: decided=%v relabelled=%v", got.Decided, got.Relabelled)
+	}
+	if got.Absorbed["cache-strategies"] != "caching" {
+		t.Errorf("the alias table was lost: %v", got.Absorbed)
+	}
+}
+
 // TestEnsureShelfIsIdempotentAndDoesNotObserveTwice: the steady state is one file read. A shelf that
 // exists and fits is a record of a decision, so it is not rebuilt, and the catalog is not read again.
 func TestEnsureShelfIsIdempotentAndDoesNotObserveTwice(t *testing.T) {
@@ -124,10 +194,11 @@ func TestEnsureShelfIsIdempotentAndDoesNotObserveTwice(t *testing.T) {
 func TestEnsureShelfTrimsWhenTheTargetShrinks(t *testing.T) {
 	store := newShelfVocab()
 	store.v[entities.VocabularyTopics] = entities.Vocabulary{
-		Namespace: entities.VocabularyTopics,
-		Shelf:     []string{"caching", "compilers", "databases", "rare-name"},
-		Target:    4,
-		Absorbed:  map[string]string{},
+		Namespace:  entities.VocabularyTopics,
+		Shelf:      []string{"caching", "compilers", "databases", "rare-name"},
+		Target:     4,
+		ShelfBuilt: shelfBuildVersion,
+		Absorbed:   map[string]string{},
 	}
 	atoms := &shelfTopics{topics: []entities.TopicUse{
 		{Topic: "caching", Count: 40},

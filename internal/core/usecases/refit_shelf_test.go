@@ -419,6 +419,7 @@ func TestCoarsenReopensTheTailUnderANewRule(t *testing.T) {
 		Namespace:   entities.VocabularyTopics,
 		Shelf:       []string{"shelf-a", "shelf-b", "shelf-c"},
 		Target:      3,
+		ShelfBuilt:  shelfBuildVersion,
 		Absorbed:    map[string]string{},
 		BroadTokens: []string{"tail", "shelf"},
 		Decided:     []string{"shelf-a", "tail-001", "tail-002"},

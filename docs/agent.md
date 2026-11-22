@@ -294,8 +294,15 @@ order. It never writes a URL, never invents a hash and never answers the request
 - **The shelf of `topics` is built on its own.** A vault that predates the shelf has a catalog of tens
   of thousands of names and a target it never reached, and no other unit would build it: the curation
   merges synonyms, it cannot fix granularity (−4 % measured, ADR 0006). The reconcile tick therefore
-  writes `vocabulary/topics.md` with the shelf the target asks for — the most used names, no model, no
-  gate, no claim rewritten — and trims it when `vocabulary.topics.max_names` moves down. That is the
+  writes `vocabulary/topics.md` with the shelf the target asks for — the most used names of the
+  catalog as it is NOW, no model, no gate, no claim rewritten — and trims it when
+  `vocabulary.topics.max_names` moves down. The catalog is ordered by uses first (the index answers
+  alphabetically, and slicing that order is how a measured vault got a shelf of the alphabetically
+  first names covering 38 % of its claims instead of the most used names covering 82 %). The build
+  rule is VERSIONED (`shelf_built:`): a shelf that does not carry the current version is rebuilt
+  once, and the `Decided`/`Relabelled` verdicts made against its names are dropped with it, because
+  they were answers about a target that never was. The target is a CEILING: the share band decides
+  how many names are really usable, so a shelf may be smaller than `max_names`. That is the
   record the **derivation reads**: candidates come from the in-band shelf (ADR 0009), and a proposed name that is
   not on it is mapped onto the best fitting in-band shelf name at the write. The tag namespaces get no such build
   (their write path reads `Canonical`); their shelf comes with the coarsening.
@@ -327,9 +334,14 @@ order. It never writes a URL, never invents a hash and never answers the request
   `thought-keeper coarsen`) exists for tooling. A pass takes the one-at-a-time latch: a second one
   while it runs is a conflict, and the automatic shelf look and the curation stay out of its way.
 - **The shelf follows the corpus.** The derivation files new claims onto the shelf, so without a
-  refit the shelf could only shrink and a new subject could never appear. When a namespace has
-  nothing left to ask (no name to file, no claim to re-derive) the reconcile tick re-synthesizes its
-  shelf at most once per `vocabulary.shelf.refit_interval` (24h). A topic is judged by its SHARE of all
+  refit the shelf could only shrink and a new subject could never appear. The reconcile tick
+  re-synthesizes a namespace's shelf at most once per `vocabulary.shelf.refit_interval` (24h), and it
+  does so BEFORE the filing passes of that look. It is deterministic and rewrites no claim, so it may
+  run while a tail exists — waiting for "nothing left to ask" made it unreachable on the vault it
+  exists for: a shelf built under the wrong rule leaves a tail that can never settle (ADR 0009: the
+  shelf moves first, the corpus follows). It still does not churn with the coarsening inside one look,
+  because a refit that moved a shelf returns and the next tick re-reads the report and picks the pass
+  the corrected names need. A topic is judged by its SHARE of all
   claims (ADR 0009): a name above `vocabulary.shelf.max_share` (0.02) is a catch-all, one below
   `vocabulary.shelf.min_share` (0.0001) is thin. A catch-all or a thin name gives its slot up, even with
   free slots, and is never promoted; a name inside the band that carries at least `2×` the coldest slot
@@ -361,7 +373,13 @@ order. It never writes a URL, never invents a hash and never answers the request
   answered for yet, most used first, and a question takes **a hundred claims drawn from ANY of them**:
   the question is the claim's text, not the name it was filed under, and asking one name's seven
   claims at a time spent a call per name (45,000 calls for 341,000 claims on a measured vault, against
-  ~3,400 batch-wise). A name is recorded in `Relabelled` when its LAST claim has been asked, so a name
+  ~3,400 batch-wise). **Four questions are in flight** — the buffer holds one chunk per thread, and the
+  answers are applied in order; filling it to a single chunk was the measured bottleneck, because the
+  configured parallelism never applied. The pass measures its progress in **claims**, not names: one
+  large name can consume several passes without being settled, so a guard that watched the name count
+  stopped a queue that was visibly shrinking. An alias is only used when it lands ON the shelf; one
+  that points outside is chained to its shelf name or dropped, so the repair cannot re-file a claim
+  under the fine name it just left. A name is recorded in `Relabelled` when its LAST claim has been asked, so a name
   that legitimately stays fine is a remainder the report shows, never a question that comes back on
   every cycle. It does NOT rewrite the vocabulary record — the shelf, the alias table and the judged
   names are decisions. A vault without a shelf keeps the oldest-first repair (`updated_at, id`), where
@@ -405,7 +423,9 @@ order. It never writes a URL, never invents a hash and never answers the request
   run row says `aborted` with `deferred: the model window is closed until …` (not `failed`) and
   everything already derived is kept. One wake is armed for the opening and resumes the pump, the
   summary/tag backfills, the vocabulary check and the wiki pages whose tagging waited. The default
-  is DeepSeek's `01:00-04:00` and `06:00-10:00`; an explicit empty list means around the clock.
+  is DeepSeek's `01:00-04:00` and `06:00-10:00`; an explicit empty list means around the clock. The
+  Status note shows the opening in the reader's local time (the browser's zone); the ranges
+  themselves stay UTC.
 - **Think less where thinking buys nothing.** `reasoning_effort_compile` and
   `reasoning_effort_distill` default to `minimal`; `reasoning_effort_reason` too.
 - **`reasoning_content` is echoed even when empty.** A thinking endpoint rejects a conversation

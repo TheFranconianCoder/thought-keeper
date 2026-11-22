@@ -57,3 +57,26 @@ count work.
   proposal still maps onto that candidate. Without that the outside tail would grow without a bound
   between two refits. This is the only place a claim is moved onto an existing name for the count, and it
   is an in-band one.
+
+## Addendum (2026-11-22): the build order and the refit's place in the queue
+
+Two defects in the implementation, not in the rule:
+
+- **The shelf was built from an unsorted catalog.** `ListClaimTopics` answers alphabetically, and the
+  build sliced the first `max_names` of that order. A measured vault therefore held the alphabetically
+  first 3,000 names (`10000-hour-rule … animal-feed-composition`), which covered 38 % of its claims,
+  while the most used 3,000 covered 82 %. The catalog is now ordered by uses before any head is taken,
+  and the build rule is versioned in the record (`shelf_built:`). A shelf without the current version
+  is rebuilt once; `Decided` and `Relabelled` are dropped with it, because their verdicts were made
+  against names that were never a target.
+- **The refit was gated behind a settled tail.** "The shelf moves first, the corpus follows" was
+  implemented as `tail == 0 && retopic == 0`, which is unreachable on the vault the refit exists for:
+  a wrong shelf leaves a tail that cannot settle. The refit now runs when its interval is due, before
+  the filing passes of the same look. It still returns after a move so the next look reads the report
+  of the new shelf; the coarsening does not chase a target that is moving inside one look.
+
+Also recorded: the target is a ceiling, not a quota. With `min_share` at `0.0001` a 419,541-claim
+vault has 721 in-band names, so a 3,000-name shelf cannot be populated from in-band names; the refit
+keeps the band and the shelf is honestly smaller. The retopic pass measures its progress in claims,
+not names, because one large name can take several passes; and an alias is only applied when it lands
+on the shelf, so the repair cannot re-file a claim under the fine name it just left.

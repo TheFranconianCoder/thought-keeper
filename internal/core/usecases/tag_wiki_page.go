@@ -57,7 +57,7 @@ func (uc Vocabulary) TagPage(ctx context.Context, id ulid.ULID) (TagResult, erro
 	defer cancel()
 	resp, err := uc.Gateway.Complete(callCtx, interfaces.AgentRequest{
 		Model:           uc.Model,
-		ReasoningEffort: "minimal",
+		ReasoningEffort: "none",
 		Messages: []interfaces.AgentMessage{
 			{Role: "system", Content: agents.WikiTagsSystem},
 			{Role: "user", Content: prompt},

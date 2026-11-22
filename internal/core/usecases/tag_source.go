@@ -64,7 +64,7 @@ func (uc Vocabulary) TagSource(ctx context.Context, runID ulid.ULID, hash string
 		defer cancel()
 		resp, cErr := uc.Gateway.Complete(callCtx, interfaces.AgentRequest{
 			Model:           uc.Model,
-			ReasoningEffort: "minimal",
+			ReasoningEffort: "none",
 			Messages: []interfaces.AgentMessage{
 				{Role: "system", Content: agents.SourceTagsSystem},
 				{Role: "user", Content: agents.SourceTagsUser(src.Title, sample, strings.Join(known, "\n"))},

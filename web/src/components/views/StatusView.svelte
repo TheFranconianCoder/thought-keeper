@@ -27,8 +27,8 @@
   const repairPercent = $derived(
     repair && repair.total > 0 ? Math.min(100, Math.round((repair.done / repair.total) * 100)) : 0,
   );
-  // The derivation's model window. The instants are UTC (the knob's clock), so the note names the
-  // opening in UTC instead of pretending the reader's zone was meant.
+  // The derivation's model window. The window is configured in UTC, but the reader thinks in their
+  // own clock: the opening is named in the browser's local zone, which needs no server setting.
   const modelWindowClosed = $derived(system.pipeline?.model_window?.closed === true);
   const modelWindowNote = $derived.by(() => {
     const iso = system.pipeline?.model_window?.opens_at;
@@ -36,11 +36,7 @@
     const parsed = Date.parse(iso);
     const time = Number.isNaN(parsed)
       ? iso
-      : `${new Date(parsed).toLocaleTimeString(i18n.locale, {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'UTC',
-        })} UTC`;
+      : new Date(parsed).toLocaleTimeString(i18n.locale, { hour: '2-digit', minute: '2-digit' });
     return t('status.modelWindowNote', { time });
   });
 
@@ -361,10 +357,10 @@
                 ({n(Math.round(vocab.singleton_share * 100))}%) · {t('status.vocabTop', { pct: Math.round(vocab.coverage * 100) })}
                 {#if vocab.target}· {t('status.vocabShelf', { shelf: vocab.shelf, target: vocab.target })}{/if}
                 {#if vocab.shelf && vocab.remaining}· {t('status.vocabRemaining', { count: n(vocab.remaining) })}{/if}
-                {#if vocab.shelf && vocab.retopic}· {t('status.vocabRetopic', { count: n(vocab.retopic) })}{/if}
+                {#if vocab.shelf && vocab.retopic}· {t('status.vocabRetopic', { names: n(vocab.retopic), claims: n(vocab.retopic_claims) })}{/if}
                 {#if vocab.shelf && vocab.off_shelf}· {t('status.vocabOffShelf', { count: n(vocab.off_shelf) })}{/if}
-                {#if vocab.catch_all}· {t('status.vocabCatchAll', { count: n(vocab.catch_all) })}{/if}
-                {#if vocab.thin}· {t('status.vocabThin', { count: n(vocab.thin) })}{/if}
+                {#if vocab.catch_all}· {t('status.vocabCatchAll', { count: n(vocab.catch_all), claims: n(vocab.catch_all_uses) })}{/if}
+                {#if vocab.thin}· {t('status.vocabThin', { count: n(vocab.thin), claims: n(vocab.thin_uses) })}{/if}
                 {#if vocab.canonical || vocab.absorbed}· {t('status.vocabCanonical', { canonical: vocab.canonical, absorbed: vocab.absorbed })}{/if}
                 {#if vocab.new?.length}· <b>{t('status.vocabNew', { count: vocab.new.length })}</b>{/if}
               </div>
