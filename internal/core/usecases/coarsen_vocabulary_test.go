@@ -8,7 +8,7 @@ import (
 )
 
 // TestShelfForBatchIsNarrowed: the prompt must carry the shelf HEAD plus the names that share a word
-// with the batch — not all 3,000 names for every 600 filed ones.
+// with the batch — not all 1,000 names for every 600 filed ones.
 func TestShelfForBatchIsNarrowed(t *testing.T) {
 	shelf := []string{"caching", "kubernetes", "llm-agents", "databases", "testing"}
 	index := map[string][]string{}

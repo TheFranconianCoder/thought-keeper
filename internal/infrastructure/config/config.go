@@ -202,7 +202,7 @@ type PipelineConfig struct {
 
 // VocabularyConfig holds the TARGETS of the name vocabularies. A vocabulary is a shelf: it has a
 // size a reader can still navigate, and the derivation resolves every new name against it. A value
-// of zero (or below) uses the default of 3,000 topics and 200 tags.
+// of zero (or below) uses the default of 1,000 topics and 200 tags.
 type VocabularyConfig struct {
 	Topics     VocabularyNamespaceConfig `yaml:"topics"`
 	SourceTags VocabularyNamespaceConfig `yaml:"source_tags"`
@@ -455,9 +455,10 @@ func Defaults() Config {
 			ReconcileInterval: "1m", ReconcileBatch: 500,
 		},
 		Vocabulary: VocabularyConfig{
-			// A shelf of 3,000 claim topics and 200 source tags is navigable and still specific.
-			// The measured vault grew to 57,181 topics because nothing bounded it.
-			Topics:     VocabularyNamespaceConfig{MaxNames: 3000},
+			// A shelf of 1,000 claim topics and 200 source tags is navigable and still specific.
+			// The measured vault grew to 57,181 topics because nothing bounded it, and its share band
+			// (ADR 0009) only filled ~700 of a 3,000 target, so the ceiling never bound (ADR 0010).
+			Topics:     VocabularyNamespaceConfig{MaxNames: 1000},
 			SourceTags: VocabularyNamespaceConfig{MaxNames: 200},
 			WikiTags:   VocabularyNamespaceConfig{MaxNames: 200},
 			// The coarsening runs by itself and hands the gate back every quarter of an hour: the

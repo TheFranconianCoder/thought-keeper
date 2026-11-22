@@ -343,7 +343,7 @@ Answer with ONLY a JSON object, no prose and no code fence:
 {"mapping":{"the finer name":"the shelf name"}}`
 
 // ShelfUser hands over the shelf and one batch of names. The shelf is filtered per batch by the
-// caller, so a 3,000-name shelf is not re-sent in full for every 600 names.
+// caller, so a 1,000-name shelf is not re-sent in full for every 600 names.
 func ShelfUser(shelf, names []string) string {
 	var b strings.Builder
 	b.WriteString("The shelf (assign to one of these):\n")

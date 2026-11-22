@@ -27,6 +27,14 @@ task.
 topic). The association is context for the answer, and the ids let the model read a peer in full if
 it needs the body. A claim body carries no links; the cluster is the association.
 
+`list_topics` reads the **shelf**, not the live catalog: the bounded names the claims may be filed
+under (`vocabulary/<namespace>.md`), judged by the share band and ordered most used first. The names
+the question itself resolves onto come first and carry `matches_question`, so an orientation question
+gets the subjects it names instead of a slice of the alphabet. The answer is a **head** of the shelf
+(80 entries at most), never the whole catalog: the loop cuts a tool answer at 6 000 bytes, and an
+unfiltered catalog was once answered as a truncated JSON array. A vault that has not built a shelf yet
+(its catalog is below the target) is answered from the catalog, unfiltered.
+
 `list_sources` reads a **recency window**: the newest content sources by vault arrival
 (`imported_at`), with a short excerpt of each overview. It is **paged**: a page carries
 `next_offset`, and the model asks for the next page with `offset` until the window is read.
@@ -279,7 +287,7 @@ order. It never writes a URL, never invents a hash and never answers the request
 ## 6. Vocabulary verbs
 
 - **The topic is a SHELF** (`docs/adr/0006-the-topic-is-a-shelf.md`): a namespace carries a bounded
-  set of names (`vocabulary.topics.max_names`, default 3,000; `vocabulary.source_tags.max_names`,
+  set of names (`vocabulary.topics.max_names`, default 1,000; `vocabulary.source_tags.max_names`,
   default 200). The write resolves every proposed name onto it, so the catalog cannot grow with the
   corpus; the units below only keep it healthy inside the shelf.
 - **`POST /vocabulary/curate`** observes all three namespaces (`topics`, `wiki-tags`, `source-tags`), asks the model

@@ -29,6 +29,12 @@ type Query struct {
 	// without a vault; the tools then report that the source side is not configured.
 	Index interfaces.IndexRepository
 	Store interfaces.SourceStore
+	// Vocab reads the topic SHELF `list_topics` orients the agent on. Nil (a unit test, or a vault
+	// without a vocabulary record) falls back to the observed catalog.
+	Vocab interfaces.VocabularyStore
+	// TopicShelf judges a shelf name by its share of all claims (vocabulary.shelf.max_share /
+	// min_share): the orientation never shows a catch-all or a thin name.
+	TopicShelf ShelfLimits
 	// Asks persists every successful question/answer in the vault. Nil means no persistence (a
 	// unit test or an embedding without a vault).
 	Asks    interfaces.AskStore
@@ -85,27 +91,40 @@ func (uc Query) AskScoped(ctx context.Context, runID ulid.ULID, question, source
 	tools := []agents.Tool{
 		{
 			Def: interfaces.AgentToolDef{
-				Name:        "list_topics",
-				Description: "List the most used claim topics with their claim counts (a shelf, not the whole catalog).",
-				Parameters:  json.RawMessage(`{"type":"object","properties":{}}`),
+				Name: "list_topics",
+				Description: "List the claim TOPICS of the shelf: the bounded names the vault files claims under, " +
+					"most used first, each with its claim count. The names the question itself resolves onto " +
+					"come first and carry `matches_question`; the list is a head of the shelf, not the whole " +
+					"catalog. Use it to learn which subjects the vault actually has.",
+				Parameters: json.RawMessage(`{"type":"object","properties":{}}`),
 			},
 			Run: func(ctx context.Context, _ json.RawMessage) (string, error) {
-				topics, err := uc.Atoms.ListClaimTopics(ctx)
+				digest, err := uc.topicDigest(ctx, question)
 				if err != nil {
 					return "", err
 				}
-				// The catalog is a shelf of thousands of names; the whole list is ~90 kB and the loop
-				// cuts a tool answer at 6 kB, so an unfiltered answer was a truncated JSON array. The
-				// most used names are what an orientation question is asking for.
-				const topTopics = 120
-				if len(topics) > topTopics {
-					topics = topics[:topTopics]
+				// The row count already bounds the head, but a shelf's names have no length bound: the
+				// encoder is asked for each row and the array stops at the byte budget, so a vault of
+				// long slugs can never hand the loop an array it would truncate mid-JSON.
+				const digestBudget = 5000
+				rows := make([]json.RawMessage, 0, len(digest))
+				used := 2 // the brackets of the array
+				for _, e := range digest {
+					row := map[string]any{"topic": e.Topic, "claims": e.Claims}
+					if e.Matched {
+						row["matches_question"] = true
+					}
+					raw, marshalErr := json.Marshal(row)
+					if marshalErr != nil {
+						return "", marshalErr
+					}
+					if used+len(raw)+1 > digestBudget && len(rows) > 0 {
+						break
+					}
+					used += len(raw) + 1
+					rows = append(rows, raw)
 				}
-				m := make([]map[string]any, 0, len(topics))
-				for _, t := range topics {
-					m = append(m, map[string]any{"topic": t.Topic, "claims": t.Count})
-				}
-				out, marshalErr := json.Marshal(m)
+				out, marshalErr := json.Marshal(rows)
 				if marshalErr != nil {
 					return "", marshalErr
 				}

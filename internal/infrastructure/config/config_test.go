@@ -39,6 +39,9 @@ func TestShelfQualityDefaults(t *testing.T) {
 	if cfg.Vocabulary.Shelf.MaxShare != 0.02 || cfg.Vocabulary.Shelf.MinShare != 0.0001 {
 		t.Errorf("shelf shares = %v/%v, want 0.02/0.0001", cfg.Vocabulary.Shelf.MaxShare, cfg.Vocabulary.Shelf.MinShare)
 	}
+	if cfg.Vocabulary.Topics.MaxNames != 1000 {
+		t.Errorf("topics target = %d, want 1000 (ADR 0010)", cfg.Vocabulary.Topics.MaxNames)
+	}
 	c := Defaults()
 	c.Vocabulary.Shelf.MaxShare = 0
 	c.Vocabulary.Shelf.MinShare = -1

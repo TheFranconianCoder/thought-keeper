@@ -624,7 +624,7 @@ func (uc Vocabulary) mergeFamilies(ctx context.Context, groups []partialentities
 }
 
 // shelfForBatch narrows the shelf to what can matter for one batch: the names that share a word with
-// it, plus the most used head. Sending all 3,000 for every 600 names would triple the prompt for no
+// it, plus the most used head. Sending all 1,000 for every 600 names would triple the prompt for no
 // decision it does not already have.
 func shelfForBatch(batch, head []string, index map[string][]string, limit int) []string {
 	seen := make(map[string]bool, limit)

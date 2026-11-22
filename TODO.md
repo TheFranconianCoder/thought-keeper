@@ -94,9 +94,11 @@ are.
     effect. The follow-up is the topics treatment: prefer the shelf when one exists, and map a
     proposed tag onto the nearest shelf name — it changes the tag prompt's contract, not just a
     lookup.
-16. **Ask reads the live top 120 topics, not the shelf.** `list_topics` (query_knowledge.go) lists the
-    most used claim topics, so a shelf name with few claims is invisible to Ask and an outlier with many
-    is shown. Ask should read the in-band shelf and resolve the question's terms onto it.
+16. **The assistant's topic digest reads the live catalog, not the shelf.** `topTopics`
+    (command_run.go) sorts the catalog by uses — so it is not alphabetical, unlike `list_topics` was —
+    but it still offers a catch-all the refit has not evicted and hides a shelf name that carries few
+    claims. The `Commands` use case already holds the vocabulary record (`Vocab`) and the band
+    (`TopicShelf`), so the fix is the same read `list_topics` now does.
 
 ## Open design questions
 

@@ -182,3 +182,11 @@ limits are relative to the corpus. See [ADR 0009](0009-a-topic-is-judged-by-its-
 
 The write path is no longer "deliberately NOT changed" in one respect: its candidates and mappings are
 in band (ADR 0009). It still never forces a claim onto a name the text does not support.
+
+## Addendum (2026-11-22): the target is 1,000
+
+A measured vault filled 698 of a 3,000-name target, because the share band — not the ceiling — decides
+how many names are usable. The default target is 1,000 (a navigable size, still a ceiling rather than a
+quota), the three ceilings are writable in the Config overlay, and `list_topics` orients Ask on the shelf
+instead of on the alphabetical head of the live catalog. See
+[ADR 0010](0010-the-target-is-1000-and-ask-reads-the-shelf.md).

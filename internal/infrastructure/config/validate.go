@@ -58,14 +58,19 @@ var writableKeys = map[string]string{
 	"app.memory_limit_mb":             TierBasic,
 
 	// Vocabulary: the automatic coarsening. "On" is housekeeping, the budget is how long one pass
-	// may hold the gate before it hands it back.
-	"vocabulary.coarsen.automatic":    TierBasic,
-	"vocabulary.retopic.automatic":    TierBasic,
-	"vocabulary.coarsen.budget":       TierAdvanced,
-	"vocabulary.retopic.budget":       TierAdvanced,
-	"vocabulary.shelf.refit_interval": TierAdvanced,
-	"vocabulary.shelf.max_share":      TierAdvanced,
-	"vocabulary.shelf.min_share":      TierAdvanced,
+	// may hold the gate before it hands it back. The three ceilings are vault-scoped settings a
+	// reader retunes when a shelf is too coarse or too fine for the way they browse; a target that
+	// moves down trims the shelf on the next look.
+	"vocabulary.topics.max_names":      TierBasic,
+	"vocabulary.source_tags.max_names": TierBasic,
+	"vocabulary.wiki_tags.max_names":   TierBasic,
+	"vocabulary.coarsen.automatic":     TierBasic,
+	"vocabulary.retopic.automatic":     TierBasic,
+	"vocabulary.coarsen.budget":        TierAdvanced,
+	"vocabulary.retopic.budget":        TierAdvanced,
+	"vocabulary.shelf.refit_interval":  TierAdvanced,
+	"vocabulary.shelf.max_share":       TierAdvanced,
+	"vocabulary.shelf.min_share":       TierAdvanced,
 
 	// Agent: patience with one endpoint, not a different endpoint.
 	"openai.timeout":        TierAdvanced,

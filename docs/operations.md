@@ -85,7 +85,7 @@ runs (an edit over SSH), it says so.
 Two sets are writable. The **curated set** is shown unasked: language, the models and reasoning
 efforts, `openai.blocked_windows` (the derivation's UTC windows), the inbox / auto-distill / debounce
 knobs, parallel runs/queries/parts, the capture cadences, `browser.path`, OCR enable/languages, the
-vocabulary shelf ceilings (`vocabulary.topics.max_names` 3,000, `.source_tags`/`.wiki_tags` 200),
+vocabulary shelf ceilings (`vocabulary.topics.max_names` 1,000, `.source_tags`/`.wiki_tags` 200),
 `vocabulary.coarsen.automatic` and `vocabulary.retopic.automatic` (the reduction to the shelf runs by
 itself) and the heap ceiling. The **Advanced** set is behind
 a reveal in the toolbar: the request and fetch timeouts, `openai.retries`/`retry_backoff`/

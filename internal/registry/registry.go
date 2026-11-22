@@ -410,7 +410,9 @@ func Build(
 	query := usecases.Query{
 		Atoms: atomRepo, Clusters: clusterRepo, Lexical: searchRepo, Index: index, Store: store,
 		Asks: askStore, Runs: runRepo,
-		Model: cfg.OpenAI.ModelReason, MaxIterations: cfg.OpenAI.MaxIterations,
+		Vocab:      vocabStore,
+		TopicShelf: usecases.ShelfLimits{MaxShare: cfg.Vocabulary.Shelf.MaxShare, MinShare: cfg.Vocabulary.Shelf.MinShare},
+		Model:      cfg.OpenAI.ModelReason, MaxIterations: cfg.OpenAI.MaxIterations,
 		ReasoningEffort: cfg.OpenAI.ReasoningEffortReason, Clock: clock, Log: log,
 	}
 	claims.CommandStore = commandStore

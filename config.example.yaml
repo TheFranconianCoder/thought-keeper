@@ -130,9 +130,11 @@ vocabulary:                                # the TARGETS of the name vocabularie
                                            # catalog cannot grow with the corpus. A coarsening pass files
                                            # an existing long tail onto it (POST /vocabulary/coarsen).
   topics:
-    max_names: 3000                        # the CEILING of claim topics (a vault that was never bounded
+    max_names: 1000                        # the CEILING of claim topics (a vault that was never bounded
                                            # reached 57k). The share band below decides how many names are
-                                           # usable, so the shelf may be smaller than this.
+                                           # usable, so the shelf may be smaller than this — a measured
+                                           # 420k-claim vault filled 696 of 3,000 slots, so the ceiling
+                                           # is a navigable size, not a quota (ADR 0010).
   source_tags:
     max_names: 200                         # the shelf a source is filed under in the Sources list
   wiki_tags:
