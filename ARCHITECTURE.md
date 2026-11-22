@@ -490,8 +490,10 @@ The endpoint surface is in **`docs/api.md`**.
   `ocr: true` marker so the provenance is honest about a lossy extraction.
 - **Everything is recorded.** Every run writes a `runs` row; every tool call writes a `run_steps`
   row. Audit tables are append-only and are not rebuilt by `reindex`.
-- **The loop is bounded.** `max_iterations` and a per-op timeout are config; hitting the bound is
-  a recorded failure.
+- **The loop is bounded.** The derivation uses `openai.max_iterations` (clamped to 6–14 per part);
+  Ask has its own `ask.max_iterations` (32) because a question may be several subjects. Both bounds
+  end with a final answer from what was read and record the run as `truncated`; a per-operation
+  timeout remains the outer wall.
 - **No silent writes.** Agent Markdown is rendered through the same codecs as any other write.
   Output that fails to decode is a recorded failure with the raw output retained.
 - **Citations are mandatory.** A query answer references the claims it used as

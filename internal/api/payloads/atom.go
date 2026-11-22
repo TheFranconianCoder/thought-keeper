@@ -106,6 +106,9 @@ type Run struct {
 	CompletionTokens int    `json:"completion_tokens"`
 	TotalTokens      int    `json:"total_tokens"`
 	Iterations       int    `json:"iterations"`
+	// Truncated says the run answered from what it had read because its research budget was spent.
+	// The answer is partial, not failed.
+	Truncated bool `json:"truncated,omitempty"`
 	// Question is what a QUERY run was asked.
 	Question  string    `json:"question,omitempty"`
 	Answer    string    `json:"answer,omitempty"`

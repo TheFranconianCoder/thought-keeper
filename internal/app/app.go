@@ -3679,7 +3679,8 @@ func (a *App) runOne(job runJob) {
 			a.log.Warn("query failed", "run", run, "err", err)
 			return
 		}
-		a.log.Info("query done", "run", run, "iterations", res.Iterations, "tokens", res.TotalTokens)
+		a.log.Info("query done", "run", run, "iterations", res.Iterations,
+			"tokens", res.TotalTokens, "truncated", res.Truncated)
 	case entities.RunLint:
 		a.publish("run", map[string]any{"run_id": run, "op": string(job.op), "step": string(job.step), "status": "running"})
 		res, err := a.deps().Lint.Check(ctx, job.runID)

@@ -79,6 +79,9 @@ var writableKeys = map[string]string{
 	"openai.max_iterations": TierAdvanced,
 	"openai.max_concurrent": TierAdvanced,
 
+	// Ask: the research budget of one question. The derivation keeps its own ceiling.
+	"ask.max_iterations": TierAdvanced,
+
 	// Pipeline: ceilings and background cadences.
 	"pipeline.run_timeout":        TierAdvanced,
 	"pipeline.cluster_timeout":    TierAdvanced,
@@ -249,6 +252,7 @@ var intRules = map[string]int64{
 	"pipeline.reconcile_batch":      1,
 	"openai.max_iterations":         1,
 	"openai.max_concurrent":         1,
+	"ask.max_iterations":            1,
 	"pipeline.audit_every":          1,
 	"openai.retries":                1,
 	"cluster.neighbor_k":            1,

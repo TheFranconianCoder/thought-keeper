@@ -17,6 +17,7 @@ type Config struct {
 	Vault    VaultConfig    `yaml:"vault"`
 	Index    IndexConfig    `yaml:"index"`
 	OpenAI   OpenAIConfig   `yaml:"openai"`
+	Ask      AskConfig      `yaml:"ask"`
 	Pipeline PipelineConfig `yaml:"pipeline"`
 	// Vocabulary holds the targets of the three name vocabularies.
 	Vocabulary VocabularyConfig `yaml:"vocabulary"`
@@ -158,6 +159,17 @@ type OpenAIConfig struct {
 	// failed turns. Zero means the default.
 	MaxConcurrent int               `yaml:"max_concurrent"`
 	Headers       map[string]string `yaml:"headers"`
+}
+
+// AskConfig is the research budget of one question. It is separate from openai.max_iterations
+// because the two operations bound different work: a derivation asks for the claims of ONE small
+// part (a couple of turns), while an answer may have to read several subjects and can reasonably
+// spend many more turns. The derivation's own clamp (6-14 per part) is unchanged.
+type AskConfig struct {
+	// MaxIterations is how many model turns one Ask may take. Each turn may call several tools, so
+	// this is a ceiling on the conversation, not on the number of searches. The run still ends with
+	// an answer when it is spent: the loop takes one final turn without tools.
+	MaxIterations int `yaml:"max_iterations"`
 }
 
 // PipelineConfig tunes the pipeline: the DOCUMENT steps (capture, outline, distill) run per source,
@@ -448,6 +460,9 @@ func Defaults() Config {
 			// into re-deriving a third of the work.
 			MaxConcurrent: 6,
 		},
+		// A question is research, not a lookup: a multi-part question spends several turns per
+		// subject. The derivation keeps openai.max_iterations (16), clamped to 6-14 per part.
+		Ask: AskConfig{MaxIterations: 32},
 		Pipeline: PipelineConfig{
 			Auto: true, AutoDistill: true, Debounce: "3s", RunTimeout: "10m", ClusterTimeout: "30m",
 			PartsPerRun: 12, AutoContinue: true, ParallelParts: 4, ParallelRuns: 4, ParallelQueries: 3,
@@ -629,6 +644,9 @@ func applyDefaults(c *Config) map[string]string {
 	}
 	if c.OpenAI.MaxConcurrent <= 0 {
 		c.OpenAI.MaxConcurrent = d.OpenAI.MaxConcurrent
+	}
+	if c.Ask.MaxIterations <= 0 {
+		c.Ask.MaxIterations = d.Ask.MaxIterations
 	}
 	if c.Pipeline.AuditEvery <= 0 {
 		c.Pipeline.AuditEvery = d.Pipeline.AuditEvery

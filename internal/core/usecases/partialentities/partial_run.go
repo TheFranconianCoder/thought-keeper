@@ -27,6 +27,8 @@ type PartialRun struct {
 	CompletionTokens int
 	TotalTokens      int
 	Iterations       int
+	// Truncated says the run answered from what it had read because its research budget was spent.
+	Truncated bool
 	// Question is what a QUERY run was asked (empty for other runs): the Ask view shows it beside the
 	// answer, and filing the answer keeps it.
 	Question  string

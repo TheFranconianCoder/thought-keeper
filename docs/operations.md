@@ -89,7 +89,8 @@ vocabulary shelf ceilings (`vocabulary.topics.max_names` 1,000, `.source_tags`/`
 `vocabulary.coarsen.automatic` and `vocabulary.retopic.automatic` (the reduction to the shelf runs by
 itself) and the heap ceiling. The **Advanced** set is behind
 a reveal in the toolbar: the request and fetch timeouts, `openai.retries`/`retry_backoff`/
-`max_iterations`/`max_concurrent` (the calls in flight at once), `pipeline.audit_every` (one part in
+`max_iterations`/`max_concurrent` (the calls in flight at once), `ask.max_iterations` (the turns one
+answer may take: 32 by default, separate from the derivation's ceiling), `pipeline.audit_every` (one part in
 n is read against its claims), the run/cluster ceilings, `auto_continue`, the reconcile cadence and batch, the
 capture thresholds, the whole `cluster.*` arithmetic, the assistant retention/prune/limits, the
 browser switches, the PDF/OCR tools and page ceilings, `app.smart_open`, the shelf's share limits

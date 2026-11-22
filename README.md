@@ -430,7 +430,8 @@ imports OpenAI.
 - A cheap model does the mechanical work (naming, claims, tags, summaries, vocabulary); the strong
   model answers questions and reasons about health. Reasoning effort is per operation and configurable.
 - The conversation stays bounded: capped tool results, elided old results, iteration limits and
-  per-operation timeouts. Hitting a bound is a recorded failure, not a silent stop.
+  per-operation timeouts. Ask has its own research budget (`ask.max_iterations`, 32) and a spent
+  budget still answers from what was read: the run is marked `truncated`, never silently cut short.
 - Every run is audited (model, tokens, iterations, answer, error) and every source has its own log.
 
 More: [`docs/agent.md`](docs/agent.md).

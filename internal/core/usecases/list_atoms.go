@@ -134,6 +134,7 @@ func (uc Runs) Get(ctx context.Context, id ulid.ULID) (partialentities.PartialRu
 		CompletionTokens: r.CompletionTokens,
 		TotalTokens:      r.TotalTokens,
 		Iterations:       r.Iterations,
+		Truncated:        r.Truncated,
 		Question:         r.Question,
 		Answer:           r.Answer,
 		Error:            r.Error,

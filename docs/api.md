@@ -88,7 +88,7 @@ the stable `WikiHash`); topics by name.** Long operations return a run id.
 | `DELETE` | `/api/v1/commands/{id}` | Move one command to `.trash/commands/` |
 | `POST` | `/api/v1/lint` | Run lint → `202 {run_id}` |
 | `GET` | `/api/v1/lint/findings` | Lint findings |
-| `GET` | `/api/v1/runs/{id}` | Run status, tokens, steps, answer, question |
+| `GET` | `/api/v1/runs/{id}` | Run status, tokens, steps, answer, question, and `truncated` (the run answered from what it had read because its research budget was spent; the answer is partial, not failed) |
 
 There is no list-all-runs endpoint; the UI follows the `run` events and the pipeline's `jobs`. A run
 is read by id.

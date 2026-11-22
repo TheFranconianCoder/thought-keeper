@@ -78,6 +78,12 @@ type Loop struct {
 	// consumed when they arrived.
 	MaxToolResult   int
 	MaxHistoryChars int
+
+	// WrapUpReserve is how much of the run's remaining time is kept for the final answer. When
+	// the context deadline is closer than this, the loop stops researching and takes the wrap-up
+	// turn instead of being cut off mid-call. Zero means the deadline is not consulted (the
+	// iteration ceiling is then the only bound).
+	WrapUpReserve time.Duration
 }
 
 const (
@@ -184,6 +190,18 @@ func (l Loop) Run(ctx context.Context, userMessage string) (Result, error) {
 		wasTruncated  bool
 	)
 	for i := 1; i <= maxIter; i++ {
+		// A run has a wall-clock ceiling of its own (pipeline.run_timeout). Keep the last stretch
+		// of it for the answer: a turn that starts too late is cut off, and a cut-off call loses
+		// the answer. The iteration ceiling is the other bound; both end the same way.
+		if l.WrapUpReserve > 0 {
+			if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= l.WrapUpReserve {
+				res, err := l.wrapUp(ctx, msgs, usage, elided, i-1, finishWhy, wasTruncated)
+				if err != nil {
+					return res, fmt.Errorf("run deadline reached before the answer: %w", err)
+				}
+				return res, nil
+			}
+		}
 		call := interfaces.AgentRequest{
 			Model: l.Model, Messages: msgs, Tools: defs, ReasoningEffort: l.ReasoningEffort,
 		}
@@ -266,35 +284,57 @@ func (l Loop) Run(ctx context.Context, userMessage string) (Result, error) {
 	// already read instead of the run dying with nothing.
 	//
 	// Hitting the cap is not a bug — a hard question needs many lookups — but FAILING because of it
-	// is: a partial answer that cites the pages it used is worth more than an error, and the run
+	// is: a partial answer that cites the claims it used is worth more than an error, and the run
 	// reports that it was cut short (Truncated) so nobody mistakes it for a finished one.
+	res, err := l.wrapUp(ctx, msgs, usage, elided, maxIter, finishWhy, wasTruncated)
+	if err != nil {
+		return res, fmt.Errorf("maxIter iterations (%d) reached", maxIter)
+	}
+	return res, nil
+}
+
+// wrapUp is the last turn: no tools, only the answer from what was already read. It is shared by
+// the iteration ceiling and the run's deadline, so a spent budget always ends the same way.
+func (l Loop) wrapUp(
+	ctx context.Context, msgs []interfaces.AgentMessage, usage Usage,
+	elided, iterations int, finishWhy string, wasTruncated bool,
+) (Result, error) {
 	msgs = append(msgs, interfaces.AgentMessage{Role: "user", Content: wrapUpPrompt})
 	final, err := l.Gateway.Complete(ctx, interfaces.AgentRequest{
 		Model: l.Model, Messages: msgs, ReasoningEffort: l.ReasoningEffort,
 	})
 	if l.OnTurn != nil {
-		l.OnTurn(maxIter+1, final, err)
+		l.OnTurn(iterations+1, final, err)
 	}
-	if err == nil {
-		usage.PromptTokens += final.PromptTokens
-		usage.CompletionTokens += final.CompletionTokens
-		usage.TotalTokens += final.TotalTokens
-		if answer := strings.TrimSpace(final.Message.Content); answer != "" {
-			return Result{
-				Content: answer, Iterations: maxIter + 1, Usage: usage, Elided: elided,
-				FinishReason: final.FinishReason, Truncated: true,
-			}, nil
-		}
+	if err != nil {
+		return Result{
+			Iterations: iterations, Usage: usage, Elided: elided,
+			FinishReason: finishWhy, Truncated: wasTruncated,
+		}, err
+	}
+	usage.PromptTokens += final.PromptTokens
+	usage.CompletionTokens += final.CompletionTokens
+	usage.TotalTokens += final.TotalTokens
+	answer := strings.TrimSpace(final.Message.Content)
+	if answer == "" {
+		return Result{
+			Iterations: iterations, Usage: usage, Elided: elided,
+			FinishReason: final.FinishReason, Truncated: wasTruncated,
+		}, fmt.Errorf("the wrap-up turn answered nothing")
 	}
 	return Result{
-		Iterations: maxIter, Usage: usage, Elided: elided, FinishReason: finishWhy, Truncated: wasTruncated,
-	}, fmt.Errorf("maxIter iterations (%d) reached", maxIter)
+		Content: answer, Iterations: iterations + 1, Usage: usage, Elided: elided,
+		FinishReason: final.FinishReason, Truncated: true,
+	}, nil
 }
 
 // wrapUpPrompt is the last turn's instruction: answer now, with what is already in hand. It is
-// deliberately blunt — a model that keeps wanting to look things up produces nothing.
-const wrapUpPrompt = "The tool budget for this run is spent. Answer NOW, in prose, using only what you have " +
-	"already read, and cite the pages you used as [[Page Title]]. Do not ask to call a tool again."
+// deliberately blunt — a model that keeps wanting to look things up produces nothing. The citation
+// form is the query prompt's, never a bare [[title]]: that one is a claim finder, not a citation.
+const wrapUpPrompt = "The research budget for this run is spent. Answer NOW, in prose and in the language of the " +
+	"question, using only what you have already read. Cite a claim as [[claim:<id>|<short claim text>]] and a " +
+	"source overview as [[source:<hash>|<source title>]]. If some part of the question stayed unread, say so " +
+	"in ONE short line and name what is open; do not invent an answer and do not ask to call a tool again."
 
 func (l Loop) call(ctx context.Context, call interfaces.AgentToolCall) (string, error) {
 	for _, t := range l.Tools {

@@ -58,6 +58,9 @@ type Run struct {
 	CompletionTokens int
 	TotalTokens      int
 	Iterations       int
+	// Truncated says the operation spent its budget (turns or time) and answered from what it had
+	// read. It is what keeps a partial answer from looking complete.
+	Truncated bool
 	// Question is what a QUERY run was asked (empty for every other run).
 	Question  string
 	Answer    string

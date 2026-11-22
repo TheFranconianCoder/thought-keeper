@@ -9,7 +9,7 @@ INSERT INTO runs (
 -- name: FinishRun :exec
 UPDATE runs SET
     status = ?, prompt_tokens = ?, completion_tokens = ?, total_tokens = ?,
-    iterations = ?, answer = ?, error = ?, ended_at = ?
+    iterations = ?, truncated = ?, answer = ?, error = ?, ended_at = ?
 WHERE id = ?;
 
 -- name: AbandonRunningRuns :exec

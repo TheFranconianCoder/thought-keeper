@@ -2,6 +2,7 @@ package usecases_test
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -126,6 +127,79 @@ func TestScopedQueryStaysInOneSource(t *testing.T) {
 		if tool.Name == "list_sources" || tool.Name == "list_topics" {
 			t.Errorf("scoped query was offered the vault-wide tool %q", tool.Name)
 		}
+	}
+}
+
+// TestQuerySpentBudgetIsRecorded: a run that spent its turns still answers, and the run says so.
+// The flag is what keeps a partial answer from looking complete in the API.
+func TestQuerySpentBudgetIsRecorded(t *testing.T) {
+	runRepo := &fakeRunRepo{}
+	gw := &fakeGateway{responses: []interfaces.AgentResponse{
+		{
+			Message: interfaces.AgentMessage{Role: "assistant", ToolCalls: []interfaces.AgentToolCall{
+				{ID: "c1", Name: "search", Arguments: `{"query":"caching"}`},
+			}},
+			TotalTokens: 40,
+		},
+		{Message: interfaces.AgentMessage{Role: "assistant", Content: "The claims I read say this."}, TotalTokens: 10},
+	}}
+	uc := usecases.Query{
+		Atoms: &fakeAtomRepo{}, Lexical: fakeSearch{}, Asks: &fakeAskStore{}, Runs: runRepo,
+		Gateway: gw, Model: "test", MaxIterations: 1, Clock: fixedClock{},
+	}
+	res, err := uc.Ask(context.Background(), ulid.Make(), "What about caching?")
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if !res.Truncated || !runRepo.run.Truncated {
+		t.Errorf("truncated = %t (run %t), want both true after a spent budget", res.Truncated, runRepo.run.Truncated)
+	}
+	if res.Answer == "" || runRepo.run.Status != entities.RunSucceeded {
+		t.Errorf("answer = %q, status = %q; want the partial answer on a succeeded run", res.Answer, runRepo.run.Status)
+	}
+}
+
+// TestSearchAnswersOnePage: a search answer is one page with next_offset, so the model reads
+// evidence instead of the beginning of a truncated JSON array. The offset names where the page
+// starts; a hit beyond the page is what says there is a next one.
+func TestSearchAnswersOnePage(t *testing.T) {
+	hits := make([]interfaces.SearchHit, 5)
+	for i := range hits {
+		hits[i] = interfaces.SearchHit{ID: ulid.Make().String(), Kind: "atom", Title: "a claim", Snippet: "s"}
+	}
+	runRepo := &fakeRunRepo{}
+	gw := &fakeGateway{responses: []interfaces.AgentResponse{
+		{
+			Message: interfaces.AgentMessage{Role: "assistant", ToolCalls: []interfaces.AgentToolCall{
+				{ID: "c1", Name: "search", Arguments: `{"query":"caching","limit":2,"offset":2}`},
+			}},
+			TotalTokens: 40,
+		},
+		{Message: interfaces.AgentMessage{Role: "assistant", Content: "Answer."}, TotalTokens: 10},
+	}}
+	uc := usecases.Query{
+		Atoms: &fakeAtomRepo{}, Lexical: fakeSearch{hits: hits}, Asks: &fakeAskStore{},
+		Runs: runRepo, Gateway: gw, Model: "test", MaxIterations: 4, Clock: fixedClock{},
+	}
+	if _, err := uc.Ask(context.Background(), ulid.Make(), "What about caching?"); err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	var toolContent string
+	for _, m := range gw.requests[1].Messages {
+		if m.Role == "tool" {
+			toolContent = m.Content
+		}
+	}
+	var page struct {
+		Offset     int              `json:"offset"`
+		NextOffset int              `json:"next_offset"`
+		Hits       []map[string]any `json:"hits"`
+	}
+	if err := json.Unmarshal([]byte(toolContent), &page); err != nil {
+		t.Fatalf("search answer is not JSON: %v\n%s", err, toolContent)
+	}
+	if page.Offset != 2 || page.NextOffset != 4 || len(page.Hits) != 2 {
+		t.Errorf("page = offset %d, next %d, hits %d; want 2, 4, 2", page.Offset, page.NextOffset, len(page.Hits))
 	}
 }
 

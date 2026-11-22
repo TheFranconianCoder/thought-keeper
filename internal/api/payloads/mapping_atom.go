@@ -63,6 +63,7 @@ func RunFromPartial(p partialentities.PartialRun) Run {
 		CompletionTokens: p.CompletionTokens,
 		TotalTokens:      p.TotalTokens,
 		Iterations:       p.Iterations,
+		Truncated:        p.Truncated,
 		Question:         p.Question,
 		Answer:           p.Answer,
 		Error:            p.Error,

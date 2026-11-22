@@ -104,6 +104,13 @@ openai:
     # here override it or add more headers.
     headers: {}
 
+ask:                                       # ONE question's research budget
+    # How many model turns one Ask may take. A turn may call several tools, so this bounds the
+    # conversation, not the number of searches. A multi-part question needs more turns than a
+    # lookup; when the budget is spent the answer still comes, from what was read. The
+    # derivation keeps openai.max_iterations (clamped to 6-14 per part).
+    max_iterations: 32
+
 pipeline:                                  # the four steps: capture → outline → distill → cluster
     # The DOCUMENT steps (capture, outline, distill) run per source; the CLUSTER step runs over the
     # whole vault and only while no document step runs. The knobs are grouped that way.

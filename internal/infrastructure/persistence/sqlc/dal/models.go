@@ -89,6 +89,7 @@ type Run struct {
 	Error            string        `json:"error"`
 	StartedAt        int64         `json:"started_at"`
 	EndedAt          sql.NullInt64 `json:"ended_at"`
+	Truncated        int64         `json:"truncated"`
 }
 
 type RunStep struct {

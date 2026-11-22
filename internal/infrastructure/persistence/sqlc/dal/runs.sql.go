@@ -32,7 +32,7 @@ func (q *Queries) AbandonRunningRuns(ctx context.Context, arg AbandonRunningRuns
 const finishRun = `-- name: FinishRun :exec
 UPDATE runs SET
     status = ?, prompt_tokens = ?, completion_tokens = ?, total_tokens = ?,
-    iterations = ?, answer = ?, error = ?, ended_at = ?
+    iterations = ?, truncated = ?, answer = ?, error = ?, ended_at = ?
 WHERE id = ?
 `
 
@@ -42,6 +42,7 @@ type FinishRunParams struct {
 	CompletionTokens int64         `json:"completion_tokens"`
 	TotalTokens      int64         `json:"total_tokens"`
 	Iterations       int64         `json:"iterations"`
+	Truncated        int64         `json:"truncated"`
 	Answer           string        `json:"answer"`
 	Error            string        `json:"error"`
 	EndedAt          sql.NullInt64 `json:"ended_at"`
@@ -55,6 +56,7 @@ func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) error {
 		arg.CompletionTokens,
 		arg.TotalTokens,
 		arg.Iterations,
+		arg.Truncated,
 		arg.Answer,
 		arg.Error,
 		arg.EndedAt,
@@ -64,7 +66,7 @@ func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) error {
 }
 
 const getRun = `-- name: GetRun :one
-SELECT id, op, step, model, target_id, status, prompt_tokens, completion_tokens, total_tokens, iterations, answer, question, error, started_at, ended_at FROM runs WHERE id = ?
+SELECT id, op, step, model, target_id, status, prompt_tokens, completion_tokens, total_tokens, iterations, answer, question, error, started_at, ended_at, truncated FROM runs WHERE id = ?
 `
 
 func (q *Queries) GetRun(ctx context.Context, id ulid.ULID) (Run, error) {
@@ -86,6 +88,7 @@ func (q *Queries) GetRun(ctx context.Context, id ulid.ULID) (Run, error) {
 		&i.Error,
 		&i.StartedAt,
 		&i.EndedAt,
+		&i.Truncated,
 	)
 	return i, err
 }

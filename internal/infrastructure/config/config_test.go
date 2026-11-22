@@ -51,6 +51,28 @@ func TestShelfQualityDefaults(t *testing.T) {
 	}
 }
 
+// TestAskBudgetDefaults: an answer is research, not a lookup, so Ask has its own turn budget (32)
+// and the derivation keeps openai.max_iterations. A zero in the file is not a budget the app can
+// use, so it falls back to the default.
+func TestAskBudgetDefaults(t *testing.T) {
+	cfg, err := Load(filepath.Join(t.TempDir(), "does-not-exist.yaml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Ask.MaxIterations != 32 {
+		t.Errorf("ask.max_iterations = %d, want 32", cfg.Ask.MaxIterations)
+	}
+	if cfg.OpenAI.MaxIterations != 16 {
+		t.Errorf("openai.max_iterations = %d, want the derivation's 16", cfg.OpenAI.MaxIterations)
+	}
+	c := Defaults()
+	c.Ask.MaxIterations = 0
+	applyDefaults(&c)
+	if c.Ask.MaxIterations != 32 {
+		t.Errorf("a zero ask budget was not replaced by the default: %d", c.Ask.MaxIterations)
+	}
+}
+
 // TestBlockedWindowsCanBeEmptied: the default is a pair of windows, and a reader who wants the
 // derivation around the clock says so with an explicit empty list — which must not fall back to the
 // default again.

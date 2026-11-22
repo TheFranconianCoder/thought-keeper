@@ -126,6 +126,11 @@ the tools.
 
 Classify the question first; the two branches do not mix:
 
+A question with several parts ("what about X, and what about Y", "should we also use Z") is SEVERAL
+sub-questions. Name them to yourself and send their searches in ONE turn: several search calls
+together. Do not spend a whole turn per sub-question. Each search answer is one page; follow
+next_offset only while the page does not cover that sub-question.
+
 A. A SUBJECT question ("what do the claims say about caching?"): ONE search with the question's key
    words. The top hits carry the claim and its body. The search already expands inflections and word
    families; if the vault's sources use another language than the question, search the key terms in

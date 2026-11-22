@@ -191,6 +191,43 @@ func (g *verboseGateway) Complete(_ context.Context, req interfaces.AgentRequest
 	}}, nil
 }
 
+// TestLoopWrapsUpBeforeTheDeadline: a run has a wall-clock ceiling of its own. When the deadline is
+// closer than the reserve, the loop stops researching and takes the final answer — a turn that
+// starts too late is cut off, and a cut-off call loses the answer. The wrap-up must speak the query
+// citation form, never a bare [[title]].
+func TestLoopWrapsUpBeforeTheDeadline(t *testing.T) {
+	gw := &scriptedGateway{responses: []interfaces.AgentResponse{
+		{Message: interfaces.AgentMessage{Role: "assistant", Content: "What I read is enough."}},
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	loop := agents.Loop{
+		Gateway: gw, Model: "test", System: "sys", MaxIterations: 32,
+		WrapUpReserve: time.Minute,
+		Tools: []agents.Tool{{
+			Def: interfaces.AgentToolDef{Name: "noop", Parameters: json.RawMessage(`{"type":"object"}`)},
+			Run: func(context.Context, json.RawMessage) (string, error) { return "ok", nil },
+		}},
+	}
+	res, err := loop.Run(ctx, "go")
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !res.Truncated || res.Content != "What I read is enough." {
+		t.Errorf("result = %+v, want a truncated answer from what was read", res)
+	}
+	if len(gw.requests) != 1 {
+		t.Fatalf("requests = %d, want one wrap-up turn (no research turn started)", len(gw.requests))
+	}
+	if len(gw.requests[0].Tools) != 0 {
+		t.Error("the wrap-up turn was offered tools; it must answer from what it read")
+	}
+	last := gw.requests[0].Messages[len(gw.requests[0].Messages)-1].Content
+	if !strings.Contains(last, "[[claim:") || strings.Contains(last, "[[Page Title]]") {
+		t.Errorf("the wrap-up does not use the claim citation form: %q", last)
+	}
+}
+
 // TestLoopElidesTheModelsOwnProse: a long monologue must not be re-sent forever. Carrying it made a
 // real plan pass grow from 27 k to 52 k prompt tokens and die on the run timeout.
 func TestLoopElidesTheModelsOwnProse(t *testing.T) {

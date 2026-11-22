@@ -9,8 +9,8 @@ The agent picks the substrate that fits the question:
 
 | Substrate | What it is | Tool / endpoint |
 | --- | --- | --- |
-| Claim topics | the shelf: the names the claims may be filed under, most used first, with the names the question resolves onto in front (a head of 80, not a dump — one tool answer is cut at 6 kB) | `list_topics` |
-| Lexical search | FTS5 over claims; the Sources layer matches the list fields (title, original name, URL, tags), answerable in any vault language; a **partial id** finds the claim (a ULID prefix) or the source (a hash prefix) | `search`, `GET /search` |
+| Claim topics | the shelf: the names the claims may be filed under, most used first, with the names the question resolves onto in front (a head of 80, not a dump — one tool answer is cut at 6 kB, 8 kB in Ask) | `list_topics` |
+| Lexical search | FTS5 over claims; the Sources layer matches the list fields (title, original name, URL, tags), answerable in any vault language; a **partial id** finds the claim (a ULID prefix) or the source (a hash prefix). Ask reads it as a **page** (eight hits with claim and body, `next_offset` while more exist) | `search`, `GET /search` |
 | Claim proximity | the same cluster, and separately the same topic | `GET /atoms/{id}/related` |
 | Source recency | the newest sources by vault arrival, paged, with a short overview excerpt | `list_sources`, `read_source_summary` |
 | Tree index (PageIndex) | per-source hierarchical tree | `read_source_node` (distill), `GET /sources/{hash}/tree` |

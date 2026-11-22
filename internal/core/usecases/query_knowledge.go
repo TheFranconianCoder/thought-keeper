@@ -44,6 +44,11 @@ type Query struct {
 	// ReasoningEffort is how much the model may deliberate ('' for the endpoint's default).
 	ReasoningEffort string
 	MaxIterations   int
+	// MaxToolResult and MaxHistoryChars bound one tool answer and the tool output carried across
+	// the conversation. Ask raises both above the loop's default: a research session keeps more
+	// evidence than a single lookup, and a page of search hits must fit in one answer.
+	MaxToolResult   int
+	MaxHistoryChars int
 	Clock           interfaces.Clock
 	Log             *slog.Logger
 }
@@ -53,11 +58,15 @@ type QueryResult struct {
 	Answer      string
 	Iterations  int
 	TotalTokens int
+	// Truncated says the run spent its research budget (turns or time) and the answer was taken
+	// from what had been read. The answer is still usable; the run is marked so the reader can
+	// tell it apart from a complete one.
+	Truncated bool
 }
 
-// The recency window's bounds. One tool answer is capped at 6 000 characters by the loop, so the
-// list is PAGED: eight sources with a short overview excerpt per page, and the agent follows
-// next_offset until the window is covered. A window too large for the transcript is grouped and
+// The recency window's bounds. One tool answer is capped by the loop (6 000 characters, 8 000 in
+// Ask), so the list is PAGED: eight sources with a short overview excerpt per page, and the agent
+// follows next_offset until the window is covered. A window too large for the transcript is grouped and
 // named, never silently truncated; the model opens a full overview only when it needs it.
 const (
 	recentSourceLimit    = 8
@@ -65,6 +74,25 @@ const (
 	summaryReadChars     = 5000
 	claimFallbackLimit   = 20
 	sourceClaimListLimit = 30
+
+	// One search answer is a PAGE: eight hits with their claim and body fit one tool answer, so
+	// the model reads evidence instead of the start of a truncated JSON array. It follows
+	// next_offset only while the page does not cover what it is looking for.
+	searchPageLimit = 8
+	searchPageMax   = 20
+	// searchFetchMax is the most hits the lexical search returns for one call. It also bounds how
+	// far a search may be paged: past it the model refines the query instead of walking the tail
+	// of a fuzzy match.
+	searchFetchMax = 100
+
+	// Ask keeps more of the transcript than the loop's default: a research session reads several
+	// pages, and evidence that vanished after three answers cannot support the final one.
+	askMaxToolResult   = 8000
+	askMaxHistoryChars = 32000
+	// askWrapUpReserve is the end of pipeline.run_timeout kept for the final answer. A turn that
+	// starts inside the reserve is cut off by the run's own deadline, and a cut-off call has no
+	// answer. Ninety seconds is several normal turns.
+	askWrapUpReserve = 90 * time.Second
 )
 
 // Ask answers one question over the vault.
@@ -137,27 +165,55 @@ func (uc Query) AskScoped(ctx context.Context, runID ulid.ULID, question, source
 				Description: "Search the CLAIMS. START HERE: one query with the question's key words. " +
 					"The search is language-aware: it expands inflections and word families, and uses the " +
 					"languages present in the vault. If the question's language differs from the vault, " +
-					"also try the key terms in the vault's language. The top hits come back with their full " +
-					"claim and body, so the answer can often be written from this call alone. Short " +
-					"separate terms work best; symbols such as C++, C# and .NET are supported. If a search " +
-					"returns nothing, retry with one or two distinctive terms instead of repeating the same " +
-					"phrase.",
-				Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}`),
+					"also try the key terms in the vault's language. The hits come back with their full " +
+					"claim and body. Short separate terms work best; symbols such as C++, C# and .NET are " +
+					"supported. The answer is a PAGE: next_offset greater than zero means there are more " +
+					"hits; call again with that offset when the page does not cover what you are looking " +
+					"for. If a search returns nothing, retry with one or two distinctive terms instead of " +
+					"repeating the same phrase.",
+				Parameters: json.RawMessage(`{"type":"object","properties":{` +
+					`"query":{"type":"string"},` +
+					`"limit":{"type":"integer","description":"hits per page (default 8, at most 20)"},` +
+					`"offset":{"type":"integer","description":"where the page starts (default 0)"}` +
+					`},"required":["query"]}`),
 			},
 			Run: func(ctx context.Context, args json.RawMessage) (string, error) {
 				var in struct {
-					Query string `json:"query"`
+					Query  string `json:"query"`
+					Limit  int    `json:"limit"`
+					Offset int    `json:"offset"`
 				}
 				if err := json.Unmarshal(args, &in); err != nil {
 					return "", err
 				}
-				hits, err := uc.searchForScope(ctx, in.Query, scope, 20)
+				limit := in.Limit
+				if limit <= 0 {
+					limit = searchPageLimit
+				}
+				if limit > searchPageMax {
+					limit = searchPageMax
+				}
+				offset := max(in.Offset, 0)
+				// One hit beyond the page tells us whether a next page exists.
+				want := min(offset+limit+1, searchFetchMax)
+				hits, err := uc.searchForScope(ctx, in.Query, scope, want)
 				if err != nil {
 					return "", err
 				}
-				m := make([]map[string]any, 0, len(hits))
-				for _, h := range hits {
-					hit := map[string]any{"id": h.ID, "kind": "claim", "snippet": h.Snippet}
+				page := hits
+				if offset >= len(page) {
+					page = nil
+				} else {
+					page = page[offset:]
+				}
+				next := 0
+				if len(page) > limit {
+					page = page[:limit]
+					next = offset + limit
+				}
+				m := make([]map[string]any, 0, len(page))
+				for _, h := range page {
+					hit := map[string]any{"id": h.ID, "kind": "claim"}
 					if id, err := ulid.ParseStrict(h.ID); err == nil {
 						if a, err := uc.Atoms.GetAtom(ctx, id); err == nil {
 							hit["claim"] = a.Claim
@@ -167,9 +223,16 @@ func (uc Query) AskScoped(ctx context.Context, runID ulid.ULID, question, source
 							hit["status"] = string(a.Status)
 						}
 					}
+					// A claim that could not be read keeps the FTS context; a readable one does not
+					// spend bytes on a second copy of its text.
+					if _, ok := hit["claim"]; !ok {
+						hit["snippet"] = h.Snippet
+					}
 					m = append(m, hit)
 				}
-				out, marshalErr := json.Marshal(m)
+				out, marshalErr := json.Marshal(map[string]any{
+					"query": in.Query, "offset": offset, "next_offset": next, "hits": m,
+				})
 				if marshalErr != nil {
 					return "", marshalErr
 				}
@@ -461,6 +524,13 @@ func (uc Query) AskScoped(ctx context.Context, runID ulid.ULID, question, source
 	if scoped {
 		system = agents.QuerySourceSystem(sourceName, scope)
 	}
+	maxToolResult, maxHistory := uc.MaxToolResult, uc.MaxHistoryChars
+	if maxToolResult <= 0 {
+		maxToolResult = askMaxToolResult
+	}
+	if maxHistory <= 0 {
+		maxHistory = askMaxHistoryChars
+	}
 	loop := agents.Loop{
 		Gateway:         uc.Gateway,
 		Model:           uc.Model,
@@ -468,6 +538,9 @@ func (uc Query) AskScoped(ctx context.Context, runID ulid.ULID, question, source
 		System:          system,
 		Tools:           tools,
 		MaxIterations:   uc.MaxIterations,
+		MaxToolResult:   maxToolResult,
+		MaxHistoryChars: maxHistory,
+		WrapUpReserve:   askWrapUpReserve,
 		OnStep:          rec.OnStep,
 		OnTurn:          turnLogger(uc.Log, "query"),
 	}
@@ -476,18 +549,19 @@ func (uc Query) AskScoped(ctx context.Context, runID ulid.ULID, question, source
 	run := entities.Run{
 		ID: runID, Op: entities.RunQuery, Model: uc.Model,
 		PromptTokens: res.Usage.PromptTokens, CompletionTokens: res.Usage.CompletionTokens,
-		TotalTokens: res.Usage.TotalTokens, Iterations: res.Iterations, EndedAt: uc.Clock.Now(),
+		TotalTokens: res.Usage.TotalTokens, Iterations: res.Iterations, Truncated: res.Truncated,
+		EndedAt: uc.Clock.Now(),
 	}
 	if runErr != nil { //nolint:errcheck // the run row is an audit trail; the work already ended
 		run.Status = entities.RunFailed
 		run.Error = runErr.Error()
 		_ = uc.Runs.FinishRun(ctx, run) //nolint:errcheck // the run row is an audit trail; the work already ended
-		return QueryResult{Iterations: res.Iterations, TotalTokens: res.Usage.TotalTokens}, runErr
+		return QueryResult{Iterations: res.Iterations, TotalTokens: res.Usage.TotalTokens, Truncated: res.Truncated}, runErr
 	}
 	if res.Truncated && uc.Log != nil {
-		// The tool budget was spent and the answer came from what was read. Worth saying: the answer
-		// may be partial, and the next question can be narrower.
-		uc.Log.Warn("query answered from what was read: the tool budget was spent", "iterations", res.Iterations)
+		// The research budget was spent and the answer came from what was read. Worth saying: the
+		// answer may be partial, and the next question can be narrower.
+		uc.Log.Warn("query answered from what was read: the research budget was spent", "iterations", res.Iterations)
 	}
 	run.Status = entities.RunSucceeded
 	// The saved file must already contain ordinary Markdown links; the [[claim:...]] and
@@ -506,7 +580,7 @@ func (uc Query) AskScoped(ctx context.Context, runID ulid.ULID, question, source
 			uc.Log.Warn("ask: could not save the question/answer", "run", runID, "err", err)
 		}
 	}
-	return QueryResult{Answer: answer, Iterations: res.Iterations, TotalTokens: res.Usage.TotalTokens}, nil
+	return QueryResult{Answer: answer, Iterations: res.Iterations, TotalTokens: res.Usage.TotalTokens, Truncated: res.Truncated}, nil
 }
 
 // searchExcerpts is how many of a search's hits carry their text, and how much of it: enough to

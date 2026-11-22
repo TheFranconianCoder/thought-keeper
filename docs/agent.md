@@ -31,9 +31,9 @@ it needs the body. A claim body carries no links; the cluster is the association
 under (`vocabulary/<namespace>.md`), judged by the share band and ordered most used first. The names
 the question itself resolves onto come first and carry `matches_question`, so an orientation question
 gets the subjects it names instead of a slice of the alphabet. The answer is a **head** of the shelf
-(80 entries at most), never the whole catalog: the loop cuts a tool answer at 6 000 bytes, and an
-unfiltered catalog was once answered as a truncated JSON array. A vault that has not built a shelf yet
-(its catalog is below the target) is answered from the catalog, unfiltered.
+(80 entries at most), never the whole catalog: the loop cuts a tool answer at 6 000 bytes (8 000 in
+Ask), and an unfiltered catalog was once answered as a truncated JSON array. A vault that has not
+built a shelf yet (its catalog is below the target) is answered from the catalog, unfiltered.
 
 `list_sources` reads a **recency window**: the newest content sources by vault arrival
 (`imported_at`), with a short excerpt of each overview. It is **paged**: a page carries
@@ -46,11 +46,20 @@ returns the source's claims (or its derivation state while the source is still b
 
 - One tool answer is capped at **6 000 bytes**; a node longer than a page is read with
   `read_source_node {node_id, offset}`, which answers 5 000 bytes at a time and names the next offset.
-- Older answers are replaced by a one-line note once carried output exceeds **24 000 characters**;
-  the newest three stay.
+  Ask caps it at **8 000 bytes**: a research turn may carry a page of search hits with their claim
+  and body.
+- Older answers are replaced by a one-line note once carried output exceeds **24 000 characters**
+  (**32 000 in Ask**); the newest three stay.
 - **No message is ever empty** (`(tool call)` / `(no output)`).
-- `max_iterations` and a per-operation timeout are config; hitting a bound is a recorded failure,
-  never a silent stop.
+- **Ask has its own turn budget** (`ask.max_iterations`, default **32**). A question is research,
+  not a lookup: one turn may call several tools, and a multi-part question needs many more turns
+  than a derivation part. The derivation keeps `openai.max_iterations` (16), clamped to 6–14 per
+  part by `unitBudget`.
+- **A spent budget still answers.** When the turns or the run's remaining time
+  (`pipeline.run_timeout`) are spent, the loop takes one final turn WITHOUT tools: the answer comes
+  from what was already read, and the run is marked `truncated` so a partial answer never reads as a
+  complete one. The loop keeps the last 90 seconds of the run's ceiling for that turn; the hard
+  deadline remains the outer wall.
 
 ## 3. Distill: one source, one part at a time
 
@@ -132,9 +141,15 @@ Queries are independent and **never gated**: up to `pipeline.parallel_queries` r
 at the same time, and the reader may ask again while an answer is still being written. A query reads
 the vault as it is; a half-associated vault is still worth asking.
 
+A question with several parts ("what about X, and what about Y", "should we also use Z") is several
+**sub-questions**: their searches go out in ONE turn (several `search` calls together), not one turn
+per part.
+
 - **A subject question** ("what do the claims say about caching?"): one search with the question's
-  key words. The top hits carry the claim and its body. If needed, read at most three claims
-  (`read_atom`). A second search only when the first found nothing.
+  key words. The hits carry the claim and its body. If needed, read at most three claims
+  (`read_atom`). A second search only when the first found nothing. A search answer is a **page**
+  (`limit` 8, `next_offset`): the model follows the offset only while the page does not cover the
+  sub-question, and refines the query instead of walking the tail.
 - **A recency or digest question** ("what is new?", "summarise the sources of the last 24 hours"):
   `list_sources` first, with the window the question named (`since` as `24h`, `7d` or an RFC3339
   timestamp). The list carries each source's title, arrival time, tags, claim count, derivation
