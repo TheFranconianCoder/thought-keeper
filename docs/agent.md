@@ -379,9 +379,9 @@ order. It never writes a URL, never invents a hash and never answers the request
   large name can consume several passes without being settled, so a guard that watched the name count
   stopped a queue that was visibly shrinking. An alias is only used when it lands ON the shelf; one
   that points outside is chained to its shelf name or dropped, so the repair cannot re-file a claim
-  under the fine name it just left. A name is recorded in `Relabelled` when its LAST claim has been asked, so a name
-  that legitimately stays fine is a remainder the report shows, never a question that comes back on
-  every cycle. It does NOT rewrite the vocabulary record — the shelf, the alias table and the judged
+  under the fine name it just left. A name is recorded in `Relabelled` when every batch of its claims
+  has been attempted, so a name that legitimately stays fine is a remainder the report shows, never a
+  question that comes back on every cycle. It does NOT rewrite the vocabulary record — the shelf, the alias table and the judged
   names are decisions. A vault without a shelf keeps the oldest-first repair (`updated_at, id`), where
   only a claim whose label moves is re-read whole before the write, because the save is authoritative
   for its provenance.
@@ -416,7 +416,7 @@ order. It never writes a URL, never invents a hash and never answers the request
 - **The derivation keeps window hours.** `openai.blocked_windows` is a list of UTC ranges
   (`HH:MM-HH:MM`, start inclusive and end exclusive; `23:00-02:00` wraps midnight) in which no
   derivation calls the model — outline naming, distill, summary, source and wiki auto tags,
-  vocabulary curation and retopic. Ask and the assistant are interactive reads and stay allowed, as
+  the vocabulary curation, the coarsening and the retopic. Ask and the assistant are interactive reads and stay allowed, as
   do capture (fetch, extract, OCR) and the cluster step, which has no model. The scheduler states the
   rule twice: no such run is claimed or queued inside a window, and the guarded gateway refuses a
   call that reaches it anyway. A call in flight when a window opens is **cut at the boundary**; the

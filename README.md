@@ -281,17 +281,22 @@ keep their HTTP status, favicon and last check, and stay out of the derivation p
 - The **summary backfill** while it runs: how many overviews are missing, queued and running, and
   when the backlog was measured.
 - The repairs (reindex, rebuild trees, consistency check, URL refresh, duplicate collapse while a
-  duplicate exists, cluster pass, vocabulary curation).
+  duplicate exists, cluster pass); the name vocabularies maintain themselves and need no action.
 - Vocabulary health per namespace: canonical names, what they absorbed, near-duplicate families and
-  broad tokens.
+  broad tokens, the shelf against its ceiling, and the work left as three numbers (names to file,
+  names to re-derive, claims still off the shelf).
 - All of it is also served by `GET /api/v1/status`, so the CLI doctor and the PWA cannot disagree.
 
 ### Vocabulary
 
 Names are decisions, not strings. Three namespaces — claim **topics**, wiki **tags** and source
 **tags** (human and derived) — keep a canonical set, an alias table of what was absorbed, and **broad tokens** learned
-from *this* vault for near-duplicate detection. The agent curates them (`curate`, `retopic`, `broad tokens`); a distill run
-applies the alias table at write time, so a merged name is not reinvented by the next run.
+from *this* vault for near-duplicate detection. The topics are filed onto a bounded **shelf**: a vault
+that predates it gets one built from its most used names, the long tail is filed in bulk, the claims
+the shelf could not take are re-derived one batch at a time, and the shelf is re-synthesized from the
+corpus on its own interval — no button, and the derivation files every new claim onto it. A distill
+run applies the alias table at write time, so a merged name is not reinvented by the next run. The
+curation (`curate`, `retopic`, `broad tokens`) still runs on its own tick wherever names drift.
 
 ### Audit
 

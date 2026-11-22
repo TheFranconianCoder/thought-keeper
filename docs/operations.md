@@ -85,15 +85,19 @@ runs (an edit over SSH), it says so.
 Two sets are writable. The **curated set** is shown unasked: language, the models and reasoning
 efforts, `openai.blocked_windows` (the derivation's UTC windows), the inbox / auto-distill / debounce
 knobs, parallel runs/queries/parts, the capture cadences, `browser.path`, OCR enable/languages, the
-vocabulary shelf ceilings (`vocabulary.topics.max_names` 3,000, `.source_tags`/`.wiki_tags` 200) and the
-heap ceiling. The **Advanced** set is behind
+vocabulary shelf ceilings (`vocabulary.topics.max_names` 3,000, `.source_tags`/`.wiki_tags` 200),
+`vocabulary.coarsen.automatic` and `vocabulary.retopic.automatic` (the reduction to the shelf runs by
+itself) and the heap ceiling. The **Advanced** set is behind
 a reveal in the toolbar: the request and fetch timeouts, `openai.retries`/`retry_backoff`/
 `max_iterations`/`max_concurrent` (the calls in flight at once), `pipeline.audit_every` (one part in
 n is read against its claims), the run/cluster ceilings, `auto_continue`, the reconcile cadence and batch, the
 capture thresholds, the whole `cluster.*` arithmetic, the assistant retention/prune/limits, the
-browser switches, the PDF/OCR tools and page ceilings, `app.smart_open`, and the shelf's share limits
+browser switches, the PDF/OCR tools and page ceilings, `app.smart_open`, the shelf's share limits
 (`vocabulary.shelf.max_share` 0.02, `vocabulary.shelf.min_share` 0.0001: a topic above or below them is
-judged by its share of all claims, see ADR 0009). A search shows a match whichever set it belongs to.
+judged by its share of all claims, see ADR 0009), how long one automatic vocabulary pass may hold the
+exclusive gate (`vocabulary.coarsen.budget`, `vocabulary.retopic.budget`, 15m each) and the shelf's
+refit cadence (`vocabulary.shelf.refit_interval`, 24h). A search shows a match whichever set it
+belongs to.
 
 Saving writes the right file first: a vault-scoped key goes to `<vault>/vault.yaml` (created on the
 first such save, carrying only the keys that save touched), everything else to the machine's config.
@@ -114,8 +118,8 @@ off), so turning it on or off needs no restart.
 
 **The derivation's hours.** `openai.blocked_windows` lists UTC ranges (`HH:MM-HH:MM`, start
 inclusive; `23:00-02:00` wraps midnight) in which the derivation may not call the model: outline
-naming, distill, summaries, source and wiki auto tags, the vocabulary curation and the retopic. Ask,
-the assistant, capture (fetch, extract, OCR) and the cluster step are not held. The default is
+naming, distill, summaries, source and wiki auto tags, the vocabulary curation, the coarsening and the
+retopic. Ask, the assistant, capture (fetch, extract, OCR) and the cluster step are not held. The default is
 DeepSeek's pair, `01:00-04:00` and `06:00-10:00`; write `[]` to derive around the clock. The running
 process reads the list on every decision, and a call that is in flight when a window opens is cut at
 the boundary: its run says `aborted` (deferred, not failed), the work already derived is kept, and
@@ -292,7 +296,7 @@ given commit.
   report older than its TTL is served as it is and rebuilt behind the reader. No visit to Status
   waits for a scan.
 - **One gate.** Document steps take the SHARED side of one `sync.RWMutex` (including the outline);
-  the cluster step, a vocabulary curation, a reset, a delete and every synchronous vault writer take
+  the cluster step, a vocabulary curation or coarsening, a reset, a delete and every synchronous vault writer take
   it EXCLUSIVELY. A waiting writer blocks new readers. **Ask is never gated.**
 - **The barrier is enforced.** `capture` must be complete (or skipped) for every source before any
   outline starts; every outline before any distill; every distill before `cluster`. The rule is one
@@ -461,7 +465,11 @@ Status → Vault offers the repairs as a **button that says what it will do** be
 | `POST /rebuild-trees` | rebuild every outline from captured sources |
 | `POST /refresh-urls` | check every known URL now (attached snapshots are left alone; `POST /sources/{hash}/refetch` is the explicit per-source retry) |
 | `POST /atoms/collapse` | keep one copy of each duplicate — offered only while the duplicate report has a group |
-| `POST /vocabulary/curate` · `/retopic` | merge names · re-derive claim topics |
+
+**The vocabulary passes are not a button.** The curate, coarsen and retopic verbs have no control on
+Status: the reconcile tick asks for each of them, and the job queue shows the pass working. Their
+endpoints (`POST /vocabulary/curate`, `/coarsen`, `/retopic`) and `thought-keeper coarsen` remain as
+"run one now" for tooling.
 
 **The rest is automatic.** A finished cluster pass settles itself: dead members are pruned and the
 programmatic findings are refreshed, so that pass has no button of its own. A write that fails there

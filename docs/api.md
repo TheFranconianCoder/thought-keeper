@@ -112,7 +112,7 @@ is read by id.
   the write endpoints.
 - **The derivation keeps its model windows.** `openai.blocked_windows` holds UTC ranges in which
   no derivation calls the model. A manual action that would start one (distill, summary, source tag,
-  vocabulary curation, retopic) answers `409` with `deferred: the model window is closed until …`;
+  vocabulary curation, coarsening, retopic) answers `409` with `deferred: the model window is closed until …`;
   automatic work simply waits. A run cut at a window's start is recorded `aborted` with the same
   reason and keeps what it derived. Ask, the assistant, captures and the cluster step are unaffected.
   `/pipeline` reports the closed window with `opens_at` (UTC); the PWA shows it in the reader's

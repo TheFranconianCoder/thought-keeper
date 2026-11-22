@@ -66,8 +66,9 @@ Two amendments:
   the fallback for a vault that has none.
 
 The long tail is still the repair: filing 57k names onto 3,000 rewrites claims, holds the exclusive
-gate and costs a model pass, so it stays a press (the Coarsen button on Status) — and the tag
-namespaces keep their coarsening-only shelf, because their write path reads `Canonical`.
+gate and costs a model pass, so it stays a running pass (see the addendum "the coarsening is
+housekeeping, not a button" below, which supersedes the manual press this paragraph assumed) — and
+the tag namespaces keep their coarsening-only shelf, because their write path reads `Canonical`.
 
 ## Addendum (2026-11-21): literal variants and parallel questions
 

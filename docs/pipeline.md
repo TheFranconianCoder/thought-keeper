@@ -481,7 +481,7 @@ carry the reason (`link failed · …`). A light that disagrees with its own num
 ## 6. Jobs, gate and automation
 
 - **One gate.** Document steps take the shared side of one `sync.RWMutex`; the cluster step, a
-  vocabulary curation, a reset, a delete and every synchronous vault writer take it exclusively. Ask
+  vocabulary curation or coarsening, a reset, a delete and every synchronous vault writer take it exclusively. Ask
   is never gated: a question runs on its own worker, beside anything.
 - **A wait is per STEP, not per source.** "Queued for the outline" and "queued for the distill" are
   different waits; one flag per source let the outline worker erase the distill's and made the
@@ -503,7 +503,7 @@ carry the reason (`link failed · …`). A light that disagrees with its own num
 - **The derivation keeps its model windows.** `openai.blocked_windows` names UTC ranges
   (`HH:MM-HH:MM`, start inclusive; a range whose start is later than its end wraps midnight) in
   which no derivation may call the model: the outline's naming, distill, the summary, the source and
-  wiki auto tags, the vocabulary curation and the retopic. The pump claims no such step inside a
+  wiki auto tags, the vocabulary curation, the coarsening and the retopic. The pump claims no such step inside a
   window, the backlog walk queues no such run, and a manual action answers `409` with the reopening
   instant. A call still in flight at the boundary is cut there (the gateway's guard): the run is
   recorded `aborted` with `deferred: the model window is closed until …`, never `failed`, and
@@ -524,8 +524,9 @@ carry the reason (`link failed · …`). A light that disagrees with its own num
   claims, one batch at a time) while claims are still there, and finally the **curation** of drift.
   Each pass stops asking when its budget
   (`vocabulary.coarsen.budget`, `vocabulary.retopic.budget`) is spent, applies the questions in flight
-  and hands the exclusive gate back. The buttons on Status remain as "run one now", never as the only
-  way the work happens.
+  and hands the exclusive gate back. The PWA has no vocabulary button: the endpoints
+  (`POST /vocabulary/coarsen`, `/retopic`, `/curate`) and `thought-keeper coarsen` stay as "run one
+  now" for tooling, never as the only way the work happens.
 - **The watchdog never releases a run that is executing.** A claim is stale only when nothing is
   queued, no step is executing and it is older than a whole run budget.
 - **A run row is closed when its claim is released**, so the audit cannot keep a `running` row for
