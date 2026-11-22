@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -100,5 +101,50 @@ func TestCountFailedSources(t *testing.T) {
 
 	if n := persistence.CountFailedSources(db); n != 2 {
 		t.Fatalf("failed sources = %d, want 2 (one per source, invalid JSON skipped)", n)
+	}
+}
+
+// TestCountUnclustered: the association backlog counts a claim once whether it sits in one cluster or
+// five, and an index that somehow names a claim twice cannot make the backlog negative.
+func TestCountUnclustered(t *testing.T) {
+	ctx := context.Background()
+	db, err := persistence.Open(filepath.Join(t.TempDir(), "index.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := persistence.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	insertAtom := func(n int) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, `INSERT INTO atoms (id, topic, path, claim, body, body_hash, size, mtime, created_at, updated_at, indexed_at)
+			VALUES (?, 't', ?, 'c', 'b', 'h', 1, 1, 1, 1, 1)`, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(n)}, fmt.Sprintf("a%d", n)); err != nil {
+			t.Fatalf("insert atom %d: %v", n, err)
+		}
+	}
+	insertCluster := func(n int) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, `INSERT INTO clusters (id, signature, created_at, updated_at) VALUES (?, '', 1, 1)`,
+			[]byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(n)}); err != nil {
+			t.Fatalf("insert cluster %d: %v", n, err)
+		}
+	}
+	insertAtom(1)
+	insertAtom(2)
+	insertAtom(3)
+	insertCluster(1)
+	insertCluster(2)
+	// Atom 1 sits in two clusters; atom 2 in one; atom 3 in none.
+	for _, pair := range [][2]byte{{1, 1}, {2, 1}, {2, 2}} {
+		if _, err := db.ExecContext(ctx, `INSERT INTO cluster_atoms (cluster_id, atom_id) VALUES (?, ?)`,
+			[]byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, pair[0]},
+			[]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, pair[1]}); err != nil {
+			t.Fatalf("insert membership %v: %v", pair, err)
+		}
+	}
+
+	if n := persistence.CountUnclustered(db); n != 1 {
+		t.Fatalf("unclustered = %d, want 1 (atom 3)", n)
 	}
 }

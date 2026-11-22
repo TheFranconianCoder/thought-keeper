@@ -606,7 +606,7 @@ export interface VocabularyHealth {
   thin_uses: number;
   canonical: number;
   absorbed: number;
-  new?: string[];
+  new_count?: number;
   top?: VocabularyNameUses[];
 }
 

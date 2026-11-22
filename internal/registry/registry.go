@@ -43,6 +43,9 @@ import (
 // itself needs (watcher intake/tree, run scheduling/execution).
 type Deps struct {
 	Handler http.Handler
+	// Warm fills the reports a reader asks for on the Status lens (/vocabulary, /atoms/duplicates).
+	// It returns at once and the work runs in the background; a nil Warm (tests) is a no-op.
+	Warm func()
 	// VocabularyCurate asks the model what the claim-topic vocabulary should become and applies it.
 	VocabularyCurate usecases.Vocabulary
 	// TagWikiPage derives a page's tags from its title and prose.
@@ -419,7 +422,10 @@ func Build(
 	claims.Log = log
 	// The duplicate check is a maintenance question the PWA asks twice at start-up; one scan serves
 	// both callers, and a collapse invalidates the answer.
-	duplicates := &cachedDuplicates{uc: claims}
+	duplicates := newCachedDuplicates(claims)
+	// The vocabulary health is a full catalogue scan. It is served from memory like the duplicate
+	// check: the Status lens must never wait for it, and a start prewarms both.
+	vocabularyReport := newCachedVocabulary(vocabulary)
 	lintUC := usecases.Lint{
 		Store: lintRepo, Atoms: atomRepo, Runs: runRepo, Clock: clock, Log: log,
 	}
@@ -474,7 +480,7 @@ func Build(
 		},
 		Reindex: handlers.ReindexHandler{Reindex: maintenance.Reindex, Mark: scheduler},
 		Vocabulary: handlers.VocabularyHandler{
-			Report: (&cachedVocabulary{uc: vocabulary}).Report, Consume: scheduler,
+			Report: vocabularyReport.Report, Consume: scheduler,
 		},
 		Tree: handlers.TreeHandler{Tree: treesUC.Tree, Node: treesUC.Node, Rebuilder: treesUC.Rebuild, Builder: treesUC.Build, Mark: scheduler},
 		Atoms: handlers.AtomHandler{
@@ -513,7 +519,17 @@ func Build(
 	}, web.Handler())
 
 	return Deps{
-		Handler:                h,
+		Handler: h,
+		// The two reports the Status lens asks for are full vault scans. A start fills them in the
+		// background, so the first visit is answered from memory instead of waiting for the scan.
+		// They are built one after the other: two full scans side by side are exactly the pressure
+		// on the four-connection pool that made the doctor report wait.
+		Warm: func() {
+			go func() {
+				vocabularyReport.Warm()
+				duplicates.Warm()
+			}()
+		},
 		VocabularyCurate:       vocabulary,
 		TagWikiPage:            vocabulary,
 		SourceSummary:          sources,

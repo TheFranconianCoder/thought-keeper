@@ -246,7 +246,10 @@ One SSE connection (`GET /api/v1/events`) replaces polling. Event types:
 
 - **Not being connected is said where the reader is looking.** The empty states answer with
   `Nothing loaded` while the connection is not live — "No sources yet" would be a claim the UI
-  cannot make offline.
+  cannot make offline. A live connection with a null read is **not** that state: the lens reserves
+  its shape with skeletons until the read settles, and the Status lens says `Nothing loaded` only
+  when the connection is down (or names the read's error once it has failed), never while the first
+  report is still in flight.
 - **A question is asked in the app's own dialog**, never a native one.
 - **A list read carries everything a SAVE replaces**, so an edit form never starts from a partial
   record.
@@ -259,9 +262,13 @@ One SSE connection (`GET /api/v1/events`) replaces polling. Event types:
   filtered list from briefly matching nothing and a refresh from looking like an empty vault.
 - **A read in flight is joined, not restarted.** Later requests (an event burst, a tab switch) wait
   for the running read and ask for one trailing read instead of starting a competing one; for the
-  open source the same rule applies to its detail. Only a switch to ANOTHER source supersedes a read.
-  Restarting on every event starved the one read that would fill the screen — the lens stayed on its
-  skeleton and a source would not open until a full reload.
+  open source the same rule applies to its detail, and for the **doctor report** it applies to every
+  ask from the Start pulse, the sidebar badges and the event stream, and for the **vault report**
+  (vocabulary health and duplicate claims) to the lens and the catch-up that both ask on entry. Only
+  a switch to ANOTHER source supersedes a read. Restarting on every event starved the one read that
+  would fill the screen — the lens stayed on its skeleton and a source would not open until a full
+  reload; the same pile-up is why the front door's counts arrived seconds late while a run published
+  source events.
 - **A summary event is a sidecar event.** A completed summary refreshes only the open source's
   overview; it does not reload the source list, the claims or the detail. A backfill of hundreds of
   summaries therefore costs one small read per viewed source, not a list read per summary.

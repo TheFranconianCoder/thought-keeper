@@ -78,8 +78,10 @@ type VocabularyHealth struct {
 	CatchAllUses int
 	Thin         int
 	ThinUses     int
-	// New are the observed names the vocabulary has no opinion about yet.
-	New []string
+	// Undecided is how many observed names the vocabulary has no opinion about yet — the count, not
+	// the names: on a vault that predates the shelf the list ran to tens of thousands of entries and
+	// the reader shows the number.
+	Undecided int
 	// Top is the biggest names, for the reader and for a curation prompt.
 	Top []NameUses
 	// Observed is EVERY name that exists right now (the whole catalog, not the head). A reconciliation

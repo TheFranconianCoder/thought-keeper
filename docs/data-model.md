@@ -55,6 +55,7 @@ index is disposable — deleting it loses nothing but time.
 | `00011_sources_published_at.sql` | adds `published_at` and `published_from`: the date a source declares for itself and the layer that found it (a record, restored by a reindex) |
 | `00012_sources_url_changed.sql` | adds `url_changed_at`: the last time a URL snapshot's readable content actually changed (a record, restored by a reindex) plus the activity index the Sources list orders by and the partial index the "updated" filter reads |
 | `00013_sources_url_checked_index.sql` | a partial index on `sources(url_checked_at)` for URL sources: the paced refresh asks "which page has waited longest?" once per gap, and without it every ask would sort the whole URL set |
+| `00014_sources_bookmark_index.sql` | a partial index on `sources(bookmark)` for bookmarked rows: the bookmark badge and the Bookmarks lens read that count on every doctor report, and without it each read scans the whole source table |
 
 A schema change is a **new** migration; a change of vocabulary is done in the initial file with the
 database thrown away. The initial file writes the shape marker (`PRAGMA user_version`), and
@@ -118,6 +119,12 @@ Notes that matter:
 - **`distill_parts` is a record, not a cache.** "Has claims" is not "finished": a run can stop
   mid-part, and a resumed run must redo such a part, never skip it. The same records are mirrored in
   the source's `.meta`.
+- **The doctor report's counts are index reads.** `failed` uses the same
+  `instr(steps, '"state":"failed"')` predicate as the Sources list's filter (`steps` is compact
+  `json.Marshal` output, so no JSON parse per row), `unclustered` is "claims minus clustered claims"
+  over `idx_cluster_atoms_atom` rather than a correlated `NOT EXISTS` per claim, and `bookmarks` is a
+  partial-index count. The Status lens, the badges and the Start pulse all read these on every
+  `/status`; they must stay in the milliseconds on a six-figure vault.
 - **FTS5 is external-content**; triggers (created and rebuilt by `persistence.EnsureFTS`) maintain it.
   If the bundled SQLite lacks FTS5, `status` shows `search: degraded` and search falls back to
   `LIKE`.

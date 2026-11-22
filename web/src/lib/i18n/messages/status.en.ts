@@ -6,6 +6,7 @@ export const statusEn: Record<string, string> = {
   'status.notLoaded': 'Nothing loaded',
   'status.notLoadedText':
     'Thought Keeper is not reachable. Start the app and this page reconnects by itself.',
+  'status.loadFailed': 'The report could not be read: {error}',
   'status.indexShape': 'The index has another shape.',
 
   // The index rebuild: it runs before the vault accepts writes.

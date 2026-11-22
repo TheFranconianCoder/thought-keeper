@@ -6,6 +6,7 @@ export const statusDe: Record<string, string> = {
   'status.notLoaded': 'Nichts geladen',
   'status.notLoadedText':
     'Thought Keeper ist nicht erreichbar. Starte die App, dann verbindet sich diese Seite von selbst neu.',
+  'status.loadFailed': 'Der Bericht konnte nicht gelesen werden: {error}',
   'status.indexShape': 'Der Index hat eine andere Form.',
 
   // Der Neuaufbau des Index: er läuft, bevor der Tresor Schreibzugriffe annimmt.

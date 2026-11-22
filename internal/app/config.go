@@ -105,6 +105,9 @@ func (a *App) applyConfig(loaded config.Loaded) {
 		}
 		return
 	}
+	// A config apply builds a fresh wiring, and with it fresh report caches: fill them now instead of
+	// making the next Status visit pay for the scan.
+	a.warmReports()
 	if !wasAuto && loaded.Config.Pipeline.Auto {
 		// A file dropped while the watcher was off is still in the inbox; enable it and take it now.
 		go a.scanInbox(loaded.Config.InboxDir())

@@ -59,6 +59,9 @@ func TestBuildWiresTheModelDependentUseCases(t *testing.T) {
 	if !deps.RebranchClaims.Apply {
 		t.Error("rebranch would only measure: Apply is false")
 	}
+	if deps.Warm == nil {
+		t.Error("no Warm: the Status lens would pay for the first full scan on the reader")
+	}
 	if deps.RebranchClaims.MaxClaims <= 0 || deps.RebranchClaims.Parallel <= 0 {
 		t.Errorf("rebranch bounds = (%d claims, %d parallel), want both > 0",
 			deps.RebranchClaims.MaxClaims, deps.RebranchClaims.Parallel)

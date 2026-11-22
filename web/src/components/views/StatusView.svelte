@@ -11,6 +11,7 @@
   import { i18n, n, t, tn } from '../../lib/i18n/index.svelte';
   import { openConfig } from '../../lib/overlays';
   import { navigate, router, sourcePath } from '../../lib/router.svelte';
+  import { connection } from '../../lib/stores/connection.svelte';
   import { sources } from '../../lib/stores/sources.svelte';
   import { system } from '../../lib/stores/system.svelte';
   import { jobStepLabel, repairPhaseLabel } from '../../lib/source-state';
@@ -185,7 +186,25 @@
   {/if}
 
   {#if !system.status}
-    <EmptyState icon="status" title={t('status.notLoaded')} text={t('status.notLoadedText')} />
+    {#if connection.state !== 'live'}
+      <EmptyState icon="status" title={t('status.notLoaded')} text={t('status.notLoadedText')} />
+    {:else if system.statusError}
+      <p class="notice notice--error">
+        {t('status.loadFailed', { error: system.statusError })}
+        <button class="btn btn--ghost btn--sm" onclick={() => void system.loadStatus()}>
+          {t('common.retry')}
+        </button>
+      </p>
+    {:else}
+      <!-- The first read is in flight: the shape of the page is already reserved, so the counts and
+           the sections never jump in from nowhere. -->
+      <div class="stat-grid" aria-hidden="true">
+        {#each Array(4) as _, index (index)}<span class="skeleton" style="height:58px"></span>{/each}
+      </div>
+      <div class="stack" aria-hidden="true">
+        {#each Array(3) as _, index (index)}<span class="skeleton" style="height:96px"></span>{/each}
+      </div>
+    {/if}
   {:else}
     {@const status = system.status}
     {#if indexOutdated}
@@ -362,10 +381,16 @@
                 {#if vocab.catch_all}· {t('status.vocabCatchAll', { count: n(vocab.catch_all), claims: n(vocab.catch_all_uses) })}{/if}
                 {#if vocab.thin}· {t('status.vocabThin', { count: n(vocab.thin), claims: n(vocab.thin_uses) })}{/if}
                 {#if vocab.canonical || vocab.absorbed}· {t('status.vocabCanonical', { canonical: vocab.canonical, absorbed: vocab.absorbed })}{/if}
-                {#if vocab.new?.length}· <b>{t('status.vocabNew', { count: vocab.new.length })}</b>{/if}
+                {#if vocab.new_count}· <b>{t('status.vocabNew', { count: vocab.new_count })}</b>{/if}
               </div>
             </div>
           {/each}
+        </div>
+      {:else if !system.vaultLoaded}
+        <!-- The vault report has its own read: the section reserves its rows instead of claiming the
+             vocabulary is empty while the scan is still running. -->
+        <div class="stack" aria-hidden="true">
+          {#each Array(3) as _, index (index)}<span class="skeleton" style="height:48px"></span>{/each}
         </div>
       {:else}
         <p class="muted small">{t('status.noVocabulary')}</p>

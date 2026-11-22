@@ -207,8 +207,8 @@ func TestRemainingSkipsJudgedNames(t *testing.T) {
 	}
 	// A judged-and-kept name is not NEW either: an automatic curation must not be woken by names the
 	// coarsening already answered for.
-	if len(got.New) != 1 || got.New[0] != "moral-psychology" {
-		t.Errorf("new = %v, want only the undecided name", got.New)
+	if got.Undecided != 1 {
+		t.Errorf("undecided = %d, want only the undecided name", got.Undecided)
 	}
 	// The retopic queue is the CLAIMS' half of the same tail: both fine names, judged or not, because
 	// "the shelf cannot take this name" is exactly when the claims have to be looked at one by one.

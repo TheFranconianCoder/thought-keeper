@@ -1048,8 +1048,20 @@ func (a *App) Run() error {
 func (a *App) startupSequence() {
 	a.startupRepair()
 	a.endRepair()
+	// The reader-facing reports (vocabulary health, duplicate claims) are full vault scans, and the
+	// Status lens asks for them on entry. They are built now, while nobody is waiting, so the first
+	// visit after a start is answered from memory.
+	a.warmReports()
 	a.startWorkers()
 	a.startupSweep()
+}
+
+// warmReports fills the reader-facing reports in the background. It runs after the start's repair:
+// a scan over a half-rebuilt index would cache numbers the rebuild is about to replace.
+func (a *App) warmReports() {
+	if warm := a.deps().Warm; warm != nil {
+		warm()
+	}
 }
 
 // startWorkers starts every worker that writes the vault. It runs only after the start's repair: a
@@ -2626,7 +2638,7 @@ func (a *App) requestVocabularyIfDue(reason string) {
 
 	fresh := 0
 	for _, h := range report {
-		fresh += len(h.New)
+		fresh += h.Undecided
 		// A flagged family that still contains an unreviewed name is work too. Once the model has
 		// judged every member, the automatic pass stops asking; a manual Curate can still revisit.
 		fresh += h.UnreviewedFamilies

@@ -230,7 +230,7 @@ func (uc Vocabulary) health(observed []partialentities.NameUses, vocab entities.
 			h.Singletons++
 		}
 		if !known[o.Name] {
-			h.New = append(h.New, o.Name)
+			h.Undecided++
 		}
 	}
 	if h.Names > 0 {

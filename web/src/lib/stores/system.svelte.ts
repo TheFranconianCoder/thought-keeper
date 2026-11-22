@@ -13,6 +13,9 @@ export interface Banner {
 
 class SystemStore {
   status = $state<Status | null>(null);
+  /** statusError is the last failed doctor-report read. A null status without an error is "not
+   *  read yet" (the lens paints its skeleton); with one it is a read that failed. */
+  statusError = $state('');
   pipeline = $state<Pipeline | null>(null);
   findings = $state<Finding[]>([]);
   findingsLoaded = $state(false);
@@ -26,19 +29,53 @@ class SystemStore {
   banner = $state<Banner | null>(null);
 
   private statusSeq = 0;
+  private statusRun: Promise<void> | null = null;
+  private statusAgain = false;
   private pipelineSeq = 0;
   private findingsSeq = 0;
-  private vaultSeq = 0;
+  private vaultRun: Promise<void> | null = null;
+  private vocabularyRun: Promise<void> | null = null;
 
-  async loadStatus(): Promise<void> {
+  /** loadStatus reads the doctor report. A read already in flight is JOINED, not restarted: the
+   *  front door, the sidebar badges and every source/cluster/run event ask for the same report, and
+   *  starting a competing read per event is what made the counts arrive seconds late during a run.
+   *  An ask that lands while a read runs sets one trailing read, so the last event of a burst is
+   *  still reflected without a read per event. */
+  loadStatus(): Promise<void> {
+    if (this.statusRun) {
+      this.statusAgain = true;
+      return this.statusRun;
+    }
+    const run = this.runStatus();
+    this.statusRun = run;
+    return run;
+  }
+
+  private async runStatus(): Promise<void> {
+    try {
+      await this.fetchStatus();
+      if (this.statusAgain) {
+        this.statusAgain = false;
+        await this.fetchStatus();
+      }
+    } finally {
+      this.statusRun = null;
+      this.statusAgain = false;
+    }
+  }
+
+  private async fetchStatus(): Promise<void> {
     const seq = ++this.statusSeq;
     try {
       const status = await api.status();
       if (seq !== this.statusSeq) return;
       this.status = status;
+      this.statusError = '';
       if (status.pipeline) this.pipeline = status.pipeline;
-    } catch {
-      if (seq === this.statusSeq && !this.status) this.status = null;
+    } catch (error) {
+      if (seq !== this.statusSeq) return;
+      // The last known report stays on screen: a failed refresh is not an empty vault.
+      this.statusError = humanError(error);
     }
   }
 
@@ -68,19 +105,41 @@ class SystemStore {
     }
   }
 
-  async loadVault(): Promise<void> {
-    const seq = ++this.vaultSeq;
+  /** loadVault reads the two reports behind the Status lens's vault section. A read in flight is
+   *  JOINED, not restarted: the lens and the catch-up both ask when the page opens, and a second
+   *  scan of the vault is what made the vocabulary arrive after everything else. Unlike the doctor
+   *  report there is no trailing read — the report is a cache with its own refresh behind the
+   *  reader, and the extra ask at page open would buy nothing. */
+  loadVault(): Promise<void> {
+    if (!this.vaultRun) {
+      this.vaultRun = this.fetchVault().finally(() => {
+        this.vaultRun = null;
+      });
+    }
+    return this.vaultRun;
+  }
+
+  private async fetchVault(): Promise<void> {
     const [duplicates, vocabulary] = await Promise.allSettled([
       api.atomDuplicates(),
       api.vocabulary(),
     ]);
-    if (seq !== this.vaultSeq) return;
     this.duplicates = duplicates.status === 'fulfilled' ? duplicates.value : null;
     this.vocabulary = vocabulary.status === 'fulfilled' ? vocabulary.value.namespaces ?? [] : null;
     this.vaultLoaded = true;
   }
 
-  async loadVocabulary(): Promise<void> {
+  /** loadVocabulary re-reads the name catalogs after a vocabulary event; a read in flight is joined. */
+  loadVocabulary(): Promise<void> {
+    if (!this.vocabularyRun) {
+      this.vocabularyRun = this.fetchVocabulary().finally(() => {
+        this.vocabularyRun = null;
+      });
+    }
+    return this.vocabularyRun;
+  }
+
+  private async fetchVocabulary(): Promise<void> {
     try {
       const result = await api.vocabulary();
       this.vocabulary = result.namespaces ?? [];

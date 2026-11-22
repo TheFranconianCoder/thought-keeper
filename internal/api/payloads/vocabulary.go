@@ -61,10 +61,11 @@ type VocabularyHealth struct {
 	CatchAllUses int `json:"catch_all_uses"`
 	Thin         int `json:"thin"`
 	ThinUses     int `json:"thin_uses"`
-	// What the vocabulary file already knows, and the names it has no opinion about yet.
+	// What the vocabulary file already knows, and how many names it has no opinion about yet (a
+	// count: on a pre-shelf vault the list is thousands of names and the reader shows the number).
 	Canonical int                  `json:"canonical"`
 	Absorbed  int                  `json:"absorbed"`
-	New       []string             `json:"new,omitempty"`
+	NewCount  int                  `json:"new_count,omitempty"`
 	Top       []VocabularyNameUses `json:"top,omitempty"`
 }
 
@@ -90,7 +91,7 @@ func VocabularyFromPartials(in []partialentities.VocabularyHealth) VocabularyRep
 			BroadTokens: h.BroadTokens, BroadTokensLearned: h.BroadTokensLearned,
 			OversizedFamilies: h.OversizedFamilies, OversizedNames: h.OversizedNames,
 			UnreviewedFamilies: h.UnreviewedFamilies,
-			Canonical:          h.Canonical, Absorbed: h.Absorbed, New: h.New, Top: namesFromPartials(h.Top),
+			Canonical:          h.Canonical, Absorbed: h.Absorbed, NewCount: h.Undecided, Top: namesFromPartials(h.Top),
 			Shelf: h.Shelf, Target: h.Target, Remaining: h.Remaining,
 			Retopic: h.Retopic, Retopiced: h.Retopiced, RetopicClaims: h.RetopicClaims, OffShelf: h.OffShelf,
 			CatchAll: h.CatchAll, CatchAllUses: h.CatchAllUses, Thin: h.Thin, ThinUses: h.ThinUses,

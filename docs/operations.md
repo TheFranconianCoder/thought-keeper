@@ -286,6 +286,11 @@ given commit.
   show a progress bar instead of a connection that looks hung. No deadline bounds the pass: a stall
   watchdog aborts it when it stops making progress, and a partial pass never re-arms parts or deletes
   a file. The workers that write start only after the repair.
+- **The Status lens's reports are warmed after the start.** The vocabulary health and the duplicate
+  scan are full vault reads (hundreds of milliseconds each on a six-figure vault). The start builds
+  them in the background — one after the other, so two scans never hold the pool at once — and a
+  report older than its TTL is served as it is and rebuilt behind the reader. No visit to Status
+  waits for a scan.
 - **One gate.** Document steps take the SHARED side of one `sync.RWMutex` (including the outline);
   the cluster step, a vocabulary curation, a reset, a delete and every synchronous vault writer take
   it EXCLUSIVELY. A waiting writer blocks new readers. **Ask is never gated.**
