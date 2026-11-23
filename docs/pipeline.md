@@ -74,7 +74,11 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   silently: the page is stored as it was and the answer carries how many cards were found; confirming
   it (`POST /api/v1/add` with `listing: true`) makes it an owner. The articles become URL sources
   (`origin: listing`, `parent_hash`) and the listing's snapshot is the **rendered list** —
-  readability throws a card grid away, so a card grid is never distilled as prose.
+  readability throws a card grid away, so a card grid is never distilled as prose. An article is
+  stored **without its query string**: a card's link carries parameters that say how the reader
+  arrived (`?utm_source=…`, `?ref=…`), not which article it is, and dropping them lets two cards for
+  one article dedupe to one source. A feed item, a wiki link and a URL the human added by hand keep
+  their query — there the address was given on purpose.
 - **The initial capture walks the pagination; a refresh does not.** A listing is read page by page —
   first the document's own `<link rel="next">` in the head (a pager needs no visible anchor), then an
   anchor whose `rel` is `next` or whose text or `aria-label` is a pager word ("load more",
@@ -136,7 +140,8 @@ runs** — in both directions. **Ask** (a query) is never gated and runs in para
   an existing source over.
 - **Two URLs that differ only by a trailing slash are one source.** Existence checks (wiki save,
   sitemap/feed/listing claim, re-add) compare `entities.URLKey` — path trailing slash and fragment
-  ignored. The stored address stays the URL as it was given.
+  ignored. The stored address stays the URL as it was given, except a listing's article, whose query
+  is dropped (see above).
 - **A URL that does not answer with itself is `blocked`, not a failure and never content.** A login  wall (`401`/`403`, a redirect to a sign-in, a password form **on a page without substantial article
   text**), a paywall (a teaser instead of the article) and a consent gate are named as such
   (`login_required`, `paywalled`, `consent_required`) and recorded where the reader sees them: a red

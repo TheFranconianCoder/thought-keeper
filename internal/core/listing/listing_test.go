@@ -299,6 +299,40 @@ func TestItemsDedupeAndTitleFallback(t *testing.T) {
 	}
 }
 
+// A card carries the address the list rendered, tracking parameters included. They say how the
+// reader arrived, not which article it is, so the stored article drops them and two cards for one
+// article dedupe to one source.
+func TestArticleURLDropsTheQuery(t *testing.T) {
+	links := []Link{
+		{URL: "https://example.org/post-a?utm_source=feed&utm_campaign=x", Text: "Sep 1, 2026A title that is long enough", InHeading: true, Group: "a/b/c"},
+		{URL: "https://example.org/post-a?ref=list", Text: "Sep 1, 2026A title that is long enough", InHeading: true, Group: "a/b/c"},
+		{URL: "https://example.org/post-b?id=7", Text: "Sep 2, 2026Another title that is long enough", InHeading: true, Group: "a/b/c"},
+	}
+	items := PageItems("https://example.org/", links)
+	if len(items) != 2 {
+		t.Fatalf("items = %d, want 2 after the query dedupe", len(items))
+	}
+	if items[0].URL != "https://example.org/post-a" {
+		t.Fatalf("url = %q, want the address without its query", items[0].URL)
+	}
+	if items[1].URL != "https://example.org/post-b" {
+		t.Fatalf("url = %q, want the address without its query", items[1].URL)
+	}
+}
+
+func TestArticleURLKeepsAddressesWithoutAQuery(t *testing.T) {
+	for _, raw := range []string{
+		"https://example.org/post-a",
+		"/relative/post-a",
+		"",
+	} {
+		want := strings.TrimSpace(raw)
+		if got := ArticleURL(raw); got != want {
+			t.Errorf("ArticleURL(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
 func TestOffHostLinksAreIgnored(t *testing.T) {
 	links := archiveLinks()
 	for i := range links {

@@ -78,6 +78,22 @@ type Item struct {
 	Date string
 }
 
+// ArticleURL is the address a listing's article is stored under. A card links to the article the way
+// the list page rendered it, and that link often carries parameters that say how the reader arrived
+// (`?utm_source=…`, `?ref=…`), not which article it is. A listing owns the address, so its query is
+// dropped and two cards for one article dedupe to one source. A feed item, a wiki link and a URL the
+// human added by hand keep theirs: there the address was written on purpose.
+func ArticleURL(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	u, err := url.Parse(trimmed)
+	if err != nil || u.Host == "" || (u.RawQuery == "" && !u.ForceQuery) {
+		return trimmed
+	}
+	u.RawQuery = ""
+	u.ForceQuery = false
+	return u.String()
+}
+
 // Result is what the rules found on one page.
 type Result struct {
 	// Items are the article links, in document order, deduplicated.
@@ -111,12 +127,13 @@ func Detect(pageURL string, links []Link) Result {
 	res.GroupSize = len(group)
 	seen := make(map[string]bool, len(group))
 	for _, link := range group {
-		key := entities.URLKey(link.URL)
+		articleURL := ArticleURL(link.URL)
+		key := entities.URLKey(articleURL)
 		if key == "" || seen[key] {
 			continue
 		}
 		seen[key] = true
-		res.Items = append(res.Items, Item{URL: link.URL, Title: titleOf(link), Date: dateOf(link)})
+		res.Items = append(res.Items, Item{URL: articleURL, Title: titleOf(link), Date: dateOf(link)})
 		if link.InHeading || link.Card {
 			res.Headings++
 		}

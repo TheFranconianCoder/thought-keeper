@@ -368,7 +368,7 @@ func parseListingSnapshot(body string) []listing.Item {
 	matches := listingLine.FindAllStringSubmatch(string(snapshotBody([]byte(body))), -1)
 	items := make([]listing.Item, 0, len(matches))
 	for _, m := range matches {
-		items = append(items, listing.Item{Title: m[1], URL: m[2], Date: strings.TrimSpace(m[3])})
+		items = append(items, listing.Item{Title: m[1], URL: listing.ArticleURL(m[2]), Date: strings.TrimSpace(m[3])})
 	}
 	return items
 }
